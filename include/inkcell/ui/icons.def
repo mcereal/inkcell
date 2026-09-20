@@ -52,8 +52,20 @@ INKCELL_ICON_ENTRY(CHEVRON,   "chevron_right")
    whole screen - and because the top app bar draws both at once, the trail's separators in
    one and the leading affordance in the other. */
 INKCELL_ICON_ENTRY(BACK,      "arrow_back")
-/* This row's value can be changed in place - Left and Right act on it. */
+/* A press on this row opens a keyboard: the value is typed, not chosen. The pencil means that
+   and only that. It used to mean "this row can be changed at all", which put it on every switch
+   and every checkbox in a settings list - a promise of a keyboard over a control the reader can
+   already see and aim at. STEPPER below is what those rows say instead. */
 INKCELL_ICON_ENTRY(EDIT,      "edit")
+/* Left and Right move this row's value along, where it stands - the row is a set of values with
+   no room to draw the set. A row that *can* draw its set (a switch, a checkbox, a segmented
+   button, a slider) says nothing here: the control is the affordance, and a caption on it is a
+   caption on something already legible.
+   Drawn with `code` because that glyph is a chevron pair and nothing else at this size; what it
+   is called in the font is the table's business, which is the rule at the top of this file. Not
+   CHEVRON, which is a single mark in the trailing slot promising a screen, and not SWAP, which
+   is A cycling a value rather than the d-pad stepping one. */
+INKCELL_ICON_ENTRY(STEPPER,   "code")
 /* Changed here and not yet written to the radio. A dot rather than a pencil: it reports state,
    it does not offer anything. */
 INKCELL_ICON_ENTRY(UNSAVED,   "fiber_manual_record")
