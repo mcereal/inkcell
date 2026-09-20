@@ -556,10 +556,12 @@ void inkcell_fb_draw_empty(const struct inkcell_backend_fb_state *state,
     }
 
     /* Wrapped rather than drawn flat: these strings say which button to press next, and at a
-       large glyph scale a flat one ran off the right edge with the verb on it. */
-    (void)inkcell_fb_draw_wrapped(state, y, text, (size_t)layout->body_w, (int)rows,
-                                  inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
-                                  inkcell_fb_color(state, INKCELL_COLOR_BG));
+       large glyph scale a flat one ran off the right edge with the verb on it. Centred, because
+       the symbol above it is - a centred icon over a left-aligned caption is two decisions about
+       one object, and the eye reads the disagreement before it reads the words. */
+    (void)inkcell_fb_draw_wrapped_centered(state, y, text, (size_t)layout->body_w, (int)rows,
+                                           inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
+                                           inkcell_fb_color(state, INKCELL_COLOR_BG));
 }
 
 int inkcell_fb_rule_height(const struct inkcell_backend_fb_state *state, int scale) {

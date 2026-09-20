@@ -656,6 +656,235 @@ static void inkcell_fb_fill_packed(const struct inkcell_backend_fb_state *state,
     }
 }
 
+/* ---- anti-aliased shapes ---------------------------------------------------------------------
+ *
+ * A curve drawn by asking "is this pixel inside?" has a stepped edge, and at the radii Material
+ * and iOS actually use - a pill, an avatar disc, a switch knob - the steps are long enough to
+ * read as a staircase rather than as a curve. The answer is the one the glyph renderer has
+ * always used here: coverage rather than a yes or no, blended into what is already there.
+ *
+ * What made that hard was the ground. inkcell_fb_blend_table() needs to know what a glyph is
+ * being drawn *over*, and a caller could tell it; a rounded rectangle crosses a row fill
+ * halfway down and could not. The way out is that this backend does not draw onto the panel at
+ * all - inkcell_backend_fb_present() points inkcell_fb_ptr at draw_buffer, ordinary RAM, for
+ * the whole render and copies the result afterwards. So the ground is readable: it is the pixel
+ * about to be written over, and decompose_color() is what reads it back.
+ *
+ * Only edge pixels are read and blended. A shape's interior is still one bulk fill, so what
+ * this costs is the boundary - a few hundred pixels on a card, a few thousand on a full-panel
+ * disc - rather than the area.
+ *
+ * Integer arithmetic throughout, and that is not a preference. The golden sheet compares
+ * digests of the rendered page across compilers and architectures, so a coverage value that
+ * depended on a float's rounding would be a test that fails on one machine and passes on
+ * another. Sixteen sub-samples a pixel, counted exactly.
+ */
+
+#define INKCELL_FB_AA_SUB 4 /* sub-samples per axis */
+#define INKCELL_FB_AA_STEPS (INKCELL_FB_AA_SUB * INKCELL_FB_AA_SUB)
+/* Sub-sample centres land on odd halves of a sub-pixel, so everything is doubled to stay whole:
+   a sample's offset from a shape's centre is 2*SUB*(pixel - centre) + 2*sub + 1. */
+#define INKCELL_FB_AA_FIXED (2 * INKCELL_FB_AA_SUB)
+
+/* An `length`-bit channel widened back to eight bits by replication, so a full-scale value
+   comes back full scale - five bits of 0x1F is 0xFF, not 0xF8. Exact in the direction that
+   matters: inkcell_fb_pack_channel() truncates, so packing this again returns the original. */
+static inline uint8_t inkcell_fb_widen_channel(uint32_t value, uint32_t length) {
+    if (length == 0U) {
+        return 0U;
+    }
+    if (length >= 8U) {
+        return (uint8_t)(value >> (length - 8U));
+    }
+    uint32_t out = value;
+    uint32_t have = length;
+    while (have < 8U) {
+        out = (out << length) | value;
+        have += length;
+    }
+    return (uint8_t)(out >> (have - 8U));
+}
+
+static inline uint8_t inkcell_fb_unpack_channel(uint32_t packed, const struct fb_bitfield *field) {
+    if (field->length == 0U) {
+        return 0U;
+    }
+    const uint32_t mask = (field->length >= 32U) ? 0xFFFFFFFFU : ((1U << field->length) - 1U);
+    return inkcell_fb_widen_channel((packed >> field->offset) & mask, field->length);
+}
+
+/* compose_color() read backwards. Every branch mirrors one up there; a format that function
+   refuses comes back black, which is what it writes. */
+static inline struct inkcell_rgb decompose_color(const struct inkcell_backend_fb_state *state,
+                                                 uint32_t packed) {
+    const struct fb_var_screeninfo *var = &state->var;
+    const bool has_fields =
+        var->red.length != 0U || var->green.length != 0U || var->blue.length != 0U;
+    struct inkcell_rgb rgb = {0U, 0U, 0U};
+    if (has_fields) {
+        rgb.r = inkcell_fb_unpack_channel(packed, &var->red);
+        rgb.g = inkcell_fb_unpack_channel(packed, &var->green);
+        rgb.b = inkcell_fb_unpack_channel(packed, &var->blue);
+        return rgb;
+    }
+    switch (var->bits_per_pixel) {
+    case 32:
+    case 24:
+        rgb.r = (uint8_t)((packed >> 16) & 0xFFU);
+        rgb.g = (uint8_t)((packed >> 8) & 0xFFU);
+        rgb.b = (uint8_t)(packed & 0xFFU);
+        break;
+    case 16:
+        rgb.r = inkcell_fb_widen_channel((packed >> 11) & 0x1FU, 5U);
+        rgb.g = inkcell_fb_widen_channel((packed >> 5) & 0x3FU, 6U);
+        rgb.b = inkcell_fb_widen_channel(packed & 0x1FU, 5U);
+        break;
+    default:
+        break;
+    }
+    return rgb;
+}
+
+/* inkcell_fb_store_span() backwards, for one pixel. */
+static inline uint32_t inkcell_fb_load_pixel(const uint8_t *px, size_t bpp) {
+    switch (bpp) {
+    case 4: {
+        uint32_t packed = 0U;
+        memcpy(&packed, px, 4U);
+        return packed;
+    }
+    case 3:
+        return (uint32_t)px[0] | ((uint32_t)px[1] << 8) | ((uint32_t)px[2] << 16);
+    case 2: {
+        uint16_t narrow = 0U;
+        memcpy(&narrow, px, 2U);
+        return narrow;
+    }
+    default:
+        return px[0];
+    }
+}
+
+static inline uint8_t inkcell_fb_mix_channel(uint8_t ground, uint8_t ink, int coverage) {
+    /* Rounded rather than truncated, so a half-covered pixel between two colours lands in the
+       middle rather than a step towards the ground. */
+    const int mixed = (int)ground * (INKCELL_FB_AA_STEPS - coverage) + (int)ink * coverage +
+                      INKCELL_FB_AA_STEPS / 2;
+    return (uint8_t)(mixed / INKCELL_FB_AA_STEPS);
+}
+
+/*
+ * One pixel at (`x`, `y`), blended `coverage` of the way towards `color`.
+ *
+ * A pixel at a time rather than a run of them, and that is a deliberate trade. A run would
+ * clip once and blend many, which is faster - but it needs the coverages in a buffer first,
+ * and every shape below wanted a different length for it: the corner's radius, the ring's
+ * band, the arc's diameter. Sizing one buffer for all three is how a thick enough stroke on a
+ * big enough shape came to write past the end of it. Clipping per pixel costs about a fifth
+ * again on the edge pixels of a shape, which are the only pixels that reach here at all, and
+ * it cannot be got wrong.
+ */
+static void inkcell_fb_blend_pixel(const struct inkcell_backend_fb_state *state, int x, int y,
+                                   struct inkcell_rgb color, int coverage) {
+    if (coverage <= 0) {
+        return;
+    }
+    struct inkcell_fb_clipped_box box;
+    if (!inkcell_fb_clip_box(state, x, y, 1, 1, &box)) {
+        return;
+    }
+
+    const size_t bpp = state->bytes_per_pixel;
+    const size_t stride = state->fix.line_length;
+    uint8_t *px = state->inkcell_fb_ptr + (size_t)box.y * stride + (size_t)box.x * bpp;
+    if ((size_t)(px - state->inkcell_fb_ptr) + bpp > state->inkcell_fb_size) {
+        return;
+    }
+
+    if (coverage >= INKCELL_FB_AA_STEPS) {
+        inkcell_fb_store_span(px, 1, compose_color(state, color.r, color.g, color.b), bpp);
+        return;
+    }
+    const struct inkcell_rgb ground = decompose_color(state, inkcell_fb_load_pixel(px, bpp));
+    const uint32_t blended =
+        compose_color(state, inkcell_fb_mix_channel(ground.r, color.r, coverage),
+                      inkcell_fb_mix_channel(ground.g, color.g, coverage),
+                      inkcell_fb_mix_channel(ground.b, color.b, coverage));
+    inkcell_fb_store_span(px, 1, blended, bpp);
+}
+
+/*
+ * How much of the pixel at (px, py) the rounded rectangle covers, 0..INKCELL_FB_AA_STEPS.
+ *
+ * The straight parts are answered without sampling - a pixel away from the corners is in or out
+ * and nothing in between, because the edges are axis-aligned and land on pixel boundaries. Only
+ * a pixel inside one of the four corner squares is sampled, and even then only when the whole
+ * pixel is not plainly on one side of the arc.
+ */
+static int inkcell_fb_rrect_coverage(int px, int py, int x, int y, int w, int h, int radius) {
+    if (px < x || py < y || px >= x + w || py >= y + h) {
+        return 0;
+    }
+    if (radius <= 0) {
+        return INKCELL_FB_AA_STEPS;
+    }
+
+    /* Which corner square, if any, and where in it - measured from the outer corner so that all
+       four reduce to the same arithmetic. */
+    int i;
+    if (py < y + radius) {
+        i = py - y;
+    } else if (py >= y + h - radius) {
+        i = (y + h - 1) - py;
+    } else {
+        return INKCELL_FB_AA_STEPS; /* between the corner bands: the straight sides */
+    }
+    int j;
+    if (px < x + radius) {
+        j = px - x;
+    } else if (px >= x + w - radius) {
+        j = (x + w - 1) - px;
+    } else {
+        return INKCELL_FB_AA_STEPS; /* between the corners: the straight top or bottom */
+    }
+
+    /* The circle's centre sits at (radius, radius) in the corner square. The pixel's farthest
+       point from it is the corner nearest the square's origin, and its nearest point the one
+       diagonally opposite. */
+    /*
+     * Squared in 64 bits, and that is not caution for its own sake: the sample offsets are in
+     * eighths of a pixel, so the square of a radius past about 5,800 does not fit in 32 - and
+     * the clipping that would have thrown such a shape away happens later, at the blend. A
+     * caller handing over a radius larger than the panel is making a legal call with almost
+     * nothing to draw, not asking for undefined behaviour.
+     */
+    const int64_t far_x = radius - j;
+    const int64_t far_y = radius - i;
+    const int64_t near_x = far_x - 1;
+    const int64_t near_y = far_y - 1;
+    const int64_t rr = (int64_t)radius * radius;
+    if (far_x * far_x + far_y * far_y <= rr) {
+        return INKCELL_FB_AA_STEPS;
+    }
+    if (near_x * near_x + near_y * near_y >= rr) {
+        return 0;
+    }
+
+    const int64_t centre = (int64_t)INKCELL_FB_AA_FIXED * radius;
+    const int64_t limit = centre * centre;
+    int covered = 0;
+    for (int sy = 0; sy < INKCELL_FB_AA_SUB; ++sy) {
+        const int64_t oy = (int64_t)INKCELL_FB_AA_FIXED * i + 2 * sy + 1 - centre;
+        for (int sx = 0; sx < INKCELL_FB_AA_SUB; ++sx) {
+            const int64_t ox = (int64_t)INKCELL_FB_AA_FIXED * j + 2 * sx + 1 - centre;
+            if (ox * ox + oy * oy <= limit) {
+                ++covered;
+            }
+        }
+    }
+    return covered;
+}
+
 /*
  * Whether this mapping holds exactly the word a decoded tile is already made of.
  *
@@ -1484,38 +1713,71 @@ void inkcell_fb_fill_round_rect_ends(const struct inkcell_backend_fb_state *stat
     }
 
     const uint32_t packed = compose_color(state, color.r, color.g, color.b);
-    /* The straight middle, then a span per row of each corner band. A square end takes its own
-       band back into the middle, so the two are one fill rather than a fill and a patch - which
-       is what keeps a squared corner from showing a seam where the two would have met. */
+    /* The straight middle, then a row at a time through each corner band. A square end takes its
+       own band back into the middle, so the two are one fill rather than a fill and a patch -
+       which is what keeps a squared corner from showing a seam where they would have met. */
     const int top_band = round_top ? radius : 0;
     const int bottom_band = round_bottom ? radius : 0;
     inkcell_fb_fill_packed(state, x, y + top_band, w, h - top_band - bottom_band, packed);
 
     /*
-     * How far in the fill starts on each of the rounded rows.
+     * The corner bands, skipping rows and columns with no pixel on the panel.
      *
-     * Everything is doubled so the test lands on pixel *centres* without leaving integers:
-     * the row's centre is half a pixel below its top edge, and a circle drawn from pixel
-     * corners is visibly lopsided at this size. `2*d - 2*r + 1` is twice the offset of the
-     * pixel centre from the arc's centre, and the comparison is that against twice the radius.
+     * The blend clips each pixel anyway, so this changes nothing that is drawn. What it changes
+     * is what is *walked*: a shape far larger than the panel has a corner band as big as its
+     * own radius, and deciding against every pixel of it one sub-sample at a time is work with
+     * no picture at the end. Two comparisons per row and column is what that costs instead.
      */
-    const int diameter_sq = 4 * radius * radius;
-    for (int dy = 0; dy < radius; ++dy) {
-        const int oy = 2 * dy - 2 * radius + 1;
-        int dx = 0;
-        while (dx < radius) {
-            const int ox = 2 * dx - 2 * radius + 1;
-            if (ox * ox + oy * oy <= diameter_sq) {
-                break;
+    const int panel_w = (int)state->var.xres;
+    const int panel_h = (int)state->var.yres;
+    const int middle = w - 2 * radius;
+    for (int i = 0; i < radius; ++i) {
+        const int top_row = y + i;
+        const int bottom_row = y + h - 1 - i;
+        const bool want_top = round_top && top_row >= 0 && top_row < panel_h;
+        const bool want_bottom = round_bottom && bottom_row >= 0 && bottom_row < panel_h;
+        if (!want_top && !want_bottom) {
+            continue;
+        }
+        /* Between the two corners the row is solid, and on any real shape it is most of it. */
+        if (want_top && middle > 0) {
+            inkcell_fb_fill_packed(state, x + radius, top_row, middle, 1, packed);
+        }
+        if (want_bottom && middle > 0) {
+            inkcell_fb_fill_packed(state, x + radius, bottom_row, middle, 1, packed);
+        }
+        for (int j = 0; j < radius; ++j) {
+            const int left_col = x + j;
+            const int right_col = x + w - 1 - j;
+            const bool want_left = left_col >= 0 && left_col < panel_w;
+            const bool want_right = right_col >= 0 && right_col < panel_w;
+            if (!want_left && !want_right) {
+                continue;
             }
-            ++dx;
-        }
-        const int span = w - 2 * dx;
-        if (round_top) {
-            inkcell_fb_fill_packed(state, x + dx, y + dy, span, 1, packed);
-        }
-        if (round_bottom) {
-            inkcell_fb_fill_packed(state, x + dx, y + h - 1 - dy, span, 1, packed);
+            const int cov = inkcell_fb_rrect_coverage(j, i, 0, 0, 2 * radius, 2 * radius, radius);
+            if (cov <= 0) {
+                continue;
+            }
+            /* The other three corners are this one reflected. Reflecting rather than sampling
+               them again is not only cheaper: it is what guarantees the two ends of a pill are
+               the same shape, rather than the same shape to within a rounding decision taken
+               four times. */
+            if (want_top) {
+                if (want_left) {
+                    inkcell_fb_blend_pixel(state, left_col, top_row, color, cov);
+                }
+                if (want_right) {
+                    inkcell_fb_blend_pixel(state, right_col, top_row, color, cov);
+                }
+            }
+            if (want_bottom) {
+                if (want_left) {
+                    inkcell_fb_blend_pixel(state, left_col, bottom_row, color, cov);
+                }
+                if (want_right) {
+                    inkcell_fb_blend_pixel(state, right_col, bottom_row, color, cov);
+                }
+            }
         }
     }
 }
@@ -1523,6 +1785,260 @@ void inkcell_fb_fill_round_rect_ends(const struct inkcell_backend_fb_state *stat
 void inkcell_fb_fill_round_rect(const struct inkcell_backend_fb_state *state, int x, int y, int w,
                                 int h, int radius, struct inkcell_rgb color) {
     inkcell_fb_fill_round_rect_ends(state, x, y, w, h, radius, color, true, true);
+}
+
+void inkcell_fb_stroke_round_rect(const struct inkcell_backend_fb_state *state, int x, int y, int w,
+                                  int h, int radius, int thickness, struct inkcell_rgb color) {
+    if (w <= 0 || h <= 0 || thickness <= 0) {
+        return;
+    }
+    const int limit = (w < h ? w : h) / 2;
+    if (radius > limit) {
+        radius = limit;
+    }
+    if (radius < 0) {
+        radius = 0;
+    }
+    if (thickness > limit) {
+        thickness = limit;
+    }
+
+    /*
+     * The ring between two rounded rectangles, the inner one inset by the thickness.
+     *
+     * Subtracting the inner coverage from the outer is exact rather than an approximation,
+     * because the inner shape lies wholly inside the outer one: every sub-sample the inner
+     * claims is one the outer claims too, so the difference is the count of samples that fall
+     * in the ring. That is what makes a hairline a hairline at any radius, instead of the
+     * two-fills-one-over-the-other an outline used to be - which needed to know what was behind
+     * it, stepped on both edges, and repainted the hole it was meant to leave alone.
+     */
+    const int inner_x = x + thickness;
+    const int inner_y = y + thickness;
+    const int inner_w = w - 2 * thickness;
+    const int inner_h = h - 2 * thickness;
+    const int inner_r = radius > thickness ? radius - thickness : 0;
+    const bool hollow = inner_w > 0 && inner_h > 0;
+
+    const uint32_t packed = compose_color(state, color.r, color.g, color.b);
+    /* How far in from either side a row can hold anything: the corner square where the arc is,
+       or the stroke itself where it is straight. When the two bands meet or overlap - a circle,
+       or a stroke as thick as the shape is wide - there is no solid middle and they are one run
+       across the row. */
+    const int band = radius > thickness ? radius : thickness;
+    const bool split = 2 * band < w;
+    const int run = split ? band : w;
+    const int sides = split ? 2 : 1;
+
+    /* Bounded to the panel for the reason the fill's corner bands are: the blend clips, but a
+       ring larger than the panel would still be walked in full. */
+    const int panel_w = (int)state->var.xres;
+    const int panel_h = (int)state->var.yres;
+    const int row_from = y > 0 ? y : 0;
+    const int row_to = (y + h) < panel_h ? (y + h) : panel_h;
+    for (int py = row_from; py < row_to; ++py) {
+        const bool cross_row = (py < y + thickness) || (py >= y + h - thickness);
+        for (int side = 0; side < sides; ++side) {
+            const int start = side == 0 ? x : x + w - run;
+            /* In 64 bits so that a caller's coordinate near the ends of an int cannot
+               overflow on the way to being clamped away. */
+            const int64_t first = (int64_t)0 - start;
+            const int64_t last = (int64_t)panel_w - start;
+            const int col_from = (int)(first > 0 ? first : 0);
+            const int col_to = (int)(last < run ? last : run);
+            for (int k = col_from; k < col_to; ++k) {
+                const int px = start + k;
+                const int outer = inkcell_fb_rrect_coverage(px, py, x, y, w, h, radius);
+                if (outer <= 0) {
+                    continue;
+                }
+                const int inner = hollow ? inkcell_fb_rrect_coverage(px, py, inner_x, inner_y,
+                                                                     inner_w, inner_h, inner_r)
+                                         : 0;
+                inkcell_fb_blend_pixel(state, px, py, color, outer - inner);
+            }
+        }
+        /* The straight top and bottom, between the bands, where the ring is solid. There is no
+           such middle when the bands are one run - the run already covered the row. */
+        const int middle = split ? w - 2 * run : 0;
+        if (cross_row && middle > 0) {
+            inkcell_fb_fill_packed(state, x + run, py, middle, 1, packed);
+        }
+    }
+}
+
+/* ---- arcs ------------------------------------------------------------------------------------
+ *
+ * sin(i * pi/128) * 1024 for i in 0..64 - a quarter wave, mirrored into the other three. The
+ * trailing entry repeats the last so that interpolating at the very end reads a real value
+ * rather than off the end.
+ *
+ * Committed rather than computed at startup, for the reason everything else here is an integer:
+ * a table built with the host's libm would put the golden sheet at the mercy of which libm the
+ * host has. Linear interpolation between entries is within 0.05% of the true sine, which is a
+ * twentieth of a sub-sample at any radius this panel can hold.
+ */
+static const int16_t k_sine_quarter[66] = {
+    0,   25,  50,  75,  100, 125,  150,  175,  200,  224,  249,  273,  297,  321,  345,  369, 392,
+    415, 438, 460, 483, 505, 526,  548,  569,  590,  610,  630,  650,  669,  688,  706,  724, 742,
+    759, 775, 792, 807, 822, 837,  851,  865,  878,  891,  903,  915,  926,  936,  946,  955, 964,
+    972, 980, 987, 993, 999, 1004, 1009, 1013, 1016, 1019, 1021, 1023, 1024, 1024, 1024,
+};
+
+/* sin(p * pi/512) * 1024, p in 0..256. */
+static int32_t inkcell_fb_quarter_sin(int32_t p) {
+    const int32_t index = p >> 2;
+    const int32_t frac = p & 3;
+    const int32_t a = k_sine_quarter[index];
+    const int32_t b = k_sine_quarter[index + 1];
+    return a + ((b - a) * frac) / 4;
+}
+
+/*
+ * A turn reduced to 0..999.
+ *
+ * Called before anything is *added* to a caller's turn, which is the order that matters: a
+ * quarter turn for the cosine and a sweep for the far end of an arc are both added to it, and
+ * a turn is an int32_t a caller may legitimately fill - a spinner driven straight off the
+ * monotonic clock reaches the top of the range in about twenty-five days of uptime. Normalising
+ * afterwards is normalising a number that has already overflowed.
+ */
+static int32_t inkcell_fb_wrap_turn(int32_t turn) {
+    int32_t wrapped = turn % 1000;
+    if (wrapped < 0) {
+        wrapped += 1000;
+    }
+    return wrapped;
+}
+
+/* sin of `turn`, stated in permille of a whole circle, scaled by 1024. */
+static int32_t inkcell_fb_sin_turn(int32_t turn) {
+    const int32_t wrapped = inkcell_fb_wrap_turn(turn);
+    const int32_t angle = ((wrapped * 1024 + 500) / 1000) & 1023;
+    const int32_t p = angle & 255;
+    switch (angle >> 8) {
+    case 0:
+        return inkcell_fb_quarter_sin(p);
+    case 1:
+        return inkcell_fb_quarter_sin(256 - p);
+    case 2:
+        return -inkcell_fb_quarter_sin(p);
+    default:
+        return -inkcell_fb_quarter_sin(256 - p);
+    }
+}
+
+/*
+ * Where a turn points, on the panel's axes.
+ *
+ * Zero is twelve o'clock and a turn runs clockwise, because that is what every progress ring
+ * and every clock face does. `y` grows downwards here, so "up" is negative and the cosine is
+ * negated rather than the sine - which also makes a positive cross product mean "clockwise
+ * from", the test the sweep below is built on.
+ */
+static void inkcell_fb_turn_vector(int32_t turn, int32_t *vx, int32_t *vy) {
+    const int32_t wrapped = inkcell_fb_wrap_turn(turn);
+    *vx = inkcell_fb_sin_turn(wrapped);
+    *vy = -inkcell_fb_sin_turn(wrapped + 250);
+}
+
+void inkcell_fb_stroke_arc(const struct inkcell_backend_fb_state *state, int cx, int cy, int radius,
+                           int thickness, int32_t start, int32_t sweep, struct inkcell_rgb color) {
+    if (radius <= 0 || thickness <= 0 || sweep <= 0) {
+        return;
+    }
+    if (thickness > radius) {
+        thickness = radius;
+    }
+    if (sweep > 1000) {
+        sweep = 1000;
+    }
+
+    const int inner = radius - thickness;
+    /* In 64 bits, for the reason inkcell_fb_rrect_coverage() is: eight sub-pixel units squared
+       leaves a 32-bit int at a radius of about 5,800, and a radius past the panel is a legal
+       call whose pixels the blend clips, not an invalid one. */
+    const int64_t outer_sq = (int64_t)INKCELL_FB_AA_FIXED * radius;
+    const int64_t inner_sq = (int64_t)INKCELL_FB_AA_FIXED * inner;
+    const int64_t outer_limit = outer_sq * outer_sq;
+    const int64_t inner_limit = inner_sq * inner_sq;
+    const int64_t radius_sq = (int64_t)radius * radius;
+    const int64_t inner_radius_sq = (int64_t)inner * inner;
+
+    const bool whole = (sweep >= 1000);
+    const bool major = (sweep > 500);
+    int32_t sx = 0;
+    int32_t sy = 0;
+    int32_t ex = 0;
+    int32_t ey = 0;
+    /* Normalised before the sweep is added to it, or a turn near the top of the range overflows
+       on the way to the far end of the arc. */
+    const int32_t from = inkcell_fb_wrap_turn(start);
+    inkcell_fb_turn_vector(from, &sx, &sy);
+    inkcell_fb_turn_vector(from + sweep, &ex, &ey);
+
+    /*
+     * Only the part of the ring that is on the panel.
+     *
+     * The blend clips every pixel anyway, so this changes nothing that is drawn - but a ring
+     * larger than the panel would otherwise be *walked* in full, and a radius of sixty thousand
+     * is fourteen billion pixels to decide against. Bounded here, a clipped arc costs what is
+     * visible of it.
+     */
+    const int64_t left = (int64_t)cx - radius;
+    const int64_t right = (int64_t)cx + radius;
+    const int64_t top = (int64_t)cy - radius;
+    const int64_t bottom = (int64_t)cy + radius;
+    const int x0 = (int)(left > 0 ? left : 0);
+    const int x1 = (int)(right < (int64_t)state->var.xres ? right : (int64_t)state->var.xres);
+    const int y0 = (int)(top > 0 ? top : 0);
+    const int y1 = (int)(bottom < (int64_t)state->var.yres ? bottom : (int64_t)state->var.yres);
+
+    for (int py = y0; py < y1; ++py) {
+        for (int px = x0; px < x1; ++px) {
+            /*
+             * The cheap rejects first, against the pixel's nearest and farthest corners: most
+             * of this box is the hole in the middle, and a ring only ever has about its own
+             * circumference worth of edge pixels to sample.
+             */
+            const int64_t dx_near = px >= cx ? px - cx : (cx - 1 - px);
+            const int64_t dy_near = py >= cy ? py - cy : (cy - 1 - py);
+            const int64_t dx_far = dx_near + 1;
+            const int64_t dy_far = dy_near + 1;
+            if (dx_near * dx_near + dy_near * dy_near >= radius_sq ||
+                dx_far * dx_far + dy_far * dy_far <= inner_radius_sq) {
+                continue;
+            }
+
+            int covered = 0;
+            for (int ssy = 0; ssy < INKCELL_FB_AA_SUB; ++ssy) {
+                const int64_t oy = (int64_t)INKCELL_FB_AA_FIXED * (py - cy) + 2 * ssy + 1;
+                for (int ssx = 0; ssx < INKCELL_FB_AA_SUB; ++ssx) {
+                    const int64_t ox = (int64_t)INKCELL_FB_AA_FIXED * (px - cx) + 2 * ssx + 1;
+                    const int64_t d = ox * ox + oy * oy;
+                    if (d > outer_limit || d < inner_limit) {
+                        continue;
+                    }
+                    if (!whole) {
+                        /* Inside the wedge: clockwise of the start ray and anticlockwise of the
+                           end one. A sweep past the half turn is the same test on the wedge it
+                           leaves behind, negated - the two rays cannot bound the larger side
+                           directly. */
+                        const int64_t from_start = (int64_t)sx * oy - (int64_t)sy * ox;
+                        const int64_t to_end = ox * (int64_t)ey - oy * (int64_t)ex;
+                        const bool within = major ? !(((int64_t)ex * oy - (int64_t)ey * ox) > 0 &&
+                                                      (ox * (int64_t)sy - oy * (int64_t)sx) > 0)
+                                                  : (from_start >= 0 && to_end >= 0);
+                        if (!within) {
+                            continue;
+                        }
+                    }
+                    ++covered;
+                }
+            }
+            inkcell_fb_blend_pixel(state, px, py, color, covered);
+        }
+    }
 }
 
 void inkcell_fb_clear(const struct inkcell_backend_fb_state *state, struct inkcell_rgb color) {
@@ -1669,6 +2185,37 @@ int inkcell_fb_draw_wrapped_at(const struct inkcell_backend_fb_state *state, int
 }
 
 /* The same, from the body's left margin - which is where a screen's own wrapped text starts. */
+int inkcell_fb_draw_wrapped_centered(const struct inkcell_backend_fb_state *state, int y,
+                                     const char *text, size_t width, int max_lines,
+                                     struct inkcell_rgb color, struct inkcell_rgb ground) {
+    struct inkcell_fb_wrap_ctx wctx;
+    const struct inkcell_wrap_metric metric = inkcell_fb_wrap_metric(&wctx, state, state->scale);
+    struct inkcell_wrap wrap;
+    inkcell_wrap_begin_measured(&wrap, text, width, &metric);
+
+    /* The band the lines are centred in, rather than the panel: a caller that wrapped to a
+       narrower width meant that width, and centring on the panel would hang the text off the
+       side of the column it was measured for. */
+    const int left = inkcell_fb_margin(state);
+    int lines = 0;
+    while (lines < max_lines && inkcell_wrap_next(&wrap)) {
+        /*
+         * Each line on its own measurement, not the block on the widest.
+         *
+         * A ragged paragraph centred as a block is a block with one edge straight, which is
+         * the thing that reads as a mistake; and measuring is the only way to know how wide a
+         * line is on a proportional face, where two lines of the same character count are two
+         * different widths.
+         */
+        const int line_w = inkcell_fb_text_width(state, wrap.line, state->scale);
+        const int x = line_w < (int)width ? left + ((int)width - line_w) / 2 : left;
+        inkcell_fb_draw_text(state, x, y, wrap.line, state->scale, color, ground);
+        y += inkcell_fb_line_adv(state, state->scale);
+        ++lines;
+    }
+    return lines;
+}
+
 int inkcell_fb_draw_wrapped(const struct inkcell_backend_fb_state *state, int y, const char *text,
                             size_t width, int max_lines, struct inkcell_rgb color,
                             struct inkcell_rgb ground) {

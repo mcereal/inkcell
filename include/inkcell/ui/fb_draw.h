@@ -603,6 +603,20 @@ int inkcell_fb_emoji_box_fit(int box);
 int inkcell_fb_draw_wrapped(const struct inkcell_backend_fb_state *state, int y, const char *text,
                             size_t width, int max_lines, struct inkcell_rgb color,
                             struct inkcell_rgb ground);
+/*
+ * The same, with every line centred in `width` about the leading margin.
+ *
+ * For the one shape that is centred rather than set: a symbol with a sentence under it. An
+ * empty state centres its icon on the panel, and a caption left-aligned under a centred symbol
+ * reads as a mistake rather than as a choice.
+ *
+ * Each line is measured and placed on its own, not the block on its widest line. A ragged
+ * paragraph centred as a block is a block with one straight edge, and on a proportional face
+ * two lines of the same character count are two different widths anyway.
+ */
+int inkcell_fb_draw_wrapped_centered(const struct inkcell_backend_fb_state *state, int y,
+                                     const char *text, size_t width, int max_lines,
+                                     struct inkcell_rgb color, struct inkcell_rgb ground);
 int inkcell_fb_draw_wrapped_at(const struct inkcell_backend_fb_state *state, int x, int y,
                                const char *text, size_t width, int max_lines,
                                struct inkcell_rgb color, struct inkcell_rgb ground);
@@ -627,10 +641,11 @@ void inkcell_fb_blit_bgra(const struct inkcell_backend_fb_state *state, int x, i
  * capsule); anything larger is clamped to that, so a caller can ask for "as round as it goes"
  * without measuring first.
  *
- * There is no anti-aliasing: the panel is 1024 px across a 3.2" screen, so a stepped edge on a
- * 60 px disc is already below what the eye resolves, and blending would need a background this
- * function cannot see - a disc is drawn over the ground on one row and over the cursor fill on
- * the next.
+ * The edge is anti-aliased, which it did not used to be. The old note here said blending would
+ * need a background this function cannot see; it can see it, because this backend draws into
+ * ordinary RAM and copies the page to the panel afterwards, so the ground is simply the pixel
+ * about to be written over. Only edge pixels are read back and blended - the interior is one
+ * bulk fill - so what the curve costs is its boundary rather than its area.
  */
 void inkcell_fb_fill_round_rect(const struct inkcell_backend_fb_state *state, int x, int y, int w,
                                 int h, int radius, struct inkcell_rgb color);
@@ -650,6 +665,37 @@ void inkcell_fb_fill_round_rect(const struct inkcell_backend_fb_state *state, in
 void inkcell_fb_fill_round_rect_ends(const struct inkcell_backend_fb_state *state, int x, int y,
                                      int w, int h, int radius, struct inkcell_rgb color,
                                      bool round_top, bool round_bottom);
+/*
+ * The same shape as an outline of `thickness` pixels, drawn as one ring.
+ *
+ * What an outline used to be here was the larger shape filled and the smaller one laid over it,
+ * which needs to know what is behind the hole and steps twice - once on each edge. A ring is
+ * the difference between the two coverages, and because the inner shape lies wholly inside the
+ * outer one that difference is exact rather than approximate: every sub-sample the inner claims
+ * is one the outer claims too.
+ *
+ * This is what a focus ring, an outlined card, a checkbox and a segmented divider all want, and
+ * it is the one of them that stays a hairline at any radius.
+ */
+void inkcell_fb_stroke_round_rect(const struct inkcell_backend_fb_state *state, int x, int y, int w,
+                                  int h, int radius, int thickness, struct inkcell_rgb color);
+
+/*
+ * Part of a ring: a band `thickness` wide at `radius` from (`cx`, `cy`), from `start` and
+ * running `sweep`.
+ *
+ * Both are in permille of a whole circle, zero is twelve o'clock and a sweep runs clockwise -
+ * the way a clock face and every progress ring on every phone run. A sweep of 1000 or more is
+ * the whole ring and skips the angular test altogether.
+ *
+ * The one thing this backend could not draw at all: a dial, a ring gauge, and the circular
+ * progress indicator that is the counterpart of inkcell_fb_draw_meter()'s bar. The angles come
+ * off a committed sine table rather than libm, so a picture of an arc is the same picture on
+ * every host that renders it.
+ */
+void inkcell_fb_stroke_arc(const struct inkcell_backend_fb_state *state, int cx, int cy, int radius,
+                           int thickness, int32_t start, int32_t sweep, struct inkcell_rgb color);
+
 void inkcell_fb_fit(char *line, size_t cols);
 void inkcell_fb_format_age(uint32_t last_heard, char *out, size_t out_len);
 void inkcell_fb_format_clock(uint32_t rx_time, char *out, size_t out_len);
