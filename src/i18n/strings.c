@@ -183,12 +183,18 @@ static const struct inkcell_i18n_locale *locale_from_tag(const char *tag) {
 }
 
 void inkcell_i18n_init(void) {
-    /* <PREFIX>_LANG first so the Brick's launch.sh can pin a language without touching the
-       system locale, which on a handheld running MinUI is not something a user can set. The
-       POSIX variables follow in the order POSIX gives them. */
-    static const char *const k_env[] = {"<PREFIX>_LANG", "LC_ALL", "LC_MESSAGES", "LANG"};
-    for (size_t i = 0; i < sizeof k_env / sizeof k_env[0]; ++i) {
-        const char *value = getenv(k_env[i]);
+    /*
+     * The application's own LANG knob first, so a launcher can pin a language without touching
+     * the system locale - which on a handheld is not something a user can set. The POSIX
+     * variables follow in the order POSIX gives them.
+     *
+     * The first is read through inkcell_env_get(), which puts the application's prefix on it;
+     * the rest are read raw, because LC_ALL is LC_ALL on every machine and prefixing it would
+     * be inventing a variable nobody sets.
+     */
+    static const char *const k_env[] = {"LC_ALL", "LC_MESSAGES", "LANG"};
+    for (size_t i = 0; i < 1U + sizeof k_env / sizeof k_env[0]; ++i) {
+        const char *value = (i == 0U) ? inkcell_env_get("LANG") : getenv(k_env[i - 1U]);
         if (value == NULL || value[0] == '\0') {
             continue;
         }
