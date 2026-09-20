@@ -851,11 +851,18 @@ static int inkcell_fb_rrect_coverage(int px, int py, int x, int y, int w, int h,
     /* The circle's centre sits at (radius, radius) in the corner square. The pixel's farthest
        point from it is the corner nearest the square's origin, and its nearest point the one
        diagonally opposite. */
-    const int far_x = radius - j;
-    const int far_y = radius - i;
-    const int near_x = far_x - 1;
-    const int near_y = far_y - 1;
-    const int rr = radius * radius;
+    /*
+     * Squared in 64 bits, and that is not caution for its own sake: the sample offsets are in
+     * eighths of a pixel, so the square of a radius past about 5,800 does not fit in 32 - and
+     * the clipping that would have thrown such a shape away happens later, at the blend. A
+     * caller handing over a radius larger than the panel is making a legal call with almost
+     * nothing to draw, not asking for undefined behaviour.
+     */
+    const int64_t far_x = radius - j;
+    const int64_t far_y = radius - i;
+    const int64_t near_x = far_x - 1;
+    const int64_t near_y = far_y - 1;
+    const int64_t rr = (int64_t)radius * radius;
     if (far_x * far_x + far_y * far_y <= rr) {
         return INKCELL_FB_AA_STEPS;
     }
@@ -863,13 +870,13 @@ static int inkcell_fb_rrect_coverage(int px, int py, int x, int y, int w, int h,
         return 0;
     }
 
-    const int centre = INKCELL_FB_AA_FIXED * radius;
-    const int limit = centre * centre;
+    const int64_t centre = (int64_t)INKCELL_FB_AA_FIXED * radius;
+    const int64_t limit = centre * centre;
     int covered = 0;
     for (int sy = 0; sy < INKCELL_FB_AA_SUB; ++sy) {
-        const int oy = INKCELL_FB_AA_FIXED * i + 2 * sy + 1 - centre;
+        const int64_t oy = (int64_t)INKCELL_FB_AA_FIXED * i + 2 * sy + 1 - centre;
         for (int sx = 0; sx < INKCELL_FB_AA_SUB; ++sx) {
-            const int ox = INKCELL_FB_AA_FIXED * j + 2 * sx + 1 - centre;
+            const int64_t ox = (int64_t)INKCELL_FB_AA_FIXED * j + 2 * sx + 1 - centre;
             if (ox * ox + oy * oy <= limit) {
                 ++covered;
             }
@@ -1713,16 +1720,40 @@ void inkcell_fb_fill_round_rect_ends(const struct inkcell_backend_fb_state *stat
     const int bottom_band = round_bottom ? radius : 0;
     inkcell_fb_fill_packed(state, x, y + top_band, w, h - top_band - bottom_band, packed);
 
+    /*
+     * The corner bands, skipping rows and columns with no pixel on the panel.
+     *
+     * The blend clips each pixel anyway, so this changes nothing that is drawn. What it changes
+     * is what is *walked*: a shape far larger than the panel has a corner band as big as its
+     * own radius, and deciding against every pixel of it one sub-sample at a time is work with
+     * no picture at the end. Two comparisons per row and column is what that costs instead.
+     */
+    const int panel_w = (int)state->var.xres;
+    const int panel_h = (int)state->var.yres;
     const int middle = w - 2 * radius;
     for (int i = 0; i < radius; ++i) {
-        /* Between the two corners the row is solid, and on any real shape it is most of it. */
-        if (round_top && middle > 0) {
-            inkcell_fb_fill_packed(state, x + radius, y + i, middle, 1, packed);
+        const int top_row = y + i;
+        const int bottom_row = y + h - 1 - i;
+        const bool want_top = round_top && top_row >= 0 && top_row < panel_h;
+        const bool want_bottom = round_bottom && bottom_row >= 0 && bottom_row < panel_h;
+        if (!want_top && !want_bottom) {
+            continue;
         }
-        if (round_bottom && middle > 0) {
-            inkcell_fb_fill_packed(state, x + radius, y + h - 1 - i, middle, 1, packed);
+        /* Between the two corners the row is solid, and on any real shape it is most of it. */
+        if (want_top && middle > 0) {
+            inkcell_fb_fill_packed(state, x + radius, top_row, middle, 1, packed);
+        }
+        if (want_bottom && middle > 0) {
+            inkcell_fb_fill_packed(state, x + radius, bottom_row, middle, 1, packed);
         }
         for (int j = 0; j < radius; ++j) {
+            const int left_col = x + j;
+            const int right_col = x + w - 1 - j;
+            const bool want_left = left_col >= 0 && left_col < panel_w;
+            const bool want_right = right_col >= 0 && right_col < panel_w;
+            if (!want_left && !want_right) {
+                continue;
+            }
             const int cov = inkcell_fb_rrect_coverage(j, i, 0, 0, 2 * radius, 2 * radius, radius);
             if (cov <= 0) {
                 continue;
@@ -1731,13 +1762,21 @@ void inkcell_fb_fill_round_rect_ends(const struct inkcell_backend_fb_state *stat
                them again is not only cheaper: it is what guarantees the two ends of a pill are
                the same shape, rather than the same shape to within a rounding decision taken
                four times. */
-            if (round_top) {
-                inkcell_fb_blend_pixel(state, x + j, y + i, color, cov);
-                inkcell_fb_blend_pixel(state, x + w - 1 - j, y + i, color, cov);
+            if (want_top) {
+                if (want_left) {
+                    inkcell_fb_blend_pixel(state, left_col, top_row, color, cov);
+                }
+                if (want_right) {
+                    inkcell_fb_blend_pixel(state, right_col, top_row, color, cov);
+                }
             }
-            if (round_bottom) {
-                inkcell_fb_blend_pixel(state, x + j, y + h - 1 - i, color, cov);
-                inkcell_fb_blend_pixel(state, x + w - 1 - j, y + h - 1 - i, color, cov);
+            if (want_bottom) {
+                if (want_left) {
+                    inkcell_fb_blend_pixel(state, left_col, bottom_row, color, cov);
+                }
+                if (want_right) {
+                    inkcell_fb_blend_pixel(state, right_col, bottom_row, color, cov);
+                }
             }
         }
     }
@@ -1791,11 +1830,23 @@ void inkcell_fb_stroke_round_rect(const struct inkcell_backend_fb_state *state, 
     const int run = split ? band : w;
     const int sides = split ? 2 : 1;
 
-    for (int py = y; py < y + h; ++py) {
+    /* Bounded to the panel for the reason the fill's corner bands are: the blend clips, but a
+       ring larger than the panel would still be walked in full. */
+    const int panel_w = (int)state->var.xres;
+    const int panel_h = (int)state->var.yres;
+    const int row_from = y > 0 ? y : 0;
+    const int row_to = (y + h) < panel_h ? (y + h) : panel_h;
+    for (int py = row_from; py < row_to; ++py) {
         const bool cross_row = (py < y + thickness) || (py >= y + h - thickness);
         for (int side = 0; side < sides; ++side) {
             const int start = side == 0 ? x : x + w - run;
-            for (int k = 0; k < run; ++k) {
+            /* In 64 bits so that a caller's coordinate near the ends of an int cannot
+               overflow on the way to being clamped away. */
+            const int64_t first = (int64_t)0 - start;
+            const int64_t last = (int64_t)panel_w - start;
+            const int col_from = (int)(first > 0 ? first : 0);
+            const int col_to = (int)(last < run ? last : run);
+            for (int k = col_from; k < col_to; ++k) {
                 const int px = start + k;
                 const int outer = inkcell_fb_rrect_coverage(px, py, x, y, w, h, radius);
                 if (outer <= 0) {
@@ -1843,12 +1894,26 @@ static int32_t inkcell_fb_quarter_sin(int32_t p) {
     return a + ((b - a) * frac) / 4;
 }
 
-/* sin of `turn`, stated in permille of a whole circle, scaled by 1024. */
-static int32_t inkcell_fb_sin_turn(int32_t turn) {
+/*
+ * A turn reduced to 0..999.
+ *
+ * Called before anything is *added* to a caller's turn, which is the order that matters: a
+ * quarter turn for the cosine and a sweep for the far end of an arc are both added to it, and
+ * a turn is an int32_t a caller may legitimately fill - a spinner driven straight off the
+ * monotonic clock reaches the top of the range in about twenty-five days of uptime. Normalising
+ * afterwards is normalising a number that has already overflowed.
+ */
+static int32_t inkcell_fb_wrap_turn(int32_t turn) {
     int32_t wrapped = turn % 1000;
     if (wrapped < 0) {
         wrapped += 1000;
     }
+    return wrapped;
+}
+
+/* sin of `turn`, stated in permille of a whole circle, scaled by 1024. */
+static int32_t inkcell_fb_sin_turn(int32_t turn) {
+    const int32_t wrapped = inkcell_fb_wrap_turn(turn);
     const int32_t angle = ((wrapped * 1024 + 500) / 1000) & 1023;
     const int32_t p = angle & 255;
     switch (angle >> 8) {
@@ -1872,8 +1937,9 @@ static int32_t inkcell_fb_sin_turn(int32_t turn) {
  * from", the test the sweep below is built on.
  */
 static void inkcell_fb_turn_vector(int32_t turn, int32_t *vx, int32_t *vy) {
-    *vx = inkcell_fb_sin_turn(turn);
-    *vy = -inkcell_fb_sin_turn(turn + 250);
+    const int32_t wrapped = inkcell_fb_wrap_turn(turn);
+    *vx = inkcell_fb_sin_turn(wrapped);
+    *vy = -inkcell_fb_sin_turn(wrapped + 250);
 }
 
 void inkcell_fb_stroke_arc(const struct inkcell_backend_fb_state *state, int cx, int cy, int radius,
@@ -1889,10 +1955,15 @@ void inkcell_fb_stroke_arc(const struct inkcell_backend_fb_state *state, int cx,
     }
 
     const int inner = radius - thickness;
-    const int32_t outer_sq = (int32_t)INKCELL_FB_AA_FIXED * radius;
-    const int32_t inner_sq = (int32_t)INKCELL_FB_AA_FIXED * inner;
-    const int32_t outer_limit = outer_sq * outer_sq;
-    const int32_t inner_limit = inner_sq * inner_sq;
+    /* In 64 bits, for the reason inkcell_fb_rrect_coverage() is: eight sub-pixel units squared
+       leaves a 32-bit int at a radius of about 5,800, and a radius past the panel is a legal
+       call whose pixels the blend clips, not an invalid one. */
+    const int64_t outer_sq = (int64_t)INKCELL_FB_AA_FIXED * radius;
+    const int64_t inner_sq = (int64_t)INKCELL_FB_AA_FIXED * inner;
+    const int64_t outer_limit = outer_sq * outer_sq;
+    const int64_t inner_limit = inner_sq * inner_sq;
+    const int64_t radius_sq = (int64_t)radius * radius;
+    const int64_t inner_radius_sq = (int64_t)inner * inner;
 
     const bool whole = (sweep >= 1000);
     const bool major = (sweep > 500);
@@ -1900,31 +1971,51 @@ void inkcell_fb_stroke_arc(const struct inkcell_backend_fb_state *state, int cx,
     int32_t sy = 0;
     int32_t ex = 0;
     int32_t ey = 0;
-    inkcell_fb_turn_vector(start, &sx, &sy);
-    inkcell_fb_turn_vector(start + sweep, &ex, &ey);
+    /* Normalised before the sweep is added to it, or a turn near the top of the range overflows
+       on the way to the far end of the arc. */
+    const int32_t from = inkcell_fb_wrap_turn(start);
+    inkcell_fb_turn_vector(from, &sx, &sy);
+    inkcell_fb_turn_vector(from + sweep, &ex, &ey);
 
-    for (int py = cy - radius; py < cy + radius; ++py) {
-        for (int px = cx - radius; px < cx + radius; ++px) {
+    /*
+     * Only the part of the ring that is on the panel.
+     *
+     * The blend clips every pixel anyway, so this changes nothing that is drawn - but a ring
+     * larger than the panel would otherwise be *walked* in full, and a radius of sixty thousand
+     * is fourteen billion pixels to decide against. Bounded here, a clipped arc costs what is
+     * visible of it.
+     */
+    const int64_t left = (int64_t)cx - radius;
+    const int64_t right = (int64_t)cx + radius;
+    const int64_t top = (int64_t)cy - radius;
+    const int64_t bottom = (int64_t)cy + radius;
+    const int x0 = (int)(left > 0 ? left : 0);
+    const int x1 = (int)(right < (int64_t)state->var.xres ? right : (int64_t)state->var.xres);
+    const int y0 = (int)(top > 0 ? top : 0);
+    const int y1 = (int)(bottom < (int64_t)state->var.yres ? bottom : (int64_t)state->var.yres);
+
+    for (int py = y0; py < y1; ++py) {
+        for (int px = x0; px < x1; ++px) {
             /*
              * The cheap rejects first, against the pixel's nearest and farthest corners: most
              * of this box is the hole in the middle, and a ring only ever has about its own
              * circumference worth of edge pixels to sample.
              */
-            const int dx_near = px >= cx ? px - cx : (cx - 1 - px);
-            const int dy_near = py >= cy ? py - cy : (cy - 1 - py);
-            const int dx_far = dx_near + 1;
-            const int dy_far = dy_near + 1;
-            if (dx_near * dx_near + dy_near * dy_near >= radius * radius ||
-                dx_far * dx_far + dy_far * dy_far <= inner * inner) {
+            const int64_t dx_near = px >= cx ? px - cx : (cx - 1 - px);
+            const int64_t dy_near = py >= cy ? py - cy : (cy - 1 - py);
+            const int64_t dx_far = dx_near + 1;
+            const int64_t dy_far = dy_near + 1;
+            if (dx_near * dx_near + dy_near * dy_near >= radius_sq ||
+                dx_far * dx_far + dy_far * dy_far <= inner_radius_sq) {
                 continue;
             }
 
             int covered = 0;
             for (int ssy = 0; ssy < INKCELL_FB_AA_SUB; ++ssy) {
-                const int32_t oy = INKCELL_FB_AA_FIXED * (py - cy) + 2 * ssy + 1;
+                const int64_t oy = (int64_t)INKCELL_FB_AA_FIXED * (py - cy) + 2 * ssy + 1;
                 for (int ssx = 0; ssx < INKCELL_FB_AA_SUB; ++ssx) {
-                    const int32_t ox = INKCELL_FB_AA_FIXED * (px - cx) + 2 * ssx + 1;
-                    const int32_t d = ox * ox + oy * oy;
+                    const int64_t ox = (int64_t)INKCELL_FB_AA_FIXED * (px - cx) + 2 * ssx + 1;
+                    const int64_t d = ox * ox + oy * oy;
                     if (d > outer_limit || d < inner_limit) {
                         continue;
                     }
@@ -1933,11 +2024,11 @@ void inkcell_fb_stroke_arc(const struct inkcell_backend_fb_state *state, int cx,
                            end one. A sweep past the half turn is the same test on the wedge it
                            leaves behind, negated - the two rays cannot bound the larger side
                            directly. */
-                        const int32_t from_start = sx * oy - sy * ox;
-                        const int32_t to_end = ox * ey - oy * ex;
-                        const bool within =
-                            major ? !((ex * oy - ey * ox) > 0 && (ox * sy - oy * sx) > 0)
-                                  : (from_start >= 0 && to_end >= 0);
+                        const int64_t from_start = (int64_t)sx * oy - (int64_t)sy * ox;
+                        const int64_t to_end = ox * (int64_t)ey - oy * (int64_t)ex;
+                        const bool within = major ? !(((int64_t)ex * oy - (int64_t)ey * ox) > 0 &&
+                                                      (ox * (int64_t)sy - oy * (int64_t)sx) > 0)
+                                                  : (from_start >= 0 && to_end >= 0);
                         if (!within) {
                             continue;
                         }

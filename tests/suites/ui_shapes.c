@@ -18,6 +18,7 @@
 #include "inkcell/ui/fb_capture.h"
 #include "inkcell/ui/fb_draw.h"
 
+#include <limits.h>
 #include <stdint.h>
 
 #define SHAPES_W 256U
@@ -245,5 +246,62 @@ INKCELL_TEST_CASE(shapes_stroke_wider_than_any_row_buffer, unit) {
                          "and should reach the far edge of the row");
 
     inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(shapes_arc_takes_any_turn_a_caller_can_hold, unit) {
+    /*
+     * The start angle is an int32_t and the sine helper deliberately accepts wrapped and
+     * negative turns - so a caller is entitled to hand it anything of that type and let the
+     * modulo sort it out. It could not: the quarter turn for the cosine and the end of the
+     * sweep were both added *before* the normalisation, so a turn near the top of the range
+     * overflowed on the way in.
+     *
+     * Not a hypothetical. A spinner driven straight off the monotonic clock - the obvious way
+     * to write one - passes a millisecond count, and INT32_MAX milliseconds is about
+     * twenty-five days of uptime. A handheld left on a shelf gets there.
+     */
+    struct shapes_page page;
+    INKCELL_TEST_FAIL_IF(!shapes_open(&page), "the capture should open");
+
+    inkcell_fb_stroke_arc(page.state, 128, 128, 60, 10, INT32_MAX, 250, k_ink);
+    inkcell_fb_stroke_arc(page.state, 128, 128, 60, 10, INT32_MIN, 250, k_ink);
+    inkcell_fb_stroke_arc(page.state, 128, 128, 60, 10, INT32_MAX - 1, 1000, k_ink);
+
+    /* A wrapped turn is the same turn: two thousand permille round is where zero is, so this
+       draws the same quarter as a start of nothing. */
+    inkcell_fb_clear(page.state, k_ground);
+    inkcell_fb_stroke_arc(page.state, 128, 128, 60, 10, 2000, 250, k_ink);
+    const int arm = 60 - 10 / 2;
+    INKCELL_TEST_FAIL_IF(shapes_at(&page, 128 + 4, 128 - arm) == 0,
+                         "a turn of two whole circles should start where zero does");
+    INKCELL_TEST_FAIL_IF(shapes_at(&page, 128 - arm, 128) != 0,
+                         "and should sweep the same quarter");
+
+    inkcell_capture_close(page.capture);
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(shapes_survive_a_radius_past_the_page, unit) {
+    /*
+     * Both primitives take an `int` and clip whatever lands off the page, so a radius far
+     * larger than the panel is a legal call with almost nothing to draw. The squaring got there
+     * first: the sample distances are in eighths of a pixel, so a radius over about 5,800
+     * overflowed a 32-bit square before a single pixel had been clipped away.
+     */
+    struct shapes_page page;
+    INKCELL_TEST_FAIL_IF(!shapes_open(&page), "the capture should open");
+
+    inkcell_fb_stroke_arc(page.state, 128, 128, 6000, 12, 0, 500, k_ink);
+    inkcell_fb_stroke_arc(page.state, 128, 128, 60000, 12, 0, 1000, k_ink);
+    inkcell_fb_fill_round_rect(page.state, -6000, -6000, 12000, 12000, 6000, k_ink);
+    inkcell_fb_stroke_round_rect(page.state, -6000, -6000, 12000, 12000, 6000, 40, k_ink);
+
+    /* The huge filled disc covers this page completely; that it drew at all is the assertion
+       that the arithmetic got through. */
+    INKCELL_TEST_FAIL_IF(shapes_at(&page, 128, 128) != 255,
+                         "a disc far larger than the page should still cover it");
+
+    inkcell_capture_close(page.capture);
     record_success(test_name);
 }
