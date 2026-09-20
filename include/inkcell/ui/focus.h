@@ -31,12 +31,26 @@
  *     }
  *
  * Registering during the draw is not an implementation detail, it is the whole safety property.
- * A card whose last row fell off the bottom of the panel never registers that row; a chip strip
- * that elided its fourth chip never registers the fourth chip. The cursor therefore cannot land
- * on something that is not on the frame - which is a failure this toolkit has already written
- * down twice as a thing screens must remember not to do (see the reservation note in
- * inkcell/ui/widgets/card.h). A screen cannot remember it wrong here, because what was drawn and
- * what can be reached are the same list.
+ * A card whose verb fell off its trailing edge never registers that verb; a list showing ten
+ * rows of four hundred registers ten. The cursor therefore cannot land on something that is not
+ * on the frame - which is a failure this toolkit has already written down twice as a thing
+ * screens must remember not to do (see the reservation note in inkcell/ui/widgets/card.h). A
+ * screen cannot remember it wrong here, because what was drawn and what can be reached are the
+ * same list.
+ *
+ * Which is also why a screen drawing components does not make these calls at all. Only the
+ * card knows how many of its verbs fitted, only the strip knows how far its pills got, only the
+ * list knows which rows the window landed on - so the components register their own, and a
+ * screen pushes a map in and names things:
+ *
+ *     inkcell_focus_begin(&map, storage, SCREEN_MAX);
+ *     inkcell_fb_set_focus_map(state, &map);
+ *     card.action_focus_id = ID_CARD_VERBS;     inkcell_fb_draw_card(...);
+ *     chips[i].focus_id = ID_FILTER(i);         inkcell_fb_draw_chip_strip(...);
+ *     inkcell_fb_list_focus(&list, ID_ROWS);    ... the walk ...
+ *
+ * See inkcell_fb_set_focus_map() in inkcell/ui/fb_draw.h for the ids each component takes.
+ * inkcell_focus_add() below stays what a screen calls for something it drew itself.
  *
  * This is a model rather than a widget, for the reason inkcell/ui/actions.h and
  * inkcell/ui/keyboard.h are: where the cursor goes next is a fact about the nav, a second

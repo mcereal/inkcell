@@ -750,6 +750,11 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state,
                 .idle_tone = INKCELL_TONE_PRIMARY,
                 .ground = m.fill,
                 .scale = layout->small,
+                /* Only the ones this loop reaches, which is `drawn` of them and not
+                   `action_count`: the verbs that did not fit were dropped above, and a verb that
+                   was dropped is not a place the cursor may stand. */
+                .focus_id = card->action_focus_id != INKCELL_FOCUS_NONE ? card->action_focus_id + i
+                                                                        : INKCELL_FOCUS_NONE,
             };
             inkcell_fb_draw_button(state, &button);
             actions_x -= gap;

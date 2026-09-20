@@ -61,6 +61,9 @@ struct inkcell_fb_list {
     /* The cursor stands on its card rather than on its row: no row takes the highlight and the
        card draws the focus ring instead. See inkcell_fb_list_begin_focus(). */
     bool focus_card;
+    /* What the d-pad calls the rows: item `index` is `focus_base + index`. Set by
+       inkcell_fb_list_focus(), zero otherwise. */
+    uint32_t focus_base;
 };
 
 /* One row per item, filling the body. */
@@ -201,6 +204,32 @@ enum inkcell_color inkcell_fb_list_ground(const struct inkcell_fb_list *list, ui
 struct inkcell_fb_list inkcell_fb_list_begin_visible(const struct inkcell_fb_layout *layout,
                                                      uint32_t count, uint32_t cursor,
                                                      uint32_t visible);
+
+/*
+ * Register each row this list draws, under `base + index`.
+ *
+ * Called after one of the inkcell_fb_list_begin*() calls above and before the walk, on a frame
+ * whose state carries a focus map (inkcell_fb_set_focus_map()). An index rather than an id per
+ * row because only the list has a number of pressable things it does not know in advance -
+ * everything else in this toolkit takes an id per thing - and because a screen's list cursor is
+ * already an item index, so `focus_base + cursor` is the id it was going to hold anyway.
+ *
+ * **Only the rows that were drawn.** A window shows what fits and the rest of the list is
+ * somewhere else; an item scrolled past, or clipped by the bottom of the body, registers
+ * nothing. That is the point of registering from the draw, and it has a consequence worth
+ * stating plainly: pressing down on the last visible row finds *nothing*, because there is
+ * nothing drawn down there.
+ *
+ * That press is a scroll, and a scroll is this list's word rather than the focus map's - the
+ * window arithmetic in struct inkcell_list is what knows there are four hundred more items. So
+ * a screen holding a list moves its own cursor first and asks the finder only when the cursor
+ * cannot move: at the true ends of the list, which is where leaving it is what the press means.
+ * See include/inkcell/ui/focus.h, which argues the same division from the other side.
+ *
+ * The subheaders and notes between rows register nothing: they are labels, not places to
+ * stand, so their item indices are simply absent from the map and a press cannot land on one.
+ */
+void inkcell_fb_list_focus(struct inkcell_fb_list *list, uint32_t base);
 
 bool inkcell_fb_list_next(struct inkcell_fb_list *list, uint32_t *index);
 

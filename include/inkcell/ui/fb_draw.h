@@ -32,6 +32,7 @@
  */
 
 #include "inkcell/ui/anim.h"
+#include "inkcell/ui/focus.h"
 #include "inkcell/ui/icon.h"
 #include "inkcell/ui/layout.h"
 #include "inkcell/ui/theme.h"
@@ -124,6 +125,18 @@ struct inkcell_backend_fb_state {
     struct inkcell_fb_render_cache *render_cache;
     /* What draws the frame. Zeroed until inkcell_fb_set_app(). */
     struct inkcell_fb_app app;
+    /*
+     * Where this frame's pressable things are being collected, or NULL.
+     *
+     * Pushed in by whoever is drawing (inkcell_fb_set_focus_map()) rather than owned here, on
+     * the same terms as the app and the theme: it is rebuilt from nothing every frame, it
+     * belongs to the screen that is going to ask it questions, and a toolkit that allocated one
+     * would be a toolkit deciding how long a screen's map lives.
+     *
+     * NULL is the whole of the opt-out, and it is what an application that has not heard of
+     * this has. A widget handed no map registers nothing and draws exactly what it drew before.
+     */
+    struct inkcell_focus_map *focus;
     bool partial_disabled;
     bool clip_active;
     struct inkcell_fb_damage_rect clip;
@@ -708,6 +721,41 @@ size_t inkcell_fb_width(const char *line);
 
 /* Installs what draws the frame. Pass NULL to remove one; the outgoing app's close() runs. */
 void inkcell_fb_set_app(struct inkcell_backend_fb_state *state, const struct inkcell_fb_app *app);
+
+/* ---- focus ------------------------------------------------------------------------------- */
+
+/*
+ * Collect this frame's pressable rectangles into `map`, or NULL to collect none.
+ *
+ * The other half of include/inkcell/ui/focus.h. That header says a frame registers the box of
+ * everything focusable *as it draws it*, and left it to the screen to make the calls - which
+ * works, and asks every screen to know where a widget put things the widget laid out itself. A
+ * card drops the verb it had no room for; a chip strip elides the tab that did not fit; a list
+ * clips the row that fell past the body. Only the widget knows which of those happened, so only
+ * the widget can honestly say what is on the frame.
+ *
+ * So the widgets say it. Set a map here, give the pressable things ids (`focus_id` on a button
+ * or a chip, `action_focus_id` on a card or a dialog, inkcell_fb_list_focus() on a list), and
+ * what was drawn and what the cursor can reach are one list rather than two that have to agree.
+ *
+ * The map is borrowed until the next call, so it must outlive the frame. Open it with
+ * inkcell_focus_begin() at the top of the render and read it after - anything registered against
+ * the *previous* layout is a box that is no longer on the panel.
+ */
+void inkcell_fb_set_focus_map(struct inkcell_backend_fb_state *state,
+                              struct inkcell_focus_map *map);
+
+/*
+ * Registers `rect` under `id` in whatever map is set, and does nothing when none is or when the
+ * id is INKCELL_FOCUS_NONE.
+ *
+ * What the widgets below call, and what a screen drawing something of its own calls so that it
+ * goes in by the same path rather than by reaching for the map it happens to hold. The state is
+ * what a renderer is handed; this keeps that true for the one fact about a frame that is not a
+ * pixel.
+ */
+void inkcell_fb_focus_register(const struct inkcell_backend_fb_state *state, uint32_t id,
+                               const struct inkcell_fb_rect *rect);
 
 /* Whether the app says it is owed another frame - what inkcell_fb_state_animating() adds to the
    animations when it decides whether one is due. */

@@ -211,6 +211,30 @@ void inkcell_fb_set_app(struct inkcell_backend_fb_state *state, const struct ink
     state->app = *app;
 }
 
+void inkcell_fb_set_focus_map(struct inkcell_backend_fb_state *state,
+                              struct inkcell_focus_map *map) {
+    if (state == NULL) {
+        return;
+    }
+    state->focus = map;
+}
+
+/*
+ * The one place a widget's geometry becomes something a d-pad can reach.
+ *
+ * Written through a const state deliberately: the map is the screen's, not the frame's, so
+ * registering into it does not make the frame mutable and the dozens of draw functions that
+ * take the state immutably stay that way. What is const here is the panel, and the panel is
+ * exactly what this does not touch.
+ */
+void inkcell_fb_focus_register(const struct inkcell_backend_fb_state *state, uint32_t id,
+                               const struct inkcell_fb_rect *rect) {
+    if (state == NULL || state->focus == NULL || id == INKCELL_FOCUS_NONE || rect == NULL) {
+        return;
+    }
+    (void)inkcell_focus_add(state->focus, id, rect->x, rect->y, rect->w, rect->h);
+}
+
 bool inkcell_fb_app_pending(const struct inkcell_backend_fb_state *state) {
     return state != NULL && state->app.pending != NULL && state->app.pending(state->app.ctx);
 }

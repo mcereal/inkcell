@@ -97,6 +97,11 @@ static int inkcell_fb_button_content_w(const struct inkcell_backend_fb_state *st
 
 void inkcell_fb_draw_button(const struct inkcell_backend_fb_state *state,
                             const struct inkcell_fb_button *button) {
+    /* Before anything is painted, because this is the frame saying the box exists rather than
+       saying what colour it came out. A button with no label and no icon returns below without
+       drawing its contents, and it is still a box a cursor can sit on. */
+    inkcell_fb_focus_register(state, button->focus_id, &button->rect);
+
     const struct inkcell_fb_button_paint paint = inkcell_fb_button_paint(state, button);
     if (paint.has_fill) {
         inkcell_fb_fill_round_rect(state, button->rect.x, button->rect.y, button->rect.w,
@@ -188,16 +193,23 @@ int inkcell_fb_chip_width(const struct inkcell_backend_fb_state *state, enum ink
     return inkcell_fb_button_width(state, icon, label, scale) + inkcell_fb_char_adv(state, scale);
 }
 
+struct inkcell_fb_rect inkcell_fb_chip_box(const struct inkcell_backend_fb_state *state, int x,
+                                           int y, enum inkcell_icon icon, const char *label,
+                                           int scale) {
+    const int width = inkcell_fb_chip_width(state, icon, label, scale);
+    return (struct inkcell_fb_rect){
+        .x = x,
+        .y = y - scale,
+        .w = width - inkcell_fb_char_adv(state, scale), /* the pill, without the gap after it */
+        .h = inkcell_fb_line_adv(state, scale)};
+}
+
 int inkcell_fb_draw_chip(const struct inkcell_backend_fb_state *state, int x, int y,
                          enum inkcell_icon icon, const char *label, bool active,
                          enum inkcell_color ground, int scale) {
     const int width = inkcell_fb_chip_width(state, icon, label, scale);
     const struct inkcell_fb_button button = {
-        .rect = {.x = x,
-                 .y = y - scale,
-                 .w = width -
-                      inkcell_fb_char_adv(state, scale), /* the pill, without the gap after it */
-                 .h = inkcell_fb_line_adv(state, scale)},
+        .rect = inkcell_fb_chip_box(state, x, y, icon, label, scale),
         .icon = icon,
         .label = label,
         .selected = false,
@@ -302,6 +314,11 @@ int inkcell_fb_draw_chip_strip(const struct inkcell_backend_fb_state *state, int
                                int room, enum inkcell_color ground, int scale) {
     const enum inkcell_fb_chip_labels labels =
         inkcell_fb_chip_strip_fit(state, chips, count, active, room, scale);
+    /* Where the strip was told to stop. A strip already down to bare icons and still too wide
+       keeps drawing - dropping a tab is worse than a tight one - so the last chip can end up
+       past its room, and that chip is registered by nobody: an id the cursor can reach at a box
+       the reader cannot see is the failure this whole mechanism is here to remove. */
+    const int limit = x + room;
     for (size_t i = 0; i < count; ++i) {
         /*
          * The badge goes in the gap inkcell_fb_draw_chip() already leaves after the pill, and the
@@ -309,9 +326,14 @@ int inkcell_fb_draw_chip_strip(const struct inkcell_backend_fb_state *state, int
          * same order as the width above, because a strip that measures itself differently from
          * the way it draws is a strip whose last tab falls off the panel.
          */
-        const int after = inkcell_fb_draw_chip(
-            state, x, y, chips[i].icon, inkcell_fb_chip_strip_label(&chips[i], i, active, labels),
-            i == active, ground, scale);
+        const char *label = inkcell_fb_chip_strip_label(&chips[i], i, active, labels);
+        const struct inkcell_fb_rect box =
+            inkcell_fb_chip_box(state, x, y, chips[i].icon, label, scale);
+        if (box.x + box.w <= limit) {
+            inkcell_fb_focus_register(state, chips[i].focus_id, &box);
+        }
+        const int after =
+            inkcell_fb_draw_chip(state, x, y, chips[i].icon, label, i == active, ground, scale);
         const int badge = inkcell_fb_chip_badge_width(state, chips[i].badge, labels, scale);
         if (badge > 0) {
             inkcell_fb_draw_chip_badge(state, after - inkcell_fb_char_adv(state, scale), y,

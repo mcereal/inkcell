@@ -85,6 +85,19 @@ struct inkcell_fb_button {
     enum inkcell_color ground;
     int scale; /* glyph multiplier for the label */
     /*
+     * What the d-pad calls this button, or INKCELL_FOCUS_NONE for one nothing navigates to.
+     *
+     * A button is the one shape in this file everything else is built from - a chip is a button
+     * sized to its own words, a card's verb is a button on a heading line, a keyboard's key is a
+     * button in a grid - so this is the single place a pressable box reaches the focus map, and
+     * the widgets above pass an id down rather than registering anything themselves.
+     *
+     * Zero is the opt-out and is what a button declared the way buttons were declared before
+     * this field existed has. Nothing is registered until a screen both names an id and pushes
+     * a map in with inkcell_fb_set_focus_map().
+     */
+    uint32_t focus_id;
+    /*
      * Draw a label that is one emoji and nothing else as the button's *face*: at the size of
      * the box rather than at the glyph scale, centred in it.
      *
@@ -130,6 +143,19 @@ int inkcell_fb_draw_chip(const struct inkcell_backend_fb_state *state, int x, in
 int inkcell_fb_button_width(const struct inkcell_backend_fb_state *state, enum inkcell_icon icon,
                             const char *label, int scale);
 
+/*
+ * The pill's own box at (x, y): what inkcell_fb_draw_chip() fills, without the gap it leaves
+ * after itself.
+ *
+ * Stated here because two things now need it and they must not each work it out: the draw, and
+ * the strip registering what it drew. It is inkcell_fb_row_box()'s rule applied one component
+ * down - a box derived twice is a box that will one day be two boxes, and the second one would
+ * be an invisible rectangle the cursor sits on beside the chip it is supposed to be on.
+ */
+struct inkcell_fb_rect inkcell_fb_chip_box(const struct inkcell_backend_fb_state *state, int x,
+                                           int y, enum inkcell_icon icon, const char *label,
+                                           int scale);
+
 /* What one chip takes, its trailing gap included - so a strip can ask whether it fits before it
    draws anything. The same arithmetic inkcell_fb_draw_chip() advances by, because a strip that
    measured itself differently from the way it draws is a strip whose last tab falls off the panel.
@@ -169,6 +195,14 @@ struct inkcell_fb_chip {
      * for the same reason.
      */
     const char *badge;
+    /*
+     * What the d-pad calls this chip, or INKCELL_FOCUS_NONE.
+     *
+     * On the chip rather than as a base the strip counts from, because a strip is the one place
+     * here where the caller already has an array to hang a fact on - and an id per chip is an
+     * id the caller chose, rather than a block it has to remember it reserved.
+     */
+    uint32_t focus_id;
 };
 
 /* How much of the labels a strip is showing. Picked by the draw call from the room it is

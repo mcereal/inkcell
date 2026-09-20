@@ -490,6 +490,26 @@ void inkcell_fb_list_chrome(const struct inkcell_backend_fb_state *state,
     inkcell_fb_list_rail(state, list);
 }
 
+void inkcell_fb_list_focus(struct inkcell_fb_list *list, uint32_t base) {
+    if (list == NULL) {
+        return;
+    }
+    list->focus_base = base;
+}
+
+void inkcell_fb_list_focus_row(const struct inkcell_backend_fb_state *state,
+                               const struct inkcell_fb_list *list, uint32_t index, int y, int h) {
+    if (list == NULL || list->focus_base == INKCELL_FOCUS_NONE) {
+        return;
+    }
+    /* The row fill, which is the box the cursor's highlight covers - not the text span inside
+       it and not the panel. A cursor that could reach a rectangle other than the one the
+       highlight draws would be a screen disagreeing with itself about where the reader is. */
+    const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
+    const struct inkcell_fb_rect rect = {.x = box.x, .y = y, .w = box.w, .h = h};
+    inkcell_fb_focus_register(state, list->focus_base + index, &rect);
+}
+
 bool inkcell_fb_list_next(struct inkcell_fb_list *list, uint32_t *index) {
     return inkcell_list_next(&list->model, index);
 }
@@ -511,7 +531,9 @@ void inkcell_fb_list_row(const struct inkcell_backend_fb_state *state, struct in
     /* By what the model says this row is, not by one row: a plain row in a list of mixed
        heights is still whatever height that list gave it, and advancing by a row would put
        every row under it in the wrong place. */
-    list->y += (int)inkcell_fb_list_row_height(list, index) * list->line;
+    const int height = (int)inkcell_fb_list_row_height(list, index) * list->line;
+    inkcell_fb_list_focus_row(state, list, index, list->y, height);
+    list->y += height;
 }
 
 /*

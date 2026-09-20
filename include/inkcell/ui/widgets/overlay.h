@@ -60,6 +60,19 @@ struct inkcell_fb_dialog {
        family to the error one, so the icon, the headline and the accept button's fill all
        change together rather than each being decided separately. */
     bool destructive;
+    /*
+     * What the d-pad calls the two answers: `action_focus_id` is the accept and
+     * `action_focus_id + 1` is the cancel, which is `cursor`'s own numbering rather than a
+     * second one to remember. INKCELL_FOCUS_NONE for a dialog a screen steers with its own
+     * toggle, which is what every dialog did before this existed.
+     *
+     * Worth registering even though a dialog is two buttons a screen could toggle between
+     * blind: the pair is laid out side by side or *stacked*, decided here from the words and
+     * the panel's width, and left-right on a stacked pair is not the press that moves between
+     * them. A screen resolving the press against the boxes gets that right without knowing
+     * which way this went.
+     */
+    uint32_t action_focus_id;
 };
 
 /* Draws the dialog into the body. It owns the whole of it, so there is no `y` to advance. */
