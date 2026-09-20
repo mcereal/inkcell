@@ -1,0 +1,90 @@
+# The gallery's pages, as rendered by a build that was looked at. One line per
+# page:
+#
+#     <scene> <theme> <scale> <width>x<height> <fnv1a-64 of the pixels>
+#
+# Regenerate with `make gallery-update`, and only after looking at `make
+# gallery`. A digest that changed without a picture being reviewed is a
+# rendering change going in unnoticed, which is the one thing this file exists
+# to stop.
+
+buttons dark 3 1024x768 b0b8b896c9c072b0
+buttons dark 4 1024x768 95c0d44b3ab4670a
+buttons light 3 1024x768 899492a014db7747
+buttons light 4 1024x768 535609c338e1659d
+buttons contrast 3 1024x768 b25fce72ac48ae18
+buttons contrast 4 1024x768 b87a3f1705b77331
+buttons colorblind 3 1024x768 c4fc30e0c5dbb77c
+buttons colorblind 4 1024x768 78482c20b4d30196
+chrome dark 3 1024x768 0658361a5f90c754
+chrome dark 4 1024x768 9440f35eb3f394e8
+chrome light 3 1024x768 7b31011f9444fd6d
+chrome light 4 1024x768 44554c24fae880be
+chrome contrast 3 1024x768 0bd783c79cc4160b
+chrome contrast 4 1024x768 bf2dcb41ec266101
+chrome colorblind 3 1024x768 a3b012ef405e6b2a
+chrome colorblind 4 1024x768 0cc318c18560ca7f
+controls dark 3 1024x768 6ee428de914b1437
+controls dark 4 1024x768 e88ca2970afe62ef
+controls light 3 1024x768 53865da5ee105e76
+controls light 4 1024x768 5186014c109cc27b
+controls contrast 3 1024x768 993d52b49246c78e
+controls contrast 4 1024x768 78ed4e8620a33b5c
+controls colorblind 3 1024x768 6b16443934a28059
+controls colorblind 4 1024x768 1a5574701e52f6c7
+list dark 3 1024x768 ec7a2e0161bbf65c
+list dark 4 1024x768 fca12c3da4fb480f
+list light 3 1024x768 e21709eb41950717
+list light 4 1024x768 b4b2cf0fe83b92ff
+list contrast 3 1024x768 e5fb0be05c674feb
+list contrast 4 1024x768 0a5c100c67975fbe
+list colorblind 3 1024x768 52c5dbd1c863b7ba
+list colorblind 4 1024x768 cae0333f266ee578
+cards dark 3 1024x768 c87977e35fcf5ab2
+cards dark 4 1024x768 997cd9beb6ce71db
+cards light 3 1024x768 b8bc33e2015cabf4
+cards light 4 1024x768 a612bc46f16cf5aa
+cards contrast 3 1024x768 350998783aac5ef1
+cards contrast 4 1024x768 ac44627781a462d4
+cards colorblind 3 1024x768 749ba39945baadd4
+cards colorblind 4 1024x768 ddd062eb98026e67
+meters dark 3 1024x768 81dea01f16e5a7de
+meters dark 4 1024x768 d04c5dee1731319c
+meters light 3 1024x768 aac7c2a56115f3ec
+meters light 4 1024x768 016d1d6d596f3b7f
+meters contrast 3 1024x768 2aabf3a4f38317f2
+meters contrast 4 1024x768 7972a5ec5117465d
+meters colorblind 3 1024x768 736bda88fe9f6183
+meters colorblind 4 1024x768 724166699ec5e993
+transcript dark 3 1024x768 4c30f0d48f920217
+transcript dark 4 1024x768 f56687080a168d1e
+transcript light 3 1024x768 5edfea1729413941
+transcript light 4 1024x768 e48d89d7bc24061d
+transcript contrast 3 1024x768 09768d70138be3cd
+transcript contrast 4 1024x768 bbfe3da516b02a9d
+transcript colorblind 3 1024x768 9d46c5857cddec1e
+transcript colorblind 4 1024x768 7fe3d531826c84df
+overlays dark 3 1024x768 54ba20d23930d825
+overlays dark 4 1024x768 3653204d61c9f412
+overlays light 3 1024x768 892172a33ff108cc
+overlays light 4 1024x768 b5b98bbb31c183ff
+overlays contrast 3 1024x768 ca24969eedeacc58
+overlays contrast 4 1024x768 ad5db1e368dd21c5
+overlays colorblind 3 1024x768 a67baf0b0b3f7ec9
+overlays colorblind 4 1024x768 820bb0695eb93174
+typography dark 3 1024x768 d7848bf02fb74373
+typography dark 4 1024x768 cf1001868b5e5ad6
+typography light 3 1024x768 6d1049f7bf076d60
+typography light 4 1024x768 00af95289182b590
+typography contrast 3 1024x768 69c489b84e7c60e7
+typography contrast 4 1024x768 8683f627b7940cf6
+typography colorblind 3 1024x768 3680a308f6d43f3c
+typography colorblind 4 1024x768 d211ee2b885e87ce
+palette dark 3 1024x768 48bd05b4bc8de72c
+palette dark 4 1024x768 ffb9725490a346b0
+palette light 3 1024x768 4647ca1e1ee885d0
+palette light 4 1024x768 f1e5bf2acadd9aac
+palette contrast 3 1024x768 157d522d89d62053
+palette contrast 4 1024x768 b9ac521fe10dd311
+palette colorblind 3 1024x768 d318d87346131b1a
+palette colorblind 4 1024x768 5bcb24e14875c8f3

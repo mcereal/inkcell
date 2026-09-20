@@ -183,7 +183,15 @@ const char *inkcell_str_id_name(enum inkcell_str_id id);
  *     };
  *
  * A _Static_assert that the table's length equals the app's own count is worth writing: the two
- * .def files drifting apart is the one way this goes wrong, and it is a compile-time question.
+ * .def files drifting apart is one way this goes wrong, and it is a compile-time question.
+ *
+ * The other way is not, and it is worth stating because it is silent. **The two #includes are a
+ * sequence, not a set.** An id is a table index, so inkcell's half has to expand first; swap
+ * them and every string shifts by the length of the other half, every label on the panel
+ * becomes the wrong word, and nothing complains - the build is clean and the assertion above
+ * still passes, because the table is still the right length. clang-format sorts includes
+ * alphabetically and will make that swap on its own, so wrap the block in `clang-format off`.
+ * See examples/gallery/strings.c, where it happened.
  */
 struct inkcell_i18n_catalog {
     /* Total ids, inkcell's included. Must be at least INKCELL_STR_COUNT. */

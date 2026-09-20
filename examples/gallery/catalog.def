@@ -1,0 +1,120 @@
+/*
+ * The gallery's own catalog: the words this example puts on a panel.
+ *
+ * It continues inkcell's - ids INKCELL_STR_COUNT and up - and it exists to be the worked
+ * example of the mechanism include/inkcell/i18n/strings.h describes at the end. An application
+ * built on inkcell writes one of these; the toolkit's own catalog stays tiny because none of
+ * the words below are the toolkit's to know.
+ *
+ * Included more than once with the macros defined differently each time, exactly as inkcell's
+ * is - once for the enum, once for the English table, once for the id names. No include guard,
+ * not a .h, and `make format` leaves it alone.
+ *
+ * The words are picked to be *specimens*: a label long enough to be clipped, a value wide
+ * enough to collide with the one beside it, a sentence that has to wrap. A gallery whose every
+ * string fits is a gallery that cannot show what happens when one does not.
+ */
+
+/* ---- the tabs -------------------------------------------------------------------------------- */
+
+INKCELL_STR_ENTRY(TAB_COMPONENTS,     "Components")
+INKCELL_STR_ENTRY(TAB_LISTS,          "Lists")
+INKCELL_STR_ENTRY(TAB_CONTROLS,       "Controls")
+INKCELL_STR_ENTRY(TAB_READINGS,       "Readings")
+INKCELL_STR_ENTRY(TAB_ABOUT,          "About")
+
+/* ---- headings and section names -------------------------------------------------------------- */
+
+INKCELL_STR_ENTRY(HEAD_BUTTONS,       "Buttons")
+INKCELL_STR_ENTRY(HEAD_CHIPS,         "Chips and badges")
+INKCELL_STR_ENTRY(HEAD_SELECTION,     "Selection")
+INKCELL_STR_ENTRY(HEAD_SWITCHES,      "Switches")
+INKCELL_STR_ENTRY(HEAD_FIELDS,        "Fields")
+INKCELL_STR_ENTRY(HEAD_METERS,        "Meters")
+INKCELL_STR_ENTRY(HEAD_SPARKLINES,    "Over time")
+INKCELL_STR_ENTRY(HEAD_ROWS,          "Rows")
+INKCELL_STR_ENTRY(HEAD_CARDS,         "Cards")
+INKCELL_STR_ENTRY(HEAD_TRANSCRIPT,    "Transcript")
+INKCELL_STR_ENTRY(HEAD_CONTROLS,      "Controls")
+INKCELL_STR_ENTRY(HEAD_CHROME,        "Chrome")
+INKCELL_STR_ENTRY(HEAD_OVERLAYS,      "Overlays")
+INKCELL_STR_ENTRY(HEAD_TYPE,          "Type scale")
+INKCELL_STR_ENTRY(HEAD_PALETTE,       "Palette")
+INKCELL_STR_ENTRY(HEAD_CHARTS,        "Charts")
+
+/* ---- verbs ------------------------------------------------------------------------------------
+ *
+ * The labels a button, a card action or an action bar puts on a key. Short, because a keycap row
+ * measures for them and a verb that wraps is a verb in the wrong place. */
+
+INKCELL_STR_ENTRY(ACT_SEND,           "Send")
+INKCELL_STR_ENTRY(ACT_SAVE,           "Save")
+INKCELL_STR_ENTRY(ACT_CANCEL,         "Cancel")
+INKCELL_STR_ENTRY(ACT_DELETE,         "Delete")
+INKCELL_STR_ENTRY(ACT_RETRY,          "Retry")
+INKCELL_STR_ENTRY(ACT_OPEN,           "Open")
+INKCELL_STR_ENTRY(ACT_BACK,           "Back")
+INKCELL_STR_ENTRY(ACT_SELECT,         "Select")
+INKCELL_STR_ENTRY(ACT_DISMISS,        "Dismiss")
+
+/* ---- settings rows ----------------------------------------------------------------------------
+ *
+ * A plausible settings screen, because a list of rows is the shape most of a handheld's UI takes
+ * and the gallery should show the real thing rather than "Row 1". */
+
+INKCELL_STR_ENTRY(ROW_DISPLAY,        "Display")
+INKCELL_STR_ENTRY(ROW_BRIGHTNESS,     "Brightness")
+INKCELL_STR_ENTRY(ROW_THEME,          "Theme")
+INKCELL_STR_ENTRY(ROW_LANGUAGE,       "Language")
+INKCELL_STR_ENTRY(ROW_SOUND,          "Sound")
+INKCELL_STR_ENTRY(ROW_NOTIFICATIONS,  "Notifications")
+INKCELL_STR_ENTRY(ROW_STORAGE,        "Storage")
+INKCELL_STR_ENTRY(ROW_BATTERY,        "Battery")
+INKCELL_STR_ENTRY(ROW_NETWORK,        "Network")
+INKCELL_STR_ENTRY(ROW_SECURITY,       "Security")
+INKCELL_STR_ENTRY(ROW_UPDATES,        "Software update")
+/* Deliberately longer than its column: this is the row that shows what clipping looks like. */
+INKCELL_STR_ENTRY(ROW_LONG,           "Automatic background synchronisation")
+
+/* ---- values ------------------------------------------------------------------------------------ */
+
+INKCELL_STR_ENTRY(VAL_ON,             "On")
+INKCELL_STR_ENTRY(VAL_OFF,            "Off")
+INKCELL_STR_ENTRY(VAL_ENGLISH,        "English")
+INKCELL_STR_ENTRY(VAL_DARK,           "Dark")
+INKCELL_STR_ENTRY(VAL_NEVER,          "Never")
+INKCELL_STR_ENTRY(VAL_EVERY_HOUR,     "Every hour")
+
+/* ---- sentences ---------------------------------------------------------------------------------
+ *
+ * The long ones. A gallery needs at least one string that cannot fit on a line, because wrapping
+ * is measured rather than counted and the bug that proves it is a sentence that runs off a panel. */
+
+INKCELL_STR_ENTRY(NOTE_WRAPPED,       "A supporting paragraph long enough to wrap onto a second and a third line, which is what a note row and an empty state both have to survive.")
+INKCELL_STR_ENTRY(BANNER_UPDATE,      "An update is ready to install")
+INKCELL_STR_ENTRY(BANNER_SUPPORTING,  "It will be applied the next time this device restarts.")
+INKCELL_STR_ENTRY(EMPTY_NOTHING,      "Nothing here yet")
+INKCELL_STR_ENTRY(DIALOG_HEADLINE,    "Delete this conversation?")
+INKCELL_STR_ENTRY(DIALOG_BODY,        "The messages in it are on this device only and cannot be recovered.")
+INKCELL_STR_ENTRY(SNACK_SENT,         "Message sent")
+INKCELL_STR_ENTRY(FIELD_LABEL,        "Message")
+INKCELL_STR_ENTRY(FIELD_VALUE,        "Heading out now, back before dark")
+
+/* ---- the transcript ---------------------------------------------------------------------------- */
+
+INKCELL_STR_ENTRY(CHAT_NAME,          "Field station")
+INKCELL_STR_ENTRY(CHAT_INBOUND,       "Repeater is up again, signal looks good from the ridge.")
+INKCELL_STR_ENTRY(CHAT_OUTBOUND,      "Copy that. Heading up after lunch to check the antenna.")
+INKCELL_STR_ENTRY(CHAT_FAILED,        "Could not send")
+INKCELL_STR_ENTRY(CHAT_TODAY,         "Today")
+
+/* ---- readings ------------------------------------------------------------------------------------
+ *
+ * Legends for the things that draw a number as a length. The units stay out of the catalog where
+ * they are symbols rather than words - "%" is "%" everywhere - and stay in where they are read. */
+
+INKCELL_STR_ENTRY(READ_CHARGE,        "Charge")
+INKCELL_STR_ENTRY(READ_SIGNAL,        "Signal")
+INKCELL_STR_ENTRY(READ_UTILISATION,   "Channel use")
+INKCELL_STR_ENTRY(READ_TEMPERATURE,   "Temperature")
+INKCELL_STR_ENTRY(READ_MIXTURE,       "Air time")

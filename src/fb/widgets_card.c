@@ -617,7 +617,7 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state,
      * a card, so that is the point at which it is refused outright rather than drawn as an empty
      * box; a single clipped line of a note is content, so it is not that point.
      *
-     * The bound is the body's bottom, not the footer's first baseline: inkcell_fb_render_snapshot()
+     * The bound is the body's bottom, not the footer's first baseline: inkcell_fb_layout_rows()
      * keeps half a margin between the two when it counts the body rows, and a card that ran to the
      * baseline itself would put its edge against the footer text on the one screen dense enough
      * to reach it.

@@ -26,6 +26,46 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* ---- the frame ------------------------------------------------------------------------------
+ *
+ * Where the chrome ends and the body begins, before any of it has been drawn.
+ *
+ * Every screen needs this and none of them should derive it. The numbers are the panel's
+ * geometry crossed with the theme's spacing - the edge the frame stands off, the line advance
+ * the body counts in, the room the action bar will want at the bottom - and a screen that works
+ * them out for itself is a screen that will disagree with the next one by a gutter.
+ *
+ * What it hands back is the *empty* frame: the body is the whole panel less its edges, and
+ * `nav_y` and `body_y` are the same row because nothing has been drawn above them yet. Each
+ * piece of chrome then takes its room as it draws - inkcell_fb_draw_nav_bar(), then
+ * inkcell_fb_draw_banner(), then inkcell_fb_draw_app_bar() - and moves `body_y` down past
+ * itself. That is why those three take `layout` mutably and everything else takes it const.
+ *
+ * `footer` is whether an action bar will be drawn at the bottom. It has to be known now rather
+ * than when the bar is drawn, because the bar is drawn *last* and the body above it has already
+ * been laid out by then - a list that counted rows into the footer's room would have its last
+ * row painted over by the keycaps. The bar itself is then drawn at `footer_y`.
+ *
+ * `back` is inkcell_action_bar_goes_back()'s answer, carried on the layout because the top app
+ * bar's leading slot and the bottom action bar must not form two opinions about whether B
+ * leaves - see the field's own note on struct inkcell_fb_layout.
+ *
+ * `rows` is recomputed by each piece of chrome that consumes body rows, so it is always the
+ * count against the body's *real* top, never a deduction from this one.
+ */
+struct inkcell_fb_layout inkcell_fb_layout_begin(const struct inkcell_backend_fb_state *state,
+                                                 bool footer, bool back);
+
+/*
+ * How many body rows are left between `body_y` and the footer, at the body's line advance.
+ *
+ * The one arithmetic behind `layout->rows`, stated once. Chrome calls it after moving `body_y`;
+ * an application calls it after making room of its own - a text field above a list, a chart the
+ * screen reserved - so that the list below counts the rows that are actually there.
+ */
+uint32_t inkcell_fb_layout_rows(const struct inkcell_backend_fb_state *state,
+                                const struct inkcell_fb_layout *layout);
+
 /* ---- the navigation bar ---------------------------------------------------------------------
  *
  * The chrome across the top: a recessed bar, one chip per tab, and the rule that closes it off.
@@ -63,8 +103,8 @@ void inkcell_fb_draw_nav_bar(const struct inkcell_backend_fb_state *state,
  * reflow the screen it was saved from. It is the same rule the card's focus ring is drawn by:
  * an indicator that changes the layout is an indicator that moves what it is pointing at.
  *
- * Which states count is not this file's business - see inkcell_chrome_busy() in
- * include/inkcell/ui/chrome.h, which is where the UI layer answers it for every backend.
+ * Which states count is not this file's business: the application answers it once, for
+ * every backend, and passes the answer in.
  */
 void inkcell_fb_draw_progress(struct inkcell_backend_fb_state *state,
                               const struct inkcell_fb_layout *layout, bool busy);
@@ -86,14 +126,14 @@ void inkcell_fb_draw_progress(struct inkcell_backend_fb_state *state,
  * *screen's* heading; a banner is a statement about the client, so it goes with the first. The
  * practical half of the same answer: drawn below the app bar it would have to be called by
  * every screen renderer, and the four overlays would each need their own copy - which is the
- * duplication inkcell_fb_render_snapshot()'s single tail exists to prevent.
+ * duplication drawing it here, once per frame, exists to prevent.
  *
  * Nothing here animates, and that is a decision rather than an omission. The container consumes
  * body rows, so a height that eased open would reflow the list underneath it for the length of
  * the animation - and unlike the snackbar, which arrives over the UI and has to be *noticed*,
  * a banner is read whenever the eye next reaches the top of the panel.
  *
- * Which banner, if any, is inkcell_chrome_banner()'s answer (include/inkcell/ui/chrome.h).
+ * Which banner, if any, is the application's answer, for the reason above.
  */
 struct inkcell_fb_banner {
     /* The leading symbol, in the container's own ink. */

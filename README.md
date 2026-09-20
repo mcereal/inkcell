@@ -19,6 +19,7 @@ backend and its component set, and the evdev layer that turns a handheld's butto
 | **Framebuffer** | `/dev/fb0`, the page flip, damage tracking, a glyph cache, and an off-screen renderer for screenshots. |
 | **Input** | evdev to a logical key, hat axes, analogue triggers, key repeat, per-device button profiles. |
 | **i18n** | A catalog mechanism with plural rules and format-string validation. |
+| **Gallery** | Every component, in every theme, rendered with no device attached - and the golden sheet that keeps them that way. |
 
 ## The rules it is built on
 
@@ -86,13 +87,49 @@ Two facts a frame needs that no snapshot carries are pushed in the same way: whi
 reader just moved (`inkcell_fb_transition_begin()` — what counts as "further in" is your
 question) and which theme they chose (`inkcell_fb_state_set_theme_by_id()`).
 
+## Seeing it
+
+The components are not a list you have to take on trust. `examples/gallery` is a program built
+on inkcell the way an application is - it links `inkcell::inkcell`, installs its own string
+catalog, and writes screens - and it draws every component the library ships, in every theme, at
+two scales.
+
+```bash
+make gallery     # 80 pages into build/gallery/, plus build/gallery/contact.png
+```
+
+It renders through `inkcell_capture`, which is the fb backend with the device taken out of it,
+so this works in a container with no framebuffer anywhere near it.
+
+### The golden sheet
+
+The same program is the test suite for the ten files under `src/fb/widgets_*.c`. "The button
+looks right" is not a unit test anybody can write; "the button looks like it did yesterday, and
+here is the picture of what changed" is.
+
+```bash
+make test            # includes inkcell_golden: every page, against tests/golden/manifest.txt
+make gallery         # when one differs, the pictures to look at
+make gallery-update  # once they have been looked at, record them
+```
+
+The manifest holds a digest per page rather than the images themselves - sixty pages of 1024x768
+in git is forty megabytes every clone pays for. CI renders and uploads the pictures on failure,
+which is the only time anybody wants them. The clang job runs the whole sheet under ASan and
+UBSan, so the widget code is sanitizer-covered by the same pass.
+
+`make gallery-update` is the one command in this tree that can quietly approve a mistake. A
+manifest regenerated without looking at `make gallery` is a test that agrees with whatever it is
+handed.
+
 ## Building
 
 **Linux only** — `epoll`, `timerfd`, `linux/fb.h`, `linux/input.h`.
 
 ```bash
-make test        # debug build + ctest: the unit suite and the no-prose check
+make test        # debug build + ctest: the unit suite, the no-prose check, the golden sheet
 make debug       # build only
+make gallery     # the pictures (see above)
 make format      # clang-format, skipping the generated glyph tables
 ```
 

@@ -3,7 +3,7 @@
 
 BUILD ?= build
 
-.PHONY: all test debug format clean
+.PHONY: all test debug format clean gallery gallery-update
 
 all: debug
 
@@ -15,6 +15,28 @@ debug:
 # a word of prose.
 test: debug
 	ctest --test-dir $(BUILD) --output-on-failure
+
+# ---- the component gallery -------------------------------------------------------------------
+#
+# `make gallery` renders every scene in every theme at every scale and leaves the pictures in
+# $(SHOTS). That is the sheet to look at before and after a change to anything under src/fb/,
+# and the contact sheet is the one image that shows whether a change touched a scene nobody
+# expected it to.
+#
+# `make gallery-update` records what came out as the new golden manifest. Only ever run it when
+# the pictures have been *looked at* - the manifest is what stops a rendering change going in
+# unnoticed, and a manifest updated without looking is a test that agrees with whatever it is
+# handed.
+SHOTS ?= $(BUILD)/gallery
+
+gallery: debug
+	rm -rf $(SHOTS) && mkdir -p $(SHOTS)
+	$(BUILD)/examples/gallery/inkcell_gallery --out $(SHOTS) > /dev/null
+	python3 scripts/frames.py $(SHOTS) --sheet $(SHOTS)/contact.png
+
+gallery-update: debug
+	$(BUILD)/examples/gallery/inkcell_gallery > tests/golden/manifest.txt
+	@echo "recorded $$(grep -vc '^#' tests/golden/manifest.txt) page(s); review the diff"
 
 # The generated glyph tables are excluded deliberately - see the note in .github/workflows/ci.yml.
 format:
