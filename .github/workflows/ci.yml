@@ -43,11 +43,32 @@ jobs:
       - name: Build
         run: cmake --build build
 
+      # The unit suite, the no-prose check, and the golden sheet. The last of those renders
+      # every component in every theme through the capture backend, which means the widget code
+      # - five thousand lines with no other test - runs under the sanitizers on the clang job.
       - name: Test
         env:
           ASAN_OPTIONS: detect_leaks=1:detect_stack_use_after_return=1:strict_string_checks=1
           UBSAN_OPTIONS: print_stacktrace=1
         run: ctest --test-dir build --output-on-failure
+
+      # A digest says *that* a page changed; only the picture says *what*. Rendered and kept
+      # solely on failure, because the whole point of committing digests instead of images is
+      # that a green run costs the repository nothing.
+      - name: Render the pages that differ
+        if: failure()
+        run: |
+          mkdir -p build/gallery
+          ./build/examples/gallery/inkcell_gallery --out build/gallery > /dev/null
+          python3 scripts/frames.py build/gallery --sheet build/gallery/contact.png
+
+      - name: Upload them
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gallery-${{ matrix.cc }}
+          path: build/gallery/*.png
+          if-no-files-found: ignore
 
   format:
     name: clang-format
