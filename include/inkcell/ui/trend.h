@@ -1,0 +1,263 @@
+#ifndef INKCELL_TREND_H
+#define INKCELL_TREND_H
+
+/*
+ * What a chart is looking at: how far back, and how far up.
+ *
+ * The two chart screens - the radio's airtime and one of a node's readings - were each working
+ * this out for themselves, in code that was the same arithmetic with different words around it.
+ * Both asked inkcell_series_window() for a window, both projected against a domain, both formatted
+ * a span. That is the *frame* rather than the picture, it is the same question on both screens,
+ * and this is the one answer. The renderers keep what actually differs: what the lines are, what
+ * they are called and what the ends of the vertical are worded as.
+ *
+ * Two things it decides, and both of them are decisions the panel had got wrong.
+ *
+ *   - **How far back.** A chart used to draw every reading the ring held, which is a span the
+ *     reader could read off the caption and not change. On the radio's own report - minutes
+ *     apart - that is an hour or two, and the last ten minutes of a mesh that has just gone busy
+ *     are a fifth of the plot. `enum inkcell_trend_span` is the reader's answer to that: the
+ *     newest reading anchors the right-hand edge and the span says how much of what came before
+ *     it is on the picture.
+ *   - **How far up.** This is the harder one, and the rule it lands on is deliberately not the
+ *     spreadsheet's. See inkcell_trend_domain().
+ *
+ * Nothing here has a pixel in it, for the reason inkcell_series_project() does not: what a
+ * backend needs from a chart is arithmetic, and the fb backend must not be the only thing that
+ * can ask. Nothing here holds state either - a span is on the nav, where every other thing a
+ * press moves is.
+ */
+
+#include "inkcell/i18n/strings.h"
+#include "inkcell/ui/layout.h"
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/*
+ * How far back a chart looks.
+ *
+ * Four, because INKCELL_FB_SEGMENTED_MAX is four and a segmented button is what draws it: above four the
+ * words stop fitting the strip, and the set that cannot be read at a glance is not a set the
+ * d-pad should be stepping either.
+ *
+ * The three fixed ones bracket the intervals the readings actually arrive on. LocalStats is a few
+ * minutes, so a quarter of an hour is "what just happened" and an hour is "this session"; a node's
+ * telemetry is half an hour by default, so six is the one that shows an afternoon of it. ALL is
+ * last rather than first because it is the widest, and a strip whose spans do not run in order is
+ * a control the reader has to read rather than aim at.
+ *
+ * ALL is also the default, and that matters: it is what the screen did before there was a picker,
+ * so a reader who never touches Left or Right sees what they always saw.
+ */
+enum inkcell_trend_span {
+    INKCELL_TREND_SPAN_15M = 0,
+    INKCELL_TREND_SPAN_1H,
+    INKCELL_TREND_SPAN_6H,
+    INKCELL_TREND_SPAN_ALL,
+    INKCELL_TREND_SPAN_COUNT
+};
+
+/* How long the span is, in milliseconds - 0 for ALL, which is "however long the readings are". */
+uint32_t inkcell_trend_span_ms(uint8_t span);
+
+/* What the strip calls it. A word rather than a formatted duration: these four are fixed, and
+   inkcell_format_duration() answers about a measurement rather than about a choice. */
+enum inkcell_str_id inkcell_trend_span_label(uint8_t span);
+
+/*
+ * The next span along, `delta` steps from this one, wrapping at both ends.
+ *
+ * Wrapping rather than clamping, because the strip is four segments the d-pad walks and a press
+ * that does nothing at the end of a set of four is a press the action bar is still naming. It is
+ * the enum row's rule (`(value + 1) % count`), and it is here rather than in nav.c so that the
+ * chart's Left and Right cannot disagree about the order the segments draw in.
+ */
+uint8_t inkcell_trend_span_step(uint8_t span, int delta);
+
+/*
+ * The vertical, with its ceiling contracted to the highest rung the readings clear.
+ *
+ * This is the one place this client bends the rule stated in layout.h - that a trend's y axis is
+ * the reading's own domain and never the range its samples span - and it bends it in exactly one
+ * direction, for a reason that was measured in a field: a mesh at 1.1% busy drawn on a domain of
+ * 0-100% is a flat line along the bottom of an empty rectangle. There is nothing wrong with the
+ * number and nothing to see in the picture.
+ *
+ * What auto-scaling gets wrong is not that it moves the ceiling. It is that it moves *both* ends
+ * to the data, so the shape is normalised away: a battery that fell two percent overnight fills
+ * the plot corner to corner and reads as a cliff, and two visits to one screen cannot be compared
+ * because neither axis stayed still. So:
+ *
+ *   - **The floor never moves.** It is the domain's own, so a reading near the bottom is drawn
+ *     near the bottom and a fall of two percent is two percent of something.
+ *   - **The ceiling moves only to a rung**, and the rungs are fractions of the domain rather than
+ *     of the data: a hundredth, a fiftieth, a twentieth, a tenth, a quarter, a half, all of it.
+ *     Which is the 1-2-5 ladder every axis has used since graph paper, expressed in the one thing
+ *     that is fixed here. Two visits an hour apart are on the same rung unless the readings
+ *     genuinely crossed one, and a rung is a number the reader can hold on to.
+ *   - **The rung is written on the axis.** The top label is the ceiling, so a chart that has
+ *     contracted says so in the one place a reader looks to find out what "high" is. That is what
+ *     makes this honest where auto-scaling is not: the lie is never the scale, it is a scale the
+ *     picture does not state.
+ *
+ * `high` is the largest reading the picture will draw, which is narrower than "the largest" in
+ * two ways: it is inside the window, because a ceiling picked from readings that scrolled off is
+ * a plot with empty air at the top of it; and it is on a line, because a reading nothing draws
+ * must not move an axis. Both are inkcell_trend_frame()'s to establish.
+ *
+ * The domain comes back unchanged in the three cases where contracting it would be a guess: a
+ * descending domain (min > max, which reads backwards and whose "ceiling" is its floor), a `high`
+ * at or above the domain's own ceiling, and a span too narrow for the ladder's own arithmetic. A
+ * zeroed domain is the identity one - the caller's readings are already permille - and it
+ * contracts against 1000 and comes back as real ends, which is the same domain said out loud.
+ */
+struct inkcell_scale inkcell_trend_domain(struct inkcell_scale domain, int32_t high);
+
+/*
+ * Everything a chart needs to place its lines: the window along the bottom, and the domain up the
+ * side.
+ *
+ * One call rather than four, and it is what makes the two chart screens one screen drawn twice.
+ * The order matters and is the whole of why this is a function: the window is cut *first* and the
+ * ceiling is picked from what is left inside it, so a span of fifteen minutes over an hour of
+ * readings is scaled to the quarter hour the reader asked to see rather than to the busy spell
+ * that has just left the picture.
+ *
+ * False when there is nothing to frame - no series, none of them with two readings, or every
+ * stamp alike - which is inkcell_series_window()'s answer and is passed straight through. A caller
+ * that gets false has a picture with no axis to lay along it and should say so rather than draw a
+ * frame around nothing.
+ */
+struct inkcell_trend {
+    uint32_t from; /* the client's monotonic clock at the left-hand edge */
+    uint32_t to;   /* and at the right-hand edge, which is the newest reading */
+    struct inkcell_scale scale;
+};
+
+bool inkcell_trend_frame(const struct inkcell_series *const *series, uint32_t count,
+                         struct inkcell_scale domain, uint8_t span, struct inkcell_trend *out);
+
+/* ---- readings ---------------------------------------------------------------------------------
+ *
+ * The same window, read as a list instead of drawn as a picture.
+ *
+ * A chart answers "which way is this going" and is the wrong shape for "what exactly did it say":
+ * a plot 900 cells wide holding two dozen readings can be read to about a percent, which is fine
+ * for a direction and useless for a number somebody is about to write down. So the chart screen
+ * has a second face, and this is what it lists.
+ *
+ * **Only a node's chart has one.** The radio's airtime is six hours at a reading a minute, which
+ * is 360 rows nobody is going to scroll - and it is already binned into columns
+ * (inkcell_trend_airtime()) precisely because reading by reading is the wrong grain for it. A
+ * node's telemetry is two dozen samples half an hour apart, which is few enough that reading them
+ * exactly is a real thing to want. The difference is in the readings rather than in the screens,
+ * which is why it is stated here and not as a flag on a renderer.
+ *
+ * The window is the span picker's, the same cut inkcell_trend_frame() makes, so the list and the
+ * plot are two views of one set of readings rather than two opinions about which readings there
+ * are. One difference, and it is the list being able to say more rather than less: a single
+ * reading is no window at all to a picture - inkcell_series_window() says so - and is a perfectly
+ * good row, because somebody took it.
+ */
+
+/*
+ * One reading, as a row.
+ *
+ * `before_ms` is measured from the newest reading in the window rather than from the clock, and
+ * that is the honest unit rather than the convenient one. A Brick has no RTC; the series are
+ * stamped with a monotonic clock that counts from boot, and the caption under the plot already
+ * says how far back the picture goes on exactly those terms. A column of "ago" would be the one
+ * claim on this screen with nothing behind it.
+ *
+ * No break flag, though the series has one. A gap is what makes a *line* lie - it is why the pen
+ * is lifted - and a list does not join anything to anything: two rows an hour apart say so in the
+ * column that is already there.
+ */
+struct inkcell_trend_reading {
+    uint32_t time; /* the history's own timeline, as a sample's is */
+    uint32_t before_ms;
+    int32_t value;
+};
+
+/*
+ * How many readings `span` holds, and the `index`th of them counting back from the newest.
+ *
+ * Newest first, because that is the order the question arrives in - the reader came from a row
+ * showing the latest figure and is looking for the ones behind it - and because it is the order
+ * that keeps a row still while readings arrive. Oldest-first, every new sample would renumber
+ * every row under a cursor that had not moved.
+ *
+ * Two functions rather than one that fills an array, for the reason the node detail's rows are
+ * built rather than indexed: three things ask - the clamp that holds the scroll in range, the
+ * action bar that decides whether to name a scroll at all, and the renderer - and an array
+ * passed between them is a fourth place for the count to be wrong.
+ */
+uint32_t inkcell_trend_readings(const struct inkcell_series *series, uint8_t span);
+bool inkcell_trend_reading_at(const struct inkcell_series *series, uint8_t span, uint32_t index,
+                              struct inkcell_trend_reading *out);
+
+/* ---- columns --------------------------------------------------------------------------------
+ *
+ * The radio's airtime drawn as columns rather than as a line through every reading.
+ *
+ * A line was the wrong mark for this reading, and a Heltec V4 on a quiet mesh showed why. The
+ * firmware's `channel_utilization` covers about the last minute, so reading by reading it is
+ * 0%, 2.1%, 0%, 5.2%: a stroke through that is a saw blade, and the one thing a reader wants
+ * from it - is the air getting busier - is exactly what the teeth hide. Averaged into bins it is
+ * a bar chart of how busy each stretch of the window was, which is the question.
+ *
+ * The bin is what makes it work on any radio anywhere, and it is picked from two things rather
+ * than fixed:
+ *
+ *   - **No narrower than the readings are apart.** A bin shorter than the cadence is empty more
+ *     often than not, and a row of gaps reads as a radio that kept dropping out. The cadence is
+ *     the median spacing of the readings in the window - median, so an outage in the middle does
+ *     not stretch it - which is a minute on a radio sending DeviceMetrics and a quarter of an
+ *     hour on one that only sends LocalStats.
+ *   - **No more bins than `max_bins`**, which is the renderer's to say because it is a question
+ *     of how wide a column can be and still be seen.
+ *
+ * Both are then rounded up a 1-2-5 ladder of durations (a minute, two, five, ten, a quarter
+ * hour...) so a column is a length of time the reader could name.
+ *
+ * Bins are anchored on the newest reading and centred on their stamps, so a report that arrives
+ * a few hundred milliseconds late lands in the same bin as one on time rather than on the other
+ * side of an edge.
+ */
+
+/* Bins one chart may carry. The renderer asks for one per cell of its smallest text across the
+   plot, which on the Brick is about eighty; this bounds the arrays below. */
+#define INKCELL_TREND_BINS_MAX 120U
+
+struct inkcell_trend_bins {
+    uint32_t count;                         /* oldest first */
+    int32_t values[INKCELL_TREND_BINS_MAX]; /* the mean of the readings in the bin */
+    bool present[INKCELL_TREND_BINS_MAX];   /* a reading landed in it */
+    /* Present, and a line drawn through the bins continues into it from the last present bin
+       before it: at most one empty bin back, and not across a break the source marked. One empty
+       bin is bridged because a single skipped report is ordinary; two is a silence. */
+    bool joins[INKCELL_TREND_BINS_MAX];
+};
+
+/*
+ * The shortest rung of the duration ladder at least `cadence_ms` (less an eighth, for the slop of
+ * a firmware tick) and long enough that `window_ms` fits in `max_bins`. The longest rung when
+ * nothing fits.
+ *
+ * Binning a particular *source* into `struct inkcell_trend_bins` is the application's - what the
+ * readings are, how often they arrive and what a gap in them means are all facts about the thing
+ * being measured. What is here is the frame around it: the window, the ceiling and the ladder
+ * the bin width is chosen off.
+ */
+uint32_t inkcell_trend_bin_ms(uint32_t window_ms, uint32_t cadence_ms, uint32_t max_bins);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* INKCELL_TREND_H */

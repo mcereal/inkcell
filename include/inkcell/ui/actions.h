@@ -1,0 +1,155 @@
+#ifndef INKCELL_ACTIONS_H
+#define INKCELL_ACTIONS_H
+
+/*
+ * What the buttons do here, as data.
+ *
+ * The footer used to say it as a sentence - one catalog entry per screen, "A open node  X pin
+ * Y write  L/R tabs" - and a sentence is the right shape for exactly one renderer: a single
+ * line of text. It is the wrong shape for everything that reads like a handheld OS rather than
+ * like a terminal, because the moment the buttons are drawn as *keycaps* the renderer needs the
+ * letters and the verbs apart, and the only place they were apart was inside a translation.
+ * Reading a translation back to find them is the one thing src/i18n exists to prevent.
+ *
+ * So the answer is the same one the colours, the icons and the shapes got: a screen names a
+ * *token*, and a table answers. Here the token is a (button, verb) pair, the table is
+ * inkcell_actions_for(), and the drawing - keycaps, elision, where the bar sits - belongs to
+ * whichever backend is up. See inkcell_fb_draw_action_bar() in src/ui/backends/inkcell_fb_widgets.h.
+ *
+ * This lives in include/inkcell/ui/ rather than beside the framebuffer backend because it is not
+ * a drawing concern at all: which buttons mean something in a given state is a fact about the
+ * nav, and a second backend would want the same answer. It is also, unlike the sentence it
+ * replaces, something a test can assert about - see tests/suites/ui_actions.c.
+ */
+
+#include "inkcell/i18n/strings.h"
+
+#include <stdbool.h>
+#include <stddef.h>
+
+
+/*
+ * A keycap, not a key code.
+ *
+ * These are the labels printed on the case, plus the two directional pairs, plus the one that
+ * leaves - and each is a *thing a finger presses*, which is why the shoulders are one entry
+ * rather than two. L1 and R1 never do different jobs; a bar that drew them separately would
+ * spend two keycaps saying one thing.
+ *
+ * This enum names the buttons; it does not say what is written on them or which evdev code each
+ * reports. Those are one fact about one piece of plastic and they are stated together, a row
+ * per device, in src/ui/input/input_profile.c - the face buttons are not by position (see the note
+ * in CLAUDE.md), and a port that corrected the codes without the words would leave this bar naming
+ * a key that does something else.
+ */
+enum inkcell_button {
+    INKCELL_BUTTON_A = 0,
+    INKCELL_BUTTON_B,
+    INKCELL_BUTTON_X,
+    INKCELL_BUTTON_Y,
+    INKCELL_BUTTON_START,
+    /*
+     * Help: what this screen is for. The one press in the client that means the same thing
+     * wherever it is offered, which is why it gets a cap of its own rather than sharing A with
+     * whatever the screen underneath does.
+     *
+     * It is offered only where there is something to explain - inkcell_help_topic() decides,
+     * and the press reads the same answer - because a keycap that sometimes does nothing is
+     * the thing this bar exists to avoid.
+     */
+    INKCELL_BUTTON_SELECT,
+    /* L1 and R1 together: "the shoulders", which only ever move between things. */
+    INKCELL_BUTTON_SHOULDERS,
+    /*
+     * L2 and R2 together, one entry for the shoulders' reason: the two never do different jobs.
+     *
+     * On the Brick they are not buttons at all - the pad reports them as absolute axes, with no
+     * BTN_ code in its key bitmap - which is why they went unread until the keyboard wanted a
+     * shift key that was not already spent on something else. See inkcell_input_map_trigger().
+     */
+    INKCELL_BUTTON_TRIGGERS,
+    INKCELL_BUTTON_UP_DOWN,
+    INKCELL_BUTTON_LEFT_RIGHT,
+    /*
+     * Whatever leaves the pak. Its cap is the one that is not a constant: MENU by default, and
+     * a bare key code when <PREFIX>_QUIT_KEYS has rebound it to something whose name we do
+     * not know. inkcell_input_quit_cap() answers.
+     */
+    INKCELL_BUTTON_QUIT,
+    INKCELL_BUTTON_COUNT
+};
+
+/*
+ * The cap's text: "A", "L/R", the arrow pair.
+ *
+ * Not a catalog id, and not an oversight. A face button's cap is what is silkscreened next to
+ * it, so it reads the same in every language for the same reason a region code does - and the
+ * arrows are drawn rather than read. The *verb* beside the cap is the translated half.
+ *
+ * Never NULL, including for a button outside the enum.
+ */
+const char *inkcell_button_cap(enum inkcell_button button);
+
+/*
+ * The most a screen offers at once.
+ *
+ * Seven was one above the densest set here (the node detail's six), so reaching the cap meant a
+ * screen had grown a seventh thing to press rather than that the bar had run out of room - which
+ * is a different problem, and the bar's own elision is what answers it.
+ *
+ * The keyboard is now that seventh, and it is at the cap rather than over it: type, send,
+ * delete, back, space, shift and the panel step are seven presses that all do something on that
+ * screen, and the one before this comment was written spent two of its buttons on presses the
+ * face already had. An eighth would be dropped silently by bar_add(), so a screen that wants one
+ * raises this number and checks that the bar still fits the panel - it is a cap on the *array*,
+ * not on what fits.
+ */
+#define INKCELL_ACTIONS_MAX 7U
+
+/*
+ * One press and what it does. Named for the button rather than for the bar because `struct
+ * inkcell_action` is already taken, and by a different sense of the word: nav.h's is a request
+ * the UI raises for the app to carry out, and this is a *label on a key*.
+ */
+struct inkcell_button_action {
+    enum inkcell_button button;
+    enum inkcell_str_id label;
+};
+
+/*
+ * The bar's contents, in the order they are offered.
+ *
+ * Order is priority, not layout: a bar that does not fit drops from the *end*, so the first
+ * entry is the one that survives a narrow panel and a long translation. Each table below is
+ * written with the press the screen is for at the front and "L/R tabs" - true everywhere, and
+ * therefore the least worth the room - at the back.
+ */
+struct inkcell_action_bar {
+    struct inkcell_button_action items[INKCELL_ACTIONS_MAX];
+    size_t count;
+};
+
+/*
+ * Which bar an application fills is its own question - the table that answers it is written
+ * against that app's screens, and inkcell only says what a bar is made of. The one rule worth
+ * carrying across: a bar should be filled by walking the same chain that decides what to draw,
+ * overlays first, because a bar describing a screen the reader cannot reach is worse than no
+ * bar.
+ */
+
+/*
+ * Whether this bar offers a way back to the screen behind - what the top app bar's leading slot
+ * draws, and the one question about a bar that something other than the bar asks.
+ *
+ * It is answered from the table rather than by the screen renderers because the tables are
+ * already the place that decides it, and a second opinion is how a screen that grows a press
+ * ends up with two places to remember it.
+ *
+ * Reading it off the bar also makes it exactly as conditional as the press is, which a flag on
+ * a screen would not be. A settings section with edits pending offers B as *discard*, not as
+ * back, and it is right that no arrow appears there: B does not leave that screen, and an arrow
+ * saying it does would be the chrome disagreeing with the keys.
+ */
+bool inkcell_action_bar_goes_back(const struct inkcell_action_bar *bar);
+
+#endif /* INKCELL_ACTIONS_H */

@@ -1,0 +1,85 @@
+/*
+ * inkcell's own catalog: the words the toolkit itself puts on a panel.
+ *
+ * This file is included more than once, with the two macros defined differently each time -
+ * once to build `enum inkcell_str_id`, once to build the English table, once to build the id
+ * names. That is why it has no include guard and why it is not a .h: `make format` would reflow
+ * the table into something no translator could scan, and there is nothing here for clang-format
+ * to be right about.
+ *
+ *   INKCELL_STR_ENTRY(ID, "text")
+ *   INKCELL_STR_PLURAL_ENTRY(ID, "one", "other")   -> INKCELL_STR_ID_ONE and INKCELL_STR_ID_OTHER
+ *
+ * **This list is deliberately tiny, and the bar for adding to it is high.** A string belongs
+ * here only when *inkcell itself* prints it - a widget with nowhere to be handed the words. The
+ * moment a string is about what an application is *for*, it belongs in that application's own
+ * catalog, which continues this one: see inkcell_i18n_set_catalog(). A toolkit that shipped the
+ * word "Messages" would be a toolkit only one program could use.
+ *
+ * The ids here are the low range, 0 .. INKCELL_STR_COUNT-1, and an application's ids continue
+ * from there. Inserting an entry in the middle therefore renumbers nothing an application
+ * compiled against - both halves are built from the same headers in the same build - but it
+ * does renumber a *translation* stored by index, so new entries go at the end of their section.
+ *
+ * Rules for a good entry, unchanged from any catalog:
+ *
+ *   - One whole sentence or label per id, %-specifiers included. Never build a sentence by
+ *     concatenating entries: the word order is the translator's to change.
+ *   - The id says where it is read, not what it says.
+ *   - Keep the specifiers, their order and their types identical across locales.
+ *     inkcell_i18n_validate() enforces it.
+ */
+
+/* ---- the sentinel --------------------------------------------------------------------------
+ *
+ * Id 0, and empty on purpose. Every widget that takes an optional label takes this to mean "no
+ * label" - a card with no heading, a meter with no legend, a chart that names its emptiness
+ * nowhere - so it has to be a real id rather than a magic number, and it has to be first so that
+ * a zeroed structure means what it looks like it means. */
+INKCELL_STR_ENTRY(NONE,                    "")
+
+/* ---- common words --------------------------------------------------------------------------- */
+
+/* A reading the client does not have. Short because it goes where a number would, in a column
+   measured for a number. */
+INKCELL_STR_ENTRY(COMMON_UNKNOWN_SHORT,    "?")
+
+/* ---- elapsed time ---------------------------------------------------------------------------
+ *
+ * How long ago something happened, in the shortest form that is still unambiguous: these go in
+ * list rows and on chart axes, where a column is a few characters wide. One unit, never two -
+ * "2h", not "2h 14m" - because the reader is asking whether a thing is recent, not how recent.
+ *
+ * A translator should keep these as short as their language allows; a row measures for them. */
+INKCELL_STR_ENTRY(TIME_NOW,                "now")
+INKCELL_STR_ENTRY(TIME_SECONDS_SHORT,      "%us")
+INKCELL_STR_ENTRY(TIME_MINUTES_SHORT,      "%um")
+INKCELL_STR_ENTRY(TIME_HOURS_SHORT,        "%uh")
+INKCELL_STR_ENTRY(TIME_DAYS_SHORT,         "%ud")
+
+/* ---- list chrome ----------------------------------------------------------------------------
+ *
+ * A list's title with how much is in it. The second form is for a list that is showing a window
+ * over something longer: `%u` is what is held and the second `%u` is how much fell off the end,
+ * which is the difference between "the mesh is quiet" and "we are not keeping up". */
+INKCELL_STR_ENTRY(LIST_TITLE_COUNT,        "%s (%u)")
+INKCELL_STR_ENTRY(LIST_TITLE_COUNT_OLDER,  "%s (%u, +%u older)")
+
+/* ---- charts ---------------------------------------------------------------------------------
+ *
+ * How far back a chart is looking, as the segmented button spells it. Four, because four is what
+ * fits the strip - see enum inkcell_trend_span. */
+INKCELL_STR_ENTRY(TREND_SPAN_15M,          "15m")
+INKCELL_STR_ENTRY(TREND_SPAN_1H,           "1h")
+INKCELL_STR_ENTRY(TREND_SPAN_6H,           "6h")
+INKCELL_STR_ENTRY(TREND_SPAN_ALL,          "All")
+
+/* ---- leaving ---------------------------------------------------------------------------------
+ *
+ * What the quit key is, told to a reader who is holding a device whose buttons this build may
+ * not have recognised. The second is the fallback when the profile named no cap for it: a key
+ * code is not a thing to put in front of a user, and it is here because a build that cannot say
+ * "MENU" should still say something rather than leave the reader holding an unresponsive
+ * handheld. See inkcell_input_quit_hint(). */
+INKCELL_STR_ENTRY(HINT_QUIT_MENU,          "Press MENU to quit")
+INKCELL_STR_ENTRY(HINT_QUIT_KEY_CODE,      "Quit: key code %u")
