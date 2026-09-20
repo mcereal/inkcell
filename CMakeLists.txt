@@ -63,6 +63,7 @@ add_library(inkcell STATIC
     # count of what somebody wrote.
     src/generated/emoji_glyphs.c
     src/generated/font_ui_glyphs.c
+    src/generated/font_ui_bold_glyphs.c
     src/generated/icon_glyphs.c
     # measuring in cells, easing curves, chart arithmetic, press-to-panel timing
     src/layout.c

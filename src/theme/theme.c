@@ -59,7 +59,15 @@
                 [INKCELL_TYPE_TITLE] = 1,                                                          \
                 [INKCELL_TYPE_BODY] = 0,                                                           \
                 [INKCELL_TYPE_LABEL] = -1,                                                         \
-            },                                                                                     \
+            }, /* A title is heavier as well as larger, and a label is heavier *instead* of        \
+                  larger: section headings and chrome are a step down in size, which on its own    \
+                  reads as text that got smaller rather than as a heading. */                      \
+            .type_weight =                                                                         \
+                {                                                                                  \
+                    [INKCELL_TYPE_TITLE] = INKCELL_WEIGHT_STRONG,                                  \
+                    [INKCELL_TYPE_BODY] = INKCELL_WEIGHT_REGULAR,                                  \
+                    [INKCELL_TYPE_LABEL] = INKCELL_WEIGHT_STRONG,                                  \
+                },                                                                                 \
         .space =                                                                                   \
             {                                                                                      \
                 [INKCELL_SPACE_NONE] = 0U, [INKCELL_SPACE_XS] = 1U, [INKCELL_SPACE_SM] = 2U,       \
@@ -91,75 +99,75 @@ static const struct inkcell_theme
                 .dark = true,
                 .colors =
                     {
-                        [INKCELL_COLOR_BG] = RGB(0x0A, 0x14, 0x1E),
+                        [INKCELL_COLOR_BG] = RGB(0x0E, 0x10, 0x14),
                         /* The three tiers walk away from the ground in even steps. Far enough apart
                            to tell one from another indoors, near enough that body text keeps the
                            contrast it is validated for on all of them - and SURFACE_HIGH now
                            carries an inbound bubble as well as the draft box, so it is read at
                            length rather than glanced at. */
-                        [INKCELL_COLOR_SURFACE_LOW] = RGB(0x10, 0x1B, 0x28),
-                        [INKCELL_COLOR_SURFACE] = RGB(0x14, 0x22, 0x32),
-                        [INKCELL_COLOR_SURFACE_HIGH] = RGB(0x1C, 0x2E, 0x42),
-                        [INKCELL_COLOR_SURFACE_SEL] = RGB(40, 80, 120),
-                        [INKCELL_COLOR_SURFACE_ACTIVE] = RGB(60, 110, 170),
+                        [INKCELL_COLOR_SURFACE_LOW] = RGB(0x16, 0x19, 0x1E),
+                        [INKCELL_COLOR_SURFACE] = RGB(0x1C, 0x20, 0x26),
+                        [INKCELL_COLOR_SURFACE_HIGH] = RGB(0x26, 0x2B, 0x33),
+                        [INKCELL_COLOR_SURFACE_SEL] = RGB(48, 56, 68),
+                        [INKCELL_COLOR_SURFACE_ACTIVE] = RGB(68, 79, 96),
                         /* The other end of the palette: near enough to the light theme's ground
                            that a notice on it reads as a piece of another UI laid over this one,
                            which is exactly what a snackbar is meant to look like. */
-                        [INKCELL_COLOR_SURFACE_INVERSE] = RGB(226, 232, 240),
-                        [INKCELL_COLOR_TEXT] = RGB(220, 230, 240),
-                        [INKCELL_COLOR_TEXT_DIM] = RGB(140, 150, 165),
+                        [INKCELL_COLOR_SURFACE_INVERSE] = RGB(229, 231, 235),
+                        [INKCELL_COLOR_TEXT] = RGB(228, 230, 235),
+                        [INKCELL_COLOR_TEXT_DIM] = RGB(147, 154, 166),
                         [INKCELL_COLOR_TEXT_STRONG] = RGB(255, 255, 255),
                         [INKCELL_COLOR_TEXT_ON_SEL] = RGB(255, 255, 255),
-                        [INKCELL_COLOR_TEXT_ON_SEL_DIM] = RGB(190, 208, 226),
-                        [INKCELL_COLOR_TEXT_ON_INVERSE] = RGB(0x10, 0x1B, 0x28),
+                        [INKCELL_COLOR_TEXT_ON_SEL_DIM] = RGB(196, 203, 214),
+                        [INKCELL_COLOR_TEXT_ON_INVERSE] = RGB(0x16, 0x19, 0x1E),
                         /* The brand yellow, unchanged. Dark text on it because white on that yellow
                            is unreadable at this glyph size; the container is the same hue taken
                            down to an olive that reads as "the primary, quietly", with a pale tint
                            of it for the ink. */
-                        [INKCELL_COLOR_PRIMARY] = RGB(255, 220, 120),
-                        [INKCELL_COLOR_ON_PRIMARY] = RGB(0x0A, 0x14, 0x1E),
-                        [INKCELL_COLOR_PRIMARY_CONTAINER] = RGB(86, 68, 24),
-                        [INKCELL_COLOR_ON_PRIMARY_CONTAINER] = RGB(255, 232, 170),
+                        [INKCELL_COLOR_PRIMARY] = RGB(240, 191, 106),
+                        [INKCELL_COLOR_ON_PRIMARY] = RGB(0x1E, 0x16, 0x08),
+                        [INKCELL_COLOR_PRIMARY_CONTAINER] = RGB(74, 56, 22),
+                        [INKCELL_COLOR_ON_PRIMARY_CONTAINER] = RGB(250, 220, 165),
                         /* The blue our own messages are drawn in. The container is the outbound
                            bubble's old fill and the ink on it the old outbound text colour, so the
                            transcript is unchanged - it is simply no longer four roles nothing else
                            could reach. */
-                        [INKCELL_COLOR_SECONDARY] = RGB(120, 175, 240),
-                        [INKCELL_COLOR_ON_SECONDARY] = RGB(0x0A, 0x14, 0x1E),
-                        [INKCELL_COLOR_SECONDARY_CONTAINER] = RGB(34, 66, 104),
-                        [INKCELL_COLOR_ON_SECONDARY_CONTAINER] = RGB(228, 238, 248),
+                        [INKCELL_COLOR_SECONDARY] = RGB(126, 170, 226),
+                        [INKCELL_COLOR_ON_SECONDARY] = RGB(0x0C, 0x16, 0x24),
+                        [INKCELL_COLOR_SECONDARY_CONTAINER] = RGB(38, 62, 92),
+                        [INKCELL_COLOR_ON_SECONDARY_CONTAINER] = RGB(215, 230, 245),
                         /* A lavender: adjacent to neither the yellow that means "here" nor the
                            green and red that mean "fine" and "not fine", which is the whole
                            requirement for a colour that says "not finished yet". */
-                        [INKCELL_COLOR_TERTIARY] = RGB(190, 160, 235),
-                        [INKCELL_COLOR_ON_TERTIARY] = RGB(0x0A, 0x14, 0x1E),
-                        [INKCELL_COLOR_TERTIARY_CONTAINER] = RGB(58, 50, 92),
-                        [INKCELL_COLOR_ON_TERTIARY_CONTAINER] = RGB(222, 208, 255),
-                        [INKCELL_COLOR_SUCCESS] = RGB(120, 220, 150),
-                        [INKCELL_COLOR_ON_SUCCESS] = RGB(0x0A, 0x14, 0x1E),
-                        [INKCELL_COLOR_SUCCESS_CONTAINER] = RGB(0x1A, 0x42, 0x2C),
-                        [INKCELL_COLOR_ON_SUCCESS_CONTAINER] = RGB(170, 240, 196),
+                        [INKCELL_COLOR_TERTIARY] = RGB(186, 162, 228),
+                        [INKCELL_COLOR_ON_TERTIARY] = RGB(0x1A, 0x14, 0x28),
+                        [INKCELL_COLOR_TERTIARY_CONTAINER] = RGB(60, 52, 88),
+                        [INKCELL_COLOR_ON_TERTIARY_CONTAINER] = RGB(222, 210, 250),
+                        [INKCELL_COLOR_SUCCESS] = RGB(122, 208, 148),
+                        [INKCELL_COLOR_ON_SUCCESS] = RGB(0x08, 0x1C, 0x10),
+                        [INKCELL_COLOR_SUCCESS_CONTAINER] = RGB(0x1C, 0x42, 0x2C),
+                        [INKCELL_COLOR_ON_SUCCESS_CONTAINER] = RGB(176, 232, 196),
                         /* Orange rather than the brand yellow. They are neighbours, which is why
                            this had to stop being one colour: a warning drawn in the primary is a
                            warning that cannot be told from a heading. */
-                        [INKCELL_COLOR_WARNING] = RGB(255, 167, 38),
-                        [INKCELL_COLOR_ON_WARNING] = RGB(0x0A, 0x14, 0x1E),
-                        [INKCELL_COLOR_WARNING_CONTAINER] = RGB(78, 46, 8),
-                        [INKCELL_COLOR_ON_WARNING_CONTAINER] = RGB(255, 208, 156),
+                        [INKCELL_COLOR_WARNING] = RGB(243, 176, 72),
+                        [INKCELL_COLOR_ON_WARNING] = RGB(0x22, 0x14, 0x04),
+                        [INKCELL_COLOR_WARNING_CONTAINER] = RGB(78, 48, 14),
+                        [INKCELL_COLOR_ON_WARNING_CONTAINER] = RGB(250, 206, 158),
                         /* The container is the failed bubble's fill, which every theme used to
                            restate. */
-                        [INKCELL_COLOR_ERROR] = RGB(240, 120, 120),
-                        [INKCELL_COLOR_ON_ERROR] = RGB(0x0A, 0x14, 0x1E),
-                        [INKCELL_COLOR_ERROR_CONTAINER] = RGB(84, 40, 44),
-                        [INKCELL_COLOR_ON_ERROR_CONTAINER] = RGB(255, 190, 190),
+                        [INKCELL_COLOR_ERROR] = RGB(233, 102, 118),
+                        [INKCELL_COLOR_ON_ERROR] = RGB(0x22, 0x0A, 0x0A),
+                        [INKCELL_COLOR_ERROR_CONTAINER] = RGB(86, 40, 44),
+                        [INKCELL_COLOR_ON_ERROR_CONTAINER] = RGB(250, 194, 194),
                         /* A step brighter than the rule for the outline: an edge has to be found
                            against two fills at once, where a separator only has to divide one. */
-                        [INKCELL_COLOR_RULE] = RGB(40, 80, 120),
-                        [INKCELL_COLOR_RULE_STRONG] = RGB(60, 110, 170),
-                        [INKCELL_COLOR_OUTLINE] = RGB(62, 100, 140),
+                        [INKCELL_COLOR_RULE] = RGB(45, 51, 61),
+                        [INKCELL_COLOR_RULE_STRONG] = RGB(54, 61, 74),
+                        [INKCELL_COLOR_OUTLINE] = RGB(66, 74, 88),
                         /* The cursor fill's own colour, which is where a track wants to sit on a
                            dark palette: one step off the surface and well under every fill. */
-                        [INKCELL_COLOR_METER_TRACK] = RGB(40, 80, 120),
+                        [INKCELL_COLOR_METER_TRACK] = RGB(44, 51, 62),
                         /* The QR code, which is black on white on every theme - see
                            inkcell/ui/theme.h. A phone camera reads it, not a person, and several
                            scanners refuse an inverted code outright. */
@@ -170,12 +178,12 @@ static const struct inkcell_theme
                    a tint has to carry the contrast the way the accent fill does. */
                 .avatars =
                     {
-                        RGB(120, 190, 255), /* sky */
-                        RGB(255, 200, 120), /* amber */
-                        RGB(150, 220, 170), /* mint */
-                        RGB(230, 160, 220), /* orchid */
-                        RGB(255, 162, 140), /* coral */
-                        RGB(180, 200, 255), /* periwinkle */
+                        RGB(124, 176, 236), /* sky */
+                        RGB(240, 190, 120), /* amber */
+                        RGB(138, 210, 168), /* mint */
+                        RGB(220, 158, 210), /* orchid */
+                        RGB(244, 156, 138), /* coral */
+                        RGB(172, 186, 240), /* periwinkle */
                     },
                 .avatar_count = 6U,
                 /* A ladder rather than a set of hues, because the contract between two of these
@@ -202,23 +210,23 @@ static const struct inkcell_theme
                         /* A paper ground. The primary goes amber-brown rather than yellow: it is a
                            fill as well as a text colour, and pale yellow under dark text is a
                            highlighter pen. */
-                        [INKCELL_COLOR_BG] = RGB(247, 248, 250),
+                        [INKCELL_COLOR_BG] = RGB(250, 250, 252),
                         /* Downwards, because here the ground is the light one: a surface rises by
                            getting further from paper, not nearer to it. */
-                        [INKCELL_COLOR_SURFACE_LOW] = RGB(238, 241, 246),
-                        [INKCELL_COLOR_SURFACE] = RGB(231, 235, 241),
-                        [INKCELL_COLOR_SURFACE_HIGH] = RGB(220, 226, 235),
-                        [INKCELL_COLOR_SURFACE_SEL] = RGB(200, 219, 242),
-                        [INKCELL_COLOR_SURFACE_ACTIVE] = RGB(154, 193, 236),
+                        [INKCELL_COLOR_SURFACE_LOW] = RGB(243, 244, 246),
+                        [INKCELL_COLOR_SURFACE] = RGB(238, 239, 242),
+                        [INKCELL_COLOR_SURFACE_HIGH] = RGB(229, 231, 235),
+                        [INKCELL_COLOR_SURFACE_SEL] = RGB(222, 226, 232),
+                        [INKCELL_COLOR_SURFACE_ACTIVE] = RGB(202, 208, 217),
                         /* Downwards here too: on paper the far end is a slate the ink comes off,
                            not a deeper tier of the same paper. */
-                        [INKCELL_COLOR_SURFACE_INVERSE] = RGB(42, 51, 64),
-                        [INKCELL_COLOR_TEXT] = RGB(24, 32, 44),
-                        [INKCELL_COLOR_TEXT_DIM] = RGB(92, 104, 120),
-                        [INKCELL_COLOR_TEXT_STRONG] = RGB(8, 14, 24),
-                        [INKCELL_COLOR_TEXT_ON_SEL] = RGB(12, 20, 32),
-                        [INKCELL_COLOR_TEXT_ON_SEL_DIM] = RGB(70, 84, 104),
-                        [INKCELL_COLOR_TEXT_ON_INVERSE] = RGB(238, 241, 246),
+                        [INKCELL_COLOR_SURFACE_INVERSE] = RGB(40, 44, 52),
+                        [INKCELL_COLOR_TEXT] = RGB(26, 29, 35),
+                        [INKCELL_COLOR_TEXT_DIM] = RGB(98, 104, 115),
+                        [INKCELL_COLOR_TEXT_STRONG] = RGB(10, 12, 16),
+                        [INKCELL_COLOR_TEXT_ON_SEL] = RGB(18, 21, 27),
+                        [INKCELL_COLOR_TEXT_ON_SEL_DIM] = RGB(78, 84, 95),
+                        [INKCELL_COLOR_TEXT_ON_INVERSE] = RGB(243, 244, 246),
                         /* An apricot container rather than the palest tint of the primary: on a
                            paper ground the two nearest surface tiers are already near-white, so a
                            container has to come down far enough to be a fill at all before it is a
@@ -259,13 +267,13 @@ static const struct inkcell_theme
                         [INKCELL_COLOR_ON_ERROR] = RGB(255, 255, 255),
                         [INKCELL_COLOR_ERROR_CONTAINER] = RGB(238, 203, 203),
                         [INKCELL_COLOR_ON_ERROR_CONTAINER] = RGB(120, 16, 22),
-                        [INKCELL_COLOR_RULE] = RGB(188, 199, 213),
-                        [INKCELL_COLOR_RULE_STRONG] = RGB(120, 160, 205),
-                        [INKCELL_COLOR_OUTLINE] = RGB(160, 174, 192),
+                        [INKCELL_COLOR_RULE] = RGB(206, 210, 217),
+                        [INKCELL_COLOR_RULE_STRONG] = RGB(186, 191, 200),
+                        [INKCELL_COLOR_OUTLINE] = RGB(188, 193, 202),
                         /* A shade under the hairline. The cursor fill is too close to a card here -
                            1.18:1, so a track drawn in it vanishes on the Status screen - and this
                            is the quietest step that still separates from both grounds. */
-                        [INKCELL_COLOR_METER_TRACK] = RGB(186, 198, 214),
+                        [INKCELL_COLOR_METER_TRACK] = RGB(214, 218, 225),
                         [INKCELL_COLOR_CODE] = RGB(0, 0, 0),
                         [INKCELL_COLOR_CODE_GROUND] = RGB(255, 255, 255),
                     },
@@ -402,22 +410,22 @@ static const struct inkcell_theme
                            reddish purple for the primary. All four stay distinct under deuteranopia
                            and protanopia, where the original green/yellow/red collapse into one
                            another. */
-                        [INKCELL_COLOR_BG] = RGB(0x0A, 0x14, 0x1E),
-                        [INKCELL_COLOR_SURFACE_LOW] = RGB(0x10, 0x1B, 0x28),
-                        [INKCELL_COLOR_SURFACE] = RGB(0x14, 0x22, 0x32),
-                        [INKCELL_COLOR_SURFACE_HIGH] = RGB(0x1C, 0x2E, 0x42),
-                        [INKCELL_COLOR_SURFACE_SEL] = RGB(40, 80, 120),
-                        [INKCELL_COLOR_SURFACE_ACTIVE] = RGB(60, 110, 170),
+                        [INKCELL_COLOR_BG] = RGB(0x0E, 0x10, 0x14),
+                        [INKCELL_COLOR_SURFACE_LOW] = RGB(0x16, 0x19, 0x1E),
+                        [INKCELL_COLOR_SURFACE] = RGB(0x1C, 0x20, 0x26),
+                        [INKCELL_COLOR_SURFACE_HIGH] = RGB(0x26, 0x2B, 0x33),
+                        [INKCELL_COLOR_SURFACE_SEL] = RGB(48, 56, 68),
+                        [INKCELL_COLOR_SURFACE_ACTIVE] = RGB(68, 79, 96),
                         /* A neutral, as on the dark theme: the notice is found by being the wrong
                            way up rather than by a hue, which is the one cue this theme can always
                            spend. */
-                        [INKCELL_COLOR_SURFACE_INVERSE] = RGB(226, 232, 240),
-                        [INKCELL_COLOR_TEXT] = RGB(226, 232, 240),
-                        [INKCELL_COLOR_TEXT_DIM] = RGB(146, 156, 170),
+                        [INKCELL_COLOR_SURFACE_INVERSE] = RGB(229, 231, 235),
+                        [INKCELL_COLOR_TEXT] = RGB(228, 230, 235),
+                        [INKCELL_COLOR_TEXT_DIM] = RGB(147, 154, 166),
                         [INKCELL_COLOR_TEXT_STRONG] = RGB(255, 255, 255),
                         [INKCELL_COLOR_TEXT_ON_SEL] = RGB(255, 255, 255),
-                        [INKCELL_COLOR_TEXT_ON_SEL_DIM] = RGB(190, 208, 226),
-                        [INKCELL_COLOR_TEXT_ON_INVERSE] = RGB(0x0C, 0x16, 0x22),
+                        [INKCELL_COLOR_TEXT_ON_SEL_DIM] = RGB(196, 203, 214),
+                        [INKCELL_COLOR_TEXT_ON_INVERSE] = RGB(0x16, 0x19, 0x1E),
                         /* The reddish purple taken down to a plum, with a pale tint of the same hue
                            on it. Held back in lightness rather than towards a neighbouring hue, so
                            the pair stays the primary under every dichromacy the theme is for. */
@@ -456,10 +464,10 @@ static const struct inkcell_theme
                         [INKCELL_COLOR_ON_ERROR] = RGB(0x0A, 0x14, 0x1E),
                         [INKCELL_COLOR_ERROR_CONTAINER] = RGB(96, 52, 20),
                         [INKCELL_COLOR_ON_ERROR_CONTAINER] = RGB(250, 206, 150),
-                        [INKCELL_COLOR_RULE] = RGB(40, 80, 120),
+                        [INKCELL_COLOR_RULE] = RGB(45, 51, 61),
                         [INKCELL_COLOR_RULE_STRONG] = RGB(86, 180, 233),
-                        [INKCELL_COLOR_OUTLINE] = RGB(62, 100, 140),
-                        [INKCELL_COLOR_METER_TRACK] = RGB(40, 80, 120),
+                        [INKCELL_COLOR_OUTLINE] = RGB(66, 74, 88),
+                        [INKCELL_COLOR_METER_TRACK] = RGB(44, 51, 62),
                         [INKCELL_COLOR_CODE] = RGB(0, 0, 0),
                         [INKCELL_COLOR_CODE_GROUND] = RGB(255, 255, 255),
                     },
@@ -824,6 +832,17 @@ int inkcell_theme_radius(const struct inkcell_theme *theme, enum inkcell_shape s
         return 0;
     }
     return (int)theme->metrics.shape[shape] * scale;
+}
+
+enum inkcell_weight inkcell_theme_type_weight(const struct inkcell_theme *theme,
+                                              enum inkcell_type type) {
+    theme = theme_or_default(theme);
+    if ((int)type < 0 || (int)type >= (int)INKCELL_TYPE_COUNT) {
+        return INKCELL_WEIGHT_REGULAR;
+    }
+    return theme->metrics.type_weight[type] == (uint8_t)INKCELL_WEIGHT_STRONG
+               ? INKCELL_WEIGHT_STRONG
+               : INKCELL_WEIGHT_REGULAR;
 }
 
 int inkcell_theme_type_scale(const struct inkcell_theme *theme, enum inkcell_type type, int scale) {

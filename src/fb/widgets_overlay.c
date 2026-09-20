@@ -101,9 +101,14 @@ void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state,
     if (room < adv || line <= 0) {
         return; /* a geometry too small to hold one cell of it; nothing to say here */
     }
-    const size_t max_cols = (size_t)(room / adv);
+    /* The budget is the room itself, in pixels, rather than a count of cells that room would
+       hold: what has to fit is the drawn line, and on a proportional face those are two
+       different questions. */
+    struct inkcell_fb_wrap_ctx wctx;
+    const struct inkcell_wrap_metric metric = inkcell_fb_wrap_metric(&wctx, state, scale);
+    const size_t budget = (size_t)room;
 
-    uint32_t lines = inkcell_wrap_lines(state->snackbar, max_cols);
+    uint32_t lines = inkcell_wrap_lines_measured(state->snackbar, budget, &metric);
     if (lines == 0U) {
         lines = 1U;
     }
@@ -112,12 +117,12 @@ void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state,
     }
     /* Sized to its own words rather than to the panel, the way a bubble is: a bar the full
        width of the screen is a region of the chrome, and a notice is one thing that arrived. */
-    size_t cols = inkcell_wrap_widest(state->snackbar, max_cols);
-    if (cols == 0U) {
-        cols = 1U;
+    size_t words = inkcell_wrap_widest_measured(state->snackbar, budget, &metric);
+    if (words == 0U) {
+        words = (size_t)adv;
     }
 
-    const int box_w = (int)cols * adv + 2 * pad_x;
+    const int box_w = (int)words + 2 * pad_x;
     /* Centred on the panel rather than against the leading margin. A bar sized to its own words
        and pinned to the left edge reads as the start of a row that ran out of things to say -
        which is what the footer line it replaced was. Centred, it reads as one object placed
@@ -151,7 +156,7 @@ void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state,
 
     const struct inkcell_rgb ink = inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_INVERSE);
     struct inkcell_wrap wrap;
-    inkcell_wrap_begin(&wrap, state->snackbar, max_cols);
+    inkcell_wrap_begin_measured(&wrap, state->snackbar, budget, &metric);
     int text_y = y + pad_y;
     for (uint32_t drawn = 0U; drawn < lines && inkcell_wrap_next(&wrap); ++drawn) {
         inkcell_fb_draw_text(state, box_x + pad_x, text_y, wrap.line, scale, ink,
@@ -215,6 +220,9 @@ void inkcell_fb_draw_dialog(const struct inkcell_backend_fb_state *state,
     /* The panel's own text column, which is narrower than the body's - a dialog is inset from
        the screen and its words are inset again from its edge. */
     const int text_w = panel_w - 2 * pad;
+    /* In pixels, for the same reason the snackbar's budget is: the panel has to hold the line
+       as drawn. `text_cols` is what the clip below still counts in. */
+    const size_t text_budget = text_w > 0 ? (size_t)text_w : 1U;
     const size_t text_cols = text_w > adv ? (size_t)(text_w / adv) : 1U;
 
     const int icon_scale = scale * INKCELL_FB_DIALOG_ICON_SCALE;
@@ -265,7 +273,7 @@ void inkcell_fb_draw_dialog(const struct inkcell_backend_fb_state *state,
     const int text_room = room - fixed;
     const uint32_t fits = text_room > 0 ? (uint32_t)(text_room / line) : 0U;
     uint32_t text_lines = (dialog->text != NULL && dialog->text[0] != '\0')
-                              ? inkcell_wrap_lines(dialog->text, text_cols)
+                              ? inkcell_fb_wrapped_lines(state, dialog->text, text_budget, scale)
                               : 0U;
     if (text_lines > fits) {
         text_lines = fits;
@@ -301,14 +309,15 @@ void inkcell_fb_draw_dialog(const struct inkcell_backend_fb_state *state,
         inkcell_line_reset(&headline);
         inkcell_line_printf(&headline, "%s", dialog->headline);
         inkcell_line_fit(&headline, text_cols);
-        inkcell_fb_draw_text(state, content_x, y, inkcell_line_text(&headline), scale,
-                             inkcell_fb_tone_color(state, accent_tone),
-                             inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
+        inkcell_fb_draw_text_weight(state, content_x, y, inkcell_line_text(&headline), scale,
+                                    inkcell_fb_type_weight(state, INKCELL_TYPE_TITLE),
+                                    inkcell_fb_tone_color(state, accent_tone),
+                                    inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
         y += head_h;
     }
 
     if (text_lines > 0U) {
-        inkcell_fb_draw_wrapped_at(state, content_x, y, dialog->text, text_cols, (int)text_lines,
+        inkcell_fb_draw_wrapped_at(state, content_x, y, dialog->text, text_budget, (int)text_lines,
                                    inkcell_fb_tone_color(state, INKCELL_TONE_NORMAL),
                                    inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
     }

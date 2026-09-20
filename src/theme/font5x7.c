@@ -488,6 +488,9 @@ const struct inkcell_font *inkcell_font5x7(void) {
            is the top half of the two-row line gap above. */
         .master_h = INKCELL_FONT_HEIGHT + 1U,
         .master_top = 1U,
+        /* Pixel art: the master *is* the cell, one unit to the pixel, so every conversion
+           through it cancels back to the measurements this font has always had. */
+        .master_scale = 1U,
         /* Its capitals fill the cell - that is why an accented one has nowhere to put its mark
            but the overhang. */
         .cap_rows = INKCELL_FONT_HEIGHT,

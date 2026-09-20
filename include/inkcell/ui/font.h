@@ -49,8 +49,12 @@ extern "C" {
 
 /* The largest coverage *master* a font may store a glyph at. Independent of the cell: a face
    is rasterised once at a resolution that survives being drawn small, and the cell it lands
-   in is whatever the theme's scale works out to. */
-#define INKCELL_GLYPH_MASTER_MAX_WIDTH 24
+   in is whatever the theme's scale works out to.
+
+   Wide enough for a proportional face's widest advance, not just a monospace cell: where a
+   mono master is the cell and nothing exceeds it, 'W' and 'm' in a proportional face are half
+   again the nominal advance, and the master has to hold the widest of them. */
+#define INKCELL_GLYPH_MASTER_MAX_WIDTH 40
 #define INKCELL_GLYPH_MASTER_MAX_HEIGHT 40
 
 /* Solid. Coverage runs 0..this inclusive, 4 bits, the same range an icon sprite carries. */
@@ -83,15 +87,69 @@ struct inkcell_glyph {
 struct inkcell_font {
     const char *id;   /* what a theme names it by */
     const char *name; /* what a menu would show */
-    uint8_t width;    /* cell width in pixels at scale 1 */
-    uint8_t height;   /* cell height in pixels at scale 1 */
+    /*
+     * The *nominal* advance, in pixels at scale 1.
+     *
+     * For a monospace face this is the advance, full stop: every cell is this wide and
+     * inkcell_font_advance() is exact. For a proportional one it is the width the layout
+     * *estimates* with - a column count, a wrap guess, the fallback when no codepoint is in
+     * hand - and the real advance comes per glyph from inkcell_font_advance_cp(). Sized to the
+     * face's average lowercase advance rather than its widest, so an estimate is wrong in both
+     * directions rather than always short.
+     */
+    uint8_t width;
+    /*
+     * The same nominal advance, in master columns - which is where the precision is.
+     *
+     * `width` is pixels at scale 1, and at that size a proportional face's average advance is
+     * about four pixels: rounding it there throws away a quarter of it before the scale is
+     * applied, which at the body scale is three pixels of every cell and at an icon's scale is
+     * twenty. Stating it in master units and dividing at the end keeps it exact.
+     *
+     * Zero means the face has not got one and `width` is the answer, which is every monospace
+     * font and anything written before this field.
+     */
+    uint8_t nominal;
+    uint8_t height; /* cell height in pixels at scale 1 */
     uint8_t advance_gap;
     uint8_t line_gap;
     uint8_t master_w; /* coverage master width; the cell width when the font is pixel art */
     uint8_t master_h; /* coverage master height, overhang rows included */
+    /*
+     * Master units to one pixel at scale 1 - the resolution the coverage is stored at, relative
+     * to the size the cell is drawn.
+     *
+     * A per-glyph advance is stored in master columns, and this is what turns one into pixels:
+     * at scale S a glyph steps `advance * S / master_scale`. 5x7 stores its master at the cell,
+     * so it is 1 and the arithmetic cancels; the rasterised faces store four master units to
+     * the pixel, which is what lets a proportional advance land on a quarter of a pixel rather
+     * than being rounded to a whole one before the scale is applied.
+     *
+     * Zero is read as 1, so a font that predates this field keeps its old measurements.
+     */
+    uint8_t master_scale;
+    /*
+     * Whether the advance varies per glyph.
+     *
+     * Not cosmetic: it is the difference between a layout that may multiply a column count by
+     * the nominal advance and one that has to measure the string. Anything that lays out against
+     * a grid asks this before assuming one.
+     */
+    bool proportional;
     /* How many of the master's top rows hang *above* the cell rather than inside it.
        See the note on the overhang below. */
     uint8_t master_top;
+    /*
+     * How many of the master's left columns sit *before* the pen.
+     *
+     * The horizontal mirror of the overhang, and there for the same reason: the accent on a
+     * narrow letter is centred on its stem and wider than it, so the circumflex of an 'i'
+     * reaches left of the origin its advance is measured from. The renderer draws the master
+     * this far before the pen, so that ink lands where the face put it and the advance stays
+     * the advance. Zero for a face whose glyphs all start at the origin, which is every
+     * monospace one.
+     */
+    uint8_t master_left;
     /*
      * How many master rows the capitals stand on the baseline, which is not the cell.
      *
@@ -107,11 +165,35 @@ struct inkcell_font {
     bool (*glyph)(uint32_t codepoint, struct inkcell_glyph *out);
     /* Whether the font has a real glyph for `codepoint`, without building it. */
     bool (*has_glyph)(uint32_t codepoint);
+    /*
+     * How far `codepoint` steps, in master columns. NULL means every glyph steps the nominal
+     * advance, which is what a monospace face is.
+     *
+     * Separate from `glyph` rather than a field on the coverage it returns, because measuring
+     * a string must not decode one: a line of body text is measured several times for every
+     * time it is drawn - to fit it, to centre it, to right-align what follows - and unpacking
+     * three hundred ink boxes to add up their widths would cost more than the frame.
+     */
+    uint8_t (*advance)(uint32_t codepoint);
 };
 
-/* Pixels from one cell's origin to the next, and from one baseline to the next. */
+/*
+ * The *nominal* advance, and the line height, in pixels.
+ *
+ * For a proportional font this is an estimate - see `width`. Anything laying out real text
+ * measures it with inkcell_font_advance_cp() or, above this layer, inkcell_text_width().
+ */
 int inkcell_font_advance(const struct inkcell_font *font, int scale);
 int inkcell_font_line(const struct inkcell_font *font, int scale);
+
+/*
+ * What `codepoint` actually steps, in pixels.
+ *
+ * The monospace answer for a monospace face, and for a proportional one the face's own
+ * advance for that character. A codepoint the font has no glyph for steps the nominal advance,
+ * which is what the replacement box is drawn at.
+ */
+int inkcell_font_advance_cp(const struct inkcell_font *font, uint32_t codepoint, int scale);
 
 /* How tall a capital is drawn, in pixels - what anything standing beside the text matches. */
 int inkcell_font_cap(const struct inkcell_font *font, int scale);
@@ -120,6 +202,32 @@ int inkcell_font_cap(const struct inkcell_font *font, int scale);
 bool inkcell_font_glyph(const struct inkcell_font *font, uint32_t codepoint,
                         struct inkcell_glyph *out);
 bool inkcell_font_has_glyph(const struct inkcell_font *font, uint32_t codepoint);
+
+/*
+ * How heavily text is set.
+ *
+ * Two, because two is what this panel can tell apart: a face rasterised into a 20-pixel cell
+ * has room for one clear step of weight and no more, and a scale of four that a reader cannot
+ * distinguish is a scale of one with extra data. REGULAR is body text and everything that has
+ * not said otherwise; STRONG is the line the eye should land on first.
+ *
+ * A weight, not a colour and not a size. That is the point of having it: hierarchy was being
+ * carried entirely by palette here, which is why a screen of headings, values and states read
+ * as though every line were competing with its neighbours.
+ */
+enum inkcell_weight {
+    INKCELL_WEIGHT_REGULAR = 0,
+    INKCELL_WEIGHT_STRONG,
+};
+
+/*
+ * `font` at `weight` - the same family, set heavier.
+ *
+ * A face with no heavier cut answers with itself, which is what the pixel font does: 5x7 has
+ * one weight and emboldening it by smearing a column would turn its letters into blocks.
+ */
+const struct inkcell_font *inkcell_font_at_weight(const struct inkcell_font *font,
+                                                  enum inkcell_weight weight);
 
 /* The registry a theme's `font_id` is resolved against. */
 size_t inkcell_font_count(void);

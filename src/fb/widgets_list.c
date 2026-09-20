@@ -58,9 +58,11 @@ void inkcell_fb_draw_avatar(const struct inkcell_backend_fb_state *state, int x,
      * on each side is what keeps two cells clear of it at every scale the theme allows.
      */
     const int room = size - size / 4;
-    const size_t cells = has_icon ? 1U : inkcell_text_cells(label);
     int scale = state->scale;
-    while (scale > 1 && ((int)cells * inkcell_fb_char_adv(state, scale) > room ||
+    /* Measured at each scale rather than counted once: the initials are two letters of a name,
+       and "WW" and "II" are the same two cells and nothing like the same width. */
+    while (scale > 1 && ((has_icon ? inkcell_fb_icon_box(state, scale)
+                                   : inkcell_fb_text_width(state, label, scale)) > room ||
                          (int)inkcell_fb_font(state)->height * scale > room)) {
         --scale;
     }
@@ -75,7 +77,7 @@ void inkcell_fb_draw_avatar(const struct inkcell_backend_fb_state *state, int x,
                              icon, scale, paint.ink, paint.fill);
         return;
     }
-    const int text_w = (int)cells * inkcell_fb_char_adv(state, scale);
+    const int text_w = inkcell_fb_text_width(state, label, scale);
     inkcell_fb_draw_text(state, x + (size - text_w) / 2, content_y, label, scale, paint.ink,
                          paint.fill);
 }
@@ -697,7 +699,10 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state
     inkcell_line_reset(&line);
     inkcell_line_printf(&line, "%s", text != NULL ? text : "");
     inkcell_line_fit(&line, inkcell_fb_row_cols(state, scale));
-    inkcell_fb_draw_text(state, x, baseline, inkcell_line_text(&line), scale, ink, ground);
+    /* A section heading is a step *down* in size, which on its own reads as text that got
+       smaller rather than as a break. The weight is what makes it a heading. */
+    inkcell_fb_draw_text_weight(state, x, baseline, inkcell_line_text(&line), scale,
+                                inkcell_fb_type_weight(state, INKCELL_TYPE_LABEL), ink, ground);
     list->y += (int)rows * list->line;
 }
 
