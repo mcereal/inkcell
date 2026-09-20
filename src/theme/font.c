@@ -64,7 +64,45 @@ int inkcell_font_advance(const struct inkcell_font *font, int scale) {
     if (font == NULL || scale <= 0) {
         return 1;
     }
+    /* Through the master where the face states one, so the divide happens after the multiply -
+       see `nominal`. `width` is the answer for a face that has not got one. */
+    if (font->nominal > 0U && font->master_scale > 0U) {
+        const int advance =
+            (int)font->nominal * scale / (int)font->master_scale + (int)font->advance_gap * scale;
+        return advance > 0 ? advance : 1;
+    }
     return (int)font->width * scale + (int)font->advance_gap * scale;
+}
+
+/*
+ * One glyph's advance, in pixels.
+ *
+ * The master-to-pixel conversion is the whole of it: a face stores its advances at the
+ * resolution it rasterised at (`master_scale` units to the pixel), so the multiply happens
+ * before the divide and a half-pixel advance survives into the sum of a whole string rather
+ * than being rounded away per character. That is what keeps a measured line the same width as
+ * the drawn one - the two walk the same arithmetic.
+ *
+ * The letter-spacing gap is added after, unscaled by the master, because it is a property of
+ * how the face is *set* rather than of the glyph.
+ */
+int inkcell_font_advance_cp(const struct inkcell_font *font, uint32_t codepoint, int scale) {
+    font = font_or_default(font);
+    if (font == NULL || scale <= 0) {
+        return 1;
+    }
+    if (!font->proportional || font->advance == NULL) {
+        return inkcell_font_advance(font, scale);
+    }
+    const int units = (int)font->advance(codepoint);
+    if (units <= 0) {
+        /* No advance of its own - a codepoint the face has no glyph for, drawn as the
+           replacement box, which is sized to the nominal cell. */
+        return inkcell_font_advance(font, scale);
+    }
+    const int per_px = font->master_scale > 0U ? (int)font->master_scale : 1;
+    const int advance = units * scale / per_px + (int)font->advance_gap * scale;
+    return advance > 0 ? advance : 1;
 }
 
 int inkcell_font_line(const struct inkcell_font *font, int scale) {

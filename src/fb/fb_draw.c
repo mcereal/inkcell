@@ -671,13 +671,121 @@ static void inkcell_fb_blend_table(const struct inkcell_backend_fb_state *state,
 int inkcell_fb_char_adv(const struct inkcell_backend_fb_state *state, int scale) {
     return inkcell_font_advance(inkcell_fb_font(state), scale);
 }
+
+int inkcell_fb_cell_adv(const struct inkcell_backend_fb_state *state, uint32_t codepoint,
+                        int scale) {
+    return inkcell_font_advance_cp(inkcell_fb_font(state), codepoint, scale);
+}
+
+/*
+ * How wide `text` draws, in pixels.
+ *
+ * The counterpart to inkcell_text_cells(), and the one to reach for when the answer becomes a
+ * coordinate: a cell count times the nominal advance was the same number while every face was
+ * monospace, and is an estimate now. Anything that centres a label, right-aligns a value or
+ * sizes a box around a string has to measure it, because being wrong by the difference between
+ * 'W' and 'i' is being wrong by half the string.
+ *
+ * It walks the same cells inkcell_fb_draw_text() walks and adds the same advances, so a line is
+ * exactly as wide as it draws - including an emoji, which steps its own square box rather than
+ * the face's advance, and a newline, which starts the width over.
+ */
+int inkcell_fb_text_width(const struct inkcell_backend_fb_state *state, const char *text,
+                          int scale) {
+    if (text == NULL) {
+        return 0;
+    }
+    int width = 0;
+    int widest = 0;
+    size_t offset = 0;
+    for (;;) {
+        const struct inkcell_text_cell cell = inkcell_text_cell_next(&text[offset]);
+        if (cell.bytes == 0U) {
+            break;
+        }
+        offset += cell.bytes;
+        if (cell.codepoint == (uint32_t)'\n' && !cell.is_emoji) {
+            width = 0;
+            continue;
+        }
+        width += cell.is_emoji ? inkcell_fb_char_adv(state, scale)
+                               : inkcell_fb_cell_adv(state, cell.codepoint, scale);
+        if (width > widest) {
+            widest = width;
+        }
+    }
+    return widest;
+}
+/*
+ * How many nominal cells `text` needs - its measured width, rounded up to the grid.
+ *
+ * The bridge for the places that still reserve space in columns: a trailing slot negotiating
+ * against the row's width, a bubble sizing itself against the panel. Those are grids, and a
+ * grid can keep working on a proportional face as long as what it reserves covers what will be
+ * drawn - so the width is measured properly and then rounded *up* to whole cells, rather than
+ * the string being counted and hoped for.
+ *
+ * Rounding up rather than to nearest, deliberately: reserving a cell too many costs a column
+ * of blank, and reserving one too few clips a word.
+ */
+size_t inkcell_fb_text_cols(const struct inkcell_backend_fb_state *state, const char *text,
+                            int scale) {
+    const int adv = inkcell_fb_char_adv(state, scale);
+    if (text == NULL || adv <= 0) {
+        return 0U;
+    }
+    const int width = inkcell_fb_text_width(state, text, scale);
+    return width > 0 ? (size_t)((width + adv - 1) / adv) : 0U;
+}
+
+/*
+ * The wrap metric for this state's font: one cell's advance, in pixels.
+ *
+ * What it is for is stated on struct inkcell_wrap_metric. What it costs is worth saying here:
+ * an emoji steps its own square box and a glyph steps the face's advance, which is exactly the
+ * pair inkcell_fb_draw_text() steps - so a wrap budget in pixels cuts the line where the drawn
+ * line would actually stop, and the measure pass and the draw pass still agree.
+ */
+static int inkcell_fb_wrap_cell(const struct inkcell_text_cell *cell, void *ctx) {
+    const struct inkcell_fb_wrap_ctx *wrap = (const struct inkcell_fb_wrap_ctx *)ctx;
+    if (cell == NULL || wrap == NULL) {
+        return 0;
+    }
+    return cell->is_emoji ? inkcell_fb_char_adv(wrap->state, wrap->scale)
+                          : inkcell_fb_cell_adv(wrap->state, cell->codepoint, wrap->scale);
+}
+
+struct inkcell_wrap_metric inkcell_fb_wrap_metric(struct inkcell_fb_wrap_ctx *ctx,
+                                                  const struct inkcell_backend_fb_state *state,
+                                                  int scale) {
+    struct inkcell_wrap_metric metric = {NULL, NULL};
+    if (ctx == NULL) {
+        return metric;
+    }
+    ctx->state = state;
+    ctx->scale = scale;
+    metric.cell = inkcell_fb_wrap_cell;
+    metric.ctx = ctx;
+    return metric;
+}
+
 int inkcell_fb_line_adv(const struct inkcell_backend_fb_state *state, int scale) {
     return inkcell_font_line(inkcell_fb_font(state), scale);
 }
 
 /* The widest cell inkcell_fb_draw_glyph() will resample into: the largest cell a font may declare,
    at the largest scale the type scale can clamp to. */
-#define INKCELL_FB_GLYPH_BOX_MAX (INKCELL_GLYPH_MAX_WIDTH * INKCELL_SCALE_MAX)
+/*
+ * Sized off the *master* rather than the cell, because that is what the box is now measured
+ * from - a proportional face stores every glyph in a master as wide as its widest advance, and
+ * that master is wider than the nominal cell by design.
+ *
+ * The divisor is the master resolution the rasterised faces store at: four units to the pixel.
+ * A face that stored its master at the cell (5x7, at one unit to the pixel) has a master only
+ * as wide as `INKCELL_GLYPH_MAX_WIDTH`, so it stays well inside this. inkcell_fb_draw_glyph_ramp()
+ * bails on a box that exceeds it rather than overrunning the scratch row.
+ */
+#define INKCELL_FB_GLYPH_BOX_MAX (INKCELL_GLYPH_MASTER_MAX_WIDTH * INKCELL_SCALE_MAX / 2)
 
 /*
  * One axis of the resample: the two master samples a destination pixel sits between, and how
@@ -755,7 +863,19 @@ static void inkcell_fb_draw_glyph_ramp(const struct inkcell_backend_fb_state *st
                                        const uint32_t blend[INKCELL_FB_BLEND_STEPS]) {
     const struct inkcell_font *font = inkcell_fb_font(state);
     const int cell_rows = (int)font->master_h - (int)font->master_top;
-    const int box_w = (int)font->width * scale;
+    /*
+     * The box the master resamples into, taken from the master rather than from the cell.
+     *
+     * For a monospace face the two are the same thing and this is the `width * scale` it has
+     * always been. For a proportional one they are not: every glyph is stored in the same
+     * master box - as wide as the widest advance the face has - and positioned inside it by its
+     * own sidebearing, so what varies between characters is where the pen goes next, not how
+     * big the box is. Keeping the box uniform is what lets the glyph cache stay a fixed-stride
+     * array, and drawing it at the pen is safe because a zero-coverage span is skipped below:
+     * two neighbouring masters overlap and only their ink is painted.
+     */
+    const int master_px = font->master_scale > 0U ? (int)font->master_scale : 1;
+    const int box_w = (int)font->master_w * scale / master_px;
     const int box_h = (int)font->height * scale;
     if (scale <= 0 || box_w <= 0 || box_h <= 0 || box_w > INKCELL_FB_GLYPH_BOX_MAX ||
         font->master_w == 0U || cell_rows <= 0) {
@@ -805,6 +925,9 @@ static void inkcell_fb_draw_glyph_ramp(const struct inkcell_backend_fb_state *st
         }
     }
 
+    /* The pen sits `master_left` columns into the master, so the box is drawn that much before
+       it - the horizontal mirror of the overhang above. */
+    const int left = x - (int)font->master_left * scale / master_px;
     const int top = y - top_off;
     for (int dy = 0; dy < full_h; ++dy) {
         uint8_t scratch[INKCELL_FB_GLYPH_BOX_MAX];
@@ -826,7 +949,7 @@ static void inkcell_fb_draw_glyph_ramp(const struct inkcell_backend_fb_state *st
                 ++end;
             }
             if (step > 0) {
-                inkcell_fb_fill_packed(state, x + dx, top + dy, end - dx, 1, blend[step]);
+                inkcell_fb_fill_packed(state, left + dx, top + dy, end - dx, 1, blend[step]);
             }
             dx = end;
         }
@@ -1023,10 +1146,23 @@ static void inkcell_fb_draw_emoji(const struct inkcell_backend_fb_state *state, 
                               box, sprite);
 }
 
-/* An icon occupies exactly one text cell, which is what lets a screen put one in a line's
-   leading slot and keep counting the rest of the row in columns. */
+/*
+ * The room an icon takes in a line: a text cell, or the symbol itself when that is wider.
+ *
+ * It was the cell alone, which held while the cell was as wide as a capital is tall - a
+ * monospace advance very nearly is. A proportional advance is not: it is the width of an
+ * average lowercase letter, comfortably narrower than the cap height an icon is drawn to
+ * match (see inkcell_fb_icon_drawn), and a box measured that way is a box the symbol hangs a
+ * fifth of itself out of on each side. At a dialog's icon scale that overhang is twenty
+ * pixels and lands outside the panel.
+ *
+ * So the box is whichever is larger. A row that reserves one still gets at least its cell, and
+ * a symbol is never asked to fit in less than it is drawn at.
+ */
 int inkcell_fb_icon_box(const struct inkcell_backend_fb_state *state, int scale) {
-    return inkcell_fb_char_adv(state, scale);
+    const int cell = inkcell_fb_char_adv(state, scale);
+    const int drawn = inkcell_fb_icon_drawn(state, scale);
+    return drawn > cell ? drawn : cell;
 }
 
 /*
@@ -1188,14 +1324,18 @@ void inkcell_fb_draw_text(const struct inkcell_backend_fb_state *state, int x, i
 
         if (cell.is_emoji) {
             inkcell_fb_draw_emoji(state, cursor, y, cell.sprite, scale);
-        } else if (cell.codepoint == (uint32_t)'\n') {
+            /* An emoji is a square sprite, not a letter: it steps its own box whatever the
+               face beside it does, which is the nominal advance. */
+            cursor += inkcell_fb_char_adv(state, scale);
+            continue;
+        }
+        if (cell.codepoint == (uint32_t)'\n') {
             y += inkcell_fb_line_adv(state, scale);
             cursor = x;
             continue;
-        } else {
-            inkcell_fb_draw_glyph_ramp(state, cursor, y, cell.codepoint, scale, blend);
         }
-        cursor += inkcell_fb_char_adv(state, scale);
+        inkcell_fb_draw_glyph_ramp(state, cursor, y, cell.codepoint, scale, blend);
+        cursor += inkcell_fb_cell_adv(state, cell.codepoint, scale);
     }
 }
 
@@ -1392,44 +1532,33 @@ void inkcell_fb_format_clock(uint32_t rx_time, char *out, size_t out_len) {
    from the body's - the body margin was the only answer while the only wrapped text on screen
    was a screen's own. */
 int inkcell_fb_draw_wrapped_at(const struct inkcell_backend_fb_state *state, int x, int y,
-                               const char *text, size_t cols, int max_lines,
+                               const char *text, size_t width, int max_lines,
                                struct inkcell_rgb color, struct inkcell_rgb ground) {
+    struct inkcell_fb_wrap_ctx wctx;
+    const struct inkcell_wrap_metric metric = inkcell_fb_wrap_metric(&wctx, state, state->scale);
+    struct inkcell_wrap wrap;
+    inkcell_wrap_begin_measured(&wrap, text, width, &metric);
+
     int lines = 0;
-    const char *cursor = text;
-    char line[160];
-    if (cols >= sizeof line) {
-        cols = sizeof line - 1U;
-    }
-    while (*cursor != '\0' && lines < max_lines) {
-        /* Byte length of the next `cols` cells, which is what memcpy below wants. */
-        size_t take = inkcell_text_cell_offset(cursor, cols);
-        if (cursor[take] != '\0') {
-            /* Break at the last space inside the window when there is one. A space byte can
-               never appear inside a multi-byte sequence, so scanning bytes is safe here. */
-            for (size_t i = take; i > take / 2; --i) {
-                if (cursor[i] == ' ') {
-                    take = i;
-                    break;
-                }
-            }
-        }
-        memcpy(line, cursor, take);
-        line[take] = '\0';
-        inkcell_fb_draw_text(state, x, y, line, state->scale, color, ground);
+    while (lines < max_lines && inkcell_wrap_next(&wrap)) {
+        inkcell_fb_draw_text(state, x, y, wrap.line, state->scale, color, ground);
         y += inkcell_fb_line_adv(state, state->scale);
-        lines++;
-        cursor += take;
-        while (*cursor == ' ') {
-            ++cursor;
-        }
+        ++lines;
     }
     return lines;
 }
 
 /* The same, from the body's left margin - which is where a screen's own wrapped text starts. */
 int inkcell_fb_draw_wrapped(const struct inkcell_backend_fb_state *state, int y, const char *text,
-                            size_t cols, int max_lines, struct inkcell_rgb color,
+                            size_t width, int max_lines, struct inkcell_rgb color,
                             struct inkcell_rgb ground) {
-    return inkcell_fb_draw_wrapped_at(state, inkcell_fb_margin(state), y, text, cols, max_lines,
+    return inkcell_fb_draw_wrapped_at(state, inkcell_fb_margin(state), y, text, width, max_lines,
                                       color, ground);
+}
+
+uint32_t inkcell_fb_wrapped_lines(const struct inkcell_backend_fb_state *state, const char *text,
+                                  size_t width, int scale) {
+    struct inkcell_fb_wrap_ctx wctx;
+    const struct inkcell_wrap_metric metric = inkcell_fb_wrap_metric(&wctx, state, scale);
+    return inkcell_wrap_lines_measured(text, width, &metric);
 }

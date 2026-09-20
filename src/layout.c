@@ -415,9 +415,26 @@ bool inkcell_list_is_cursor(const struct inkcell_list *list, uint32_t index) {
 /* ---- word wrapping -------------------------------------------------------------------------- */
 
 void inkcell_wrap_begin(struct inkcell_wrap *wrap, const char *text, size_t cols) {
+    inkcell_wrap_begin_measured(wrap, text, cols, NULL);
+}
+
+void inkcell_wrap_begin_measured(struct inkcell_wrap *wrap, const char *text, size_t budget,
+                                 const struct inkcell_wrap_metric *metric) {
     wrap->rest = text != NULL ? text : "";
-    wrap->cols = cols > 0U ? cols : 1U;
+    wrap->cols = budget > 0U ? budget : 1U;
+    wrap->metric.cell = metric != NULL ? metric->cell : NULL;
+    wrap->metric.ctx = metric != NULL ? metric->ctx : NULL;
     wrap->line[0] = '\0';
+}
+
+/* One cell's width in the budget's unit: the metric's answer, or one cell when there is none. */
+static size_t inkcell_wrap_step(const struct inkcell_wrap *wrap,
+                                const struct inkcell_text_cell *cell) {
+    if (wrap->metric.cell == NULL) {
+        return 1U;
+    }
+    const int width = wrap->metric.cell(cell, wrap->metric.ctx);
+    return width > 0 ? (size_t)width : 0U;
 }
 
 bool inkcell_wrap_next(struct inkcell_wrap *wrap) {
@@ -437,10 +454,10 @@ bool inkcell_wrap_next(struct inkcell_wrap *wrap) {
        boundary would let us break. A space byte can never appear inside a multi-byte sequence,
        so testing the lead byte for ' ' is safe. */
     size_t taken = 0U;
-    size_t cells = 0U;
+    size_t used = 0U;
     size_t last_space = 0U; /* bytes up to and including that space; 0 means none */
     bool hard = false;
-    while (cells < wrap->cols) {
+    for (;;) {
         const char lead = rest[taken];
         if (lead == '\0') {
             break;
@@ -453,8 +470,14 @@ bool inkcell_wrap_next(struct inkcell_wrap *wrap) {
         if (cell.bytes == 0U || taken + cell.bytes >= sizeof wrap->line) {
             break;
         }
+        const size_t step = inkcell_wrap_step(wrap, &cell);
+        /* The first cell of a line goes on it whatever it costs: a window narrower than one
+           character still has to advance, or the caller loops forever on the same byte. */
+        if (used > 0U && used + step > wrap->cols) {
+            break;
+        }
         taken += cell.bytes;
-        cells += 1U;
+        used += step;
         if (lead == ' ') {
             last_space = taken;
         }
@@ -484,8 +507,13 @@ bool inkcell_wrap_next(struct inkcell_wrap *wrap) {
 }
 
 uint32_t inkcell_wrap_lines(const char *text, size_t cols) {
+    return inkcell_wrap_lines_measured(text, cols, NULL);
+}
+
+uint32_t inkcell_wrap_lines_measured(const char *text, size_t budget,
+                                     const struct inkcell_wrap_metric *metric) {
     struct inkcell_wrap wrap;
-    inkcell_wrap_begin(&wrap, text, cols);
+    inkcell_wrap_begin_measured(&wrap, text, budget, metric);
     uint32_t lines = 0U;
     while (inkcell_wrap_next(&wrap)) {
         lines += 1U;
@@ -493,12 +521,36 @@ uint32_t inkcell_wrap_lines(const char *text, size_t cols) {
     return lines;
 }
 
+/* The widest line, in the metric's unit - which for a measured walk is the sum of the cells'
+   own widths, not a count of them. */
+static size_t inkcell_wrap_line_width(const struct inkcell_wrap *wrap) {
+    if (wrap->metric.cell == NULL) {
+        return inkcell_text_cells(wrap->line);
+    }
+    size_t width = 0U;
+    size_t offset = 0U;
+    for (;;) {
+        const struct inkcell_text_cell cell = inkcell_text_cell_next(&wrap->line[offset]);
+        if (cell.bytes == 0U) {
+            break;
+        }
+        offset += cell.bytes;
+        width += inkcell_wrap_step(wrap, &cell);
+    }
+    return width;
+}
+
 size_t inkcell_wrap_widest(const char *text, size_t cols) {
+    return inkcell_wrap_widest_measured(text, cols, NULL);
+}
+
+size_t inkcell_wrap_widest_measured(const char *text, size_t budget,
+                                    const struct inkcell_wrap_metric *metric) {
     struct inkcell_wrap wrap;
-    inkcell_wrap_begin(&wrap, text, cols);
+    inkcell_wrap_begin_measured(&wrap, text, budget, metric);
     size_t widest = 0U;
     while (inkcell_wrap_next(&wrap)) {
-        const size_t width = inkcell_text_cells(wrap.line);
+        const size_t width = inkcell_wrap_line_width(&wrap);
         if (width > widest) {
             widest = width;
         }

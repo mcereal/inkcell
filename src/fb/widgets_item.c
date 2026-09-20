@@ -274,14 +274,13 @@ static size_t inkcell_fb_segmented_as_text(const struct inkcell_backend_fb_state
                                            size_t cols,
                                            const struct inkcell_fb_segmented *segmented,
                                            bool *out_as_text) {
-    (void)state;
     if (out_as_text != NULL) {
         *out_as_text = true;
     }
     if (segmented == NULL) {
         return 0U;
     }
-    const size_t cells = inkcell_text_cells(segmented->value);
+    const size_t cells = inkcell_fb_text_cols(state, segmented->value, state->scale);
     return (cells > 0U && cols > cells + 1U) ? cells + 1U : 0U;
 }
 
@@ -337,12 +336,12 @@ static size_t inkcell_fb_trailing_cols(const struct inkcell_backend_fb_state *st
     size_t want = 0U;
     switch (trailing->kind) {
     case INKCELL_FB_TRAILING_TEXT: {
-        const size_t cells = inkcell_text_cells(trailing->text);
+        const size_t cells = inkcell_fb_text_cols(state, trailing->text, state->scale);
         want = cells > 0U ? cells + 1U : 0U;
         break;
     }
     case INKCELL_FB_TRAILING_BADGE: {
-        const size_t cells = inkcell_text_cells(trailing->text);
+        const size_t cells = inkcell_fb_text_cols(state, trailing->text, state->scale);
         want = cells > 0U ? cells + 2U : 0U;
         break;
     }
@@ -365,7 +364,7 @@ static size_t inkcell_fb_trailing_cols(const struct inkcell_backend_fb_state *st
         /* The staircase, its gap to whatever is left of it, and the figure it carries - which
            may be nothing, and then costs nothing. Stated the same way the meter's width is, and
            for the same reason: rungs have no natural width either. */
-        const size_t cells = inkcell_text_cells(trailing->text);
+        const size_t cells = inkcell_fb_text_cols(state, trailing->text, state->scale);
         want = INKCELL_FB_SIGNAL_CELLS + 1U + (cells > 0U ? cells + 1U : 0U);
         break;
     }
@@ -435,8 +434,9 @@ static void inkcell_fb_draw_trailing(struct inkcell_backend_fb_state *state,
         inkcell_fb_color(state, selected ? INKCELL_COLOR_SURFACE_SEL : rest_role);
     const int scale = state->scale;
     const int adv = inkcell_fb_char_adv(state, scale);
-    const size_t cells =
-        trailing->kind == INKCELL_FB_TRAILING_TEXT ? inkcell_text_cells(trailing->text) : 0U;
+    const size_t cells = trailing->kind == INKCELL_FB_TRAILING_TEXT
+                             ? inkcell_fb_text_cols(state, trailing->text, scale)
+                             : 0U;
 
     switch (trailing->kind) {
     case INKCELL_FB_TRAILING_TEXT:
@@ -549,7 +549,8 @@ static void inkcell_fb_draw_trailing(struct inkcell_backend_fb_state *state,
                 return;
             }
             inkcell_fb_draw_text(
-                state, g->text_right - (int)inkcell_text_cells(trailing->segmented->value) * adv,
+                state,
+                g->text_right - inkcell_fb_text_width(state, trailing->segmented->value, scale),
                 baseline, trailing->segmented->value, scale,
                 selected ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL_DIM)
                          : inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
@@ -628,10 +629,10 @@ static void inkcell_fb_draw_trailing(struct inkcell_backend_fb_state *state,
             .h = height,
         };
         inkcell_fb_draw_signal(state, &box, trailing->signal, ink, unlit);
-        const size_t figure = inkcell_text_cells(trailing->text);
-        if (figure > 0U) {
-            inkcell_fb_draw_text(state, box.x - adv - (int)figure * adv, baseline, trailing->text,
-                                 scale, quiet, ground);
+        const int figure = inkcell_fb_text_width(state, trailing->text, scale);
+        if (figure > 0) {
+            inkcell_fb_draw_text(state, box.x - adv - figure, baseline, trailing->text, scale,
+                                 quiet, ground);
         }
         return;
     }

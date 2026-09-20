@@ -81,14 +81,16 @@ static bool inkcell_fb_button_face_sprite(const struct inkcell_fb_button *button
     return true;
 }
 
-/* What a button's content occupies: its icon, the gap after it, and its label - all in cells
-   except that gap, which is half of one. */
+/* What a button's content occupies: its icon, the gap after it, and its label.
+   The label is *measured*, not counted: a keycap reading "START" and one reading "MENU" are
+   five cells and four, and on a proportional face they are nothing like five and four times
+   anything. The gap is still half a nominal cell, because it is a space rather than a word. */
 static int inkcell_fb_button_content_w(const struct inkcell_backend_fb_state *state,
                                        const struct inkcell_fb_button *button) {
     const int adv = inkcell_fb_char_adv(state, button->scale);
     const bool has_label = button->label != NULL && button->label[0] != '\0';
     const bool has_icon = inkcell_icon_is_valid(button->icon);
-    const int label_w = has_label ? (int)inkcell_text_cells(button->label) * adv : 0;
+    const int label_w = has_label ? inkcell_fb_text_width(state, button->label, button->scale) : 0;
     return label_w + (has_icon ? inkcell_fb_icon_box(state, button->scale) : 0) +
            ((has_icon && has_label) ? adv / 2 : 0);
 }
@@ -333,10 +335,12 @@ int inkcell_fb_draw_chip_strip(const struct inkcell_backend_fb_state *state, int
 
 int inkcell_fb_badge_width(const struct inkcell_backend_fb_state *state, const char *text,
                            int scale) {
-    const size_t cells = text != NULL ? inkcell_text_cells(text) : 0U;
+    const int words = text != NULL ? inkcell_fb_text_width(state, text, scale) : 0;
     /* Half a cell either side of the words: enough to clear the capsule's own curve at every
-       glyph scale a theme may pick, and it is what the row's badge has always taken. */
-    return cells > 0U ? (int)(cells + 1U) * inkcell_fb_char_adv(state, scale) : 0;
+       glyph scale a theme may pick, and it is what the row's badge has always taken. The
+       padding is a nominal cell because it is space; the words are measured because they are
+       words, and a badge sized by counting them is a badge the text hangs out of. */
+    return words > 0 ? words + inkcell_fb_char_adv(state, scale) : 0;
 }
 
 /* The capsule itself: a pill of `paint.fill` with the words on it in `paint.ink`. Both callers

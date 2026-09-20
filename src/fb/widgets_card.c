@@ -44,6 +44,7 @@ struct inkcell_fb_card_metrics {
     int heading_h;
     int button_h;  /* one action button, 0 when the card has no verbs */
     int content_x; /* where a row's text starts */
+    int label_w;   /* the label column's width in pixels, measured off the labels in hand */
     size_t cols;   /* content width in cells */
     size_t label_cols;
     int gap;                     /* to the next card */
@@ -164,7 +165,7 @@ inkcell_fb_card_measure(const struct inkcell_backend_fb_state *state,
      * Still bounded: half the card is the most a label column may take, because past that a
      * value is being squeezed to line up labels that already line up.
      */
-    size_t widest = 0U;
+    int widest = 0;
     for (uint32_t i = 0U; i < card->count; ++i) {
         /*
          * Every row that *uses* the label column, which is the question - not every row of one
@@ -173,15 +174,22 @@ inkcell_fb_card_measure(const struct inkcell_backend_fb_state *state,
          * labelled meters measuring its column against no labels at all and clipping each one
          * to a single cell. Measuring and drawing have to ask the same question.
          */
-        const size_t cells = inkcell_text_cells(card->rows[i].label);
-        if (cells > widest) {
-            widest = cells;
+        const int words = inkcell_fb_text_width(state, card->rows[i].label, state->scale);
+        if (words > widest) {
+            widest = words;
         }
     }
-    m.label_cols = widest + 1U;
-    if (m.label_cols > m.cols / 2U) {
-        m.label_cols = m.cols / 2U;
+    /* Measured in pixels, not counted in cells: the column has to clear the widest label as it
+       is actually set, and on a proportional face "Sync" and "Radio" are the same five cells
+       and quite different widths. The cell count below is what the *clip* still works in. */
+    m.label_w = widest + adv;
+    if (m.label_w > (m.width - 2 * inset) / 2) {
+        m.label_w = (m.width - 2 * inset) / 2;
     }
+    if (m.label_w < adv) {
+        m.label_w = adv;
+    }
+    m.label_cols = m.cols / 2U;
     if (m.label_cols == 0U) {
         m.label_cols = 1U;
     }
@@ -444,13 +452,18 @@ static int inkcell_fb_card_row_label(struct inkcell_backend_fb_state *state,
     if (row->label[0] == '\0') {
         return m->content_x;
     }
+    /* The label as it is, clipped to the column rather than padded into it: the value's x comes
+       from the measured column below, so nothing is gained by trailing spaces and a proportional
+       space is not the width of a proportional letter anyway. */
     struct inkcell_line line;
     inkcell_line_reset(&line);
-    inkcell_line_column(&line, row->label, m->label_cols);
-    inkcell_line_fit(&line, m->cols);
+    inkcell_line_printf(&line, "%s", row->label);
+    inkcell_line_fit(&line, m->label_cols);
     inkcell_fb_draw_text(state, m->content_x, y, inkcell_line_text(&line), state->scale,
                          inkcell_fb_tone_color(state, INKCELL_TONE_DIM), ground);
-    return m->content_x + (int)(m->label_cols + 1U) * inkcell_fb_char_adv(state, state->scale);
+    /* The value starts after the measured column, not after a count of padded cells: the label
+       is drawn as it is and the column is what every row's value lines up on. */
+    return m->content_x + m->label_w;
 }
 
 /* One row of content, drawn at `y` and returning the rows it used. `max_lines` of 0 means the

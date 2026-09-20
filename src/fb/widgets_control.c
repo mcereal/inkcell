@@ -479,7 +479,7 @@ void inkcell_fb_draw_text_field(const struct inkcell_backend_fb_state *state,
     }
     /* The value sits a scale down from the box's own top edge, which is the inset every other
        container here gives its contents. */
-    inkcell_fb_draw_wrapped(state, top + scale, tail, layout->cols, (int)lines,
+    inkcell_fb_draw_wrapped(state, top + scale, tail, (size_t)layout->body_w, (int)lines,
                             inkcell_fb_tone_color(state, INKCELL_TONE_STRONG),
                             inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
     top += box_h;
@@ -487,8 +487,7 @@ void inkcell_fb_draw_text_field(const struct inkcell_backend_fb_state *state,
     if (inkcell_fb_text_field_counter_h(state, layout, field) > 0) {
         /* Against the box's own trailing edge rather than the body's - it belongs to the field,
            and a figure that does not line up with the container it reports on reads as loose. */
-        const int adv = inkcell_fb_char_adv(state, layout->small);
-        const int x = box_x + box_w - (int)inkcell_text_cells(field->counter) * adv;
+        const int x = box_x + box_w - inkcell_fb_text_width(state, field->counter, layout->small);
         inkcell_fb_draw_text(
             state, x, top, field->counter, layout->small,
             inkcell_fb_tone_color(state, field->error ? INKCELL_TONE_ERROR : INKCELL_TONE_DIM),

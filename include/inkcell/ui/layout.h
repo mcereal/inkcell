@@ -112,23 +112,49 @@ const char *inkcell_line_text(const struct inkcell_line *line);
  * Breaks at the last space inside the window when there is one, at a hard newline always, and
  * mid-cell never. Leading spaces never open a line and trailing spaces never close one.
  */
+/*
+ * How wide one cell is, in whatever unit the budget is stated in.
+ *
+ * The wrap counts cells by default, which is exact while the face is monospace and an estimate
+ * the moment it is not: a line of forty cells set in a proportional face is forty different
+ * widths depending on which forty. A caller that knows how to measure passes one of these and
+ * states its budget in the same unit - pixels, in every case here - and the walk then cuts
+ * where the text actually stops fitting rather than where the character count runs out.
+ *
+ * NULL `cell` means every cell counts 1, which is the grid this has always wrapped on.
+ */
+struct inkcell_wrap_metric {
+    int (*cell)(const struct inkcell_text_cell *cell, void *ctx);
+    void *ctx;
+};
+
 struct inkcell_wrap {
-    const char *rest;            /* what has not been emitted yet */
-    size_t cols;                 /* window width in cells; 0 is read as 1 */
-    char line[INKCELL_LINE_MAX]; /* the line the last _next() produced */
+    const char *rest;                  /* what has not been emitted yet */
+    size_t cols;                       /* the window, in the metric's unit; 0 is read as 1 */
+    struct inkcell_wrap_metric metric; /* zeroed: count cells */
+    char line[INKCELL_LINE_MAX];       /* the line the last _next() produced */
 };
 
 void inkcell_wrap_begin(struct inkcell_wrap *wrap, const char *text, size_t cols);
+
+/* The same, with `budget` stated in the metric's own unit. A NULL or empty metric is exactly
+   inkcell_wrap_begin(). */
+void inkcell_wrap_begin_measured(struct inkcell_wrap *wrap, const char *text, size_t budget,
+                                 const struct inkcell_wrap_metric *metric);
 
 /* Fills `wrap->line` with the next line; false once the text is spent. */
 bool inkcell_wrap_next(struct inkcell_wrap *wrap);
 
 /* Rows `text` needs at this width. Empty text needs none. */
 uint32_t inkcell_wrap_lines(const char *text, size_t cols);
+uint32_t inkcell_wrap_lines_measured(const char *text, size_t budget,
+                                     const struct inkcell_wrap_metric *metric);
 
 /* Cells the widest of those rows occupies - what a bubble sizes itself to, so a two-word
-   message does not draw a full-width box. */
+   message does not draw a full-width box. The measured form answers in the metric's unit. */
 size_t inkcell_wrap_widest(const char *text, size_t cols);
+size_t inkcell_wrap_widest_measured(const char *text, size_t budget,
+                                    const struct inkcell_wrap_metric *metric);
 
 /*
  * A bottom-anchored window onto items of differing heights: a transcript.

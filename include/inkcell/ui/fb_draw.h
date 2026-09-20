@@ -33,6 +33,7 @@
 
 #include "inkcell/ui/anim.h"
 #include "inkcell/ui/icon.h"
+#include "inkcell/ui/layout.h"
 #include "inkcell/ui/theme.h"
 
 #include <linux/fb.h>
@@ -397,7 +398,18 @@ struct inkcell_fb_layout {
     int footer_y;  /* top of the two footer lines */
     int line;      /* body line advance */
     uint32_t rows; /* body rows available */
-    size_t cols;   /* body columns */
+    size_t cols;   /* body columns, at the nominal advance - an estimate on a proportional face */
+    /*
+     * The body's width in pixels, which is what anything wrapping or fitting real text measures
+     * against.
+     *
+     * `cols` is a character count and was the same fact while every face was monospace. It is
+     * not one now: a line of `cols` characters set in a proportional face is as wide as those
+     * particular characters happen to be, so a screen that wrapped to `cols` and drew the
+     * result would run off the panel for some strings and stop short for others. Wrap against
+     * this and the two agree again.
+     */
+    int body_w;
     /* The glyph multiplier chrome is drawn at: INKCELL_TYPE_LABEL, resolved once in
        inkcell_fb_render_snapshot() and carried here so every piece of chrome in the frame agrees.
      */
@@ -438,8 +450,41 @@ void inkcell_fb_glyph_cache_free(struct inkcell_backend_fb_state *state);
 /* ---- inkcell_fb_draw.c: the drawing toolkit
  * ------------------------------------------------------ */
 
-/* Glyph metrics for a multiplier, from the theme's font. */
+/*
+ * Glyph metrics for a multiplier, from the theme's font.
+ *
+ * `char_adv` is the *nominal* advance - the width a column of a grid is worth, and the exact
+ * advance only while the theme's face is monospace. `cell_adv` is what one character actually
+ * steps, and `text_width` is what a whole string actually draws, which is the one to measure a
+ * coordinate with. See the note on inkcell_font's `width`.
+ */
 int inkcell_fb_char_adv(const struct inkcell_backend_fb_state *state, int scale);
+int inkcell_fb_cell_adv(const struct inkcell_backend_fb_state *state, uint32_t codepoint,
+                        int scale);
+int inkcell_fb_text_width(const struct inkcell_backend_fb_state *state, const char *text,
+                          int scale);
+/* The same width, rounded up to whole nominal cells - for the layouts that still reserve
+   space in columns. See the note on the implementation. */
+size_t inkcell_fb_text_cols(const struct inkcell_backend_fb_state *state, const char *text,
+                            int scale);
+
+/*
+ * A wrap metric over this state's font, so a wrap budget can be stated in pixels.
+ *
+ * The context is the caller's and must outlive the walk - it is two words, so it goes beside
+ * the `struct inkcell_wrap` on the stack:
+ *
+ *     struct inkcell_fb_wrap_ctx wctx;
+ *     const struct inkcell_wrap_metric metric = inkcell_fb_wrap_metric(&wctx, state, scale);
+ *     inkcell_wrap_begin_measured(&wrap, text, width_in_pixels, &metric);
+ */
+struct inkcell_fb_wrap_ctx {
+    const struct inkcell_backend_fb_state *state;
+    int scale;
+};
+struct inkcell_wrap_metric inkcell_fb_wrap_metric(struct inkcell_fb_wrap_ctx *ctx,
+                                                  const struct inkcell_backend_fb_state *state,
+                                                  int scale);
 int inkcell_fb_line_adv(const struct inkcell_backend_fb_state *state, int scale);
 void inkcell_fb_clear(const struct inkcell_backend_fb_state *state, struct inkcell_rgb color);
 size_t inkcell_fb_cols(const struct inkcell_backend_fb_state *state, int scale);
@@ -534,14 +579,23 @@ void inkcell_fb_draw_emoji_box(const struct inkcell_backend_fb_state *state, int
    multiple of the sprite's own grid that fits, so every source pixel lands on a square of the same
    size rather than on a mix of two. Returns small boxes - a text cell - unchanged. */
 int inkcell_fb_emoji_box_fit(int box);
+/*
+ * Wrapped body text from the leading margin, and from an explicit left edge.
+ *
+ * `width` is pixels, not columns - see `body_w` on struct inkcell_fb_layout. Both walk
+ * inkcell_wrap() with the font's own advances, so what they measure is what they draw; there is
+ * no second wrapper in this file any more.
+ */
 int inkcell_fb_draw_wrapped(const struct inkcell_backend_fb_state *state, int y, const char *text,
-                            size_t cols, int max_lines, struct inkcell_rgb color,
+                            size_t width, int max_lines, struct inkcell_rgb color,
                             struct inkcell_rgb ground);
-/* The same from an explicit left edge, for text inset into a container rather than into the
-   body - a dialog's supporting paragraph. */
 int inkcell_fb_draw_wrapped_at(const struct inkcell_backend_fb_state *state, int x, int y,
-                               const char *text, size_t cols, int max_lines,
+                               const char *text, size_t width, int max_lines,
                                struct inkcell_rgb color, struct inkcell_rgb ground);
+
+/* How many lines `text` wraps to inside `width` pixels, at `scale`. */
+uint32_t inkcell_fb_wrapped_lines(const struct inkcell_backend_fb_state *state, const char *text,
+                                  size_t width, int scale);
 void inkcell_fb_fill_rect(const struct inkcell_backend_fb_state *state, int x, int y, int w, int h,
                           struct inkcell_rgb color);
 /*

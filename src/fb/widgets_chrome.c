@@ -161,7 +161,7 @@ void inkcell_fb_draw_banner(const struct inkcell_backend_fb_state *state,
      * and a dimmed variant of its ink is a contract no theme has been held to.
      */
     if (banner->detail != NULL && banner->detail[0] != '\0') {
-        const int detail_w = (int)inkcell_text_cells(banner->detail) * small_adv;
+        const int detail_w = inkcell_fb_text_width(state, banner->detail, layout->small);
         if (detail_w > 0 && right - detail_w > x) {
             right -= detail_w;
             /* Centred on the headline's glyph body rather than sharing its top edge: a smaller
@@ -212,7 +212,7 @@ static int inkcell_fb_action_width(const struct inkcell_backend_fb_state *state,
     const char *label = inkcell_str(action->label);
     return inkcell_fb_button_width(state, INKCELL_ICON_NONE, inkcell_button_cap(action->button),
                                    scale) +
-           adv / 2 + (int)inkcell_text_cells(label) * adv;
+           adv / 2 + inkcell_fb_text_width(state, label, scale);
 }
 
 int inkcell_fb_action_bar_height(const struct inkcell_backend_fb_state *state,
@@ -272,9 +272,7 @@ void inkcell_fb_draw_action_bar(const struct inkcell_backend_fb_state *state,
         inkcell_fb_draw_text(state, x, keys_y, inkcell_str(action->label), small,
                              inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
                              inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
-        x += (int)inkcell_text_cells(inkcell_str(action->label)) *
-                 inkcell_fb_char_adv(state, small) +
-             gap;
+        x += inkcell_fb_text_width(state, inkcell_str(action->label), small) + gap;
     }
 
     if (bar->status == NULL || bar->status[0] == '\0') {
@@ -335,7 +333,7 @@ static void inkcell_fb_draw_app_bar_trail(const struct inkcell_backend_fb_state 
         inkcell_line_printf(&word, "%s", text);
         inkcell_line_fit(&word, (size_t)room);
         inkcell_fb_draw_text(state, x, y, inkcell_line_text(&word), scale, ink, ground);
-        x += (int)inkcell_text_cells(inkcell_line_text(&word)) * adv;
+        x += inkcell_fb_text_width(state, inkcell_line_text(&word), scale);
     }
 }
 
@@ -497,7 +495,7 @@ void inkcell_fb_draw_empty(const struct inkcell_backend_fb_state *state,
 
     /* Wrapped rather than drawn flat: these strings say which button to press next, and at a
        large glyph scale a flat one ran off the right edge with the verb on it. */
-    (void)inkcell_fb_draw_wrapped(state, y, text, layout->cols, (int)rows,
+    (void)inkcell_fb_draw_wrapped(state, y, text, (size_t)layout->body_w, (int)rows,
                                   inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
                                   inkcell_fb_color(state, INKCELL_COLOR_BG));
 }

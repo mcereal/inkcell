@@ -54,10 +54,18 @@ struct inkcell_fb_bubble_metrics {
 
 /* A bubble never spans the whole panel: the gutter down the other side is what says which end
    of the conversation it came from, so three quarters is a look rather than a limit. */
-static size_t inkcell_fb_bubble_max_cols(const struct inkcell_backend_fb_state *state,
-                                         const struct inkcell_fb_layout *layout) {
+/*
+ * The widest a bubble may grow, in pixels.
+ *
+ * Pixels rather than columns, and so is everything derived from it below: a bubble is sized to
+ * its own words, so the measure and the draw have to agree to the pixel or a transcript paints
+ * over itself. See `body_w` on struct inkcell_fb_layout.
+ */
+static size_t inkcell_fb_bubble_max_width(const struct inkcell_backend_fb_state *state,
+                                          const struct inkcell_fb_layout *layout) {
     const size_t pct = inkcell_fb_metrics(state)->bubble_width_pct;
-    const size_t max = layout->cols > 4U ? layout->cols * pct / 100U : layout->cols;
+    const size_t body = layout->body_w > 0 ? (size_t)layout->body_w : 1U;
+    const size_t max = body * pct / 100U;
     return max > 0U ? max : 1U;
 }
 
@@ -120,35 +128,38 @@ static struct inkcell_rgb inkcell_fb_bubble_quiet(const struct inkcell_backend_f
     return inkcell_fb_tone_color(state, INKCELL_TONE_DIM);
 }
 
-static void inkcell_fb_bubble_part_text(struct inkcell_fb_bubble_part *parts, size_t *count,
+static void inkcell_fb_bubble_part_text(const struct inkcell_backend_fb_state *state,
+                                        struct inkcell_fb_bubble_part *parts, size_t *count,
                                         const char *text) {
     if (!inkcell_fb_bubble_has(text) || *count >= INKCELL_FB_BUBBLE_META_PARTS) {
         return;
     }
     parts[*count].text = text;
     parts[*count].icon = INKCELL_ICON_NONE;
-    parts[*count].cells = inkcell_text_cells(text);
+    parts[*count].cells = (size_t)inkcell_fb_text_width(state, text, state->scale);
     *count += 1U;
 }
 
-static void inkcell_fb_bubble_part_icon(struct inkcell_fb_bubble_part *parts, size_t *count,
+static void inkcell_fb_bubble_part_icon(const struct inkcell_backend_fb_state *state,
+                                        struct inkcell_fb_bubble_part *parts, size_t *count,
                                         enum inkcell_icon icon) {
     if (!inkcell_icon_is_valid(icon) || *count >= INKCELL_FB_BUBBLE_META_PARTS) {
         return;
     }
     parts[*count].text = NULL;
     parts[*count].icon = icon;
-    parts[*count].cells = INKCELL_FB_BUBBLE_ICON_CELLS;
+    parts[*count].cells =
+        (size_t)(INKCELL_FB_BUBBLE_ICON_CELLS * inkcell_fb_char_adv(state, state->scale));
     *count += 1U;
 }
 
 /* The run's width: every part, plus a cell of air between each neighbouring pair. */
-static size_t inkcell_fb_bubble_run_cells(const struct inkcell_fb_bubble_part *parts,
-                                          size_t count) {
+static size_t inkcell_fb_bubble_run_cells(const struct inkcell_fb_bubble_part *parts, size_t count,
+                                          int gap) {
     if (count == 0U) {
         return 0U;
     }
-    size_t cells = (count - 1U) * INKCELL_FB_BUBBLE_META_GAP;
+    size_t cells = (count - 1U) * (size_t)gap;
     for (size_t i = 0; i < count; ++i) {
         cells += parts[i].cells;
     }
@@ -167,33 +178,39 @@ static size_t inkcell_fb_bubble_run_cells(const struct inkcell_fb_bubble_part *p
  * rather than truncating, because half a clock is not a shorter clock. It bottoms out at
  * nothing, which is the honest answer for a bubble too narrow to say anything in the corner.
  */
-static size_t inkcell_fb_bubble_run(const struct inkcell_fb_bubble_meta *meta, size_t budget,
+static size_t inkcell_fb_bubble_run(const struct inkcell_backend_fb_state *state,
+                                    const struct inkcell_fb_bubble_meta *meta, size_t budget,
                                     struct inkcell_fb_bubble_part *parts, size_t *count) {
     *count = 0U;
-    inkcell_fb_bubble_part_text(parts, count, meta->reactions);
-    inkcell_fb_bubble_part_text(parts, count, meta->relay);
-    inkcell_fb_bubble_part_icon(parts, count, meta->lock);
-    inkcell_fb_bubble_part_text(parts, count, meta->clock);
-    inkcell_fb_bubble_part_icon(parts, count, meta->state);
+    inkcell_fb_bubble_part_text(state, parts, count, meta->reactions);
+    inkcell_fb_bubble_part_text(state, parts, count, meta->relay);
+    inkcell_fb_bubble_part_icon(state, parts, count, meta->lock);
+    inkcell_fb_bubble_part_text(state, parts, count, meta->clock);
+    inkcell_fb_bubble_part_icon(state, parts, count, meta->state);
 
-    size_t cells = inkcell_fb_bubble_run_cells(parts, *count);
+    size_t cells = inkcell_fb_bubble_run_cells(
+        parts, *count, INKCELL_FB_BUBBLE_META_GAP * inkcell_fb_char_adv(state, state->scale));
     while (*count > 0U && cells > budget) {
         for (size_t i = 1U; i < *count; ++i) {
             parts[i - 1U] = parts[i];
         }
         *count -= 1U;
-        cells = inkcell_fb_bubble_run_cells(parts, *count);
+        cells = inkcell_fb_bubble_run_cells(
+            parts, *count, INKCELL_FB_BUBBLE_META_GAP * inkcell_fb_char_adv(state, state->scale));
     }
     return cells;
 }
 
 /* The widest and the last of the lines `text` wraps to at `max`, and how many there are. */
-static uint32_t inkcell_fb_bubble_wrap(const char *text, size_t max, size_t *widest, size_t *last) {
+static uint32_t inkcell_fb_bubble_wrap(const struct inkcell_backend_fb_state *state,
+                                       const char *text, size_t max, size_t *widest, size_t *last) {
     uint32_t lines = 0U;
+    struct inkcell_fb_wrap_ctx wctx;
+    const struct inkcell_wrap_metric metric = inkcell_fb_wrap_metric(&wctx, state, state->scale);
     struct inkcell_wrap wrap;
-    inkcell_wrap_begin(&wrap, text, max);
+    inkcell_wrap_begin_measured(&wrap, text, max, &metric);
     while (inkcell_wrap_next(&wrap)) {
-        *last = inkcell_text_cells(wrap.line);
+        *last = (size_t)inkcell_fb_text_width(state, wrap.line, state->scale);
         if (*last > *widest) {
             *widest = *last;
         }
@@ -206,7 +223,7 @@ static struct inkcell_fb_bubble_metrics
 inkcell_fb_bubble_measure(const struct inkcell_backend_fb_state *state,
                           const struct inkcell_fb_layout *layout,
                           const struct inkcell_fb_bubble *bubble) {
-    const size_t max = inkcell_fb_bubble_max_cols(state, layout);
+    const size_t max = inkcell_fb_bubble_max_width(state, layout);
     struct inkcell_fb_bubble_metrics metrics;
     memset(&metrics, 0, sizeof metrics);
 
@@ -214,31 +231,35 @@ inkcell_fb_bubble_measure(const struct inkcell_backend_fb_state *state,
        text a second way - a strlen, a second wrapper - is how a bubble comes to paint over the
        one below it. */
     size_t widest = 0U;
-    metrics.lines = inkcell_fb_bubble_wrap(bubble->text, max, &widest, &metrics.last);
+    metrics.lines = inkcell_fb_bubble_wrap(state, bubble->text, max, &widest, &metrics.last);
     if (metrics.lines == 0U) {
         metrics.lines = 1U; /* an empty message is still a bubble, just an empty one */
     }
     /* The reason a failed message failed, under it - so the run tucks onto *its* last line,
        which is the last line the bubble draws. */
-    metrics.notes = inkcell_fb_bubble_wrap(bubble->note, max, &widest, &metrics.last);
+    metrics.notes = inkcell_fb_bubble_wrap(state, bubble->note, max, &widest, &metrics.last);
 
     metrics.cols = widest;
     if (inkcell_fb_bubble_has(bubble->name)) {
-        const size_t name_cols = inkcell_text_cells(bubble->name);
+        const size_t name_cols = (size_t)inkcell_fb_text_width(state, bubble->name, state->scale);
         if (name_cols > metrics.cols) {
             metrics.cols = name_cols;
         }
     }
     /* The quote is one line whatever it says, so it is elided here rather than wrapped - and
        the width it asks for is what is left of it, never what it started as. */
-    if (inkcell_fb_bubble_has(bubble->quote) && max > INKCELL_FB_BUBBLE_QUOTE_INDENT) {
-        const size_t room = max - INKCELL_FB_BUBBLE_QUOTE_INDENT;
-        metrics.quote_cols = inkcell_text_cells(bubble->quote);
+    /* The indent is stated in cells because it is a *space*, and turned into pixels here
+       because everything it is compared against is now measured. */
+    const size_t quote_indent =
+        (size_t)(INKCELL_FB_BUBBLE_QUOTE_INDENT * inkcell_fb_char_adv(state, state->scale));
+    if (inkcell_fb_bubble_has(bubble->quote) && max > quote_indent) {
+        const size_t room = max - quote_indent;
+        metrics.quote_cols = (size_t)inkcell_fb_text_width(state, bubble->quote, state->scale);
         if (metrics.quote_cols > room) {
             metrics.quote_cols = room;
         }
-        if (metrics.quote_cols + INKCELL_FB_BUBBLE_QUOTE_INDENT > metrics.cols) {
-            metrics.cols = metrics.quote_cols + INKCELL_FB_BUBBLE_QUOTE_INDENT;
+        if (metrics.quote_cols + quote_indent > metrics.cols) {
+            metrics.cols = metrics.quote_cols + quote_indent;
         }
     }
 
@@ -251,7 +272,7 @@ inkcell_fb_bubble_measure(const struct inkcell_backend_fb_state *state,
      * past the left padding. That is the invariant the whole component turns on.
      */
     metrics.meta_cols =
-        inkcell_fb_bubble_run(&bubble->meta, max, metrics.parts, &metrics.part_count);
+        inkcell_fb_bubble_run(state, &bubble->meta, max, metrics.parts, &metrics.part_count);
     if (metrics.meta_cols > 0U) {
         const size_t tucked = metrics.last + INKCELL_FB_BUBBLE_META_GAP + metrics.meta_cols;
         if (tucked <= max) {
@@ -297,8 +318,9 @@ void inkcell_fb_draw_separator(const struct inkcell_backend_fb_state *state, int
         return;
     }
 
-    /* Centred in cells, so a label with an emoji in it sits where it looks centred. */
-    const int width = (int)inkcell_text_cells(label) * adv;
+    /* Centred on the measured width, so a label with an emoji in it - or any word at all on a
+       proportional face - sits where it looks centred. */
+    const int width = inkcell_fb_text_width(state, label, state->scale);
     const int x = left + (right - left - width) / 2;
     inkcell_fb_draw_rule(state, left, rule_y, x - left - adv, state->scale, INKCELL_COLOR_RULE);
     inkcell_fb_draw_rule(state, x + width + adv, rule_y, right - (x + width + adv), state->scale,
@@ -313,7 +335,9 @@ static int inkcell_fb_bubble_draw_wrapped(const struct inkcell_backend_fb_state 
                                           int y, const char *text, size_t max, int line_h,
                                           struct inkcell_rgb ink, struct inkcell_rgb fill) {
     struct inkcell_wrap wrap;
-    inkcell_wrap_begin(&wrap, text, max);
+    struct inkcell_fb_wrap_ctx wctx;
+    const struct inkcell_wrap_metric metric = inkcell_fb_wrap_metric(&wctx, state, state->scale);
+    inkcell_wrap_begin_measured(&wrap, text, max, &metric);
     while (inkcell_wrap_next(&wrap)) {
         inkcell_fb_draw_text(state, x, y, wrap.line, state->scale, ink, fill);
         y += line_h;
@@ -328,7 +352,7 @@ void inkcell_fb_draw_bubble(const struct inkcell_backend_fb_state *state,
         inkcell_fb_bubble_measure(state, layout, bubble);
     const int adv = inkcell_fb_char_adv(state, state->scale);
     const int scale = state->scale;
-    const size_t max = inkcell_fb_bubble_max_cols(state, layout);
+    const size_t max = inkcell_fb_bubble_max_width(state, layout);
 
     if (inkcell_fb_bubble_has(bubble->separator)) {
         inkcell_fb_draw_separator(state, y, bubble->separator, bubble->separator_tone);
@@ -339,7 +363,7 @@ void inkcell_fb_draw_bubble(const struct inkcell_backend_fb_state *state,
        names. The fill stops a scale short of the row it ends on, so stacked bubbles read as
        separate messages rather than as one block. */
     const int pad = adv / 2 > 0 ? adv / 2 : 1;
-    const int box_w = (int)metrics.cols * adv + 2 * pad;
+    const int box_w = (int)metrics.cols + 2 * pad;
     const int box_x = bubble->outbound ? (int)state->var.xres - inkcell_fb_margin(state) - box_w
                                        : inkcell_fb_margin(state);
     const uint32_t box_rows = metrics.rows - (inkcell_fb_bubble_has(bubble->separator) ? 1U : 0U);
@@ -376,7 +400,7 @@ void inkcell_fb_draw_bubble(const struct inkcell_backend_fb_state *state,
         struct inkcell_line line;
         inkcell_line_reset(&line);
         inkcell_line_printf(&line, "%s", bubble->name);
-        inkcell_line_fit(&line, metrics.cols);
+        inkcell_line_fit(&line, adv > 0 ? metrics.cols / (size_t)adv : metrics.cols);
         /* Ours is dimmed and theirs takes the primary: on our own bubble the name is a
            reminder, on theirs it is the thing being looked for. An alert overrides both - it is
            the one bubble whose heading is the point rather than the label on the point. A
@@ -432,7 +456,7 @@ void inkcell_fb_draw_bubble(const struct inkcell_backend_fb_state *state,
     }
     /* Right-aligned against the padding, which the measure widened the bubble to leave room
        for - so this can never reach back past `text_x`. */
-    int meta_x = box_x + box_w - pad - (int)metrics.meta_cols * adv;
+    int meta_x = box_x + box_w - pad - (int)metrics.meta_cols;
     int meta_y = metrics.meta_own_line ? y : last_y;
     if (!metrics.meta_own_line) {
         /* Tucked against the right edge of the line it shares, which is where every messenger
