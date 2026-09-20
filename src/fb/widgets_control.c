@@ -335,20 +335,25 @@ void inkcell_fb_draw_segmented(const struct inkcell_backend_fb_state *state,
        control's: the container is an outline, so what shows through it is whatever is behind -
        and behind it on the row the cursor is on is a fill the outline was never contracted
        against. */
-    struct inkcell_rgb behind = inkcell_fb_color(state, ground);
     if (selected) {
         const int pad = inkcell_fb_space(state, INKCELL_SPACE_XS);
-        behind = inkcell_fb_color(state, INKCELL_COLOR_BG);
         inkcell_fb_fill_round_rect(state, rect->x - pad, rect->y - pad, rect->w + 2 * pad,
-                                   rect->h + 2 * pad, radius, behind);
+                                   rect->h + 2 * pad, radius,
+                                   inkcell_fb_color(state, INKCELL_COLOR_BG));
     }
 
-    /* The container: one outline around the set, which is the whole of what says these are
-       alternatives rather than a row of separate offers. Two fills, as every outline here is. */
-    inkcell_fb_fill_round_rect(state, rect->x, rect->y, rect->w, rect->h, radius,
-                               inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
-    inkcell_fb_fill_round_rect(state, rect->x + edge, rect->y + edge, rect->w - 2 * edge,
-                               rect->h - 2 * edge, radius, behind);
+    /*
+     * The container: one outline around the set, which is the whole of what says these are
+     * alternatives rather than a row of separate offers.
+     *
+     * A ring rather than the two fills this used to be. The second of those repainted the
+     * inside with what the caller *said* was behind - so a strip drawn over anything else put a
+     * patch of the wrong colour inside its own outline. A stroke leaves the inside alone, and
+     * what the labels are blended against is the segment button's own `ground`, which is a
+     * faint halo at worst rather than a hole.
+     */
+    inkcell_fb_stroke_round_rect(state, rect->x, rect->y, rect->w, rect->h, radius, edge,
+                                 inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
 
     const size_t active = segmented->active;
     for (size_t i = 0; i < segmented->count; ++i) {

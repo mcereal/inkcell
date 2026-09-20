@@ -404,19 +404,17 @@ void inkcell_fb_draw_state_chip(const struct inkcell_backend_fb_state *state,
      * worth *checking*, which is Material's own distinction between the two and the difference
      * between "verified" and "not verified" being two pills of equal weight.
      *
-     * Two fills rather than a stroke, on inkcell_fb_draw_card()'s terms: the ring, then the row's
-     * own ground inset by one hairline. The words keep the row's ink, because the inside of the
-     * capsule is the same colour they were already legible on.
+     * One ring, not the two fills this used to be: the second of those repainted the inside of
+     * the capsule with the row's ground, which is a patch of the wrong colour on any row whose
+     * ground the caller named wrongly. The words keep the row's ink, because the inside of the
+     * capsule is whatever they were already legible on - which is now literally true rather
+     * than true because the chip painted it so.
      */
     const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_FULL);
     const int edge = inkcell_fb_edge(state);
     const struct inkcell_rgb fill = inkcell_fb_color(state, ground);
-    inkcell_fb_fill_round_rect(state, box->x, box->y, box->w, box->h, radius,
-                               inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
-    if (box->w > 2 * edge && box->h > 2 * edge) {
-        inkcell_fb_fill_round_rect(state, box->x + edge, box->y + edge, box->w - 2 * edge,
-                                   box->h - 2 * edge, radius, fill);
-    }
+    inkcell_fb_stroke_round_rect(state, box->x, box->y, box->w, box->h, radius, edge,
+                                 inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
     inkcell_fb_draw_text(state, box->x + inkcell_fb_char_adv(state, scale) / 2, text_y, text, scale,
                          ink, fill);
 }

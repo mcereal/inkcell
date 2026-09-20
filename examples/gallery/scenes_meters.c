@@ -17,11 +17,14 @@
 
 #include "inkcell/ui/layout.h"
 
+#include <stdio.h>
+
 #include <string.h>
 
 enum {
     GALLERY_ANIM_METER = 0x4D00,
     GALLERY_ANIM_SLIDER = 0x4D40,
+    GALLERY_ANIM_DIAL = 0x4D80,
 };
 
 /* A plausible series: a reading every half minute, with one silence in the middle so that the
@@ -130,6 +133,77 @@ void gallery_scene_meters(struct inkcell_backend_fb_state *state) {
     };
     inkcell_fb_draw_proportion(state, &split);
     y += icon + gap;
+
+    y += inkcell_fb_space(state, INKCELL_SPACE_MD);
+    y = gallery_section(state, &layout, y, GALLERY_STR_HEAD_DIALS);
+
+    /*
+     * The same four readings as the bar above, against the same band, as rings - which is the
+     * point of putting them on one sheet. A quantity that is bad at 94% has to look bad in both
+     * shapes, and the two have to agree about where three quarters is.
+     */
+    const int dial_side = inkcell_fb_line_adv(state, state->scale) * 3;
+    int dx = box.text_x;
+    for (size_t i = 0U; i < sizeof k_readings / sizeof k_readings[0]; ++i) {
+        char figure[16];
+        (void)snprintf(figure, sizeof figure, "%d%%", (int)(k_readings[i] / 10));
+        const struct inkcell_fb_dial dial = {
+            .rect = {.x = dx, .y = y, .w = dial_side, .h = dial_side},
+            .id = (uint32_t)(GALLERY_ANIM_DIAL + i),
+            .kind = INKCELL_FB_DIAL_DETERMINATE,
+            .value = k_readings[i],
+            .scale = k_permille,
+            .band = &k_band,
+            .tone = INKCELL_TONE_PRIMARY,
+            .ground = INKCELL_COLOR_BG,
+            .label = figure,
+        };
+        inkcell_fb_draw_dial(state, &dial);
+        dx += dial_side + gap;
+    }
+
+    /* The spinner, which is the ring's answer to the travelling pill; then one under the cursor,
+       so the ground it lays for itself is visible; then one too small for a figure, which draws
+       the ring and says nothing rather than a smudge. */
+    const struct inkcell_fb_dial busy_dial = {
+        .rect = {.x = dx, .y = y, .w = dial_side, .h = dial_side},
+        .id = GALLERY_ANIM_DIAL + 16U,
+        .kind = INKCELL_FB_DIAL_INDETERMINATE,
+        .scale = k_permille,
+        .tone = INKCELL_TONE_PRIMARY,
+        .ground = INKCELL_COLOR_BG,
+    };
+    inkcell_fb_draw_dial(state, &busy_dial);
+    dx += dial_side + gap;
+
+    const struct inkcell_fb_dial picked = {
+        .rect = {.x = dx, .y = y, .w = dial_side, .h = dial_side},
+        .id = GALLERY_ANIM_DIAL + 17U,
+        .kind = INKCELL_FB_DIAL_DETERMINATE,
+        .value = 620,
+        .scale = k_permille,
+        .band = &k_band,
+        .tone = INKCELL_TONE_PRIMARY,
+        .selected = true,
+        .ground = INKCELL_COLOR_BG,
+        .label = "62%",
+    };
+    inkcell_fb_draw_dial(state, &picked);
+    dx += dial_side + gap;
+
+    const int tiny = inkcell_fb_dial_min_side(state, state->scale);
+    const struct inkcell_fb_dial small = {
+        .rect = {.x = dx, .y = y + (dial_side - tiny) / 2, .w = tiny, .h = tiny},
+        .id = GALLERY_ANIM_DIAL + 18U,
+        .kind = INKCELL_FB_DIAL_DETERMINATE,
+        .value = 450,
+        .scale = k_permille,
+        .tone = INKCELL_TONE_TERTIARY,
+        .ground = INKCELL_COLOR_BG,
+        .label = "45%",
+    };
+    inkcell_fb_draw_dial(state, &small);
+    y += dial_side + gap;
 
     y = gallery_section(state, &layout, y, GALLERY_STR_HEAD_SPARKLINES);
 

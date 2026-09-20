@@ -45,6 +45,7 @@ INKCELL_STR_ENTRY(HEAD_SHAPES,        "Shapes")
 INKCELL_STR_ENTRY(HEAD_CORNERS,       "Corners")
 INKCELL_STR_ENTRY(HEAD_OUTLINES,      "Outlines")
 INKCELL_STR_ENTRY(HEAD_ARCS,          "Arcs")
+INKCELL_STR_ENTRY(HEAD_DIALS,         "Dials")
 
 /* ---- verbs ------------------------------------------------------------------------------------
  *
