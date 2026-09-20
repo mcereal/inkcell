@@ -91,8 +91,12 @@ struct inkcell_fb_app {
     bool (*pending)(void *ctx);
     /* Clears that, once per frame before anything is drawn. */
     void (*frame_begin)(void *ctx);
-    /* Released when the backend shuts down. */
-    void (*close)(void *ctx);
+    /*
+     * Released when the backend shuts down, and again whenever the app's own caches have to be
+     * dropped - a reference render, a geometry change. Handed the state because what an app
+     * hangs off it (`thread_cache`, `render_cache`) is the app's to free.
+     */
+    void (*close)(struct inkcell_backend_fb_state *state, void *ctx);
 };
 
 struct inkcell_fb_damage_rect {
@@ -105,6 +109,9 @@ struct inkcell_backend_fb_state {
        read back through the backend's page_rows() vtable entry. */
     uint32_t page_rows;
     struct inkcell_fb_glyph_cache *glyph_cache;
+    /* Two slots an application may memo into - laid-out text, a rendered screen. inkcell
+       allocates neither and frees neither; they are here because the state is what a renderer
+       is handed, and the app drops them from its close() hook. */
     struct inkcell_fb_thread_cache *thread_cache;
     struct inkcell_fb_render_cache *render_cache;
     /* What draws the frame. Zeroed until inkcell_fb_set_app(). */
@@ -408,9 +415,9 @@ struct inkcell_fb_layout {
    Returns bytes written across both pages; force initializes pages owned by the launcher. */
 size_t inkcell_fb_copy_damage(struct inkcell_backend_fb_state *state, const uint8_t *frame,
                       uint8_t *previous, bool force);
-void inkcell_fb_render_cache_free(struct inkcell_backend_fb_state *state);
+
 void inkcell_fb_animation_damage(struct inkcell_backend_fb_state *state, int x, int y, int w, int h);
-void inkcell_fb_thread_cache_free(struct inkcell_backend_fb_state *state);
+
 void inkcell_fb_glyph_cache_free(struct inkcell_backend_fb_state *state);
 
 /* ---- inkcell_fb_draw.c: the drawing toolkit ------------------------------------------------------ */
@@ -571,6 +578,10 @@ void inkcell_fb_set_app(struct inkcell_backend_fb_state *state, const struct ink
 /* Whether the app says it is owed another frame - what inkcell_fb_state_animating() adds to the
    animations when it decides whether one is due. */
 bool inkcell_fb_app_pending(const struct inkcell_backend_fb_state *state);
+
+/* Asks the app to drop whatever it has memoised on this state - what a geometry or mode change
+   invalidates. A no-op when nothing installed an app, or when it keeps no caches. */
+void inkcell_fb_app_drop_caches(struct inkcell_backend_fb_state *state);
 
 /* Clears that, before anything is drawn. Called once per frame by inkcell_fb_render(). */
 void inkcell_fb_app_frame_begin(struct inkcell_backend_fb_state *state);

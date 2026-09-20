@@ -856,7 +856,7 @@ INKCELL_TEST_CASE(ui_theme_fonts_cap_height, unit) {
  * The prefix is the whole of how a knob is spelled, so a name that carries one already reads a
  * variable nobody sets.
  *
- * Worth a case of its own because nothing else catches it: inkcell_env_get("FB_SCALE") and
+ * Worth a case of its own because nothing else catches it: inkcell_env_get("INKCELL_FB_SCALE") and
  * inkcell_env_get("INKCELL_FB_SCALE") both compile, both return NULL on a machine that has
  * neither set, and the second is wrong on every machine that has the first. The extraction
  * introduced exactly this bug once, mechanically, in fb.c.

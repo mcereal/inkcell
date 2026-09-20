@@ -92,8 +92,6 @@ void inkcell_capture_close(struct inkcell_capture *capture) {
     }
     inkcell_fb_set_app(&capture->state, NULL);
     inkcell_fb_glyph_cache_free(&capture->state);
-    inkcell_fb_thread_cache_free(&capture->state);
-    inkcell_fb_render_cache_free(&capture->state);
     free(capture->state.inkcell_fb_ptr);
     free(capture);
 }
@@ -102,8 +100,9 @@ void inkcell_capture_set_reference(struct inkcell_capture *capture, bool referen
     if (capture != NULL) {
         capture->state.partial_disabled = reference;
         capture->state.thread_cache_disabled = reference;
-        inkcell_fb_render_cache_free(&capture->state);
-        inkcell_fb_thread_cache_free(&capture->state);
+        /* A reference render must not read a memo taken under the other mode, and what is
+           memoised is the app's - so it is asked to drop it rather than told how. */
+        inkcell_fb_app_drop_caches(&capture->state);
     }
 }
 
