@@ -2,3 +2,4 @@ build/
 dist/
 compile_commands.json
 .cache/
+__pycache__/
