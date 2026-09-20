@@ -329,39 +329,6 @@ static size_t inkcell_fb_segmented_cols(const struct inkcell_backend_fb_state *s
     return inkcell_fb_segmented_as_text(state, cols, segmented, out_as_text);
 }
 
-/*
- * Whether this row's trailing slot will come out as a *control* - something the reader can see
- * is theirs to work - rather than as words.
- *
- * `marker_yields_to_control` is what asks, and the question is deliberately about what will be
- * drawn rather than about what was requested: a segmented button that cannot have its room
- * draws its chosen word instead, and a row that had already dropped its marker on the strength
- * of asking for one would come out as a label and a word with nothing saying it can be changed.
- * Measured with the same call the measuring pass makes, so the two cannot disagree.
- */
-static bool inkcell_fb_trailing_is_control(const struct inkcell_backend_fb_state *state,
-                                           size_t cols, size_t reserved,
-                                           const struct inkcell_fb_trailing *trailing) {
-    switch (trailing->kind) {
-    case INKCELL_FB_TRAILING_SWITCH:
-        return trailing->sw != NULL;
-    case INKCELL_FB_TRAILING_CHECKBOX:
-    case INKCELL_FB_TRAILING_RADIO:
-        return trailing->sel != NULL;
-    case INKCELL_FB_TRAILING_SEGMENTED: {
-        bool as_text = true;
-        (void)inkcell_fb_segmented_cols(state, cols > reserved ? cols - reserved : 0U,
-                                        trailing->segmented, &as_text);
-        return !as_text;
-    }
-    /* A meter and a signal staircase are readings. They are pictures of a value rather than
-       offers to change one, so neither supersedes anything in the gutter. */
-    case INKCELL_FB_TRAILING_NONE:
-    default:
-        return false;
-    }
-}
-
 static size_t inkcell_fb_trailing_cols(const struct inkcell_backend_fb_state *state, size_t cols,
                                        size_t reserved,
                                        const struct inkcell_fb_trailing *trailing) {
@@ -428,6 +395,56 @@ static size_t inkcell_fb_trailing_cols(const struct inkcell_backend_fb_state *st
     /* Strictly greater: the line keeps at least one cell of its own, which is the test the
        conversation cell made for its age before this was a shared slot. */
     return (want > 0U && cols > want + reserved) ? want : 0U;
+}
+
+/*
+ * Whether this row's trailing slot will come out as a *control* - something the reader can see
+ * is theirs to work - rather than as words, or as nothing at all.
+ *
+ * `marker_yields_to_control` is what asks, and the question is deliberately about what will be
+ * drawn rather than about what was requested. Two ways a row can ask for a control and not get
+ * one, and both leave a label with nothing beside it:
+ *
+ *   - **it does not fit.** inkcell_fb_trailing_cols() hands back zero when the line cannot spare
+ *     the slot its cells, and the caller draws no trailing at all. A switch and the two
+ *     selection controls have a fixed width, so this is the whole of their answer - asked here
+ *     with the same call the measuring pass makes, because a fit worked out twice is a fit two
+ *     pieces of code can come to disagree about.
+ *   - **it has a second form.** A segmented button falls back to its chosen word, which
+ *     inkcell_fb_segmented_cols() reports through `as_text`: room for the word is still room, so
+ *     a non-zero answer there does not mean the segments were drawn.
+ *
+ * A meter and a signal staircase are readings. They are pictures of a value rather than offers
+ * to change one, so neither supersedes anything in the gutter however well it fits.
+ */
+static bool inkcell_fb_trailing_is_control(const struct inkcell_backend_fb_state *state,
+                                           size_t cols, size_t reserved,
+                                           const struct inkcell_fb_trailing *trailing) {
+    switch (trailing->kind) {
+    case INKCELL_FB_TRAILING_SWITCH:
+        if (trailing->sw == NULL) {
+            return false;
+        }
+        break;
+    case INKCELL_FB_TRAILING_CHECKBOX:
+    case INKCELL_FB_TRAILING_RADIO:
+        if (trailing->sel == NULL) {
+            return false;
+        }
+        break;
+    case INKCELL_FB_TRAILING_SEGMENTED: {
+        /* Already the room question and the form question at once: this returns zero, with
+           `as_text` set, when there is not even room for the word. */
+        bool as_text = true;
+        (void)inkcell_fb_segmented_cols(state, cols > reserved ? cols - reserved : 0U,
+                                        trailing->segmented, &as_text);
+        return !as_text;
+    }
+    case INKCELL_FB_TRAILING_NONE:
+    default:
+        return false;
+    }
+    return inkcell_fb_trailing_cols(state, cols, reserved, trailing) > 0U;
 }
 
 /* One piece of a headline, clipped to the cells it was given - declared here for the segmented
