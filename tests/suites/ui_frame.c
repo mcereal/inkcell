@@ -168,3 +168,55 @@ INKCELL_TEST_CASE(button_cap_never_returns_null, unit) {
                          "the A key is printed on every pad this runs on");
     record_success(test_name);
 }
+
+/*
+ * The clipped frame, which is the case inkcell_fb_animation_damage() exists for and the one
+ * nothing else in this tree exercises: no code here sets `clip_active`, so the band is a
+ * contract with whatever application does.
+ *
+ * Both halves are checked together on purpose. Exempting only the copy copies pixels nothing
+ * redrew; exempting only the draw redraws pixels nothing copies. Either alone is a control
+ * frozen on the panel, and either alone passes a test that only looks at the other.
+ */
+INKCELL_TEST_CASE(animation_damage_draws_outside_the_clip_band, unit) {
+    struct inkcell_backend_fb_state *state = NULL;
+    struct inkcell_capture *capture = frame_open(&state);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+
+    const struct inkcell_rgb black = {0U, 0U, 0U};
+    const struct inkcell_rgb white = {255U, 255U, 255U};
+    inkcell_fb_clear(state, black);
+
+    /* A band a list would repaint, and two rows well outside it. */
+    state->clip_active = true;
+    state->clip = (struct inkcell_fb_damage_rect){
+        .x = 0, .y = 400, .right = (int)INKCELL_CAPTURE_WIDTH, .bottom = 500, .valid = true};
+
+    uint32_t width = 0U;
+    uint32_t height = 0U;
+    size_t stride = 0U;
+    const uint8_t *pixels = inkcell_capture_pixels(capture, &width, &height, &stride);
+    INKCELL_TEST_FAIL_IF(pixels == NULL, "the page should have pixels");
+
+    /* Outside the band and undeclared: rejected, as a clipped frame should reject it. */
+    inkcell_fb_fill_rect(state, 10, 100, 40, 20, white);
+    INKCELL_TEST_FAIL_IF(pixels[(size_t)110 * stride + 20 * 4] != 0U,
+                         "an undeclared fill outside the band should be clipped away");
+
+    /* Declared, then drawn - the order every widget uses. This one has to land, or the knob
+       that moved has no way to be repainted where it moved to. */
+    inkcell_fb_animation_damage(state, 0, 200, 100, 60);
+    inkcell_fb_fill_rect(state, 10, 210, 40, 20, white);
+    INKCELL_TEST_FAIL_IF(pixels[(size_t)220 * stride + 20 * 4] == 0U,
+                         "a fill inside declared animation damage should reach the panel");
+
+    /* And the exemption is not a hole in the band: a box that is not wholly inside the damage
+       is still that band's to clip, or one widget's declaration would let every later draw in
+       the frame through. */
+    inkcell_fb_fill_rect(state, 10, 190, 40, 100, white);
+    INKCELL_TEST_FAIL_IF(pixels[(size_t)195 * stride + 20 * 4] != 0U,
+                         "a fill straddling the damage and the band should still be clipped");
+
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}

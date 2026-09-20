@@ -476,6 +476,15 @@ struct inkcell_fb_clipped_box {
     int dx, dy;
 };
 
+/* Whether a box lies entirely inside the region a widget said it was animating in this frame.
+   False when nothing has been declared, which is every frame that has no motion on it. */
+static bool inkcell_fb_within_animation(const struct inkcell_backend_fb_state *state, int x, int y,
+                                        int w, int h) {
+    const struct inkcell_fb_damage_rect *damage = &state->animation_damage;
+    return damage->valid && x >= damage->x && y >= damage->y && x + w <= damage->right &&
+           y + h <= damage->bottom;
+}
+
 static bool inkcell_fb_clip_box(const struct inkcell_backend_fb_state *state, int x, int y, int w,
                                 int h, struct inkcell_fb_clipped_box *out) {
     int dx = 0;
@@ -521,6 +530,33 @@ static bool inkcell_fb_clip_box(const struct inkcell_backend_fb_state *state, in
     }
     if (w <= 0 || h <= 0) {
         return false;
+    }
+
+    /*
+     * The band, unless this box is a widget redrawing something that moved.
+     *
+     * A clipped frame repaints one band and leaves the rest of the panel alone, which is
+     * exactly wrong for a control animating outside it: the switch two rows above the band
+     * has somewhere new to be, and a clip that rejected its fills would leave the old knob
+     * on the panel with no way to remove it. So a widget says where it is moving before it
+     * draws - inkcell_fb_animation_damage() - and what it says is exempt here, and let
+     * through again by inkcell_fb_copy_damage() when the frame is presented. Both halves, or
+     * neither works: exempting only the copy copies pixels nothing redrew, and exempting only
+     * the draw redraws pixels nothing copies.
+     *
+     * Whole containment rather than an intersection, because this function answers with one
+     * box and a union of two is not one. A widget declares its damage padded around itself
+     * and then draws inside it, so its own boxes are contained; anything straddling the
+     * damage and the band is not that widget's and is clipped by the band as it always was.
+     */
+    if (state->clip_active && inkcell_fb_within_animation(state, x, y, w, h)) {
+        out->x = x;
+        out->y = y;
+        out->w = w;
+        out->h = h;
+        out->dx = dx;
+        out->dy = dy;
+        return true;
     }
 
     if (state->clip_active) {

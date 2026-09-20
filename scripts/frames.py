@@ -152,20 +152,57 @@ def contact_sheet(pages, columns, scale_down):
     return sheet_w, sheet_h, bytes(sheet)
 
 
+# The themes in the order inkcell's registry lists them, which is menu order. A theme not
+# named here sorts after these, alphabetically, so adding one to the library does not have to
+# be remembered twice - it just lands on the end of the row instead of in menu order.
+THEME_ORDER = ["dark", "light", "contrast", "colorblind"]
+
+
+def sheet_key(path):
+    """Sort key placing one scene at one scale, across every theme, on one row.
+
+    The gallery names its pages `scene@theme@scale`, so a plain filename sort gives
+    (scene, theme, scale) - which puts two scales of one theme next to two scales of the next,
+    and a four-wide row then compares two themes at two different sizes. That is not a
+    comparison anybody can read. Sorting by scale before theme is what makes a row the same
+    picture in every look, which is the only thing a contact sheet is for.
+    """
+    scene, _, rest = path.stem.partition("@")
+    theme, _, scale = rest.partition("@")
+    try:
+        rank = THEME_ORDER.index(theme)
+    except ValueError:
+        rank = len(THEME_ORDER)
+    # The scale sorts numerically where it can: "10" must not fall between "1" and "2".
+    try:
+        scale_key = (0, int(scale))
+    except ValueError:
+        scale_key = (1, 0)
+    return (scene, scale_key, rank, theme)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("directory", type=Path, help="where inkcell_gallery --out wrote its PPMs")
     parser.add_argument("--sheet", type=Path, help="also write a contact sheet here")
-    parser.add_argument("--columns", type=int, default=4, help="cells across the sheet")
+    parser.add_argument("--columns", type=int, default=0,
+                        help="cells across the sheet; 0 means one per theme present")
     parser.add_argument("--shrink", type=int, default=4, help="how far down to scale each cell")
     parser.add_argument("--keep-ppm", action="store_true", help="do not delete the PPMs after")
     args = parser.parse_args()
 
-    sources = sorted(args.directory.glob("*.ppm"))
+    sources = sorted(args.directory.glob("*.ppm"), key=sheet_key)
     if not sources:
         print(f"frames: no .ppm files in {args.directory}", file=sys.stderr)
         return 1
+
+    # One column per theme by default, so a row is one scene at one scale in every look and a
+    # fifth theme widens the sheet rather than wrapping it into nonsense.
+    columns = args.columns
+    if columns <= 0:
+        themes = {path.stem.partition("@")[2].partition("@")[0] for path in sources}
+        columns = max(len(themes), 1)
 
     pages = []
     for source in sources:
@@ -176,7 +213,7 @@ def main():
             source.unlink()
 
     if args.sheet is not None:
-        width, height, pixels = contact_sheet(pages, args.columns, args.shrink)
+        width, height, pixels = contact_sheet(pages, columns, args.shrink)
         args.sheet.parent.mkdir(parents=True, exist_ok=True)
         write_png(args.sheet, width, height, pixels)
         print(f"frames: {len(pages)} page(s), sheet at {args.sheet}")
