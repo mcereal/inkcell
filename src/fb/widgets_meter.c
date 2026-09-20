@@ -821,9 +821,10 @@ static void inkcell_fb_chart_legend(const struct inkcell_backend_fb_state *state
         }
         const char *word = label != INKCELL_STR_NONE ? inkcell_str(label) : NULL;
         int width = cap + adv;
-        width += word != NULL ? (int)inkcell_text_cells(word) * adv : 0;
-        width +=
-            value != NULL ? (int)inkcell_text_cells(value) * adv + (word != NULL ? adv : 0) : 0;
+        width += inkcell_fb_text_width(state, word, scale);
+        width += value != NULL
+                     ? inkcell_fb_text_width(state, value, scale) + (word != NULL ? adv : 0)
+                     : 0;
         if (x + width > chart->rect.x + chart->rect.w) {
             /* Out of line. The entry is dropped whole rather than cut, for the reason a bubble's
                trailing run drops a chip rather than truncating one: half a word beside a colour
@@ -839,7 +840,7 @@ static void inkcell_fb_chart_legend(const struct inkcell_backend_fb_state *state
         int text_x = x + cap + adv;
         if (word != NULL) {
             inkcell_fb_draw_text(state, text_x, y, word, scale, ink, ground);
-            text_x += (int)inkcell_text_cells(word) * adv + adv;
+            text_x += inkcell_fb_text_width(state, word, scale) + adv;
         }
         if (value != NULL) {
             /* The reading in the body's own ink rather than dimmed: it is the only number on
@@ -1018,32 +1019,36 @@ static void inkcell_fb_draw_chart_readings(const struct inkcell_backend_fb_state
      * under a "-110 dBm" puts the digits that differ in different places. A cell of air between
      * them, which is the gap a list row leaves between its label and its value.
      */
-    size_t when_cells = 0U;
-    size_t value_cells = 0U;
+    /* Both columns measured, not counted: these are right-aligned figures, so the offset a row
+       is pushed by is the difference between its own width and the widest - and on a
+       proportional face "11:04" and "9:30" are five cells and four, and nothing like five and
+       four times anything. */
+    int when_w = 0;
+    int value_w = 0;
     for (uint32_t i = 0U; i < chart->reading_count; ++i) {
         const struct inkcell_fb_chart_reading *row = &chart->readings[i];
-        const size_t when = row->when != NULL ? inkcell_text_cells(row->when) : 0U;
-        const size_t value = row->value != NULL ? inkcell_text_cells(row->value) : 0U;
-        if (when > when_cells) {
-            when_cells = when;
+        const int when = inkcell_fb_text_width(state, row->when, scale);
+        const int value = inkcell_fb_text_width(state, row->value, scale);
+        if (when > when_w) {
+            when_w = when;
         }
-        if (value > value_cells) {
-            value_cells = value;
+        if (value > value_w) {
+            value_w = value;
         }
     }
-    const int block = (int)(when_cells + 1U + value_cells) * adv;
+    const int block = when_w + adv + value_w;
     const int left = body->x + (body->w > block ? (body->w - block) / 2 : 0);
-    const int values_x = left + (int)(when_cells + 1U) * adv;
+    const int values_x = left + when_w + adv;
 
     int y = body->y;
     for (uint32_t i = 0U; i < chart->reading_count; ++i) {
         const struct inkcell_fb_chart_reading *row = &chart->readings[i];
         if (row->value != NULL) {
-            const int x = values_x + (int)(value_cells - inkcell_text_cells(row->value)) * adv;
+            const int x = values_x + value_w - inkcell_fb_text_width(state, row->value, scale);
             inkcell_fb_draw_text(state, x, y, row->value, scale, ink, ground);
         }
         if (row->when != NULL) {
-            const int x = left + (int)(when_cells - inkcell_text_cells(row->when)) * adv;
+            const int x = left + when_w - inkcell_fb_text_width(state, row->when, scale);
             inkcell_fb_draw_text(state, x, y, row->when, scale, dim, ground);
         }
         y += layout->line;
@@ -1057,8 +1062,7 @@ static void inkcell_fb_draw_chart_readings(const struct inkcell_backend_fb_state
      * leave the same line stranded half a panel below the thing it is about.
      */
     if (chart->readings_note != NULL) {
-        const int small = inkcell_fb_char_adv(state, layout->small);
-        const int width = (int)inkcell_text_cells(chart->readings_note) * small;
+        const int width = inkcell_fb_text_width(state, chart->readings_note, layout->small);
         inkcell_fb_draw_text(state, body->x + (body->w > width ? (body->w - width) / 2 : 0), y,
                              chart->readings_note, layout->small, dim, ground);
     }
@@ -1120,10 +1124,10 @@ void inkcell_fb_draw_chart(const struct inkcell_backend_fb_state *state,
      * five-digit counts. The gap after them is one cell, which is the same gap a list row leaves
      * between its label column and its value.
      */
-    const size_t top_cells = chart->top != NULL ? inkcell_text_cells(chart->top) : 0U;
-    const size_t bottom_cells = chart->bottom != NULL ? inkcell_text_cells(chart->bottom) : 0U;
-    const size_t axis_cells = top_cells > bottom_cells ? top_cells : bottom_cells;
-    const int gutter = axis_cells > 0U ? (int)(axis_cells + 1U) * adv : 0;
+    const int top_w = inkcell_fb_text_width(state, chart->top, scale);
+    const int bottom_w = inkcell_fb_text_width(state, chart->bottom, scale);
+    const int axis_w = top_w > bottom_w ? top_w : bottom_w;
+    const int gutter = axis_w > 0 ? axis_w + adv : 0;
 
     struct inkcell_fb_rect plot = {
         .x = body.x + gutter,
@@ -1171,13 +1175,15 @@ void inkcell_fb_draw_chart(const struct inkcell_backend_fb_state *state,
     /* The two ends of the vertical, against the plot's own top and bottom. */
     const int label_line = inkcell_fb_line_adv(state, scale);
     const struct inkcell_rgb ink = inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM);
+    /* Right-aligned against the plot's edge, each by its own measured width: the gutter was
+       sized for the wider of the two, so hanging both off the same cell count would push the
+       shorter one away from the axis it labels. */
     if (chart->top != NULL) {
-        inkcell_fb_draw_text(state, plot.x - (int)(top_cells + 1U) * adv, plot.y, chart->top, scale,
-                             ink, ground);
+        inkcell_fb_draw_text(state, plot.x - adv - top_w, plot.y, chart->top, scale, ink, ground);
     }
     if (chart->bottom != NULL) {
-        inkcell_fb_draw_text(state, plot.x - (int)(bottom_cells + 1U) * adv,
-                             plot.y + interior - label_line, chart->bottom, scale, ink, ground);
+        inkcell_fb_draw_text(state, plot.x - adv - bottom_w, plot.y + interior - label_line,
+                             chart->bottom, scale, ink, ground);
     }
 
     /*
@@ -1236,7 +1242,7 @@ void inkcell_fb_draw_chart(const struct inkcell_backend_fb_state *state,
      */
     if (!drawn && chart->empty != INKCELL_STR_NONE) {
         const char *word = inkcell_str(chart->empty);
-        const int width = (int)inkcell_text_cells(word) * adv;
+        const int width = inkcell_fb_text_width(state, word, scale);
         const int x = plot.x + (plot.w - width) / 2;
         inkcell_fb_draw_text(state, x > plot.x ? x : plot.x, plot.y + (interior - layout->line) / 2,
                              word, scale, inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM), ground);
@@ -1251,7 +1257,7 @@ void inkcell_fb_draw_chart(const struct inkcell_backend_fb_state *state,
      */
     int y = plot.y + plot.h;
     if (chart->span != NULL) {
-        const int width = (int)inkcell_text_cells(chart->span) * adv;
+        const int width = inkcell_fb_text_width(state, chart->span, scale);
         const int x = plot.x + (plot.w - width) / 2;
         inkcell_fb_draw_text(state, x > plot.x ? x : plot.x, y, chart->span, scale, ink, ground);
     }
