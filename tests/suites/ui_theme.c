@@ -851,3 +851,47 @@ INKCELL_TEST_CASE(ui_theme_fonts_cap_height, unit) {
     }
     record_success(test_name);
 }
+
+/*
+ * The prefix is the whole of how a knob is spelled, so a name that carries one already reads a
+ * variable nobody sets.
+ *
+ * Worth a case of its own because nothing else catches it: inkcell_env_get("FB_SCALE") and
+ * inkcell_env_get("INKCELL_FB_SCALE") both compile, both return NULL on a machine that has
+ * neither set, and the second is wrong on every machine that has the first. The extraction
+ * introduced exactly this bug once, mechanically, in fb.c.
+ */
+INKCELL_TEST_CASE(ui_env_prefix_is_applied_once, unit) {
+    const char *const original = inkcell_env_prefix();
+    char saved[32];
+    snprintf(saved, sizeof saved, "%s", original != NULL ? original : "INKCELL");
+
+    inkcell_env_set_prefix("TESTPREFIX");
+    INKCELL_TEST_FAIL_IF_CLEANUP(strcmp(inkcell_env_prefix(), "TESTPREFIX") != 0,
+                                 inkcell_env_set_prefix(saved), "the prefix did not take");
+
+    (void)setenv("TESTPREFIX_KNOB", "yes", 1);
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_env_bool("KNOB", NULL, false),
+                                 inkcell_env_set_prefix(saved),
+                                 "a suffix did not resolve under the prefix");
+
+    /* The bug: a name that already carries the prefix must not resolve. */
+    (void)setenv("TESTPREFIX_TESTPREFIX_KNOB", "yes", 1);
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_env_get("KNOB") == NULL,
+                                 inkcell_env_set_prefix(saved), "the knob went missing");
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        strcmp(inkcell_env_get("TESTPREFIX_KNOB"), "yes") != 0, inkcell_env_set_prefix(saved),
+        "a prefixed name resolved to something other than the doubly-prefixed variable");
+
+    (void)unsetenv("TESTPREFIX_KNOB");
+    (void)unsetenv("TESTPREFIX_TESTPREFIX_KNOB");
+
+    /* An empty prefix restores the default rather than reading bare names. */
+    inkcell_env_set_prefix("");
+    INKCELL_TEST_FAIL_IF_CLEANUP(strcmp(inkcell_env_prefix(), "INKCELL") != 0,
+                                 inkcell_env_set_prefix(saved),
+                                 "an empty prefix did not restore the default");
+
+    inkcell_env_set_prefix(saved);
+    record_success(test_name);
+}

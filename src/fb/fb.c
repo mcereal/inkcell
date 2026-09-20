@@ -37,8 +37,8 @@ static void inkcell_fb_apply_theme_from_env(struct inkcell_backend_fb_state *sta
     const struct inkcell_theme *theme = inkcell_theme_from_env();
     /* A scale named in the environment outlives a theme switch: it is an explicit choice about
        this panel, where a theme's own scale is only that theme's default. */
-    state->scale_pinned = inkcell_env_get("INKCELL_FB_SCALE") != NULL;
-    const int scale = (int)inkcell_env_int("INKCELL_FB_SCALE", INKCELL_SCALE_MIN, INKCELL_SCALE_MAX,
+    state->scale_pinned = inkcell_env_get("FB_SCALE") != NULL;
+    const int scale = (int)inkcell_env_int("FB_SCALE", INKCELL_SCALE_MIN, INKCELL_SCALE_MAX,
                                         inkcell_theme_scale(theme));
     inkcell_fb_state_set_theme(state, theme, scale);
 }
@@ -101,6 +101,7 @@ static int inkcell_backend_fb_init(void **state_out, void *userdata) {
         }
     }
     inkcell_fb_apply_theme_from_env(state);
+    inkcell_fb_set_app(state, context->app);
 
     inkcell_log_info("ui",
                   "Framebuffer UI backend active (%ux%u %u bpp, virtual %ux%u, offset %u,%u, "
