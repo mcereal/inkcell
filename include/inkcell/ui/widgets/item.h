@@ -169,8 +169,13 @@ struct inkcell_fb_list_item {
     size_t label_cols;
     /*
      * The gutter between the label column and the value, which says what the row *offers*: the
-     * pencil on a row Left and Right change, the dot on one changed and not yet written, the
-     * chevron on one that opens something.
+     * stepper on a row Left and Right move along, the pencil on one a press opens a keyboard
+     * for, the dot on one changed and not yet written.
+     *
+     * A row whose value column draws a control - a switch, a checkbox, a segmented button, a
+     * slider - leaves this empty for what it offers, because the control is the offer and
+     * already reads as one. The gutter is for the rows whose value is a word: a word cannot say
+     * whether it can be changed, which is the whole reason this slot exists.
      *
      * It is one cell wide whether or not there is an icon in it, so the value column starts in
      * the same place on every row of a list - which is the whole reason this is a slot rather
