@@ -8,6 +8,7 @@
 set(INKCELL_TEST_SUITES
     suites/ui_anim.c
     suites/ui_focus.c
+    suites/ui_focus_widgets.c
     suites/ui_frame.c
     suites/ui_dial.c
     suites/ui_icon.c

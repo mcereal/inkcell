@@ -999,6 +999,7 @@ void inkcell_fb_list_item(struct inkcell_backend_fb_state *state, struct inkcell
                              g.text_right - g.text_x, scale, INKCELL_COLOR_RULE);
     }
 
+    inkcell_fb_list_focus_row(state, list, index, g.fill_top, g.fill_h);
     list->y += (int)g.rows * list->line;
 }
 

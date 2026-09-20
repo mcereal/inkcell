@@ -343,6 +343,8 @@ void inkcell_fb_draw_dialog(const struct inkcell_backend_fb_state *state,
         .idle_tone = INKCELL_TONE_NORMAL,
         .ground = INKCELL_COLOR_SURFACE_HIGH,
         .scale = scale,
+        .focus_id = dialog->action_focus_id != INKCELL_FOCUS_NONE ? dialog->action_focus_id + 1U
+                                                                  : INKCELL_FOCUS_NONE,
     };
     inkcell_fb_draw_button(state, &cancel);
 
@@ -375,6 +377,7 @@ void inkcell_fb_draw_dialog(const struct inkcell_backend_fb_state *state,
         .idle_tone = accent_tone,
         .ground = INKCELL_COLOR_SURFACE_HIGH,
         .scale = scale,
+        .focus_id = dialog->action_focus_id,
     };
     inkcell_fb_draw_button(state, &accept);
 }

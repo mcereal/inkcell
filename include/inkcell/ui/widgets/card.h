@@ -185,13 +185,32 @@ struct inkcell_fb_card {
        verbs and cuts the heading, for the same reason. */
     struct inkcell_fb_card_action actions[INKCELL_FB_CARD_ACTIONS_MAX];
     uint32_t action_count;
+    /*
+     * What the d-pad calls the verbs: the first is this id, the second this id + 1, and so on
+     * up to INKCELL_FB_CARD_ACTIONS_MAX. INKCELL_FOCUS_NONE for a card nothing navigates into.
+     *
+     * A base and an offset rather than an id per verb, because the verbs are declared one call
+     * at a time and a screen would otherwise be naming them in two places - here and at
+     * inkcell_fb_card_action(). The block is three wide and the cap says so, which is small
+     * enough for a screen to reserve by hand and the reason the cap is a constant rather than a
+     * number this file happens to stop at.
+     *
+     * The registration is the part worth having. A card is drawn against the room it has, and a
+     * card too narrow for its verbs drops them **from the end** - so a screen that had reserved
+     * a cursor position per declared verb would walk onto one that is not on the panel, which
+     * is the failure the reservation note below describes from the other side. What goes into
+     * the map is what was drawn: two verbs on a card that fitted two, however many were
+     * declared.
+     */
+    uint32_t action_focus_id;
 };
 
 /* Starts a card. `heading` of INKCELL_STR_NONE is a card with no heading - a panel, not a
    section - and takes INKCELL_ICON_NONE with it. Always call this first: it is what clears the
-   row list. The variant is stated here rather than defaulted, because which of three weights a
-   card is asking for is a decision about the column it sits in and not a property of the card
-   on its own. */
+   row list - and the focus base with it, so `action_focus_id` is set on the card after this
+   call rather than before. The variant is stated here rather than defaulted, because which of three
+   weights a card is asking for is a decision about the column it sits in and not a property of the
+   card on its own. */
 void inkcell_fb_card_begin(struct inkcell_fb_card *card, enum inkcell_fb_card_variant variant,
                            enum inkcell_icon icon, enum inkcell_str_id heading,
                            enum inkcell_tone tone);
