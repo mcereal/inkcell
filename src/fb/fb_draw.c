@@ -222,8 +222,8 @@ void inkcell_fb_app_frame_begin(struct inkcell_backend_fb_state *state) {
 /* Asks the app to drop whatever it has memoised on this state - what a geometry or mode change
    invalidates. A no-op when nothing installed an app, or when it keeps no caches. */
 void inkcell_fb_app_drop_caches(struct inkcell_backend_fb_state *state) {
-    if (state != NULL && state->app.close != NULL) {
-        state->app.close(state, state->app.ctx);
+    if (state != NULL && state->app.drop_caches != NULL) {
+        state->app.drop_caches(state, state->app.ctx);
     }
 }
 

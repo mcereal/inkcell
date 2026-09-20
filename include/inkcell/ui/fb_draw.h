@@ -92,9 +92,16 @@ struct inkcell_fb_app {
     /* Clears that, once per frame before anything is drawn. */
     void (*frame_begin)(void *ctx);
     /*
-     * Released when the backend shuts down, and again whenever the app's own caches have to be
-     * dropped - a reference render, a geometry change. Handed the state because what an app
-     * hangs off it (`thread_cache`, `render_cache`) is the app's to free.
+     * Drop whatever this app has memoised on the state - `thread_cache`, `render_cache`, and
+     * anything else it hung there. Called when a memo can no longer be trusted: a reference
+     * render, a geometry change. The app keeps running afterwards, so this frees caches and
+     * nothing else.
+     */
+    void (*drop_caches)(struct inkcell_backend_fb_state *state, void *ctx);
+    /*
+     * Released when the backend shuts down, for good. Handed the state because what an app hung
+     * off it is the app's to free - which is everything drop_caches() frees, and whatever else
+     * the app opened.
      */
     void (*close)(struct inkcell_backend_fb_state *state, void *ctx);
 };
