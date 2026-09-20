@@ -146,7 +146,7 @@ As a subdirectory of another project, the tests are off by default and inkcell i
 - **A scene driver for screenshots.** `inkcell_capture_*` renders a frame off-screen, which is
   the reusable half. Driving an app through a scripted sequence of presses is a script against
   *that app's* navigation, so it lives with the app.
-- **Translations.** The mechanism is here and so are inkcell's own fifteen strings. A translation
+- **Translations.** The mechanism is here and so are inkcell's own twenty-three strings. A translation
   covers the catalog in force — both halves at once — so it belongs with the application.
 - **Your vocabulary.** Strings and icons work the same way: inkcell ships only what a *widget*
   needs to put on a panel, and an application's own continue the ids from there

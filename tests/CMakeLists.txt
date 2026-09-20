@@ -10,6 +10,7 @@ set(INKCELL_TEST_SUITES
     suites/ui_frame.c
     suites/ui_dial.c
     suites/ui_icon.c
+    suites/ui_keyboard.c
     suites/ui_layout.c
     suites/ui_shapes.c
     suites/ui_text.c

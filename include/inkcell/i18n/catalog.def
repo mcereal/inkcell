@@ -83,3 +83,28 @@ INKCELL_STR_ENTRY(TREND_SPAN_ALL,          "All")
  * handheld. See inkcell_input_quit_hint(). */
 INKCELL_STR_ENTRY(HINT_QUIT_MENU,          "Press MENU to quit")
 INKCELL_STR_ENTRY(HINT_QUIT_KEY_CODE,      "Quit: key code %u")
+
+/* ---- the on-screen keyboard -------------------------------------------------------------------
+ *
+ * The words on the action row, which inkcell draws itself - see include/inkcell/ui/keyboard.h.
+ * They are here rather than handed in because a keyboard prints them whatever the application
+ * is for: space is space in a radio client and in a music player alike.
+ *
+ * The one key missing from this list is the submit key, and its absence is the rule at the top
+ * of this file doing its job. It reads "Send" over a message and "Done" over a settings field,
+ * and that difference is about what the application is *for* - so it is handed in as
+ * `submit_label`, from the application's own catalog.
+ *
+ * KEY_LAYER_* are what the layer key shows, and each names where the press *goes* rather than
+ * where the grid is: that is the only thing about a layer key worth drawing. EMOJI_MORE is the
+ * one that stops three presses in a row landing on a key that says the same thing - it means
+ * "another page of these", where EMOJI means "the first page" and LOWER means "back to
+ * letters". */
+INKCELL_STR_ENTRY(KEY_LAYER_UPPER,         "ABC")
+INKCELL_STR_ENTRY(KEY_LAYER_SYMBOLS,       "#+=")
+INKCELL_STR_ENTRY(KEY_LAYER_LOWER,         "abc")
+INKCELL_STR_ENTRY(KEY_LAYER_EMOJI,         ":)")
+INKCELL_STR_ENTRY(KEY_LAYER_EMOJI_MORE,    ":)>")
+INKCELL_STR_ENTRY(KEY_SPACE,               "space")
+INKCELL_STR_ENTRY(KEY_DELETE,              "del")
+INKCELL_STR_ENTRY(KEY_CANCEL,              "cancel")

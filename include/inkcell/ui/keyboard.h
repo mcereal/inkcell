@@ -179,7 +179,16 @@ struct inkcell_keyboard {
 enum inkcell_keyboard_result {
     /* Nothing here uses that key. The caller may do what it likes with it. */
     INKCELL_KEYBOARD_IGNORED = 0,
-    /* The cursor, the panel or the text changed. Redraw; nothing else is owed. */
+    /*
+     * The keyboard took the key. Redraw; nothing else is owed.
+     *
+     * "Took it", not "changed something", and the difference matters in one place: a letter
+     * pressed on a field already at its cap, and a backspace on an empty one, are both this
+     * rather than IGNORED. Reporting those as IGNORED would be telling the caller the key was
+     * going spare, and a caller that then acted on it would navigate away from a keyboard the
+     * user was still typing into. A redundant frame costs a memcmp; a wrong one costs the
+     * draft.
+     */
     INKCELL_KEYBOARD_CONSUMED,
     /* The user finished: submit key, or START. The text is in the caller's buffer and what it
        means is the caller's business. */
