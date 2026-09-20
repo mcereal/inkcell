@@ -174,8 +174,10 @@ struct inkcell_fb_list_item {
      *
      * A row whose value column draws a control - a switch, a checkbox, a segmented button, a
      * slider - leaves this empty for what it offers, because the control is the offer and
-     * already reads as one. The gutter is for the rows whose value is a word: a word cannot say
-     * whether it can be changed, which is the whole reason this slot exists.
+     * already reads as one. `marker_yields_to_control` below is how a caller says that, and it
+     * is how a caller should say it: the row is the only thing that knows whether the control
+     * it asked for actually got drawn. The gutter is for the rows whose value is a word: a word
+     * cannot say whether it can be changed, which is the whole reason this slot exists.
      *
      * It is one cell wide whether or not there is an icon in it, so the value column starts in
      * the same place on every row of a list - which is the whole reason this is a slot rather
@@ -196,6 +198,27 @@ struct inkcell_fb_list_item {
      * text starts in two columns. Ignored when `label_cols` is set, which already has a gutter.
      */
     bool marker_slot;
+    /*
+     * Drop `marker_icon` when this row draws a control that says the same thing.
+     *
+     * The gutter and a trailing control answer one question - can this row be changed - so a row
+     * carrying both says it twice, and the mark is the weaker of the two: a switch is aimable on
+     * sight where a rune has to be learned. What makes this a flag rather than a rule the caller
+     * applies for itself is that **asking for a control is not the same as getting one.** A
+     * segmented button falls back to its chosen word when the value column cannot hold the
+     * segments - a narrow panel, a large glyph scale - and again when `active` is outside the
+     * set, which is a real state a device can be in. A slider draws only if the list gave its
+     * row a second step. In every one of those cases the row comes out as a label and a word,
+     * and a caller that had already dropped its own marker leaves a row that can be changed
+     * looking exactly like one that cannot.
+     *
+     * So the row answers it, at the point where it knows: the marker is drawn unless the control
+     * was. Off by default, and deliberately narrow - it applies to the mark this row happens to
+     * be carrying, so a caller sets it only for the mark that is an *offer*. A state - an unsaved
+     * dot, a conflict warning - is not an offer and no control supersedes it; a caller with one
+     * of those to draw leaves this false and the mark stands whatever else the row holds.
+     */
+    bool marker_yields_to_control;
     const char *value;
     enum inkcell_tone tone;
     /*
