@@ -96,7 +96,7 @@ catalog, and writes screens - and it draws every component the library ships, in
 two scales.
 
 ```bash
-make gallery     # 80 pages into build/gallery/, plus build/gallery/contact.png
+make gallery     # 104 pages into build/gallery/, plus build/gallery/contact.png
 ```
 
 It renders through `inkcell_capture`, which is the fb backend with the device taken out of it,

@@ -17,7 +17,7 @@
  * screen used to re-derive, and the three things that were subtly wrong in a different way on
  * each of them.
  *
- * This header is the umbrella: one file per group of components, and this pulls all nine in.
+ * This header is the umbrella: one file per group of components, and this pulls all ten in.
  * A file that wants one group can include that group's header instead, the way the UI store's
  * subjects are included - which of them a component is filed under is not part of its
  * interface, and a `struct inkcell_fb_meter` is `struct inkcell_fb_meter` from either door.
@@ -31,6 +31,7 @@
  *   inkcell_fb_widgets_control.h   the switch, the checkbox and radio, the segmented button, the
  * field inkcell_fb_widgets_meter.h     a quantity as a length, and a reading over time
  *   inkcell_fb_widgets_overlay.h   the dialog, the snackbar, the QR code
+ *   inkcell_fb_widgets_keyboard.h  the on-screen keyboard's grid, over the model in ui/keyboard.h
  *
  * Tones - what a thing *is*, rather than which colour to draw it - live in
  * include/inkcell/ui/theme.h as `enum inkcell_tone`, because they are the UI's vocabulary rather
@@ -53,6 +54,7 @@
 #include "inkcell/ui/widgets/chrome.h"
 #include "inkcell/ui/widgets/control.h"
 #include "inkcell/ui/widgets/item.h"
+#include "inkcell/ui/widgets/keyboard.h"
 #include "inkcell/ui/widgets/list.h"
 #include "inkcell/ui/widgets/meter.h"
 #include "inkcell/ui/widgets/overlay.h"

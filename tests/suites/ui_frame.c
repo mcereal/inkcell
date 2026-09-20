@@ -14,6 +14,7 @@
 
 #include "inkcell/ui/fb_capture.h"
 #include "inkcell/ui/widgets/chrome.h"
+#include "inkcell/ui/widgets/keyboard.h"
 
 /* A state with a panel and a theme on it, and no device behind either. The capture harness is
    the supported way to get one; opening it here keeps these cases honest about using the same
@@ -94,6 +95,54 @@ INKCELL_TEST_CASE(layout_rows_shrink_as_the_body_top_moves, unit) {
     layout.body_y = layout.footer_y + 1000;
     INKCELL_TEST_FAIL_IF(inkcell_fb_layout_rows(state, &layout) != 0U,
                          "a body past its own bottom holds no rows");
+
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
+/*
+ * The keyboard grid's two ends: a body with room to spare, and one with none.
+ *
+ * Both are about where the five rows *land*, which is the one thing the golden sheet cannot
+ * say - it renders two geometries, and the answer here changes with every panel and every
+ * glyph scale. The widget draws nothing a digest would catch either: a grid that stopped short
+ * of the footer looks like a grid.
+ */
+INKCELL_TEST_CASE(keyboard_grid_sits_on_the_footer, unit) {
+    struct inkcell_backend_fb_state *state = NULL;
+    struct inkcell_capture *capture = frame_open(&state);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+
+    const struct inkcell_fb_layout layout = inkcell_fb_layout_begin(state, true, true);
+    const struct inkcell_keyboard keyboard = {0};
+    const struct inkcell_fb_keyboard grid = {.keyboard = &keyboard};
+
+    /* Room to spare: the keys take their cap and the slack goes above them, so the last row
+       ends exactly on the footer. A keyboard sits at the bottom of what it is given. */
+    int y = layout.body_y;
+    inkcell_fb_draw_keyboard(state, &layout, &y, &grid);
+    INKCELL_TEST_FAIL_IF(y != layout.footer_y,
+                         "a grid with slack above it should end on the footer");
+
+    /*
+     * No room at all: two lines of body for five rows of keys. The floor wins and the grid
+     * overflows the footer rather than being crushed - the rows are aimed at with a d-pad, and
+     * a keycap thinner than the text on it is a key that cannot be hit. The last row going
+     * under the keycap bar is the honest failure; a 16 px key is not.
+     */
+    const int floor_h = layout.line + inkcell_fb_space(state, INKCELL_SPACE_MD);
+    int cramped = layout.footer_y - 2 * layout.line;
+    const int before = cramped;
+    inkcell_fb_draw_keyboard(state, &layout, &cramped, &grid);
+    INKCELL_TEST_FAIL_IF(cramped - before != (int)INKCELL_KB_ROWS * floor_h,
+                         "a grid with no room should hold its floor rather than compress");
+
+    /* And nothing to draw is nothing drawn: a screen that has not opened a keyboard yet hands
+       this a NULL cursor, and the row it was laying out must survive the call. */
+    int untouched = layout.body_y;
+    const struct inkcell_fb_keyboard empty = {0};
+    inkcell_fb_draw_keyboard(state, &layout, &untouched, &empty);
+    INKCELL_TEST_FAIL_IF(untouched != layout.body_y, "a keyboard with no cursor should draw none");
 
     inkcell_capture_close(capture);
     record_success(test_name);
