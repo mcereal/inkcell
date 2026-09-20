@@ -70,6 +70,22 @@ enum inkcell_kb_layer {
 /* Cells on one emoji page - the character grid, filled. */
 #define INKCELL_KB_EMOJI_PAGE_CELLS (INKCELL_KB_CHAR_ROWS * INKCELL_KB_COLS)
 
+/*
+ * The most emoji pages a layout may carry.
+ *
+ * Two things point at a small number here and they agree. The ring is walked one press at a
+ * time, so a page at the far end of a long one is a page nobody reaches; and the cursor stores
+ * which page is showing in a byte, alongside a panel index that has the three ASCII layers in
+ * front of it - a layout free to declare more pages than that byte can name would have pages
+ * the cursor cannot address, which is a keycap that does nothing dressed up as a capability.
+ *
+ * Sixteen is 640 emoji, which is well past what anybody steps through and well inside the byte.
+ * Like INKCELL_ACTIONS_MAX, it is a cap on the *array* rather than on what fits: raising it is
+ * a one-line change, and `pages` being a uint8_t is what keeps the unrepresentable case from
+ * being expressible at all. inkcell_keyboard_layout_drawable() rejects a layout over the cap.
+ */
+#define INKCELL_KB_EMOJI_PAGES_MAX 16U
+
 enum inkcell_kb_action {
     INKCELL_KB_ACTION_LAYER = 0, /* step the panel ring: abc, ABC, symbols, then the emoji pages */
     INKCELL_KB_ACTION_SPACE,
@@ -89,8 +105,8 @@ enum inkcell_kb_action {
 struct inkcell_keyboard_layout {
     /*
      * The emoji pages, `pages` of them, each INKCELL_KB_EMOJI_PAGE_CELLS entries in row-major
-     * order. NULL with `pages` 0 is a keyboard with no emoji layer at all, which is the right
-     * answer for one collecting six digits.
+     * order, and at most INKCELL_KB_EMOJI_PAGES_MAX of them. NULL with `pages` 0 is a keyboard
+     * with no emoji layer at all, which is the right answer for one collecting six digits.
      *
      * Every cell must be a glyph this build can actually draw, or the user gets a keycap that
      * looks blank and a press that appends something no panel will show. inkcell owns the glyph
@@ -98,7 +114,9 @@ struct inkcell_keyboard_layout {
      * for an application's test to call, not for the draw path.
      */
     const char *const *emoji;
-    uint32_t pages;
+    /* A byte for the reason `emoji_page` is one: the two are the same number seen from either
+       end, and a width the cursor cannot match is a page the cursor cannot reach. */
+    uint8_t pages;
     /*
      * The word on the submit key.
      *
@@ -235,14 +253,18 @@ enum inkcell_keyboard_result inkcell_keyboard_key(struct inkcell_keyboard *kb,
                                                   enum inkcell_key key, char *text, size_t size);
 
 /*
- * Every cell of every emoji page is a glyph this build can draw, and every page is full.
+ * The layout is one this grid can actually show: no more than INKCELL_KB_EMOJI_PAGES_MAX pages,
+ * every page full, and every cell a glyph this build can draw.
  *
  * For an application's test, which is where this check has to live and where it could not live
  * before: the glyph tables are inkcell's, so an application asserting its own emoji table was
- * drawable was a test reaching down a layer to read data it does not own.
+ * drawable was a test reaching down a layer to read data it does not own. The page cap is
+ * checked in the same breath because it fails the same way - a page that is there and cannot be
+ * reached and a cell that is there and cannot be seen are one bug to the person holding it.
  *
  * `bad_page` and `bad_cell` name the first offender when this returns false, for a failure
- * message that says which one rather than that there is one. Either may be NULL.
+ * message that says which one rather than that there is one. Either may be NULL; over the page
+ * cap, `bad_page` is the first page past it and `bad_cell` is left alone.
  */
 bool inkcell_keyboard_layout_drawable(const struct inkcell_keyboard_layout *layout,
                                       uint32_t *bad_page, uint32_t *bad_cell);
