@@ -65,6 +65,9 @@ inkcell_env_set_prefix("MYAPP");          /* MYAPP_THEME, MYAPP_FB_SCALE, ... */
 inkcell_i18n_set_catalog(&my_catalog);
 inkcell_i18n_init();
 
+/* 2b. And so do your icons. inkcell's are the ones a widget reaches for; `album` is yours. */
+inkcell_icon_set_app_table(&myapp_icon_table);
+
 /* 3. inkcell does not own an event loop; yours registers the input descriptors. */
 struct inkcell_input_host host = {
     .ctx = &my_loop, .add_fd = my_add_fd, .remove_fd = my_remove_fd,
@@ -104,6 +107,11 @@ As a subdirectory of another project, the tests are off by default and inkcell i
   *that app's* navigation, so it lives with the app.
 - **Translations.** The mechanism is here and so are inkcell's own fifteen strings. A translation
   covers the catalog in force — both halves at once — so it belongs with the application.
+- **Your vocabulary.** Strings and icons work the same way: inkcell ships only what a *widget*
+  needs to put on a panel, and an application's own continue the ids from there
+  (`inkcell_i18n_set_catalog`, `inkcell_icon_set_app_table`). `scripts/gen-icons.py` will
+  rasterise an application's own `icons.def` — `--def`, `--macro` and `--symbol` — so there is
+  no copy of the generator to keep in step.
 - **Anything that knows what your app is about.** No store, no navigation model, no screens.
 
 ## Licence

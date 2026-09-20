@@ -38,6 +38,7 @@ Why the axes and the crop are what they are:
              as a smudge. The whole set is still under 10 KB.
 """
 
+import argparse
 import re
 import sys
 
@@ -52,14 +53,12 @@ AXES = {"FILL": 1.0, "GRAD": 0.0, "opsz": 20.0, "wght": 500.0}
 
 ORIGIN = (EM, EM)  # where the pen is put on the canvas, clear of every edge at any anchor
 
-ENTRY = re.compile(r'^INKCELL_ICON_ENTRY\(\s*(\w+)\s*,\s*"([^"]+)"\s*\)')
-
-
-def catalog(path):
-    """(id, glyph name) for every icon in icons.def, in enum order."""
+def catalog(path, macro):
+    """(id, glyph name) for every icon in an icons.def, in enum order."""
+    entry = re.compile(macro + r'\(\s*(\w+)\s*,\s*"([^"]+)"\s*\)')
     out = []
     for line in open(path):
-        match = ENTRY.match(line.strip())
+        match = entry.match(line.strip())
         if match is not None:
             out.append((match.group(1), match.group(2)))
     return out
@@ -115,13 +114,31 @@ def rle(values):
 
 
 def main():
-    if len(sys.argv) != 3:
-        print(__doc__)
-        return 1
-    font_path, out_path = sys.argv[1], sys.argv[2]
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("font", help="the Material Symbols Rounded variable font")
+    parser.add_argument("out", help="the C file to write")
+    parser.add_argument("--def", dest="catalog", default=None,
+                        help="the icons.def to read; inkcell's own by default")
+    parser.add_argument("--macro", default="INKCELL_ICON_ENTRY",
+                        help="the entry macro in that file")
+    parser.add_argument("--symbol", default=None,
+                        help="an application's table symbol; writes a "
+                             "struct inkcell_icon_app_table rather than inkcell's own table")
+    args = parser.parse_args()
+    font_path, out_path = args.font, args.out
+    app = args.symbol is not None
 
     root = __file__.rsplit("/", 2)[0]
-    icons = catalog(root + "/include/inkcell/ui/icons.def")
+    # The label is what the generated file's header says the sprites came from, and it is the
+    # path as a reader of that file would type it - repository-relative, not the absolute one
+    # this script happened to be handed.
+    catalog_label = args.catalog or "include/inkcell/ui/icons.def"
+    catalog_path = args.catalog or (root + "/include/inkcell/ui/icons.def")
+    icons = catalog(catalog_path, args.macro)
+    if not icons:
+        print("no %s entries in %s" % (args.macro, catalog_path), file=sys.stderr)
+        return 1
 
     cmap = {name: cp for cp, name in TTFont(font_path, lazy=True).getBestCmap().items()}
     missing = [glyph for _, glyph in icons if glyph not in cmap]
@@ -133,9 +150,10 @@ def main():
     face.set_variation_by_axes([AXES[axis.axisTag] for axis in TTFont(font_path, lazy=True)["fvar"].axes])
 
     # INKCELL_ICON_NONE is enum id 0 and draws nothing, so it gets a blank sprite rather than a
-    # special case in the decoder.
+    # special case in the decoder. An application's table starts at its own first id instead:
+    # the id that means "no icon" is inkcell's, and every application shares it.
     box = window(face)
-    sprites = [(("NONE", "-"), [0] * (SIZE * SIZE))]
+    sprites = [] if app else [(("NONE", "-"), [0] * (SIZE * SIZE))]
     for name, glyph in icons:
         pixels, ink = render(face, cmap[glyph], box)
         sprites.append(((name, glyph), pixels))
@@ -147,6 +165,10 @@ def main():
             print("%s (%s) spills %d units past the %d-unit window" % (name, glyph, cut, WINDOW),
                   file=sys.stderr)
             return 1
+
+    # "MYAPP_ICON_ENTRY" names "MYAPP_ICON_", which is what the ids in the offsets table below
+    # are called - the comment on each line is how a bad merge in 6000 lines of hex is found.
+    prefix = args.macro[:-len("ENTRY")] if args.macro.endswith("ENTRY") else args.macro + "_"
 
     runs = []
     offsets = []
@@ -167,10 +189,15 @@ def main():
         w(" *\n")
         w(" * %d sprites of %dx%d at %d coverage levels, %d runs. The icons and their glyph names\n"
           % (len(sprites), SIZE, SIZE, LEVELS, len(runs) // 2))
-        w(" * are include/inkcell/ui/icons.def; the axes are FILL %g, GRAD %g, opsz %g, wght %g, and\n"
-          % (AXES["FILL"], AXES["GRAD"], AXES["opsz"], AXES["wght"]))
+        w(" * are %s; the axes are FILL %g, GRAD %g, opsz %g, wght %g, and\n"
+          % (catalog_label, AXES["FILL"], AXES["GRAD"], AXES["opsz"], AXES["wght"]))
         w(" * each sprite is a %d-unit window on the %d-unit design grid, centred on it.\n"
           % (WINDOW, EM))
+        if app:
+            w(" *\n")
+            w(" * These continue inkcell's own ids from INKCELL_ICON_COUNT, and the table below is\n")
+            w(" * what inkcell_icon_set_app_table() is handed - so the first entry here is this\n")
+            w(" * application's first icon, not the blank one that means \"no icon\".\n")
         w(" */\n\n")
         w('#include "inkcell/ui/icon.h"\n\n')
 
@@ -182,16 +209,36 @@ def main():
 
         w("/* Where each icon's runs start, plus a final entry so the last icon has an end.\n")
         w("   One line per icon, named, because this is the table a bad merge shows up in. */\n")
-        w("static const uint32_t k_run_offsets[INKCELL_ICON_COUNT + 1] = {\n")
+        w("static const uint32_t k_run_offsets[%s] = {\n"
+          % ("%d + 1" % len(sprites) if app else "INKCELL_ICON_COUNT + 1"))
         for index, ((name, glyph), _) in enumerate(sprites):
-            w("    %-6s /* INKCELL_ICON_%s (%s) */\n" % (str(offsets[index]) + ",", name, glyph))
+            w("    %-6s /* %s%s (%s) */\n"
+              % (str(offsets[index]) + ",", prefix, name, glyph))
         w("    %-6s /* end */\n" % (str(offsets[-1]) + ","))
         w("};\n\n")
 
-        w("const struct inkcell_icon_table inkcell_icon_table = {\n")
-        w("    .runs = k_runs,\n")
-        w("    .run_offsets = k_run_offsets,\n")
-        w("};\n")
+        if app:
+            # The names travel with an application's table rather than being generated into a
+            # header of its own: the whole point of the app shape is that this file compiles
+            # against inkcell's header alone, so a generated table is never waiting on an
+            # application header to be written first.
+            w("/* The glyph each sprite was drawn from - what inkcell_icon_name() answers. */\n")
+            w("static const char *const k_names[] = {\n")
+            for (name, glyph), _ in sprites:
+                w('    "%s",\n' % glyph)
+            w("};\n\n")
+
+            w("const struct inkcell_icon_app_table %s = {\n" % args.symbol)
+            w("    .count = %d,\n" % len(sprites))
+            w("    .runs = k_runs,\n")
+            w("    .run_offsets = k_run_offsets,\n")
+            w("    .names = k_names,\n")
+            w("};\n")
+        else:
+            w("const struct inkcell_icon_table inkcell_icon_table = {\n")
+            w("    .runs = k_runs,\n")
+            w("    .run_offsets = k_run_offsets,\n")
+            w("};\n")
 
     print("%s: %d sprites, %d runs, %d bytes of run data"
           % (out_path, len(sprites), len(runs) // 2, len(runs)))

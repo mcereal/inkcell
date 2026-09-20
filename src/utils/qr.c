@@ -28,7 +28,7 @@
 #define QR_MODULE_DARK 0x01U
 #define QR_MODULE_FUNCTION 0x02U
 
-/* The largest interleaved codeword block a code at MESH_QR_MAX_VERSION carries: version 25 has
+/* The largest interleaved codeword block a code at INKCELL_QR_MAX_VERSION carries: version 25 has
    1588 total codewords, and every version below it fewer. */
 #define QR_CODEWORDS_MAX 1588U
 /* No version uses more than 30 error-correction codewords per block. */
@@ -36,7 +36,7 @@
 
 /*
  * The standard's two block tables, transcribed whole for versions 1-40 rather than cut to
- * MESH_QR_MAX_VERSION. A truncated table is a table nobody can check against the document it
+ * INKCELL_QR_MAX_VERSION. A truncated table is a table nobody can check against the document it
  * came from, and the 328 bytes buy a cap that moves by editing one #define.
  *
  * Rows are the four levels in enum inkcell_qr_ecc order (L, M, Q, H); index 0 of each row is a
@@ -501,12 +501,12 @@ bool inkcell_qr_encode(const uint8_t *data, size_t len, enum inkcell_qr_ecc ecc,
         return false;
     }
     memset(out, 0, sizeof *out);
-    if ((data == NULL && len > 0U) || ecc > MESH_QR_ECC_HIGH) {
+    if ((data == NULL && len > 0U) || ecc > INKCELL_QR_ECC_HIGH) {
         return false;
     }
 
     int version = 0;
-    for (int v = 1; v <= (int)MESH_QR_MAX_VERSION; ++v) {
+    for (int v = 1; v <= (int)INKCELL_QR_MAX_VERSION; ++v) {
         const size_t capacity_bits = data_codewords(v, ecc) * 8U;
         const size_t needed = 4U + (size_t)count_bits(v) + len * 8U;
         if (needed <= capacity_bits) {

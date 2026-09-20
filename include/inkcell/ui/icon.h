@@ -63,6 +63,9 @@ extern "C" {
  * INKCELL_ICON_NONE is 0 and draws nothing, which is what makes an icon slot safe to leave
  * zeroed: a widget's leading slot is declared once for a whole list and the rows that have
  * nothing to put in it say so by saying nothing.
+ *
+ * These are the ones inkcell itself draws. An application's own continue from
+ * INKCELL_ICON_COUNT - see inkcell_icon_set_app_table() at the bottom of this file.
  */
 enum inkcell_icon {
     INKCELL_ICON_NONE = 0,
@@ -104,8 +107,65 @@ void inkcell_icon_alpha(enum inkcell_icon icon, uint8_t out[INKCELL_ICON_SIZE * 
 const char *inkcell_icon_name(enum inkcell_icon icon);
 
 /* Whether `icon` names something this build can draw. INKCELL_ICON_NONE is not one: it is the
-   absence of an icon, which is legal everywhere and drawable nowhere. */
+   absence of an icon, which is legal everywhere and drawable nowhere. An application's own id
+   counts, once its table is registered below. */
 bool inkcell_icon_is_valid(enum inkcell_icon icon);
+
+/* ---- an application's own icons -------------------------------------------------------------
+ *
+ * The icons above are inkcell's: the ones a *widget* reaches for - a chevron on a row that
+ * opens something, a check on a chosen one, the warning triangle a dialog draws itself. What an
+ * application's screens point at is the application's vocabulary, and a toolkit that shipped
+ * `album` and `shuffle` would be a toolkit for one program.
+ *
+ * So an application brings its own sprite table and its ids continue inkcell's, exactly the way
+ * its strings continue inkcell's catalog - see inkcell_i18n_set_catalog(). The ids are constants
+ * of `enum inkcell_icon` rather than a second enum type, because there is one id space here and
+ * a widget's `enum inkcell_icon` parameter has to accept both halves without a cast at every
+ * call site:
+ *
+ *     enum {
+ *         MYAPP_ICON__BASE = INKCELL_ICON_COUNT - 1,
+ *     #define MYAPP_ICON_ENTRY(id, glyph) MYAPP_ICON_##id,
+ *     #include "myapp/ui/icons.def"
+ *     #undef MYAPP_ICON_ENTRY
+ *         MYAPP_ICON_COUNT
+ *     };
+ *
+ * Unlike the string catalog, the table registered here holds the application's icons *alone*
+ * rather than both halves. A string table is an array of pointers an application builds by
+ * including two .def files, which costs it nothing; a sprite table is generated binary data, and
+ * asking an application to regenerate inkcell's seventy sprites into its own file would duplicate
+ * 15 KB in the binary to save one comparison per lookup. So the lookup branches instead.
+ *
+ * Generate the table with inkcell's own scripts/gen-icons.py, pointed at the application's .def:
+ *
+ *     gen-icons.py <font> <out.c> --def include/myapp/ui/icons.def \
+ *                  --macro MYAPP_ICON_ENTRY --symbol myapp_icon_table
+ */
+struct inkcell_icon_app_table {
+    /* How many icons the application adds - MYAPP_ICON_COUNT - INKCELL_ICON_COUNT. */
+    size_t count;
+    const uint8_t *runs;
+    const uint32_t *run_offsets; /* `count` + 1 entries, indexed from the application's first id */
+    /* The glyph names, `count` entries, for the same diagnostics inkcell_icon_name() serves.
+       May be NULL, which leaves an application's icons unnamed. */
+    const char *const *names;
+};
+
+/*
+ * Installs the application's icons. Call once, before anything draws.
+ *
+ * The structure and everything it points at must outlive the process - this is a generated
+ * static table, not something to build on a stack. Passing NULL removes one, which leaves
+ * inkcell's own icons as all there are: what a test, a capture harness or the library on its
+ * own runs with.
+ */
+void inkcell_icon_set_app_table(const struct inkcell_icon_app_table *table);
+
+/* How many ids are drawable in total - INKCELL_ICON_COUNT when no application table was
+   registered, and INKCELL_ICON_COUNT + the table's `count` when one was. */
+size_t inkcell_icon_count(void);
 
 #ifdef __cplusplus
 }

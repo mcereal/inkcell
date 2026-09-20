@@ -207,3 +207,131 @@ INKCELL_TEST_CASE(icon_names_are_present, unit) {
     }
     record_success(test_name);
 }
+
+/* ---- an application's own icons -------------------------------------------------------------
+ *
+ * The seam that keeps `album` and `shuffle` out of a toolkit: an application registers its own
+ * sprite table and its ids continue inkcell's. See inkcell_icon_set_app_table().
+ */
+
+/* Two sprites, hand-built rather than generated: a solid one and a half-solid one, each covering
+   exactly the pixels a sprite has. Runs are (count, coverage) pairs, and 1024 pixels is five runs
+   at the 255 cap. */
+#define APP_SPRITE(alpha) 255U, (alpha), 255U, (alpha), 255U, (alpha), 255U, (alpha), 4U, (alpha)
+
+static const uint8_t k_app_runs[] = {
+    APP_SPRITE(INKCELL_ICON_MAX_ALPHA),
+    APP_SPRITE(INKCELL_ICON_MAX_ALPHA / 2),
+};
+static const uint32_t k_app_offsets[] = {0U, 5U, 10U};
+static const char *const k_app_names[] = {"solid", "half"};
+
+static const struct inkcell_icon_app_table k_app_table = {
+    .count = 2U,
+    .runs = k_app_runs,
+    .run_offsets = k_app_offsets,
+    .names = k_app_names,
+};
+
+/* The registered table is process-wide, so every case below puts it back. A suite that left one
+   installed would be handing the next one two icons it never asked for. */
+static void app_table_forget(void) {
+    inkcell_icon_set_app_table(NULL);
+}
+
+INKCELL_TEST_CASE(icon_app_table_extends_the_ids, unit) {
+    const enum inkcell_icon first = (enum inkcell_icon)INKCELL_ICON_COUNT;
+    const enum inkcell_icon second = (enum inkcell_icon)(INKCELL_ICON_COUNT + 1);
+    const enum inkcell_icon past = (enum inkcell_icon)(INKCELL_ICON_COUNT + 2);
+    uint8_t alpha[INKCELL_ICON_SIZE * INKCELL_ICON_SIZE];
+    /* Read before the application's table goes in, so the check below is that inkcell's own
+       answer did not move rather than that it matches a literal copied into this file. */
+    const char *const chevron = inkcell_icon_name(INKCELL_ICON_CHEVRON);
+
+    /* Before registration an application's id is an id from a newer build: not drawable, and
+       decoding to nothing rather than reading past inkcell's table. */
+    INKCELL_TEST_FAIL_IF(inkcell_icon_count() != (size_t)INKCELL_ICON_COUNT,
+                         "with no application table there are only inkcell's icons");
+    INKCELL_TEST_FAIL_IF(inkcell_icon_is_valid(first),
+                         "an application id should not be drawable before its table is installed");
+
+    inkcell_icon_set_app_table(&k_app_table);
+
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_icon_count() != (size_t)INKCELL_ICON_COUNT + 2U,
+                                 app_table_forget(), "the count should carry both halves");
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_icon_is_valid(first) || !inkcell_icon_is_valid(second),
+                                 app_table_forget(),
+                                 "an application's ids are drawable once registered");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_icon_is_valid(past), app_table_forget(),
+                                 "one past the application's last id is still nothing");
+
+    /* The sprite that comes back is the application's, at the offset its table names. */
+    inkcell_icon_alpha(first, alpha);
+    for (size_t p = 0; p < sizeof alpha; ++p) {
+        INKCELL_TEST_FAIL_IF_CLEANUP(alpha[p] != INKCELL_ICON_MAX_ALPHA, app_table_forget(),
+                                     "the first application sprite should decode solid");
+    }
+    inkcell_icon_alpha(second, alpha);
+    for (size_t p = 0; p < sizeof alpha; ++p) {
+        INKCELL_TEST_FAIL_IF_CLEANUP(alpha[p] != INKCELL_ICON_MAX_ALPHA / 2, app_table_forget(),
+                                     "the second application sprite should decode half");
+    }
+
+    INKCELL_TEST_FAIL_IF_CLEANUP(strcmp(inkcell_icon_name(first), "solid") != 0, app_table_forget(),
+                                 "an application's icon names its own glyph");
+
+    /* And inkcell's own ids still answer out of inkcell's table: the lookup branches on which
+       half an id fell in, it does not swap one table for another. */
+    INKCELL_TEST_FAIL_IF_CLEANUP(strcmp(inkcell_icon_name(INKCELL_ICON_CHEVRON), chevron) != 0,
+                                 app_table_forget(),
+                                 "inkcell's icons are unaffected by an application's table");
+
+    app_table_forget();
+    INKCELL_TEST_FAIL_IF(inkcell_icon_is_valid(first),
+                         "removing the table should take the application's ids with it");
+    record_success(test_name);
+}
+
+/*
+ * A table that says it holds icons and points at no runs.
+ *
+ * It is the shape a half-written registration takes - a structure declared, a symbol not yet
+ * generated - and accepting it would put a NULL dereference one frame away rather than at the
+ * call that got it wrong.
+ */
+INKCELL_TEST_CASE(icon_app_table_rejects_a_table_with_no_runs, unit) {
+    static const struct inkcell_icon_app_table k_empty = {.count = 2U};
+    uint8_t alpha[INKCELL_ICON_SIZE * INKCELL_ICON_SIZE];
+
+    inkcell_icon_set_app_table(&k_empty);
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_icon_count() != (size_t)INKCELL_ICON_COUNT,
+                                 app_table_forget(),
+                                 "a table with no runs should not be installed");
+
+    memset(alpha, 0xFF, sizeof alpha);
+    inkcell_icon_alpha((enum inkcell_icon)INKCELL_ICON_COUNT, alpha);
+    for (size_t p = 0; p < sizeof alpha; ++p) {
+        INKCELL_TEST_FAIL_IF_CLEANUP(alpha[p] != 0U, app_table_forget(),
+                                     "and its ids should decode to nothing");
+    }
+    app_table_forget();
+    record_success(test_name);
+}
+
+/* Names are optional - a table generated without them is still a table of sprites. */
+INKCELL_TEST_CASE(icon_app_table_names_are_optional, unit) {
+    static const struct inkcell_icon_app_table k_unnamed = {
+        .count = 2U,
+        .runs = k_app_runs,
+        .run_offsets = k_app_offsets,
+    };
+    const enum inkcell_icon first = (enum inkcell_icon)INKCELL_ICON_COUNT;
+
+    inkcell_icon_set_app_table(&k_unnamed);
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_icon_is_valid(first), app_table_forget(),
+                                 "an unnamed icon is still drawable");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_icon_name(first)[0] != '\0', app_table_forget(),
+                                 "and names nothing rather than reading a NULL table");
+    app_table_forget();
+    record_success(test_name);
+}

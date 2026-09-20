@@ -1,5 +1,5 @@
-#ifndef MESH_UTILS_QR_H
-#define MESH_UTILS_QR_H
+#ifndef INKCELL_UTILS_QR_H
+#define INKCELL_UTILS_QR_H
 
 /*
  * A QR Code encoder, byte mode, for showing something a phone can read off this screen.
@@ -40,28 +40,27 @@ extern "C" {
  * knows what the code is being read off.
  */
 enum inkcell_qr_ecc {
-    MESH_QR_ECC_LOW = 0, /* ~7% recoverable */
-    MESH_QR_ECC_MEDIUM,  /* ~15% */
-    MESH_QR_ECC_QUARTILE,
-    MESH_QR_ECC_HIGH,
+    INKCELL_QR_ECC_LOW = 0, /* ~7% recoverable */
+    INKCELL_QR_ECC_MEDIUM,  /* ~15% */
+    INKCELL_QR_ECC_QUARTILE,
+    INKCELL_QR_ECC_HIGH,
 };
 
 /*
  * The largest version this encoder will produce, and therefore the buffer every caller carries.
  *
  * A cap rather than the standard's 40 because the matrix is held as one byte per module and a
- * version-40 code is 31329 of them. Twenty-five holds 1276 bytes at LOW, which covers the
- * longest URL a full ChannelSet can make (mesh/proto/channel_url.h bounds that at
- * MESH_CHANNEL_URL_MAX) with room over. Raising it is this line and the memory; nothing below
- * is version-limited.
+ * version-40 code is 31329 of them. Twenty-five holds 1276 bytes at LOW, which is comfortably
+ * more than the longest link an application is likely to put on a handheld's panel. Raising it
+ * is this line and the memory; nothing below is version-limited.
  *
  * Fitting is not the same as reading: 117 modules across a 1024-pixel panel is about four
  * pixels each, which a phone will manage close up and not from across a room. A realistic share
  * - a primary and a secondary or two - lands around version 12, at twice that. What the cap
  * buys is that the failure at the far end is a code that is hard to scan rather than no code.
  */
-#define MESH_QR_MAX_VERSION 25U
-#define MESH_QR_MAX_SIZE (17U + 4U * MESH_QR_MAX_VERSION)
+#define INKCELL_QR_MAX_VERSION 25U
+#define INKCELL_QR_MAX_SIZE (17U + 4U * INKCELL_QR_MAX_VERSION)
 
 /*
  * A finished code: `size` modules square, `size` being 21 + 4*(version - 1).
@@ -76,13 +75,13 @@ struct inkcell_qr {
     uint8_t size;
     /* Bit 0 is dark; bit 1 marks a function module (finder, timing, format, alignment), which
        is what the data walk skips and the mask leaves alone. */
-    uint8_t modules[MESH_QR_MAX_SIZE * MESH_QR_MAX_SIZE];
+    uint8_t modules[INKCELL_QR_MAX_SIZE * INKCELL_QR_MAX_SIZE];
 };
 
 /*
  * Encodes `len` bytes at the smallest version that will hold them.
  *
- * Returns false when the payload does not fit at MESH_QR_MAX_VERSION, or on a NULL argument;
+ * Returns false when the payload does not fit at INKCELL_QR_MAX_VERSION, or on a NULL argument;
  * `out` is zeroed either way, so a caller that draws a failed code draws nothing rather than
  * half a code. Deterministic: the same bytes and level always give the same matrix, including
  * the mask chosen, which is what lets a test pin one.
@@ -98,4 +97,4 @@ bool inkcell_qr_dark(const struct inkcell_qr *qr, int x, int y);
 }
 #endif
 
-#endif /* MESH_UTILS_QR_H */
+#endif /* INKCELL_UTILS_QR_H */
