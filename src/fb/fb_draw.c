@@ -232,6 +232,33 @@ void inkcell_fb_focus_register(const struct inkcell_backend_fb_state *state, uin
     if (state == NULL || state->focus == NULL || id == INKCELL_FOCUS_NONE || rect == NULL) {
         return;
     }
+    /*
+     * A box with no part of it on the panel is not a place to stand, whatever was asked for.
+     * The components only lay out what they are drawing, so this catches the screen that
+     * measured something wrong rather than anything inkcell does - and it is the one clip worth
+     * applying here.
+     *
+     * The two it deliberately does not apply are the ones the pixels go through, and they
+     * would each make this answer a different question:
+     *
+     *   - **The damage band** (`clip_active`). That is what limits a *partial redraw* to the
+     *     rows that changed, so intersecting with it would make the map hold whatever happened
+     *     to be repainted this frame. A reader who moved a switch would find the other half of
+     *     the screen unreachable until something else redrew it.
+     *   - **The transition shift** (`shift_active`). A screen sliding in is every box moved by
+     *     one dx, and a uniform translation changes no answer this map is asked for - what is
+     *     to my right is to my right at every point of the slide. Registering the travelling
+     *     position instead would clip away whatever had not arrived yet, so the screen would be
+     *     navigable only in the parts that had landed. The boxes here are where the layout put
+     *     things, which is where they will be when the slide ends and where a press is resolved
+     *     against in the meantime.
+     */
+    const int panel_w = (int)state->var.xres;
+    const int panel_h = (int)state->var.yres;
+    if (rect->x >= panel_w || rect->y >= panel_h || rect->x + rect->w <= 0 ||
+        rect->y + rect->h <= 0) {
+        return;
+    }
     (void)inkcell_focus_add(state->focus, id, rect->x, rect->y, rect->w, rect->h);
 }
 

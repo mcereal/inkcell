@@ -532,7 +532,12 @@ void inkcell_fb_list_row(const struct inkcell_backend_fb_state *state, struct in
        heights is still whatever height that list gave it, and advancing by a row would put
        every row under it in the wrong place. */
     const int height = (int)inkcell_fb_list_row_height(list, index) * list->line;
-    inkcell_fb_list_focus_row(state, list, index, list->y, height);
+    /* The fill's top and not the baseline: inkcell_fb_draw_row_fill_on() paints from
+       `y - scale`, and a box registered a baseline's lift below the highlight is a cursor
+       whose geometry disagrees with the one thing on the panel that shows where it is. The
+       slotted item registers its own `fill_top`, which is this same number arrived at from the
+       other side. */
+    inkcell_fb_list_focus_row(state, list, index, list->y - state->scale, height);
     list->y += height;
 }
 

@@ -296,6 +296,91 @@ INKCELL_TEST_CASE(focus_widgets_list_registers_the_window_and_not_the_list, unit
     record_success(test_name);
 }
 
+/*
+ * A row's box is the box its highlight paints, and the two kinds of row agree about it.
+ *
+ * The plain row and the slotted item arrive at that rectangle from opposite ends - one from the
+ * model's height, one from the geometry it measured for itself - so the way this goes wrong is
+ * that one of them registers a *baseline* where the other registers a top, and the cursor ends
+ * up a lift below the highlight on some rows and not others. Rendering the same list both ways
+ * and comparing is the only thing that catches it.
+ */
+INKCELL_TEST_CASE(focus_widgets_both_kinds_of_row_register_the_same_box, unit) {
+    struct focus_harness plain;
+    struct focus_harness slotted;
+    INKCELL_TEST_FAIL_IF(!focus_harness_open(&plain, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT),
+                         "the capture should open");
+
+    struct inkcell_fb_layout layout = inkcell_fb_layout_begin(plain.state, false, false);
+    struct inkcell_fb_list list = inkcell_fb_list_begin(&layout, 3U, 0U);
+    inkcell_fb_list_focus(&list, W_ID_ROW);
+    uint32_t index = 0U;
+    while (inkcell_fb_list_next(&list, &index)) {
+        inkcell_fb_list_row(plain.state, &list, index, "row", INKCELL_TONE_NORMAL);
+    }
+
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        !focus_harness_open(&slotted, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT),
+        focus_harness_close(&plain), "the second capture should open");
+    struct inkcell_fb_layout other = inkcell_fb_layout_begin(slotted.state, false, false);
+    struct inkcell_fb_list items = inkcell_fb_list_begin(&other, 3U, 0U);
+    inkcell_fb_list_focus(&items, W_ID_ROW);
+    index = 0U;
+    while (inkcell_fb_list_next(&items, &index)) {
+        const struct inkcell_fb_list_item item = {.text = "row", .tone = INKCELL_TONE_NORMAL};
+        inkcell_fb_list_item(slotted.state, &items, index, &item);
+    }
+
+    for (uint32_t i = 0U; i < 3U; ++i) {
+        struct inkcell_focus_rect a = {0, 0, 0, 0};
+        struct inkcell_focus_rect b = {0, 0, 0, 0};
+        const bool both = inkcell_focus_rect_of(&plain.map, W_ID_ROW + i, &a) &&
+                          inkcell_focus_rect_of(&slotted.map, W_ID_ROW + i, &b);
+        INKCELL_TEST_FAIL_IF_CLEANUP(!both,
+                                     (focus_harness_close(&plain), focus_harness_close(&slotted)),
+                                     "both kinds of row should have registered");
+        INKCELL_TEST_FAIL_IF_CLEANUP(a.x != b.x || a.y != b.y || a.w != b.w || a.h != b.h,
+                                     (focus_harness_close(&plain), focus_harness_close(&slotted)),
+                                     "a plain row and a slotted one should occupy one box");
+    }
+    focus_harness_close(&plain);
+    focus_harness_close(&slotted);
+    record_success(test_name);
+}
+
+/*
+ * A box with no part of it on the panel is not a place to stand.
+ *
+ * The components only lay out what they are drawing, so this is the screen that measured
+ * something wrong rather than anything the toolkit does - and an id that answers a press with a
+ * rectangle nobody can see is the exact failure the registration is here to remove, so it is
+ * worth one branch.
+ */
+INKCELL_TEST_CASE(focus_widgets_a_box_off_the_panel_is_not_registered, unit) {
+    struct focus_harness h;
+    INKCELL_TEST_FAIL_IF(!focus_harness_open(&h, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT),
+                         "the capture should open");
+
+    const struct inkcell_fb_button below = {.rect = {10, (int)INKCELL_CAPTURE_HEIGHT + 20, 40, 20},
+                                            .label = "x",
+                                            .scale = 2,
+                                            .focus_id = W_ID_BUTTON};
+    inkcell_fb_draw_button(h.state, &below);
+    INKCELL_TEST_FAIL_IF_CLEANUP(h.map.count != 0U, focus_harness_close(&h),
+                                 "a button drawn past the bottom of the panel is not reachable");
+
+    /* Half on is still on: a row cut by the edge of the body is a row the reader can see and
+       press, and refusing it would be the same mistake from the other end. */
+    const struct inkcell_fb_button half = {
+        .rect = {-20, 10, 40, 20}, .label = "x", .scale = 2, .focus_id = W_ID_BUTTON + 1U};
+    inkcell_fb_draw_button(h.state, &half);
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_focus_has(&h.map, W_ID_BUTTON + 1U),
+                                 focus_harness_close(&h),
+                                 "a box straddling the edge is still on the panel");
+    focus_harness_close(&h);
+    record_success(test_name);
+}
+
 /* ---- the opt-out ------------------------------------------------------------------------ */
 
 /*
