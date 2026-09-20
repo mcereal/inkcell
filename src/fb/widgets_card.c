@@ -665,10 +665,14 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state,
 
     const int height = inkcell_fb_card_box_height(&m, layout, card, fit);
     /*
-     * The edge first, then the fill inside it: inkcell_fb_fill_round_rect() fills rather than
-     * strokes, so an outline is the larger shape with the smaller one laid over it. Two fills
-     * rather than four rectangles because the corners have to follow the radius, and a stroked
-     * round rect is a primitive nothing else here would use.
+     * The panel, then the ring around its edge.
+     *
+     * Not the hollowing the other outlines were: a card's inside is a real fill - the tier it
+     * stands on - so this is one fill and one ring rather than a ring with the ground put back
+     * inside it. The two used to be a larger fill with a smaller one laid over it, which drew
+     * the whole edge colour and then covered all but a hairline of it; the panel is painted
+     * once now, and the ring follows the radius exactly instead of being the difference between
+     * two shapes that had to be kept in step by hand.
      *
      * The edge is not decoration. On a theme whose surface is a step off the ground - which is
      * every one that ships, because a surface far from the ground is a surface body text is no
@@ -686,11 +690,10 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state,
      */
     const int top = *y;
     if (m.ring > 0) {
-        const int inner_radius = m.radius + m.edge - m.ring > 0 ? m.radius + m.edge - m.ring : 0;
-        inkcell_fb_fill_round_rect(state, m.x, top, m.width, height, m.radius + m.edge, m.edge_ink);
-        inkcell_fb_fill_round_rect(state, m.x + m.ring, top + m.ring, m.width - 2 * m.ring,
-                                   height - 2 * m.ring, inner_radius,
+        inkcell_fb_fill_round_rect(state, m.x, top, m.width, height, m.radius + m.edge,
                                    inkcell_fb_color(state, m.fill));
+        inkcell_fb_stroke_round_rect(state, m.x, top, m.width, height, m.radius + m.edge, m.ring,
+                                     m.edge_ink);
     } else {
         /* No edge to lay down first, so the fill is the whole panel - and it takes the outer
            radius, because with nothing around it the fill's own corner is the card's corner. */

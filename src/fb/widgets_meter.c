@@ -232,6 +232,152 @@ void inkcell_fb_draw_meter(struct inkcell_backend_fb_state *state,
     }
 }
 
+/* ---- the dial --------------------------------------------------------------------------------
+ *
+ * The bar's arithmetic on a circle. Everything that decides *what* to draw - the domain, the
+ * band, the tone rules, the easing - is the same call the bar makes; only the shape differs.
+ */
+
+/* How much of a turn the spinner's arc spans. A quarter is Material's, and it is the length
+   that still reads as an arc travelling rather than as a ring with a bite out of it. */
+#define INKCELL_FB_DIAL_SWEEP 250
+
+/*
+ * The reading in the middle of the ring, or nothing.
+ *
+ * Nothing is a real answer here rather than a failure. The hole is small, a figure clipped to
+ * fit it is a figure nobody can read, and an ellipsis inside a dial says even less than the arc
+ * already does - so this tries the body scale, then the smaller one chrome is set in, and if
+ * neither fits it leaves the ring to speak for itself.
+ *
+ * Measured against the square that fits *inside* the hole, not the hole's diameter: a line as
+ * wide as the circle is a line whose ends are outside it. Seven tenths is the inscribed square,
+ * near enough, and it is a ratio rather than a root because nothing here wants a float.
+ */
+static void inkcell_fb_dial_label(const struct inkcell_backend_fb_state *state,
+                                  const struct inkcell_fb_dial *dial, int cx, int cy, int side,
+                                  int thickness) {
+    if (dial->label == NULL || dial->label[0] == '\0') {
+        return;
+    }
+    const int hole = side - 2 * thickness;
+    if (hole <= 0) {
+        return;
+    }
+    const int room = hole * 7 / 10;
+
+    const int scales[] = {inkcell_fb_type_scale(state, INKCELL_TYPE_BODY),
+                          inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL)};
+    for (size_t i = 0U; i < sizeof scales / sizeof scales[0]; ++i) {
+        const int scale = scales[i];
+        if (scale <= 0) {
+            continue;
+        }
+        const int width = inkcell_fb_text_width(state, dial->label, scale);
+        const int height = (int)inkcell_fb_font(state)->height * scale;
+        if (width > room || height > room) {
+            continue;
+        }
+        /* The glyph body is centred, not the line advance: the advance carries the gap accents
+           hang in, and counting it would sit every figure low in its ring. */
+        inkcell_fb_draw_text(state, cx - width / 2, cy - height / 2, dial->label, scale,
+                             inkcell_fb_color(state, INKCELL_COLOR_TEXT),
+                             inkcell_fb_color(state, dial->ground));
+        return;
+    }
+}
+
+int inkcell_fb_dial_thickness(const struct inkcell_backend_fb_state *state, int scale) {
+    return inkcell_fb_meter_thickness(state, scale);
+}
+
+int inkcell_fb_dial_min_side(const struct inkcell_backend_fb_state *state, int scale) {
+    /* Two walls and a hole at least as wide as one of them: below that the ring closes up into
+       a disc and stops being a reading at all. */
+    return 3 * inkcell_fb_dial_thickness(state, scale);
+}
+
+void inkcell_fb_draw_dial(struct inkcell_backend_fb_state *state,
+                          const struct inkcell_fb_dial *dial) {
+    if (dial == NULL || dial->rect.w <= 0 || dial->rect.h <= 0) {
+        return;
+    }
+    const struct inkcell_fb_rect r = dial->rect;
+    const int side = r.w < r.h ? r.w : r.h;
+    const int thickness = inkcell_fb_dial_thickness(state, state->scale);
+    if (side < 3 * thickness) {
+        return; /* no room for a ring with a hole in it; see inkcell_fb_dial_min_side() */
+    }
+
+    const int damage_pad = inkcell_fb_space(state, INKCELL_SPACE_XS);
+    inkcell_fb_animation_damage(state, r.x - damage_pad, r.y - damage_pad, r.w + 2 * damage_pad,
+                                r.h + 2 * damage_pad);
+
+    /* The centre is a pixel corner, which is where inkcell_fb_stroke_arc() measures from, and
+       the radius is half the shorter side - so the ring meets the box on that axis and is
+       centred on the other. */
+    const int cx = r.x + r.w / 2;
+    const int cy = r.y + r.h / 2;
+    const int radius = side / 2;
+
+    /*
+     * Its own ground under a cursor fill, for the reason the bar lays one: the track is
+     * validated against the body and against a card, not against the selection fill, and on two
+     * of the four themes it *is* that fill. Without this the ring would vanish on precisely the
+     * row being pointed at.
+     */
+    if (dial->selected) {
+        const int pad = inkcell_fb_space(state, INKCELL_SPACE_XS);
+        const int disc = side + 2 * pad;
+        inkcell_fb_fill_round_rect(state, cx - disc / 2, cy - disc / 2, disc, disc, disc / 2,
+                                   inkcell_fb_color(state, dial->ground));
+    }
+
+    /* The track, all the way round. A ring with no track is an arc floating in space: the thing
+       that makes three quarters read as three quarters is the quarter that is not filled. */
+    inkcell_fb_stroke_arc(state, cx, cy, radius, thickness, 0, INKCELL_ANIM_ONE,
+                          inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK));
+
+    if (dial->kind == INKCELL_FB_DIAL_INDETERMINATE) {
+        /* A band says where a reading changes meaning and a spinner has no reading, so nothing
+           here consults one - the same rule the travelling pill is drawn by. */
+        const struct inkcell_rgb ink =
+            inkcell_fb_tone_color(state, inkcell_fb_meter_tone(dial->tone));
+        /*
+         * The arc keeps its length and its start goes round, which is what a spinner is. No
+         * easing: a rotation that accelerated and settled would read as something arriving over
+         * and over rather than as something still going, and unlike the bar there is no moment
+         * in the cycle where the shape is off the track and a wrap could hide.
+         */
+        const int32_t turn = inkcell_anim_loop(&state->anim, dial->id, state->now_ms,
+                                               inkcell_fb_motion(state, INKCELL_MOTION_LOOP));
+        inkcell_fb_stroke_arc(state, cx, cy, radius, thickness, turn, INKCELL_FB_DIAL_SWEEP, ink);
+        inkcell_fb_dial_label(state, dial, cx, cy, side, thickness);
+        return;
+    }
+
+    /* The reading onto the domain, then the band asked in the caller's own units - both exactly
+       as the bar does them, so a ring and a bar on one screen cannot disagree. */
+    const int32_t value = inkcell_scale_permille(dial->scale, dial->value);
+    const struct inkcell_rgb ink = inkcell_fb_tone_color(
+        state, inkcell_fb_meter_tone(inkcell_band_tone(dial->band, dial->value, dial->tone)));
+
+    const int32_t position =
+        inkcell_anim_track(&state->anim, dial->id, state->now_ms, value,
+                           inkcell_fb_motion(state, INKCELL_FB_METER_MOTION), INKCELL_EASE_OUT);
+
+    /* A reading that is not zero draws something, however small - the same refusal to round a
+       real fraction away to nothing that the bar makes. Exactly zero draws an empty track. */
+    int32_t sweep = position;
+    if (sweep <= 0 && position > 0) {
+        sweep = 1;
+    }
+    if (sweep > 0) {
+        inkcell_fb_stroke_arc(state, cx, cy, radius, thickness, 0, sweep, ink);
+    }
+    inkcell_fb_dial_label(state, dial, cx, cy, side, thickness);
+}
+
 /* ---- the slider ----------------------------------------------------------------------------- */
 
 /*

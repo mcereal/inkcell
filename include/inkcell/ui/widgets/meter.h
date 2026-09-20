@@ -129,6 +129,83 @@ int inkcell_fb_meter_thickness(const struct inkcell_backend_fb_state *state, int
 void inkcell_fb_draw_meter(struct inkcell_backend_fb_state *state,
                            const struct inkcell_fb_meter *meter);
 
+/* ---- the dial --------------------------------------------------------------------------------
+ *
+ * The same quantity as an angle rather than as a length.
+ *
+ * A bar and a ring answer one question and it is worth being clear about when each is right. A
+ * bar is read against its own ends, so it belongs in a row beside a label where the eye is
+ * already travelling left to right; a ring has no ends to read against and has to carry its
+ * reading in the middle, which is why it belongs where it is the *subject* - a charge screen, a
+ * transfer, a single figure a screen is about. Put a ring in a list row and it is a bar that
+ * has been made harder to read; put a bar where a ring belongs and the screen has no centre.
+ *
+ * It is a component of its own rather than a third `enum inkcell_fb_meter_kind` because almost
+ * nothing about it is the bar's. Its geometry is a centre and a radius rather than a box it
+ * fills, its indeterminate state rotates rather than travels, and it has an inside to put a
+ * figure in. A kind that changed the meaning of `rect` and left half the structure unread is
+ * the thing this tree argues against everywhere else.
+ *
+ * What it does share is the vocabulary, and deliberately all of it: the same domain, the same
+ * band, the same tone rules, the same animation slot, the same track colour. A ring and a bar
+ * on one screen have to agree about what three quarters looks like and about where a reading
+ * stops being healthy, and they do that by asking the same questions rather than by being the
+ * same code.
+ */
+
+enum inkcell_fb_dial_kind {
+    INKCELL_FB_DIAL_DETERMINATE = 0,
+    /* Nothing has changed, nothing is going to, and the ring still has to say that work is
+       happening - the spinner. The arc keeps its length and its start goes round. */
+    INKCELL_FB_DIAL_INDETERMINATE,
+};
+
+struct inkcell_fb_dial {
+    /*
+     * The box the ring centres in. The ring takes the shorter side, so a box that is not square
+     * gives a circle centred in it rather than an ellipse: a ring read at an angle is a ring
+     * whose reading depends on where on it you look.
+     */
+    struct inkcell_fb_rect rect;
+    /* The animation slot, as a meter's is - see include/inkcell/ui/anim.h. 0 is not a key and
+       draws the reading unanimated, which is right for a still frame and wrong for a screen. */
+    uint32_t id;
+    enum inkcell_fb_dial_kind kind;
+    int32_t value;
+    struct inkcell_scale scale;
+    /* Where the reading stops meaning one thing and starts meaning another. NULL for a quantity
+       with no thresholds; unlike the bar, a ring draws no notches for it - an arc cut at a
+       boundary reads as a gap in the reading rather than as a mark on a scale. The band still
+       chooses the tone. */
+    const struct inkcell_band *band;
+    enum inkcell_tone tone;
+    bool selected; /* the row or card under it carries the cursor fill */
+    enum inkcell_color ground;
+    /*
+     * What goes in the middle: the reading in the units a person reads it in, already
+     * formatted. NULL leaves it empty, which is right for a dial small enough that a figure
+     * inside it would be a smudge.
+     *
+     * A ring with nothing in it is the one shape here that can be genuinely ambiguous - three
+     * quarters of what? - so a caller with room should fill this.
+     */
+    const char *label;
+};
+
+/* How thick the ring is drawn at `scale`: the bar's thickness, so the two read as one family. */
+int inkcell_fb_dial_thickness(const struct inkcell_backend_fb_state *state, int scale);
+
+/*
+ * The smallest box worth drawing a dial in at `scale` - twice the thickness plus room for the
+ * hole to still be a hole. Below it a caller should draw the bar instead.
+ */
+int inkcell_fb_dial_min_side(const struct inkcell_backend_fb_state *state, int scale);
+
+/* Mutable for the reason the meter is: where the arc has got to lives on the state, keyed by
+   `id`, because a screen renderer is rebuilt from nothing every frame. */
+void inkcell_fb_draw_dial(struct inkcell_backend_fb_state *state,
+                          const struct inkcell_fb_dial *dial);
+
 /* ---- the slider ------------------------------------------------------------------------------
  *
  * A quantity the reader is *choosing*, where the meter is a quantity they are being told.
