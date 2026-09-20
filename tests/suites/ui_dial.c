@@ -246,3 +246,68 @@ INKCELL_TEST_CASE(dial_label_fits_or_is_left_out, unit) {
     inkcell_capture_close(page.capture);
     record_success(test_name);
 }
+
+INKCELL_TEST_CASE(dial_is_drawn_at_the_thickness_it_was_measured_at, unit) {
+    /*
+     * The sizing helpers take a scale and the draw has to agree with them.
+     *
+     * It did not. inkcell_fb_dial_min_side() answered for whatever scale it was asked about and
+     * the draw recomputed the thickness from the state's - so a caller sizing a compact dial at
+     * the chrome scale got a box the helper called the minimum and the draw called too small,
+     * and drew nothing at all. Anything larger got a ring thicker than the helper advertised,
+     * which is the same disagreement with a subtler symptom.
+     *
+     * The fix is that the thickness is *carried* rather than recomputed. A bar's is simply the
+     * height of the box it was handed, so the two can never diverge; a ring's is not derivable
+     * from a square, which makes the dial the first component here that could get this wrong.
+     */
+    struct dial_page page;
+    INKCELL_TEST_FAIL_IF(!dial_open(&page), "the capture should open");
+
+    const int small = inkcell_fb_type_scale(page.state, INKCELL_TYPE_LABEL);
+    INKCELL_TEST_FAIL_IF(small >= page.state->scale,
+                         "this case needs a chrome scale below the body scale to say anything");
+    const int thin = inkcell_fb_dial_thickness(page.state, small);
+    const int thick = inkcell_fb_dial_thickness(page.state, page.state->scale);
+    INKCELL_TEST_FAIL_IF(thin >= thick, "the chrome scale should advise a thinner ring");
+
+    const uint32_t ground = dial_at(&page, 10, 10);
+
+    /* The band at twelve o'clock, on a box big enough that the ring is not degenerate: the
+       outer edge lands on the box's own top row, so counting down from it is the thickness. */
+    const int side = 60;
+    int measured[2] = {0, 0};
+    const int wanted[2] = {0, thin}; /* 0 means "the state's own", which is the other answer */
+    for (int i = 0; i < 2; ++i) {
+        inkcell_fb_clear(page.state, inkcell_fb_color(page.state, INKCELL_COLOR_BG));
+        struct inkcell_fb_dial dial = dial_of(500, (uint32_t)(0x0D51 + i));
+        dial.rect = (struct inkcell_fb_rect){.x = 20, .y = 20, .w = side, .h = side};
+        dial.thickness = wanted[i];
+        inkcell_fb_draw_dial(page.state, &dial);
+        for (int y = 20; y < 20 + side; ++y) {
+            if (dial_at(&page, 20 + side / 2, y) == ground) {
+                break;
+            }
+            ++measured[i];
+        }
+    }
+    INKCELL_TEST_FAIL_IF(measured[0] != thick,
+                         "a dial naming no thickness should take the state's");
+    INKCELL_TEST_FAIL_IF(measured[1] != thin, "a dial naming one should be drawn at exactly that");
+
+    /*
+     * And the box the helper calls the smallest worth drawing at that scale is one the draw
+     * accepts, which is the half of this that used to draw nothing at all.
+     */
+    inkcell_fb_clear(page.state, inkcell_fb_color(page.state, INKCELL_COLOR_BG));
+    const int least = inkcell_fb_dial_min_side(page.state, small);
+    struct inkcell_fb_dial compact = dial_of(500, 0x0D53);
+    compact.thickness = thin;
+    compact.rect = (struct inkcell_fb_rect){.x = 20, .y = 20, .w = least, .h = least};
+    inkcell_fb_draw_dial(page.state, &compact);
+    INKCELL_TEST_FAIL_IF(dial_at(&page, 20 + least / 2, 20) == ground,
+                         "a box at the helper's own minimum should draw at that scale");
+
+    inkcell_capture_close(page.capture);
+    record_success(test_name);
+}

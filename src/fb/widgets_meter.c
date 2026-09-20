@@ -304,7 +304,10 @@ void inkcell_fb_draw_dial(struct inkcell_backend_fb_state *state,
     }
     const struct inkcell_fb_rect r = dial->rect;
     const int side = r.w < r.h ? r.w : r.h;
-    const int thickness = inkcell_fb_dial_thickness(state, state->scale);
+    /* The caller's, or the state's when it named none - never recomputed from a scale the
+       caller may not have sized against. See `thickness` on struct inkcell_fb_dial. */
+    const int thickness =
+        dial->thickness > 0 ? dial->thickness : inkcell_fb_dial_thickness(state, state->scale);
     if (side < 3 * thickness) {
         return; /* no room for a ring with a hole in it; see inkcell_fb_dial_min_side() */
     }

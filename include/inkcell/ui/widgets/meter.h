@@ -179,6 +179,18 @@ struct inkcell_fb_dial {
        chooses the tone. */
     const struct inkcell_band *band;
     enum inkcell_tone tone;
+    /*
+     * How thick the ring is drawn, in pixels. 0 takes inkcell_fb_dial_thickness() at the
+     * state's own scale, which is right for a dial that is the subject of its screen.
+     *
+     * Carried rather than recomputed, and that is the whole of what keeps the measure and the
+     * draw from disagreeing. A bar's thickness is simply the height of the box it was handed,
+     * so the two cannot diverge; a ring's is not derivable from a square, so it has to be
+     * *stated*. A caller that sized its box with inkcell_fb_dial_min_side() at some scale sets
+     * this from inkcell_fb_dial_thickness() at the same one - and a caller that leaves both
+     * alone gets one answer for both, which is the case that needs no thought at all.
+     */
+    int thickness;
     bool selected; /* the row or card under it carries the cursor fill */
     enum inkcell_color ground;
     /*
@@ -192,12 +204,18 @@ struct inkcell_fb_dial {
     const char *label;
 };
 
-/* How thick the ring is drawn at `scale`: the bar's thickness, so the two read as one family. */
+/* What a ring at `scale` should be thick, which is the bar's thickness there - so a dial and a
+   meter on one screen are drawn with one weight. Goes in `thickness` above. */
 int inkcell_fb_dial_thickness(const struct inkcell_backend_fb_state *state, int scale);
 
 /*
  * The smallest box worth drawing a dial in at `scale` - twice the thickness plus room for the
  * hole to still be a hole. Below it a caller should draw the bar instead.
+ *
+ * A caller that sizes with this must set `thickness` from inkcell_fb_dial_thickness() at the
+ * *same* scale, or it has measured against one ring and drawn another. Three times the
+ * thickness is the whole of the arithmetic, so a caller stating its own thickness can work it
+ * out directly.
  */
 int inkcell_fb_dial_min_side(const struct inkcell_backend_fb_state *state, int scale);
 
