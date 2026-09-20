@@ -16,6 +16,7 @@ backend and its component set, and the evdev layer that turns a handheld's butto
 | **Glyphs** | Emoji, icons and font tables, generated (`scripts/gen-*.py`) and committed. |
 | **Layout** | Lines measured in *cells*, scroll windows, text wrapping done once for both the measure and the draw pass. |
 | **Widgets** | Buttons, chips, app bars, list rows, chat bubbles, cards, switches, segmented buttons, meters, charts, dialogs, snackbars, QR codes. |
+| **Shapes** | Anti-aliased rounded rectangles, rings and arcs, in integers - so a curve is the same curve on every host that draws it. |
 | **Framebuffer** | `/dev/fb0`, the page flip, damage tracking, a glyph cache, and an off-screen renderer for screenshots. |
 | **Input** | evdev to a logical key, hat axes, analogue triggers, key repeat, per-device button profiles. |
 | **i18n** | A catalog mechanism with plural rules and format-string validation. |

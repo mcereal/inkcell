@@ -16,6 +16,7 @@ add_executable(inkcell_gallery
     scenes_overlays.c
     scenes_typography.c
     scenes_palette.c
+    scenes_shapes.c
 )
 
 # Its own directory, so that catalog.def and gallery.h are found the way an application finds

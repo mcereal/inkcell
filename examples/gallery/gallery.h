@@ -112,6 +112,7 @@ void gallery_scene_transcript(struct inkcell_backend_fb_state *state);
 void gallery_scene_overlays(struct inkcell_backend_fb_state *state);
 void gallery_scene_typography(struct inkcell_backend_fb_state *state);
 void gallery_scene_palette(struct inkcell_backend_fb_state *state);
+void gallery_scene_shapes(struct inkcell_backend_fb_state *state);
 
 /* ---- shared scene furniture --------------------------------------------------------------------
  *

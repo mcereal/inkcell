@@ -237,10 +237,17 @@ void inkcell_fb_draw_selection(struct inkcell_backend_fb_state *state,
         outline = mark;
     }
 
-    /* The ring, hollowed out. Two fills, the way every outline in this file is drawn. */
-    inkcell_fb_fill_round_rect(state, sel->rect.x, sel->rect.y, side, side, radius, outline);
-    inkcell_fb_fill_round_rect(state, sel->rect.x + ring, sel->rect.y + ring, side - 2 * ring,
-                               side - 2 * ring, radius - ring > 0 ? radius - ring : 0, ground);
+    /*
+     * The ring, as a ring.
+     *
+     * This was two fills - the larger shape, then the smaller one in the ground colour laid
+     * over it - which is how every outline in this file used to be drawn. That needs to know
+     * what is behind the hole, and it steps twice, once on each of the two edges it paints.
+     * inkcell_fb_stroke_round_rect() is one shape: the hole is left alone rather than repainted,
+     * so a radio inside a selected row no longer punches the row's fill back to the body ground.
+     */
+    inkcell_fb_stroke_round_rect(state, sel->rect.x, sel->rect.y, side, side, radius, ring,
+                                 outline);
 
     /*
      * The mark, grown from the centre.

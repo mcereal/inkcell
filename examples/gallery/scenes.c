@@ -33,6 +33,7 @@ static const struct gallery_scene k_scenes[] = {
     {"overlays", gallery_scene_overlays, 400U},
     {"typography", gallery_scene_typography, 0U},
     {"palette", gallery_scene_palette, 0U},
+    {"shapes", gallery_scene_shapes, 0U},
 };
 
 const struct gallery_scene *gallery_scenes(size_t *count) {
