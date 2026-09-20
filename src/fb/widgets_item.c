@@ -397,6 +397,56 @@ static size_t inkcell_fb_trailing_cols(const struct inkcell_backend_fb_state *st
     return (want > 0U && cols > want + reserved) ? want : 0U;
 }
 
+/*
+ * Whether this row's trailing slot will come out as a *control* - something the reader can see
+ * is theirs to work - rather than as words, or as nothing at all.
+ *
+ * `marker_yields_to_control` is what asks, and the question is deliberately about what will be
+ * drawn rather than about what was requested. Two ways a row can ask for a control and not get
+ * one, and both leave a label with nothing beside it:
+ *
+ *   - **it does not fit.** inkcell_fb_trailing_cols() hands back zero when the line cannot spare
+ *     the slot its cells, and the caller draws no trailing at all. A switch and the two
+ *     selection controls have a fixed width, so this is the whole of their answer - asked here
+ *     with the same call the measuring pass makes, because a fit worked out twice is a fit two
+ *     pieces of code can come to disagree about.
+ *   - **it has a second form.** A segmented button falls back to its chosen word, which
+ *     inkcell_fb_segmented_cols() reports through `as_text`: room for the word is still room, so
+ *     a non-zero answer there does not mean the segments were drawn.
+ *
+ * A meter and a signal staircase are readings. They are pictures of a value rather than offers
+ * to change one, so neither supersedes anything in the gutter however well it fits.
+ */
+static bool inkcell_fb_trailing_is_control(const struct inkcell_backend_fb_state *state,
+                                           size_t cols, size_t reserved,
+                                           const struct inkcell_fb_trailing *trailing) {
+    switch (trailing->kind) {
+    case INKCELL_FB_TRAILING_SWITCH:
+        if (trailing->sw == NULL) {
+            return false;
+        }
+        break;
+    case INKCELL_FB_TRAILING_CHECKBOX:
+    case INKCELL_FB_TRAILING_RADIO:
+        if (trailing->sel == NULL) {
+            return false;
+        }
+        break;
+    case INKCELL_FB_TRAILING_SEGMENTED: {
+        /* Already the room question and the form question at once: this returns zero, with
+           `as_text` set, when there is not even room for the word. */
+        bool as_text = true;
+        (void)inkcell_fb_segmented_cols(state, cols > reserved ? cols - reserved : 0U,
+                                        trailing->segmented, &as_text);
+        return !as_text;
+    }
+    case INKCELL_FB_TRAILING_NONE:
+    default:
+        return false;
+    }
+    return inkcell_fb_trailing_cols(state, cols, reserved, trailing) > 0U;
+}
+
 /* One piece of a headline, clipped to the cells it was given - declared here for the segmented
    slot's fallback, which writes into the row's value column rather than the trailing edge and
    owes that column the same clipping every other piece of the line gets. */
@@ -852,12 +902,26 @@ void inkcell_fb_list_item(struct inkcell_backend_fb_state *state, struct inkcell
     /* Into the blank cell the label column and the value leave between them, and only when the
        value column actually got that far - a label column wider than the row is clipped, and a
        marker drawn at a column the words no longer reach would sit on top of the label. */
-    if (item->label_cols > 0U && inkcell_icon_is_valid(item->marker_icon) &&
+    /*
+     * The control the row actually drew, if it drew one, supersedes a marker that was offering
+     * the same thing - see marker_yields_to_control.
+     *
+     * The slider is asked separately because it is a band under the words rather than a trailing
+     * slot, and the test is the draw's own, term for term: it needs the second step the list may
+     * not have given, and it loses the bar to a meter that wants it. Writing "has a slider"
+     * here instead would suppress the mark on a row that drew a *meter* - a reading, which
+     * supersedes nothing.
+     */
+    const bool slider_drawn = item->slider != NULL && g.bar_h > 0 && item->meter == NULL;
+    const bool marker_superseded =
+        item->marker_yields_to_control &&
+        (inkcell_fb_trailing_is_control(state, g.cols, reserved, &item->trailing) || slider_drawn);
+    if (!marker_superseded && item->label_cols > 0U && inkcell_icon_is_valid(item->marker_icon) &&
         g.cols > item->label_cols + INKCELL_FB_ITEM_MARKER_CELLS) {
         inkcell_fb_draw_icon(
             state, g.text_x + (int)(item->label_cols + 1U) * inkcell_fb_char_adv(state, scale),
             g.head_y, item->marker_icon, scale, head_ink, ground);
-    } else if (item->label_cols == 0U && item->marker_slot &&
+    } else if (!marker_superseded && item->label_cols == 0U && item->marker_slot &&
                inkcell_icon_is_valid(item->marker_icon)) {
         /* Into the cell the measure held back before the words. In the row's own ink, like every
            other icon in a row's slots: the star is as loud as the name it sits beside. */
