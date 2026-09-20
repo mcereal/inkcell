@@ -176,11 +176,22 @@ bool inkcell_focus_rect_of(const struct inkcell_focus_map *map, uint32_t id,
  *
  * How it chooses, because a screen is entitled to predict it. Two rules, in order:
  *
- *   1. **The beam.** Anything overlapping the source across the direction of travel - the rows
- *      in line with it, for a left or right press - beats anything that does not, however much
- *      closer the out-of-line one is. This is what keeps a press moving along a row instead of
- *      diving at the nearest corner, and it is why moving right along a chip strip does not
- *      fall into the card underneath at the first ragged gap.
+ *   1. **The beam**: whether a candidate is in line with the source across the direction of
+ *      travel - on the same row, for a left or right press, or in the same column for an up or
+ *      down one.
+ *
+ *      Sideways this is absolute. An in-line candidate beats one that is not, however much
+ *      closer the out-of-line one is, which is what keeps a press travelling along a chip strip
+ *      instead of diving into the card underneath at the first ragged gap.
+ *
+ *      Up and down keep the same preference with one release valve, and it is Android's rather
+ *      than an oversight: an in-line candidate a long way down does not beat one sitting
+ *      diagonally nearer than that reach. A column is normally tight and the in-line one wins
+ *      on distance anyway; where it does not, the choice is between stepping to the control
+ *      beside you and leaping the height of the panel to stay in a column the reader is not
+ *      thinking in. A screen that needs the sideways guarantee vertically is a screen whose
+ *      columns should say so by being columns - see `inkcell_focus_find_wrapping()`, which is
+ *      in-line only, both ways.
  *   2. **Weighted distance**, among equals: `13 * along² + across²`, where `along` is the gap in
  *      the direction pressed and `across` is how far the two centres are offset from each other.
  *      The 13 is Android's, kept rather than re-derived because the number is not the point -
@@ -198,11 +209,16 @@ uint32_t inkcell_focus_find(const struct inkcell_focus_map *map, uint32_t id,
 /*
  * The same, except that running out of screen comes back round.
  *
- * Where it wraps to is stated as a property rather than as a second algorithm: **it lands where
- * holding the opposite direction would have ended up**. Right at the last chip walks left from
- * there until nothing is left and answers with the chip it stopped on, which is the first chip
- * of that strip - and not something on another row, because every step of that walk is an
- * ordinary `inkcell_focus_find()` and stays in line for the same reason a press does.
+ * Where it wraps to: **the furthest one back that is still in line with the source** - the other
+ * end of the row a left or right press was travelling along, the top of the column an up or down
+ * press was. In line is the beam of rule 1 above, and it is the whole of the rule here, with no
+ * release valve in either direction: the strip's own chips are the candidates and the row under
+ * it is not, whatever that row is doing with its own edges.
+ *
+ * Absolute here and not when a press is merely moving, because the two answer different
+ * questions. A press asks what is over there and should reach a near thing off to one side
+ * rather than nothing at all; a wrap asks for the other end of *this* row, and a wrap that
+ * answered with another row has not brought the reader round, it has lost their place.
  *
  * Which of the two a screen calls is an editorial decision, and the toolkit has no opinion. A
  * strip of four filters wants to wrap; a column of settings does not, because a reader holding

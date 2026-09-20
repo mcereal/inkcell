@@ -170,6 +170,37 @@ INKCELL_TEST_CASE(focus_leaves_a_row_when_nothing_is_level_with_it, unit) {
 }
 
 /*
+ * The beam is absolute sideways and released by distance vertically, which is Android's
+ * asymmetry and is stated in the contract rather than merely happening.
+ *
+ * Sideways there is no argument: a press along a row is travelling along that row, and the
+ * nearer thing off it can wait for the press that means "off it". Vertically the release is the
+ * one that keeps a cursor from leaping the height of a sparse panel to stay in a column - the
+ * in-line cell here is two hundred pixels down and the diagonal one is ten.
+ */
+INKCELL_TEST_CASE(focus_beam_is_absolute_sideways_and_not_vertically, unit) {
+    struct inkcell_focus_item storage[FOCUS_STORAGE];
+    struct inkcell_focus_map map;
+
+    inkcell_focus_begin(&map, storage, FOCUS_STORAGE);
+    (void)inkcell_focus_add(&map, ID_A, 0, 0, 20, 20);
+    (void)inkcell_focus_add(&map, ID_B, 200, 0, 20, 20); /* in line, far */
+    (void)inkcell_focus_add(&map, ID_C, 30, 30, 20, 20); /* off the row, near */
+    INKCELL_TEST_FAIL_IF(inkcell_focus_find(&map, ID_A, INKCELL_FOCUS_RIGHT) != ID_B,
+                         "a sideways press should stay on its row however far along the next "
+                         "thing on it is");
+
+    inkcell_focus_begin(&map, storage, FOCUS_STORAGE);
+    (void)inkcell_focus_add(&map, ID_A, 0, 0, 20, 20);
+    (void)inkcell_focus_add(&map, ID_B, 0, 200, 20, 20); /* in line, far */
+    (void)inkcell_focus_add(&map, ID_C, 30, 30, 20, 20); /* off the column, near */
+    INKCELL_TEST_FAIL_IF(inkcell_focus_find(&map, ID_A, INKCELL_FOCUS_DOWN) != ID_C,
+                         "a vertical press should take the near diagonal over a column two "
+                         "hundred pixels long");
+    record_success(test_name);
+}
+
+/*
  * Wrapping, and the property it is defined by: it lands where holding the other direction would
  * have. The second strip below is the part worth asserting - a wrap that walked the whole map
  * would come back round onto another row, which is a cursor teleporting rather than wrapping.
@@ -202,6 +233,30 @@ INKCELL_TEST_CASE(focus_wraps_along_the_row_and_no_further, unit) {
        cursor index got for free and would have been sorry to lose. */
     INKCELL_TEST_FAIL_IF(inkcell_focus_find_wrapping(&map, ID_D, INKCELL_FOCUS_DOWN) != ID_A,
                          "down at the bottom of a column should come back to its top");
+    record_success(test_name);
+}
+
+/*
+ * The wrap is in line only, and this is the layout that says so: the row below starts further
+ * left than the row being wrapped.
+ *
+ * A wrap implemented as "hold the other direction until the screen runs out" lands on ID_C
+ * here, because the last of those presses has nothing in line ahead of it and is entitled to
+ * leave the row - which is the right answer for a press and the wrong one for a wrap. Coming
+ * round to a row the reader was not on has not brought them back to the start, it has lost
+ * their place.
+ */
+INKCELL_TEST_CASE(focus_wrapping_ignores_a_row_that_reaches_further_back, unit) {
+    struct inkcell_focus_item storage[FOCUS_STORAGE];
+    struct inkcell_focus_map map;
+
+    inkcell_focus_begin(&map, storage, FOCUS_STORAGE);
+    (void)inkcell_focus_add(&map, ID_A, 0, 0, 90, 40);
+    (void)inkcell_focus_add(&map, ID_B, 100, 0, 90, 40);
+    (void)inkcell_focus_add(&map, ID_C, -10, 60, 90, 40);
+
+    INKCELL_TEST_FAIL_IF(inkcell_focus_find_wrapping(&map, ID_B, INKCELL_FOCUS_RIGHT) != ID_A,
+                         "a wrap should come round to the start of its own row");
     record_success(test_name);
 }
 

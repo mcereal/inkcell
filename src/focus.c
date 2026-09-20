@@ -47,20 +47,6 @@ static bool focus_horizontal(enum inkcell_focus_dir dir) {
     return dir == INKCELL_FOCUS_LEFT || dir == INKCELL_FOCUS_RIGHT;
 }
 
-static enum inkcell_focus_dir focus_opposite(enum inkcell_focus_dir dir) {
-    switch (dir) {
-    case INKCELL_FOCUS_LEFT:
-        return INKCELL_FOCUS_RIGHT;
-    case INKCELL_FOCUS_RIGHT:
-        return INKCELL_FOCUS_LEFT;
-    case INKCELL_FOCUS_UP:
-        return INKCELL_FOCUS_DOWN;
-    case INKCELL_FOCUS_DOWN:
-    default:
-        return INKCELL_FOCUS_UP;
-    }
-}
-
 /* Half-open throughout: a box at x=10 w=20 ends at 30, and the box starting at 30 is beside it
    rather than one pixel inside it. Negating the far edge is what makes a leftward press the
    same code as a rightward one. */
@@ -164,11 +150,19 @@ static int64_t focus_weight(int64_t along, int64_t across) {
 /*
  * Whether `a` beats `b` on the beam alone, before any distance is measured.
  *
- * In line beats out of line, however much closer the out-of-line one is: that is what keeps a
- * press travelling along a chip strip instead of diving into the card below it at the first
- * ragged gap. The last clause is the one exception, and it is a vertical one - a candidate out
- * of the beam but *overlapping* the source's own row can still win a left or right press,
- * because it is beside us in every sense a reader has.
+ * In line beats out of line, and sideways that is the whole rule: it is what keeps a press
+ * travelling along a chip strip instead of diving into the card below it at the first ragged
+ * gap. Two things stop it being absolute, and both are Android's.
+ *
+ * An out-of-beam candidate *overlapping* the source's leading edge is never beaten on the beam,
+ * whichever way the press went: it is beside us in every sense a reader has, and the overlap is
+ * how a tall card beside two short buttons presents itself.
+ *
+ * And a vertical press releases the rule by distance - an in-line candidate wins only while it
+ * is nearer than the far edge of the out-of-line one. A column is normally tight enough that it
+ * wins on distance regardless; where it is not, this is the cursor stepping to the control
+ * beside it rather than leaping the height of the panel to stay in line. The contract states
+ * this, and focus_beam_is_absolute_sideways_and_not_vertically holds it.
  */
 static bool focus_beam_beats(const struct focus_span *src, const struct focus_span *a,
                              const struct focus_span *b, bool horizontal) {
@@ -298,31 +292,41 @@ uint32_t inkcell_focus_find_wrapping(const struct inkcell_focus_map *map, uint32
     if (next != INKCELL_FOCUS_NONE) {
         return next;
     }
-    if (map == NULL) {
+    const struct inkcell_focus_item *from = focus_item(map, id);
+    if (from == NULL) {
         return INKCELL_FOCUS_NONE;
     }
 
     /*
-     * Walk the other way until the screen runs out, and answer with where that stopped - which
-     * is the header's promise stated as code: wrapping lands where holding the opposite
-     * direction would have.
+     * The furthest one back that is still in line: the other end of the row, and nothing that
+     * is not on it.
      *
-     * Bounded by the number of registered rectangles rather than by "until it stops moving". A
-     * box that entirely contains another can be a candidate of it in the same direction that it
-     * is a candidate of the box - two rectangles that each think the other is to their left -
-     * and a walk with no bound on it would sit between them forever on a layout nobody
-     * inspected.
+     * The beam is checked here and not left to fall out of walking the other direction one
+     * press at a time. That walk is what this used to do, and it leaked: a press with nothing
+     * in line ahead of it is *entitled* to leave the row (see the note on the beam above), so
+     * the last step of a walk along a strip could step off it onto whatever row below happened
+     * to extend further back, and the wrap answered with that. Asking the question this file
+     * exists to answer - what is in line with me - is also cheaper than n presses, and it
+     * cannot loop on a layout where two boxes each contain the other.
      */
-    const enum inkcell_focus_dir back = focus_opposite(dir);
-    uint32_t far = id;
-    for (uint32_t step = 0U; step < map->count; ++step) {
-        const uint32_t prev = inkcell_focus_find(map, far, back);
-        if (prev == INKCELL_FOCUS_NONE) {
-            break;
+    const struct focus_span src = focus_project(from->rect, dir);
+    uint32_t best_id = INKCELL_FOCUS_NONE;
+    struct focus_span best = {0, 0, 0, 0, 0};
+
+    for (uint32_t i = 0U; i < map->count; ++i) {
+        if (map->items[i].id == id) {
+            continue;
         }
-        far = prev;
+        const struct focus_span cand = focus_project(map->items[i].rect, dir);
+        if (!focus_beams_overlap(&src, &cand)) {
+            continue;
+        }
+        if (best_id == INKCELL_FOCUS_NONE || cand.start < best.start) {
+            best_id = map->items[i].id;
+            best = cand;
+        }
     }
-    return (far == id) ? INKCELL_FOCUS_NONE : far;
+    return best_id;
 }
 
 uint32_t inkcell_focus_first(const struct inkcell_focus_map *map) {
