@@ -15,9 +15,8 @@
 
 /* ---- chat bubbles ------------------------------------------------------------------------- */
 
-/* An icon stands in one cell, like a glyph, and one cell of air separates two parts of the
-   trailing run. Both are counted by the measure and spent by the draw. */
-#define INKCELL_FB_BUBBLE_ICON_CELLS 1U
+/* One cell of air separates two parts of the trailing run, counted by the measure and spent by
+   the draw. The icon's own width is not a cell - see inkcell_fb_icon_box(). */
 #define INKCELL_FB_BUBBLE_META_GAP 1U
 
 /* Reactions, relay chip, padlock, clock, delivery mark: the run is never longer than its five
@@ -150,8 +149,17 @@ static void inkcell_fb_bubble_part_icon(const struct inkcell_backend_fb_state *s
     }
     parts[*count].text = NULL;
     parts[*count].icon = icon;
-    parts[*count].width =
-        (size_t)INKCELL_FB_BUBBLE_ICON_CELLS * (size_t)inkcell_fb_char_adv(state, state->scale);
+    /*
+     * The box the symbol is drawn in, not the cell it sits on.
+     *
+     * A symbol stands as tall as the capitals beside it, and the cell advance is narrower than
+     * the glyph body is tall - so an icon is drawn a little wider than a cell and centred on
+     * it, which inkcell_fb_icon_box() is the number for. Measured as a cell, the run came out
+     * narrower than it draws and the last part of it hung out of the bubble the run was fitted
+     * into: a pending clock and a failed mark, each drawn half outside the fill behind it, on
+     * every scale and both themes.
+     */
+    parts[*count].width = (size_t)inkcell_fb_icon_box(state, state->scale);
     *count += 1U;
 }
 

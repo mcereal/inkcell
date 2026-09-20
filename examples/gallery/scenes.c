@@ -34,6 +34,11 @@ static const struct gallery_scene k_scenes[] = {
     {"typography", gallery_scene_typography, 0U},
     {"palette", gallery_scene_palette, 0U},
     {"shapes", gallery_scene_shapes, 0U},
+    /* Two pictures of one widget: the character grid sets its keycaps as text and the emoji
+       panel draws them as sprites at the size of the key, which is a different path through the
+       button and the one that looks wrong first. */
+    {"keyboard", gallery_scene_keyboard, 0U},
+    {"keyboard_emoji", gallery_scene_keyboard_emoji, 0U},
 };
 
 const struct gallery_scene *gallery_scenes(size_t *count) {

@@ -87,6 +87,7 @@ add_library(inkcell STATIC
     src/fb/widgets_chrome.c
     src/fb/widgets_control.c
     src/fb/widgets_item.c
+    src/fb/widgets_keyboard.c
     src/fb/widgets_list.c
     src/fb/widgets_meter.c
     src/fb/widgets_overlay.c
