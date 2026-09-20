@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: debug
+            args: ""
+          - name: asan+ubsan
+            args: "-DINKCELL_ENABLE_ASAN=ON -DINKCELL_ENABLE_UBSAN=ON"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug ${{ matrix.args }}
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  format:
+    name: clang-format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format-18
+
+      # The generated glyph tables are excluded for the reason they are in their own directory:
+      # 42k lines nobody wrote and nobody reads, and reformatting them would bury every real
+      # change in a diff the size of the repository.
+      - name: Check formatting
+        run: |
+          files=$(git ls-files '*.c' '*.h' | grep -v '^src/generated/')
+          clang-format-18 --dry-run --Werror $files

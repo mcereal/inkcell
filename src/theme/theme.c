@@ -32,6 +32,7 @@
 
 #include "inkcell/ui/theme.h"
 
+#include "inkcell/utils/env.h"
 #include "inkcell/utils/log.h"
 
 #include <stdio.h>

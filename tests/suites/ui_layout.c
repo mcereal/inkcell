@@ -1,0 +1,692 @@
+#define _POSIX_C_SOURCE 200809L
+
+/*
+ * The backend-agnostic layout primitives: the cell-measured line builder and the scroll window.
+ *
+ * These are worth their own suite because they are where the byte/cell confusion used to live.
+ * Every case here uses a real multi-byte cell - U+2B50, the star the Nodes tab marks a pinned
+ * node with, which is three bytes and one column - so a helper that quietly counted bytes fails
+ * loudly instead of only misbehaving on somebody's emoji-named radio.
+ */
+
+#include "framework/inkcell_test.h"
+
+#include "inkcell/ui/anim.h"
+#include "inkcell/ui/emoji.h"
+#include "inkcell/ui/layout.h"
+
+#include <string.h>
+
+#define STAR "\xE2\xAD\x90" /* U+2B50, three bytes, one drawn cell */
+
+INKCELL_TEST_CASE(layout_line_builds_and_measures, unit) {
+    struct inkcell_line line;
+    inkcell_line_reset(&line);
+    INKCELL_TEST_FAIL_IF(inkcell_line_width(&line) != 0U, "a reset line should be empty");
+
+    inkcell_line_printf(&line, "%s", "ab");
+    inkcell_line_printf(&line, "%s%d", STAR, 7);
+    INKCELL_TEST_FAIL_IF(strcmp(inkcell_line_text(&line), "ab" STAR "7") != 0,
+                      "printf should append rather than replace");
+    INKCELL_TEST_FAIL_IF(inkcell_line_width(&line) != 4U,
+                      "an emoji should measure one column, not three");
+
+    /* Clipping happens on a cell boundary, so the star survives whole or not at all. */
+    inkcell_line_fit(&line, 3U);
+    INKCELL_TEST_FAIL_IF(strcmp(inkcell_line_text(&line), "ab" STAR) != 0,
+                      "fit should cut on a cell boundary");
+    record_success(test_name);
+}
+
+/*
+ * The bug this exists to prevent: "%-4s" pads to four *bytes*, so a one-emoji short name comes
+ * out of it one column wide and the value column beside it no longer lines up.
+ */
+INKCELL_TEST_CASE(layout_line_column_pads_by_cells, unit) {
+    struct inkcell_line line;
+
+    inkcell_line_reset(&line);
+    inkcell_line_column(&line, STAR, 4U);
+    INKCELL_TEST_FAIL_IF(inkcell_line_width(&line) != 4U,
+                      "a one-cell emoji should be padded to the full column");
+    INKCELL_TEST_FAIL_IF(strcmp(inkcell_line_text(&line), STAR "   ") != 0,
+                      "padding should be three spaces after a one-cell name");
+
+    /* Short of the column it pads; past it, it clips - both measured in cells. */
+    inkcell_line_reset(&line);
+    inkcell_line_column(&line, "Battery", 4U);
+    INKCELL_TEST_FAIL_IF(strcmp(inkcell_line_text(&line), "Batt") != 0,
+                      "a label wider than its column should be clipped to it");
+
+    /* A column appended after existing text is measured from where it starts, not from zero. */
+    inkcell_line_reset(&line);
+    inkcell_line_printf(&line, "%s", "* ");
+    inkcell_line_column(&line, "ab", 4U);
+    inkcell_line_printf(&line, "%s", "|");
+    INKCELL_TEST_FAIL_IF(strcmp(inkcell_line_text(&line), "* ab  |") != 0,
+                      "a column should be relative to the text already in the line");
+    record_success(test_name);
+}
+
+/* A metric on the right-hand end of a row has to land at the last column exactly, whatever the
+   name beside it is spelled with. */
+INKCELL_TEST_CASE(layout_line_right_aligns_by_cells, unit) {
+    struct inkcell_line line;
+
+    inkcell_line_reset(&line);
+    inkcell_line_printf(&line, "%s", "Andy");
+    inkcell_line_right(&line, 20U, "-7.5dB 3m");
+    INKCELL_TEST_FAIL_IF(inkcell_line_width(&line) != 20U,
+                      "a right-aligned row should fill exactly the columns it was given");
+    INKCELL_TEST_FAIL_IF(strcmp(inkcell_line_text(&line), "Andy       -7.5dB 3m") != 0,
+                      "the metric should sit flush against the right edge");
+
+    /* Nine emoji are nine columns and twenty-seven bytes: aligning on the byte count would
+       push the metric a long way off the panel. */
+    inkcell_line_reset(&line);
+    inkcell_line_printf(&line, "%s", STAR STAR STAR STAR STAR STAR STAR STAR STAR);
+    inkcell_line_right(&line, 20U, "3m");
+    INKCELL_TEST_FAIL_IF(inkcell_line_width(&line) != 20U,
+                      "an emoji name should not push a right-aligned metric off the row");
+
+    /* A name too long for the row is what clips, not the metric. */
+    inkcell_line_reset(&line);
+    inkcell_line_printf(&line, "%s", "a name far longer than the row is wide");
+    inkcell_line_right(&line, 20U, "3m");
+    INKCELL_TEST_FAIL_IF(inkcell_line_width(&line) != 20U, "an over-long name should be clipped");
+    INKCELL_TEST_FAIL_IF(strcmp(inkcell_line_text(&line) + 18, "3m") != 0,
+                      "the metric should survive an over-long name");
+
+    /* No metric is just a clip. */
+    inkcell_line_reset(&line);
+    inkcell_line_printf(&line, "%s", "abcdef");
+    inkcell_line_right(&line, 4U, "");
+    INKCELL_TEST_FAIL_IF(strcmp(inkcell_line_text(&line), "abcd") != 0,
+                      "an empty right half should leave a plain clip");
+    record_success(test_name);
+}
+
+/*
+ * Overflowing the builder must not leave half a UTF-8 sequence behind. snprintf truncates on a
+ * byte, and a stray lead byte would draw as a replacement box and would be malformed on the
+ * paths that also log or serialise the line.
+ */
+INKCELL_TEST_CASE(layout_line_overflow_stays_valid_utf8, unit) {
+    struct inkcell_line line;
+    inkcell_line_reset(&line);
+    for (int i = 0; i < 400; ++i) {
+        inkcell_line_printf(&line, "%s", STAR);
+    }
+
+    const size_t bytes = strlen(inkcell_line_text(&line));
+    INKCELL_TEST_FAIL_IF(bytes >= INKCELL_LINE_MAX, "the builder should stay inside its buffer");
+    INKCELL_TEST_FAIL_IF(bytes % 3U != 0U, "a truncated append should not leave a partial sequence");
+    INKCELL_TEST_FAIL_IF(inkcell_text_cells(inkcell_line_text(&line)) != bytes / 3U,
+                      "every byte left in the line should belong to a whole star");
+
+    /* Padding cannot overflow it either. */
+    inkcell_line_pad_to(&line, 4096U);
+    INKCELL_TEST_FAIL_IF(strlen(inkcell_line_text(&line)) >= INKCELL_LINE_MAX,
+                      "padding should stop at the end of the buffer");
+    record_success(test_name);
+}
+
+/* The window arithmetic every screen used to write out by hand. */
+INKCELL_TEST_CASE(layout_list_window_follows_cursor, unit) {
+    /* Everything fits: no scrolling, whatever the cursor is doing. */
+    INKCELL_TEST_FAIL_IF(inkcell_list_first_visible(4U, 5U, 10U) != 0U,
+                      "a list that fits should never scroll");
+    /* The cursor is inside the first window. */
+    INKCELL_TEST_FAIL_IF(inkcell_list_first_visible(2U, 20U, 5U) != 0U,
+                      "a cursor inside the first window should not scroll it");
+    /* Past it, the window follows - and stops a look-ahead short of the cursor rather than on
+       it, so the reader can see what the next press moves onto. Five rows of window buys one
+       step of that (a third of it), so a cursor on row 5 puts row 6 on the bottom line. */
+    INKCELL_TEST_FAIL_IF(inkcell_list_first_visible(5U, 20U, 5U) != 2U,
+                      "the window should follow the cursor with a row to spare below it");
+    /* At the end, the window stops rather than running off the list. */
+    INKCELL_TEST_FAIL_IF(inkcell_list_first_visible(19U, 20U, 5U) != 15U,
+                      "the last window should end on the last item");
+    /* A body with no room draws nothing rather than dividing by zero. */
+    INKCELL_TEST_FAIL_IF(inkcell_list_first_visible(3U, 20U, 0U) != 0U,
+                      "a zero-row body should not scroll");
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(layout_list_iterates_its_window, unit) {
+    /* A cursor past the end is clamped here, which is the check every renderer repeated. */
+    struct inkcell_list list = inkcell_list_begin(3U, 99U, 10U);
+    INKCELL_TEST_FAIL_IF(list.cursor != 2U,
+                      "an out-of-range cursor should be clamped to the last row");
+
+    uint32_t index = 0U;
+    uint32_t seen = 0U;
+    while (inkcell_list_next(&list, &index)) {
+        INKCELL_TEST_FAIL_IF(index != seen, "iteration should hand back consecutive indices");
+        seen++;
+    }
+    INKCELL_TEST_FAIL_IF(seen != 3U, "a short list should yield every item");
+
+    /* A window smaller than the list yields only what is on screen, starting where it should. */
+    list = inkcell_list_begin(20U, 19U, 5U);
+    INKCELL_TEST_FAIL_IF(!inkcell_list_is_cursor(&list, 19U), "the cursor should be the last item");
+    seen = 0U;
+    uint32_t first = 0U;
+    while (inkcell_list_next(&list, &index)) {
+        if (seen == 0U) {
+            first = index;
+        }
+        seen++;
+    }
+    INKCELL_TEST_FAIL_IF(seen != 5U, "only the visible rows should be yielded");
+    INKCELL_TEST_FAIL_IF(first != 15U, "iteration should start at the top of the window");
+
+    /* An empty list is not a special case at the call site: it simply yields nothing. */
+    list = inkcell_list_begin(0U, 0U, 10U);
+    INKCELL_TEST_FAIL_IF(inkcell_list_next(&list, &index), "an empty list should yield nothing");
+    INKCELL_TEST_FAIL_IF(inkcell_list_is_cursor(&list, 0U), "an empty list has no cursor row");
+    record_success(test_name);
+}
+
+/*
+ * Items of differing heights.
+ *
+ * The window is measured in steps rather than items, so every one of these asks the same
+ * question twice: how many items came back, and how many *steps* they were. A model that got
+ * one right and the other wrong is exactly the failure the fixed row height was hiding - the
+ * cursor lands on a row the highlight is not under, and nothing in an item count says so.
+ */
+INKCELL_TEST_CASE(layout_list_window_counts_steps, unit) {
+    /* A uniform list is the same window it always was, said in the new unit. */
+    struct inkcell_list flat = inkcell_list_begin(20U, 19U, 5U);
+    INKCELL_TEST_FAIL_IF(flat.total != 20U || flat.capacity != 5U,
+                      "a list of one-step items should total its own count");
+    INKCELL_TEST_FAIL_IF(flat.first != 15U || flat.visible != 5U || flat.used != 5U,
+                      "a uniform list's window moved when the unit changed");
+    INKCELL_TEST_FAIL_IF(flat.first_step != 15U, "steps above the window should be its first index");
+
+    /* Two-step items in a window that does not divide evenly: seven of them fit in fifteen
+       rows, and the fifteenth row is slack rather than half a row of an eighth item. */
+    struct inkcell_list pairs = inkcell_list_begin_step(20U, 0U, 15U, 2U);
+    INKCELL_TEST_FAIL_IF(pairs.visible != 7U, "two-step items should fill the window seven deep");
+    INKCELL_TEST_FAIL_IF(pairs.used != 14U, "the window should report the steps it actually spent");
+    INKCELL_TEST_FAIL_IF(pairs.total != 40U, "twenty two-step items are forty steps");
+
+    /* Mixed: a tall row among short ones. Five steps of window over 1,3,1,1,2,1 - the window
+       around a cursor on the last item is the three items that fit above it. */
+    static const uint8_t heights[] = {1U, 3U, 1U, 1U, 2U, 1U};
+    struct inkcell_list mixed = inkcell_list_begin_heights(6U, 5U, 5U, heights);
+    INKCELL_TEST_FAIL_IF(mixed.total != 9U, "the total should be the sum of the heights");
+    INKCELL_TEST_FAIL_IF(mixed.first != 2U, "the window should fill upward from the cursor");
+    INKCELL_TEST_FAIL_IF(mixed.visible != 4U || mixed.used != 5U,
+                      "the window should take every item that fits and no more");
+    INKCELL_TEST_FAIL_IF(mixed.first_step != 4U, "steps above the window should sum the heights");
+    INKCELL_TEST_FAIL_IF(inkcell_list_item_height(&mixed, 1U) != 3U,
+                      "an item should report the height it was given");
+    INKCELL_TEST_FAIL_IF(inkcell_list_item_height(&mixed, 99U) != 0U,
+                      "an item past the end has no height");
+
+    /* A whole short list still fits, however the heights fall. */
+    struct inkcell_list roomy = inkcell_list_begin_heights(6U, 5U, 20U, heights);
+    INKCELL_TEST_FAIL_IF(roomy.first != 0U || roomy.visible != 6U,
+                      "a list that fits should start at its top");
+
+    /* One item taller than the whole window is drawn clipped rather than not drawn: refusing it
+       leaves the cursor on a row the screen does not contain, which is wrong and invisible. */
+    static const uint8_t giant[] = {1U, 9U, 1U};
+    struct inkcell_list clipped = inkcell_list_begin_heights(3U, 1U, 4U, giant);
+    INKCELL_TEST_FAIL_IF(clipped.first != 1U || clipped.visible != 1U,
+                      "an over-tall item should still be the window");
+    INKCELL_TEST_FAIL_IF(!inkcell_list_is_cursor(&clipped, 1U), "the cursor should be on it");
+
+    /* A height of 0 is read as 1. An item occupying nothing could be scrolled onto and never
+       appear, so the window would stop moving rather than draw an invisible row. */
+    static const uint8_t zeroed[] = {0U, 0U, 0U};
+    struct inkcell_list zeros = inkcell_list_begin_heights(3U, 2U, 2U, zeroed);
+    INKCELL_TEST_FAIL_IF(zeros.total != 3U, "a zero height should count as one step");
+    INKCELL_TEST_FAIL_IF(zeros.first != 1U || zeros.visible != 2U,
+                      "a list of zero-height items should still scroll");
+    record_success(test_name);
+}
+
+/*
+ * A window told to keep a span in view as well as the cursor: the node detail's card under a
+ * cursor standing on its first row. Forty one-step items in a fifteen-step window, which keeps
+ * three steps of look-ahead.
+ */
+INKCELL_TEST_CASE(ui_list_keeps_a_span_in_view, unit) {
+    const struct inkcell_list plain = inkcell_list_begin_heights(40U, 20U, 15U, NULL);
+    INKCELL_TEST_FAIL_IF(plain.first != 9U, "the cursor's own window ends three past it");
+
+    /* The span and its look-ahead fit, so the window ends three past the span instead. */
+    const struct inkcell_list card = inkcell_list_begin_span(40U, 20U, 20U, 27U, 15U, NULL);
+    INKCELL_TEST_FAIL_IF(card.first != 16U || card.visible != 15U,
+                      "a span that fits should be shown whole, with its look-ahead");
+    INKCELL_TEST_FAIL_IF(!inkcell_list_is_cursor(&card, 20U), "the cursor is unchanged");
+
+    /* Taller than the window: its top, while that still shows the cursor. */
+    const struct inkcell_list tall = inkcell_list_begin_span(40U, 12U, 10U, 35U, 15U, NULL);
+    INKCELL_TEST_FAIL_IF(tall.first != 10U, "a tall span should open at its top");
+    const struct inkcell_list deep = inkcell_list_begin_span(40U, 30U, 10U, 35U, 15U, NULL);
+    const struct inkcell_list deep_plain = inkcell_list_begin_heights(40U, 30U, 15U, NULL);
+    INKCELL_TEST_FAIL_IF(deep.first != deep_plain.first,
+                      "a cursor too far down a tall span keeps its own window");
+
+    /* Near the end the window is the last one, not one that runs out of items. */
+    const struct inkcell_list tail = inkcell_list_begin_span(40U, 36U, 36U, 39U, 15U, NULL);
+    INKCELL_TEST_FAIL_IF(tail.first != 25U || tail.visible != 15U, "a span at the end fills upward");
+
+    /* A span that does not hold the cursor is ignored, and a list that fits never scrolls. */
+    const struct inkcell_list stray = inkcell_list_begin_span(40U, 20U, 30U, 35U, 15U, NULL);
+    INKCELL_TEST_FAIL_IF(stray.first != plain.first, "a span without the cursor is not its span");
+    const struct inkcell_list fits = inkcell_list_begin_span(10U, 8U, 8U, 9U, 15U, NULL);
+    INKCELL_TEST_FAIL_IF(fits.first != 0U, "a list that fits should start at its top");
+    record_success(test_name);
+}
+
+/*
+ * The scroll thumb over items of differing heights.
+ *
+ * The case an item count gets wrong: half the items on screen is not half the list when the
+ * ones on screen are the tall ones.
+ */
+INKCELL_TEST_CASE(layout_list_scroll_counts_steps, unit) {
+    /* Four one-step items then four two-step ones: twelve steps, a window of four. At the top
+       the four short items are a third of the list, not a half. */
+    static const uint8_t heights[] = {1U, 1U, 1U, 1U, 2U, 2U, 2U, 2U};
+    struct inkcell_list top = inkcell_list_begin_heights(8U, 0U, 4U, heights);
+    INKCELL_TEST_FAIL_IF(top.visible != 4U || top.used != 4U, "the short rows should all fit");
+    struct inkcell_scroll at_top = inkcell_list_scroll(&top, 120, 4);
+    INKCELL_TEST_FAIL_IF(at_top.length != 40, "the thumb should be the steps on screen, not the rows");
+    INKCELL_TEST_FAIL_IF(at_top.offset != 0, "a list at its start reported an offset");
+
+    /* At the bottom the window holds two tall items and the thumb still ends on the end of the
+       track - the property the whole travel-rather-than-track derivation exists for, and the one
+       a window whose step count changes with position is most likely to break. */
+    struct inkcell_list bottom = inkcell_list_begin_heights(8U, 7U, 4U, heights);
+    INKCELL_TEST_FAIL_IF(bottom.visible != 2U || bottom.used != 4U,
+                      "two tall rows should fill a window of four steps");
+    struct inkcell_scroll at_bottom = inkcell_list_scroll(&bottom, 120, 4);
+    INKCELL_TEST_FAIL_IF(at_bottom.offset + at_bottom.length != 120,
+                      "a list scrolled to its end left the thumb short of the track");
+    record_success(test_name);
+}
+
+/*
+ * The wrap walk. Both the measure pass and the draw pass go through it, so what it counts is
+ * literally what a bubble draws - the failure it exists to prevent is a bubble that reserves
+ * five rows and paints six over the message below it.
+ */
+INKCELL_TEST_CASE(layout_wrap_breaks_on_words, unit) {
+    struct inkcell_wrap wrap;
+    inkcell_wrap_begin(&wrap, "the quick brown fox", 10U);
+
+    INKCELL_TEST_FAIL_IF(!inkcell_wrap_next(&wrap), "the first line should be produced");
+    INKCELL_TEST_FAIL_IF(strcmp(wrap.line, "the quick") != 0,
+                      "the break should land on the space, with no trailing blank");
+    INKCELL_TEST_FAIL_IF(!inkcell_wrap_next(&wrap), "the second line should be produced");
+    INKCELL_TEST_FAIL_IF(strcmp(wrap.line, "brown fox") != 0, "the rest should follow whole");
+    INKCELL_TEST_FAIL_IF(inkcell_wrap_next(&wrap), "the text should be spent");
+
+    INKCELL_TEST_FAIL_IF(inkcell_wrap_lines("the quick brown fox", 10U) != 2U,
+                      "the count should agree with the walk");
+    INKCELL_TEST_FAIL_IF(inkcell_wrap_widest("the quick brown fox", 10U) != 9U,
+                      "a bubble sizes itself to its widest line, not to the window");
+    INKCELL_TEST_FAIL_IF(inkcell_wrap_lines("", 10U) != 0U, "empty text needs no rows");
+    record_success(test_name);
+}
+
+/* A word longer than the window has nowhere to break, and an emoji is one cell however many
+   bytes it is spelled with - the two ways a byte-counting wrapper goes wrong. */
+INKCELL_TEST_CASE(layout_wrap_measures_in_cells, unit) {
+    struct inkcell_wrap wrap;
+
+    inkcell_wrap_begin(&wrap, STAR STAR STAR STAR, 2U);
+    INKCELL_TEST_FAIL_IF(!inkcell_wrap_next(&wrap), "the first line should be produced");
+    INKCELL_TEST_FAIL_IF(strcmp(wrap.line, STAR STAR) != 0,
+                      "two cells should be two emoji, not two bytes");
+    INKCELL_TEST_FAIL_IF(inkcell_wrap_lines(STAR STAR STAR STAR, 2U) != 2U,
+                      "four one-cell emoji should wrap into two lines of two");
+
+    /* Nowhere to break: the word is cut at the window rather than pushed off the edge. */
+    inkcell_wrap_begin(&wrap, "unbreakable", 4U);
+    INKCELL_TEST_FAIL_IF(!inkcell_wrap_next(&wrap), "a long word should still produce a line");
+    INKCELL_TEST_FAIL_IF(strcmp(wrap.line, "unbr") != 0,
+                      "a word with no space should cut at the window");
+
+    /* A hard newline breaks wherever it falls and is never drawn. */
+    INKCELL_TEST_FAIL_IF(inkcell_wrap_lines("a\nb", 40U) != 2U, "a newline should break the line");
+    record_success(test_name);
+}
+
+/*
+ * The transcript window. A list pins the *cursor*; a transcript pins the *newest*, which is the
+ * whole difference between a screen that reads as a message log and one that reads as a chat.
+ */
+INKCELL_TEST_CASE(layout_transcript_anchors_to_the_newest, unit) {
+    const uint8_t heights[4] = {2U, 1U, 3U, 2U};
+
+    /* Everything fits: the slack goes above, so the newest still lands on the last row. */
+    struct inkcell_transcript window = inkcell_transcript_window(heights, 4U, 3U, 12U);
+    INKCELL_TEST_FAIL_IF(window.first != 0U || window.count != 4U,
+                      "a transcript that fits should show all of it");
+    INKCELL_TEST_FAIL_IF(window.pad != 4U, "the leftover rows belong above the oldest message");
+
+    /* Too tall: the newest is kept and the oldest scroll off, whole messages at a time. */
+    window = inkcell_transcript_window(heights, 4U, 3U, 6U);
+    INKCELL_TEST_FAIL_IF(window.first != 1U || window.count != 3U,
+                      "the window should hold the newest three (1+3+2 rows)");
+    INKCELL_TEST_FAIL_IF(window.pad != 0U, "a full window has no slack to pad with");
+    record_success(test_name);
+}
+
+/* Scrolling up puts the cursor at the top and fills downward, so the message being read is
+   whole rather than the one hanging off the top edge. */
+INKCELL_TEST_CASE(layout_transcript_follows_the_cursor_up, unit) {
+    const uint8_t heights[5] = {2U, 2U, 2U, 2U, 2U};
+
+    struct inkcell_transcript window = inkcell_transcript_window(heights, 5U, 0U, 6U);
+    INKCELL_TEST_FAIL_IF(window.first != 0U || window.count != 3U,
+                      "a cursor above the pinned window should top it");
+
+    /* Still inside the pinned window, so the view does not move. */
+    window = inkcell_transcript_window(heights, 5U, 3U, 6U);
+    INKCELL_TEST_FAIL_IF(window.first != 2U || window.count != 3U,
+                      "a cursor inside the pinned window should leave it pinned");
+
+    /* A single message taller than the body still draws, clipped at the bottom. */
+    const uint8_t tall[2] = {2U, 9U};
+    window = inkcell_transcript_window(tall, 2U, 1U, 4U);
+    INKCELL_TEST_FAIL_IF(window.first != 1U || window.count != 1U,
+                      "a message taller than the body should still be drawn");
+
+    /* Degenerate inputs answer with an empty window rather than dividing by zero. */
+    window = inkcell_transcript_window(heights, 5U, 0U, 0U);
+    INKCELL_TEST_FAIL_IF(window.count != 0U, "no rows means nothing is drawn");
+    window = inkcell_transcript_window(NULL, 5U, 0U, 6U);
+    INKCELL_TEST_FAIL_IF(window.count != 0U, "no heights means nothing is drawn");
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(ui_layout_scroll_reports_the_window, unit) {
+    /* A list that fits draws no indicator at all. This is the case that matters most: every
+       screen calls this unconditionally, so "nothing off screen" has to be answerable with
+       "draw nothing" rather than with a full-length thumb that says the opposite. */
+    struct inkcell_list fits = inkcell_list_begin(6U, 0U, 10U);
+    struct inkcell_scroll none = inkcell_list_scroll(&fits, 400, 8);
+    INKCELL_TEST_FAIL_IF(none.length != 0, "a list that fits asked for a thumb");
+
+    struct inkcell_list empty = inkcell_list_begin(0U, 0U, 10U);
+    INKCELL_TEST_FAIL_IF(inkcell_list_scroll(&empty, 400, 8).length != 0,
+                      "an empty list asked for a thumb");
+    INKCELL_TEST_FAIL_IF(inkcell_list_scroll(NULL, 400, 8).length != 0, "a NULL list drew something");
+    struct inkcell_list any = inkcell_list_begin(40U, 0U, 10U);
+    INKCELL_TEST_FAIL_IF(inkcell_list_scroll(&any, 0, 8).length != 0, "a track of nothing drew");
+
+    /* Ten of forty on screen: a quarter of the track, sitting at the top. */
+    struct inkcell_list top = inkcell_list_begin(40U, 0U, 10U);
+    struct inkcell_scroll at_top = inkcell_list_scroll(&top, 400, 8);
+    INKCELL_TEST_FAIL_IF(at_top.length != 100, "the thumb is not the fraction on screen");
+    INKCELL_TEST_FAIL_IF(at_top.offset != 0, "a list at its start reported an offset");
+
+    /*
+     * Scrolled to the end, the thumb ends exactly on the end of the track.
+     *
+     * This is the one that a proportion measured against the *track* rather than the travel
+     * gets wrong: it leaves the thumb short of the bottom on a list that has no more items,
+     * which is an indicator saying there is something below when there is not.
+     */
+    struct inkcell_list bottom = inkcell_list_begin(40U, 39U, 10U);
+    struct inkcell_scroll at_bottom = inkcell_list_scroll(&bottom, 400, 8);
+    INKCELL_TEST_FAIL_IF(at_bottom.offset + at_bottom.length != 400,
+                      "a list scrolled to its end left the thumb short of the track");
+
+    /* Halfway along the travel, within the rounding a integer division costs. The window is
+       asked for rather than poked into the struct: the offset is now derived from the steps
+       above `first`, so a `first` written straight over the top of a settled list describes a
+       window nothing else in it agrees with. */
+    /* Ten rows of window buys three steps of look-ahead, so the window starts six rows above
+       the cursor rather than nine. */
+    struct inkcell_list middle = inkcell_list_begin(40U, 21U, 10U); /* first 15, travel 30 */
+    INKCELL_TEST_FAIL_IF(middle.first != 15U, "the window did not start where the cursor put it");
+    struct inkcell_scroll at_middle = inkcell_list_scroll(&middle, 400, 8);
+    const int centre = (400 - at_middle.length) / 2;
+    INKCELL_TEST_FAIL_IF(at_middle.offset < centre - 1 || at_middle.offset > centre + 1,
+                      "a list halfway down did not put the thumb halfway along");
+
+    /* A huge list floors the thumb rather than drawing a couple of pixels, and the floor never
+       pushes it past the end of the track. */
+    struct inkcell_list huge = inkcell_list_begin(4000U, 3999U, 10U);
+    struct inkcell_scroll tiny = inkcell_list_scroll(&huge, 400, 8);
+    INKCELL_TEST_FAIL_IF(tiny.length != 8, "a very long list did not floor its thumb");
+    INKCELL_TEST_FAIL_IF(tiny.offset + tiny.length > 400, "a floored thumb ran past the track");
+
+    /* A window longer than the track cannot produce a thumb longer than the track. */
+    struct inkcell_list stubby = inkcell_list_begin(12U, 0U, 10U);
+    struct inkcell_scroll clipped = inkcell_list_scroll(&stubby, 4, 40);
+    INKCELL_TEST_FAIL_IF(clipped.length > 4, "the thumb is longer than the track holding it");
+    INKCELL_TEST_FAIL_IF(clipped.offset + clipped.length > 4, "the thumb ran past a short track");
+    record_success(test_name);
+}
+
+/*
+ * A reading onto a track.
+ *
+ * The arithmetic under every bar on the device, and the reason it is here rather than in the
+ * framebuffer backend: a domain with a negative end is the case a fill-from-zero bar cannot
+ * express at all, and it is one division to get wrong quietly.
+ */
+INKCELL_TEST_CASE(ui_layout_scale_permille, unit) {
+    /* The identity domain: a caller that already holds a fraction says nothing and is clamped
+       rather than rescaled. A zeroed struct is this, which is what keeps it free. */
+    const struct inkcell_scale identity = {0, 0};
+    INKCELL_TEST_FAIL_IF(inkcell_scale_permille(identity, 314) != 314,
+                      "the identity domain rescaled a reading that was already permille");
+    INKCELL_TEST_FAIL_IF(inkcell_scale_permille(identity, -1) != 0,
+                      "the identity domain did not clamp below the track");
+    INKCELL_TEST_FAIL_IF(inkcell_scale_permille(identity, 4000) != INKCELL_ANIM_ONE,
+                      "the identity domain did not clamp above the track");
+
+    /* A percentage. */
+    const struct inkcell_scale percent = {0, 100};
+    INKCELL_TEST_FAIL_IF(inkcell_scale_permille(percent, 0) != 0, "an empty reading is not empty");
+    INKCELL_TEST_FAIL_IF(inkcell_scale_permille(percent, 50) != 500, "half a scale is not half");
+    INKCELL_TEST_FAIL_IF(inkcell_scale_permille(percent, 100) != INKCELL_ANIM_ONE,
+                      "a full reading did not fill the track");
+
+    /*
+     * A domain that starts below zero, which is the one this exists for: an SNR of -20 dB is
+     * the demodulator's floor and belongs at the *start* of the track, not off the end of it.
+     */
+    const struct inkcell_scale snr = {INKCELL_SNR_FLOOR, INKCELL_SNR_CEILING};
+    INKCELL_TEST_FAIL_IF(inkcell_scale_permille(snr, INKCELL_SNR_FLOOR) != 0,
+                      "the floor of a signed domain is not the start of the track");
+    INKCELL_TEST_FAIL_IF(inkcell_scale_permille(snr, INKCELL_SNR_CEILING) != INKCELL_ANIM_ONE,
+                      "the ceiling of a signed domain is not the end of the track");
+    INKCELL_TEST_FAIL_IF(inkcell_scale_permille(snr, -5) != 500,
+                      "the middle of a signed domain is not the middle of the track");
+    INKCELL_TEST_FAIL_IF(inkcell_scale_permille(snr, -40) != 0,
+                      "a reading under a signed domain did not clamp to the start");
+
+    /* Descending, which is what a figure that is better when it is smaller reads as. */
+    const struct inkcell_scale descending = {100, 0};
+    INKCELL_TEST_FAIL_IF(inkcell_scale_permille(descending, 0) != INKCELL_ANIM_ONE,
+                      "a descending domain did not run backwards");
+    INKCELL_TEST_FAIL_IF(inkcell_scale_permille(descending, 100) != 0,
+                      "a descending domain did not start at its own minimum");
+    INKCELL_TEST_FAIL_IF(inkcell_scale_permille(descending, 25) != 750,
+                      "a descending domain did not place its middle");
+    record_success(test_name);
+}
+
+/*
+ * A float percentage as permille.
+ *
+ * One function because two screens draw the mesh's airtime and a second rounding of the same
+ * float is a bar and a figure that disagree by a pixel nobody can explain. The NaN case is the
+ * one worth pinning: a radio that has reported nothing must read as nothing, not as whatever a
+ * cast happens to produce.
+ */
+INKCELL_TEST_CASE(ui_layout_percent_permille, unit) {
+    INKCELL_TEST_FAIL_IF(inkcell_percent_permille(0.0f) != 0, "an idle channel was not idle");
+    INKCELL_TEST_FAIL_IF(inkcell_percent_permille(31.0f) != 310, "a percentage did not scale");
+    INKCELL_TEST_FAIL_IF(inkcell_percent_permille(4.25f) != 43,
+                      "a fractional percentage was not rounded to the nearest permille");
+    INKCELL_TEST_FAIL_IF(inkcell_percent_permille(100.0f) != INKCELL_ANIM_ONE,
+                      "a saturated channel did not fill the track");
+    INKCELL_TEST_FAIL_IF(inkcell_percent_permille(140.0f) != INKCELL_ANIM_ONE,
+                      "a reading past the end of the scale was not clamped");
+    INKCELL_TEST_FAIL_IF(inkcell_percent_permille(-3.0f) != 0,
+                      "a negative reading was not clamped to nothing");
+    INKCELL_TEST_FAIL_IF(inkcell_percent_permille(0.0f / 0.0f) != 0,
+                      "a reading that is not a number escaped the guard");
+    /* A reading small enough to round to nothing still has to *be* something, because the meter
+       distinguishes a real trickle from an empty track and cannot if this floors it away. */
+    INKCELL_TEST_FAIL_IF(inkcell_percent_permille(0.4f) != 4, "a small real reading was lost");
+    record_success(test_name);
+}
+
+/*
+ * Signal as rungs.
+ *
+ * The bucket boundaries are the contract - a node at exactly the fair threshold should show the
+ * fair number of rungs and not one fewer - and so is what a reading nobody can use does, which
+ * is fall to the bottom rather than land in the middle.
+ */
+/*
+ * A whole, split into the parts it is made of.
+ *
+ * The two rules the split exists for are both about the ways a bar lies rather than about the
+ * arithmetic being close enough: it has to fill its track exactly, because a gap at the end of
+ * a bar that claims to be everything is a part nobody named; and a part that is there has to be
+ * drawn, because three bad packets in fifty thousand rounded honestly is a picture saying
+ * nothing is wrong.
+ */
+INKCELL_TEST_CASE(ui_layout_proportion_split_fills_the_extent, unit) {
+    int32_t out[INKCELL_PROPORTION_PARTS];
+
+    /* An even split with a remainder that cannot be shared evenly: 100 among three is 33 each
+       and one unit over, and the unit has to land somewhere rather than be dropped. */
+    const uint32_t thirds[] = {1U, 1U, 1U};
+    INKCELL_TEST_FAIL_IF(inkcell_proportion_split(thirds, 3U, 100, out) != 3U,
+                      "a three-part whole did not report three parts");
+    INKCELL_TEST_FAIL_IF(out[0] + out[1] + out[2] != 100, "the parts did not fill the bar");
+
+    /* The awkward widths, exhaustively: every extent a bar on this panel can have, against a
+       whole whose parts share no factor with it. A single lost or invented unit anywhere is a
+       bar drawn a pixel short of the track it is measured against. */
+    const uint32_t awkward[] = {7U, 11U, 13U, 17U};
+    for (int32_t extent = 1; extent <= 512; ++extent) {
+        const uint32_t parts = inkcell_proportion_split(awkward, 4U, extent, out);
+        INKCELL_TEST_FAIL_IF(parts != 4U, "a four-part whole did not report four parts");
+        int32_t total = 0;
+        for (uint32_t i = 0; i < parts; ++i) {
+            INKCELL_TEST_FAIL_IF(out[i] < 0, "a part came out negative");
+            total += out[i];
+        }
+        INKCELL_TEST_FAIL_IF(total != extent, "the parts did not add up to the bar");
+    }
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(ui_layout_proportion_split_keeps_the_small_part, unit) {
+    int32_t out[INKCELL_PROPORTION_PARTS];
+
+    /*
+     * The reading this component exists to get right. A radio that has heard fifty thousand
+     * packets and three bad ones is a quarter of a pixel of bad on a 300px bar; drawn as the
+     * arithmetic says, the bar reports a mesh with nothing wrong with it.
+     */
+    const uint32_t lopsided[] = {49000U, 997U, 3U};
+    INKCELL_TEST_FAIL_IF(inkcell_proportion_split(lopsided, 3U, 300, out) != 3U,
+                      "a lopsided whole did not report its parts");
+    INKCELL_TEST_FAIL_IF(out[2] <= 0, "a part that is there was rounded away to nothing");
+    INKCELL_TEST_FAIL_IF(out[0] + out[1] + out[2] != 300,
+                      "rescuing a small part cost the bar its total");
+    /* And it is taken off the longest part, not off the neighbour: the part that can afford a
+       pixel is the one that has the most of them. */
+    INKCELL_TEST_FAIL_IF(out[0] < out[1], "the donated pixel came from the wrong part");
+
+    /* A part that is genuinely zero still draws nothing. Inventing a sliver for it would be the
+       same lie as rounding a real one away, the other way round. */
+    const uint32_t absent[] = {10U, 0U, 5U};
+    INKCELL_TEST_FAIL_IF(inkcell_proportion_split(absent, 3U, 90, out) != 3U,
+                      "a whole with an empty part did not report its parts");
+    INKCELL_TEST_FAIL_IF(out[1] != 0, "a part that is not there was drawn anyway");
+    INKCELL_TEST_FAIL_IF(out[0] + out[2] != 90, "an empty part cost the bar its total");
+
+    /* Counters off a radio that has been up for a month. The multiply before the divide is
+       where a 32-bit version wraps, and a wrapped share is a negative length. */
+    const uint32_t huge[] = {3000000000U, 1000000000U, 200000000U};
+    INKCELL_TEST_FAIL_IF(inkcell_proportion_split(huge, 3U, 256, out) != 3U,
+                      "a whole in the billions did not report its parts");
+    INKCELL_TEST_FAIL_IF(out[0] <= 0 || out[1] <= 0 || out[2] <= 0,
+                      "a counter in the billions overflowed into an empty part");
+    INKCELL_TEST_FAIL_IF(out[0] + out[1] + out[2] != 256, "a whole in the billions lost the bar");
+    INKCELL_TEST_FAIL_IF(out[0] <= out[1], "the largest part did not come out largest");
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(ui_layout_proportion_split_refuses_what_it_cannot_draw, unit) {
+    int32_t out[INKCELL_PROPORTION_PARTS];
+    const uint32_t parts[] = {1U, 2U, 3U};
+
+    INKCELL_TEST_FAIL_IF(inkcell_proportion_split(NULL, 3U, 100, out) != 0U,
+                      "a split with no values answered");
+    INKCELL_TEST_FAIL_IF(inkcell_proportion_split(parts, 3U, 100, NULL) != 0U,
+                      "a split with nowhere to write answered");
+    INKCELL_TEST_FAIL_IF(inkcell_proportion_split(parts, 0U, 100, out) != 0U,
+                      "a whole of no parts answered");
+    INKCELL_TEST_FAIL_IF(inkcell_proportion_split(parts, INKCELL_PROPORTION_PARTS + 1U, 100, out) !=
+                          0U,
+                      "a whole of more parts than the palette can colour answered");
+    INKCELL_TEST_FAIL_IF(inkcell_proportion_split(parts, 3U, 0, out) != 0U,
+                      "a bar with no width answered");
+
+    /*
+     * And the reading that is an absence rather than a zero. A radio that has reported nothing
+     * has every counter at zero, and a bar drawn from that would be a track saying the mesh is
+     * silent - which is a claim, where "no bar" is the honest absence of one.
+     */
+    const uint32_t nothing[] = {0U, 0U, 0U};
+    INKCELL_TEST_FAIL_IF(inkcell_proportion_split(nothing, 3U, 100, out) != 0U,
+                      "a whole that sums to nothing was drawn as a bar");
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(ui_layout_signal_level_rungs, unit) {
+    INKCELL_TEST_FAIL_IF(inkcell_signal_level(20.0f) != INKCELL_SIGNAL_STEPS,
+                      "a strong link did not light every rung");
+    INKCELL_TEST_FAIL_IF(inkcell_signal_level((float)INKCELL_SNR_EXCELLENT) != 4U,
+                      "the excellent threshold itself did not read as excellent");
+    INKCELL_TEST_FAIL_IF(inkcell_signal_level((float)INKCELL_SNR_EXCELLENT - 0.1f) != 3U,
+                      "just under excellent did not step down exactly one rung");
+    INKCELL_TEST_FAIL_IF(inkcell_signal_level((float)INKCELL_SNR_GOOD) != 3U,
+                      "the good threshold itself did not read as good");
+    INKCELL_TEST_FAIL_IF(inkcell_signal_level((float)INKCELL_SNR_FAIR) != 2U,
+                      "the fair threshold itself did not read as fair");
+    INKCELL_TEST_FAIL_IF(inkcell_signal_level((float)INKCELL_SNR_POOR) != 1U,
+                      "the poor threshold itself did not read as poor");
+    INKCELL_TEST_FAIL_IF(inkcell_signal_level(-40.0f) != 0U, "a link under the floor lit a rung");
+
+    /*
+     * A reading the radio never made. The ladder is walked downwards from the top precisely so
+     * that a NaN - which compares false against every threshold - falls through to the bottom
+     * rung: a comparison written the other way round would hand it a middling signal, which is
+     * the failure that hides itself.
+     */
+    const float nothing = 0.0f / 0.0f;
+    INKCELL_TEST_FAIL_IF(inkcell_signal_level(nothing) != 0U,
+                      "a reading that is not a number was drawn as a middling link");
+
+    /* Monotonic across the whole useful range, in tenths of a decibel: a staircase that ever
+       went down as the signal went up would be worse than no staircase. */
+    uint8_t previous = 0U;
+    for (int tenths = -400; tenths <= 300; tenths++) {
+        const uint8_t level = inkcell_signal_level((float)tenths / 10.0f);
+        INKCELL_TEST_FAIL_IF(level < previous, "the rungs fell as the signal rose");
+        INKCELL_TEST_FAIL_IF(level > INKCELL_SIGNAL_STEPS, "a reading lit more rungs than there are");
+        previous = level;
+    }
+    record_success(test_name);
+}

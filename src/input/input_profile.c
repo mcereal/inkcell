@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include "inkcell/utils/env.h"
 #include "inkcell/ui/input_profile.h"
 
 #include "inkcell/utils/array.h"

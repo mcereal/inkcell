@@ -23,53 +23,24 @@ ROOT = Path(__file__).resolve().parent.parent
 # The files whose strings reach a screen. A file not listed here is not exempt from the rule;
 # it is a file with no user-facing text in it, and adding text to one means adding it here.
 #
-# The transports are deliberately absent, and are not an exception: everything they say to a
-# person goes out through mesh_ble_set_error() / mesh_serial_set_error(), whose first parameter
-# is an `enum inkcell_str_id`. A string literal there does not compile, which is a stronger check
-# than this one - and the rest of those files is D-Bus paths and BlueZ diagnostics, which this
-# script would only be able to tell apart from prose with a very long ALLOWED list.
+# inkcell's list is short by construction: a widget takes an `enum inkcell_str_id` and the words
+# belong to whatever application installed a catalog, so a string literal in one of these is
+# almost always a mistake rather than a judgement call. An application built on inkcell wants its
+# own copy of this check over its own screens.
 CHECKED = [
-    "src/ui/tables/actions.c",
-    "src/ui/views/channel_share.c",
-    "src/ui/views/contact_share.c",
-    "src/ui/tables/chrome.c",
-    "src/ui/tables/help.c",
-    "src/ui/layout.c",
-    "src/ui/nav/nav.c",
-    "src/ui/nav/nav_canned.c",
-    "src/ui/nav/nav_conversations.c",
-    "src/ui/nav/nav_keyboard.c",
-    "src/ui/nav/nav_settings.c",
-    "src/ui/nav/nav_waypoints.c",
-    "src/ui/views/node_detail.c",
-    "src/ui/views/waypoints.c",
-    "src/ui/settings/settings.c",
-    "src/ui/settings/settings_rows.c",
-    "src/ui/backends/inkcell_fb_draw.c",
-    "src/ui/backends/inkcell_fb_screens_chart.c",
-    "src/ui/backends/inkcell_fb_screens_code.c",
-    "src/ui/backends/inkcell_fb_screens_compose.c",
-    "src/ui/backends/inkcell_fb_screens_devices.c",
-    "src/ui/backends/inkcell_fb_screens_frame.c",
-    "src/ui/backends/inkcell_fb_screens_messages.c",
-    "src/ui/backends/inkcell_fb_screens_nodes.c",
-    "src/ui/backends/inkcell_fb_screens_overlays.c",
-    "src/ui/backends/inkcell_fb_screens_settings.c",
-    "src/ui/backends/inkcell_fb_screens_status.c",
-    "src/ui/backends/inkcell_fb_screens_waypoints.c",
-    "src/ui/backends/inkcell_fb_widgets_bubble.c",
-    "src/ui/backends/inkcell_fb_widgets_button.c",
-    "src/ui/backends/inkcell_fb_widgets_card.c",
-    "src/ui/backends/inkcell_fb_widgets_chrome.c",
-    "src/ui/backends/inkcell_fb_widgets_control.c",
-    "src/ui/backends/inkcell_fb_widgets_item.c",
-    "src/ui/backends/inkcell_fb_widgets_list.c",
-    "src/ui/backends/inkcell_fb_widgets_meter.c",
-    "src/ui/backends/inkcell_fb_widgets_overlay.c",
-    "src/ui/input/input.c",
-    "src/app/app_actions.c",
-    "src/app/app_publish.c",
-    "src/app/app_settings.c",
+    "src/layout.c",
+    "src/trend.c",
+    "src/fb/fb_draw.c",
+    "src/fb/widgets_bubble.c",
+    "src/fb/widgets_button.c",
+    "src/fb/widgets_card.c",
+    "src/fb/widgets_chrome.c",
+    "src/fb/widgets_control.c",
+    "src/fb/widgets_item.c",
+    "src/fb/widgets_list.c",
+    "src/fb/widgets_meter.c",
+    "src/fb/widgets_overlay.c",
+    "src/input/input.c",
 ]
 
 # Literals that are not prose even though they read like it, each with the reason it stays.

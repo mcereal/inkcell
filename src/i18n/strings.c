@@ -14,6 +14,7 @@
 
 #include "inkcell/i18n/strings.h"
 
+#include "inkcell/utils/env.h"
 #include "inkcell/utils/log.h"
 
 #include <stdio.h>

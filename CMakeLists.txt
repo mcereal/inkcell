@@ -17,7 +17,6 @@ else()
 endif()
 
 option(INKCELL_BUILD_TESTS "Build inkcell's own test binary" ${INKCELL_IS_TOP_LEVEL})
-option(INKCELL_BUILD_DEVTOOLS "Build the UI capture harness" ${INKCELL_IS_TOP_LEVEL})
 option(INKCELL_ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(INKCELL_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
 
@@ -111,8 +110,4 @@ add_library(inkcell::inkcell ALIAS inkcell)
 if(INKCELL_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
-endif()
-
-if(INKCELL_BUILD_DEVTOOLS)
-    add_subdirectory(devtools/ui_capture)
 endif()
