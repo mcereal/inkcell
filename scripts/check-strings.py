@@ -41,6 +41,7 @@ CHECKED = [
     "src/fb/widgets_meter.c",
     "src/fb/widgets_overlay.c",
     "src/input/input.c",
+    "src/keyboard.c",
 ]
 
 # Literals that are not prose even though they read like it, each with the reason it stays.

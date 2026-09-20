@@ -71,6 +71,9 @@ add_library(inkcell STATIC
     src/anim.c
     src/trend.c
     src/latency.c
+    # the on-screen keyboard's model: the grid, the panel ring, the edits. No drawing, which is
+    # what lets the whole thing be tested without a panel.
+    src/keyboard.c
     # evdev to a key, and the button profile of the device under it
     src/input/input.c
     src/input/input_profile.c
@@ -87,7 +90,7 @@ add_library(inkcell STATIC
     src/fb/widgets_list.c
     src/fb/widgets_meter.c
     src/fb/widgets_overlay.c
-    # the catalog mechanism and inkcell's own fifteen strings
+    # the catalog mechanism and inkcell's own twenty-three strings
     src/i18n/strings.c
     # the leaves: no inkcell header above them includes one of these back
     src/utils/text.c
