@@ -15,6 +15,7 @@ backend and its component set, and the evdev layer that turns a handheld's butto
 | **Fonts** | A 5x7 pixel face and a proportional UI face in two weights, all as coverage rather than 1-bit masks, resampled into whatever cell the theme asks for. |
 | **Glyphs** | Emoji, icons and font tables, generated (`scripts/gen-*.py`) and committed. |
 | **Layout** | Lines measured in *cells*, scroll windows, text wrapping done once for both the measure and the draw pass. |
+| **Focus** | A d-pad answered against the rectangles a frame drew - "right from here lands on *that*" - so a grid, a card with two verbs on it or a form with a chip row in it is a layout rather than an index somebody maintains. |
 | **Widgets** | Buttons, chips, app bars, list rows, chat bubbles, cards, switches, segmented buttons, meters, charts, dialogs, snackbars, QR codes. |
 | **Shapes** | Anti-aliased rounded rectangles, rings and arcs, in integers - so a curve is the same curve on every host that draws it. |
 | **Framebuffer** | `/dev/fb0`, the page flip, damage tracking, a glyph cache, and an off-screen renderer for screenshots. |
@@ -37,6 +38,11 @@ These are authoring rules — breaking one compiles and looks fine.
   with `inkcell_fb_text_width()`, wrap and fit against pixels, and use `inkcell_fb_text_cols()`
   where a layout genuinely reserves whole columns. `inkcell_fb_char_adv()` is the *nominal*
   advance: an estimate, and exact only while the face is monospace.
+- **What is drawn is what can be reached.** A frame registers the box of everything focusable
+  as it draws it (`inkcell_focus_add()`), and a press is resolved against those boxes
+  (`inkcell_focus_find()`). A screen keeping a cursor *index* instead is a screen that will
+  eventually walk onto the row a card dropped for want of room, because an index cannot tell
+  what came out on the panel and a registered rectangle is nothing but that.
 - **Button hints are (button, string id) pairs**, never a sentence. A keycap is untranslated — it
   is what is printed on the case.
 
@@ -96,7 +102,7 @@ catalog, and writes screens - and it draws every component the library ships, in
 two scales.
 
 ```bash
-make gallery     # 104 pages into build/gallery/, plus build/gallery/contact.png
+make gallery     # 113 pages into build/gallery/, plus build/gallery/contact.png
 ```
 
 It renders through `inkcell_capture`, which is the fb backend with the device taken out of it,

@@ -1,0 +1,256 @@
+#ifndef INKCELL_FOCUS_H
+#define INKCELL_FOCUS_H
+
+/*
+ * Where the d-pad goes: the rectangles a frame drew, and which one lies in a given direction.
+ *
+ * Every screen written against this toolkit so far has kept a cursor as an *index* and moved it
+ * with `cursor++`. That is the right model for exactly one shape of screen - a single column of
+ * rows, where the thing below is the next number - and it is the reason nothing here has a grid
+ * in it. An index knows how many focusable things there are; it does not know where any of them
+ * is, so it cannot answer the only question a d-pad ever asks. Two chips side by side, a card
+ * with two verbs on its heading line, a keypad: each one needs "right from here lands on that",
+ * and each screen that wanted it wrote its own arithmetic over its own indices, in terms of a
+ * layout it had just finished forgetting.
+ *
+ * So the answer is the one Android's FocusFinder and the tvOS focus engine both landed on, and
+ * it inverts the problem: the frame *registers the rectangle of everything it actually drew*,
+ * and a press is resolved against those rectangles. The screen stops holding a map of itself.
+ * It holds one id - which thing has the cursor - and asks.
+ *
+ *     inkcell_focus_begin(&map, storage, GRID_MAX);
+ *     ... draw a button ...  inkcell_focus_add(&map, ID_SEND, rect.x, rect.y, rect.w, rect.h);
+ *     ... draw a chip ...    inkcell_focus_add(&map, ID_FILTER(i), x, y, w, h);
+ *
+ *     enum inkcell_focus_dir dir;
+ *     if (inkcell_focus_dir_for_key(key, &dir)) {
+ *         const uint32_t next = inkcell_focus_find(&map, screen->focus, dir);
+ *         if (next != INKCELL_FOCUS_NONE) {
+ *             screen->focus = next;
+ *         }
+ *     }
+ *
+ * Registering during the draw is not an implementation detail, it is the whole safety property.
+ * A card whose last row fell off the bottom of the panel never registers that row; a chip strip
+ * that elided its fourth chip never registers the fourth chip. The cursor therefore cannot land
+ * on something that is not on the frame - which is a failure this toolkit has already written
+ * down twice as a thing screens must remember not to do (see the reservation note in
+ * inkcell/ui/widgets/card.h). A screen cannot remember it wrong here, because what was drawn and
+ * what can be reached are the same list.
+ *
+ * This is a model rather than a widget, for the reason inkcell/ui/actions.h and
+ * inkcell/ui/keyboard.h are: where the cursor goes next is a fact about the nav, a second
+ * backend would want the same answer, and it is something a test can assert about without a
+ * panel anywhere near it (tests/suites/ui_focus.c). Nothing here includes a framebuffer header,
+ * allocates, or keeps a pointer past the call it was made in.
+ *
+ * What this does not replace
+ * --------------------------
+ * A scrolling list is *one* focusable, not one per row. `struct inkcell_list` already owns the
+ * window arithmetic and the row cursor, and it owns them over rows that are not on the panel,
+ * which is precisely what a map of drawn rectangles cannot see. Register the list's box, let
+ * inkcell_list move inside it, and let this decide when the cursor *leaves* it - which is the
+ * same division Android makes at a ListView and tvOS at a collection view. Registering a rect
+ * per visible row is the other legitimate reading, and it is the right one for a short list
+ * that never scrolls; what does not work is registering rows and then being surprised that
+ * pressing down at the last visible one finds nothing, because there is nothing drawn down
+ * there. That press is a scroll, and a scroll is the list's word, not this file's.
+ */
+
+#include "inkcell/ui/key.h"
+
+#include <stdbool.h>
+#include <stdint.h>
+
+/*
+ * The id of nothing.
+ *
+ * Returned when no registered rectangle lies in the direction asked for, which is a normal
+ * answer and not an error: it is what the edge of a screen is. A caller that wants a press at
+ * the edge to do something else - scroll, change tab, close - is a caller that has just been
+ * told the press was going spare.
+ *
+ * Zero is reserved for it, so `inkcell_focus_add()` refuses that id. An id space that could
+ * name the thing meaning "nothing" is one where a screen's first enum entry silently becomes
+ * unreachable.
+ */
+#define INKCELL_FOCUS_NONE 0U
+
+/*
+ * A direction of travel, and only the four.
+ *
+ * Not "next" and "previous": those are an index's words and they are what this file exists to
+ * stop screens reasoning in. A shoulder button that steps through a strip is a different press
+ * from a d-pad, and a screen that wants one already knows the order it declared things in.
+ */
+enum inkcell_focus_dir {
+    INKCELL_FOCUS_LEFT = 0,
+    INKCELL_FOCUS_RIGHT,
+    INKCELL_FOCUS_UP,
+    INKCELL_FOCUS_DOWN,
+};
+
+/*
+ * A box in pixels, in whatever coordinates the frame was drawn in.
+ *
+ * Deliberately not `struct inkcell_fb_rect`, which is the same four numbers: that one lives in
+ * the framebuffer backend's public header, and a model that included it to borrow a shape would
+ * make every consumer of the focus map - a test, a second backend, a screen that has not drawn
+ * anything yet - depend on the framebuffer. The four ints are passed to `inkcell_focus_add()`
+ * individually for the same reason, so a caller holding either shape hands over `rect.x,
+ * rect.y, rect.w, rect.h` and nothing needs converting.
+ *
+ * Half-open: a rect at x=10 with w=20 covers 10 through 29, and the one starting at x=30 is
+ * beside it rather than overlapping it by a pixel. Everything below is written to that rule,
+ * which is what makes two adjacent chips two chips.
+ */
+struct inkcell_focus_rect {
+    int x, y, w, h;
+};
+
+/* One registered thing: what the screen calls it, and where it came out. */
+struct inkcell_focus_item {
+    uint32_t id;
+    struct inkcell_focus_rect rect;
+};
+
+/*
+ * The frame's focusable rectangles.
+ *
+ * Storage is the caller's - an array on the stack of the render function, sized to the most
+ * that screen can draw - because this is rebuilt from nothing every frame and a frame is not a
+ * place to allocate. `count` and `capacity` are the whole of the bookkeeping.
+ *
+ * `dropped` is how many `inkcell_focus_add()` calls were refused for want of room. It is not an
+ * error return nobody checks: a screen that outgrew its array loses the ability to reach
+ * whatever it drew last, which on a panel looks like a button that cannot be selected rather
+ * than like a bug, and is the sort of thing a test asserts is zero.
+ */
+struct inkcell_focus_map {
+    struct inkcell_focus_item *items;
+    uint32_t count;
+    uint32_t capacity;
+    uint32_t dropped;
+};
+
+/* Empties the map onto `storage`. Call it at the top of the draw, once, before anything is
+   registered: a map carried between frames is a map naming rectangles from the layout before
+   the last one. `storage` may be NULL with a capacity of 0, which is a map that refuses
+   everything - and answers INKCELL_FOCUS_NONE to everything, which is what an empty screen
+   is. */
+void inkcell_focus_begin(struct inkcell_focus_map *map, struct inkcell_focus_item *storage,
+                         uint32_t capacity);
+
+/*
+ * Registers a rectangle under `id`. Returns false when it was refused, which is one of four
+ * things and all of them are the caller's mistake rather than a state to handle:
+ *
+ *   - the map is full (`dropped` counts these),
+ *   - `id` is INKCELL_FOCUS_NONE,
+ *   - `id` is already registered - one name, two boxes, and no answer to which one "right"
+ *     means. A grid's ids are usually an index folded into the enum for exactly this reason,
+ *   - the box has no area. A zero-width control is one the eye cannot find and the cursor
+ *     should not be able to either; this is the case that turns up when a widget is asked to
+ *     draw itself into a gutter.
+ */
+bool inkcell_focus_add(struct inkcell_focus_map *map, uint32_t id, int x, int y, int w, int h);
+
+/* Whether `id` was registered this frame. The question a screen asks *after* laying out, about
+   the id it was holding: a card that lost a row, a chip that was elided and a list that scrolled
+   are all "the thing the cursor was on is not on this frame", and they are all this. */
+bool inkcell_focus_has(const struct inkcell_focus_map *map, uint32_t id);
+
+/* Where `id` came out. False, and `out` untouched, when it was not registered. Worth keeping
+   beside the focused id on a screen that reflows: it is the remembered rectangle
+   `inkcell_focus_nearest()` takes, and the only thing that survives the layout it describes. */
+bool inkcell_focus_rect_of(const struct inkcell_focus_map *map, uint32_t id,
+                           struct inkcell_focus_rect *out);
+
+/*
+ * What lies `dir` of `id`, or INKCELL_FOCUS_NONE.
+ *
+ * INKCELL_FOCUS_NONE is also the answer when `id` itself was not registered, rather than a
+ * jump to somewhere plausible. A cursor on something that is no longer drawn is a screen with a
+ * question to answer - `inkcell_focus_nearest()` is usually the answer - and a finder that
+ * quietly picked for it would turn a reflow into the cursor teleporting.
+ *
+ * How it chooses, because a screen is entitled to predict it. Two rules, in order:
+ *
+ *   1. **The beam.** Anything overlapping the source across the direction of travel - the rows
+ *      in line with it, for a left or right press - beats anything that does not, however much
+ *      closer the out-of-line one is. This is what keeps a press moving along a row instead of
+ *      diving at the nearest corner, and it is why moving right along a chip strip does not
+ *      fall into the card underneath at the first ragged gap.
+ *   2. **Weighted distance**, among equals: `13 * along² + across²`, where `along` is the gap in
+ *      the direction pressed and `across` is how far the two centres are offset from each other.
+ *      The 13 is Android's, kept rather than re-derived because the number is not the point -
+ *      what it says is that being *in line* is worth about three and a half times being *close*,
+ *      so a slightly further cell straight ahead beats a nearer one off to the side. A plain
+ *      centre-to-centre distance is what gives a grid its diagonal drift.
+ *
+ * Things that overlap the source are candidates too - a wide card beside two stacked buttons is
+ * the ordinary case - which is why the test is "is any part of it further along" rather than
+ * "is all of it past the edge".
+ */
+uint32_t inkcell_focus_find(const struct inkcell_focus_map *map, uint32_t id,
+                            enum inkcell_focus_dir dir);
+
+/*
+ * The same, except that running out of screen comes back round.
+ *
+ * Where it wraps to is stated as a property rather than as a second algorithm: **it lands where
+ * holding the opposite direction would have ended up**. Right at the last chip walks left from
+ * there until nothing is left and answers with the chip it stopped on, which is the first chip
+ * of that strip - and not something on another row, because every step of that walk is an
+ * ordinary `inkcell_focus_find()` and stays in line for the same reason a press does.
+ *
+ * Which of the two a screen calls is an editorial decision, and the toolkit has no opinion. A
+ * strip of four filters wants to wrap; a column of settings does not, because a reader holding
+ * down and finding themselves back at the top has lost their place rather than been helped.
+ */
+uint32_t inkcell_focus_find_wrapping(const struct inkcell_focus_map *map, uint32_t id,
+                                     enum inkcell_focus_dir dir);
+
+/*
+ * Where a screen with no cursor yet starts: the top-most registered rectangle, and the
+ * left-most of those level with it.
+ *
+ * Reading order rather than registration order, which are usually the same list and sometimes
+ * not: chrome is drawn before the body it sits above, and a widget is free to draw its own
+ * parts in whatever order suits it. The one that the eye lands on first is the one a geometry
+ * answers for, and the order a frame happened to be assembled in is not that.
+ */
+uint32_t inkcell_focus_first(const struct inkcell_focus_map *map);
+
+/*
+ * The registered rectangle closest to `rect`, or INKCELL_FOCUS_NONE when nothing was
+ * registered at all.
+ *
+ * This is how a cursor survives the screen changing under it - the remembered rectangle tvOS
+ * keeps, and the pair to `inkcell_focus_rect_of()`. A row was deleted, a card shed a verb, a
+ * filter emptied the list; the id the screen was holding is gone, and the honest answer to
+ * "where was the user looking" is not the first thing on the panel, it is whatever is now
+ * nearest to where they were looking.
+ *
+ *     if (!inkcell_focus_has(&map, screen->focus)) {
+ *         screen->focus = inkcell_focus_nearest(&map, screen->focus_rect);
+ *     }
+ *     (void)inkcell_focus_rect_of(&map, screen->focus, &screen->focus_rect);
+ *
+ * Distance is measured between the boxes and not between their centres, so a rectangle
+ * overlapping `rect` is at zero however large it is: a row that grew a second line is still the
+ * row the cursor was on, and a centre that moved half a line down should not hand the cursor to
+ * its neighbour.
+ */
+uint32_t inkcell_focus_nearest(const struct inkcell_focus_map *map, struct inkcell_focus_rect rect);
+
+/*
+ * The d-pad key as a direction. False for every other key, which is the screen's to deal with.
+ *
+ * One line, and it is here so that it is one line *once*. Every screen that resolves a press
+ * writes this switch otherwise, and a switch that turns four enum entries into four enum
+ * entries is a place for a typo to live where no test will ever see it.
+ */
+bool inkcell_focus_dir_for_key(enum inkcell_key key, enum inkcell_focus_dir *dir);
+
+#endif /* INKCELL_FOCUS_H */

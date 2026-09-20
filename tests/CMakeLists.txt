@@ -7,6 +7,7 @@
 # them with it, silently. Add a new suite file to INKCELL_TEST_SUITES and it runs.
 set(INKCELL_TEST_SUITES
     suites/ui_anim.c
+    suites/ui_focus.c
     suites/ui_frame.c
     suites/ui_dial.c
     suites/ui_icon.c
