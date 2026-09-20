@@ -509,6 +509,17 @@ struct inkcell_metrics {
        a title is above the body and a label below it. Read through
        inkcell_theme_type_scale(), which does the addition and the clamp. */
     int8_t type_offset[INKCELL_TYPE_COUNT];
+    /*
+     * How heavily each role is set, indexed by enum inkcell_type. Read through
+     * inkcell_theme_type_weight().
+     *
+     * Beside the scale rather than decided at each drawing site, because the two are one
+     * decision: how far a title stands above the body is a question about size *and* weight,
+     * and a theme that answered one of them here and left the other in the renderers would be a
+     * theme that cannot actually restyle its own typography. A theme wanting the flat look this
+     * replaced sets every entry to REGULAR.
+     */
+    uint8_t type_weight[INKCELL_TYPE_COUNT];
     uint8_t bubble_width_pct; /* how much of the body a chat bubble may fill */
     uint8_t field_label_cols; /* preferred label column, in cells */
     uint8_t narrow_cols;      /* a body narrower than this halves the label column */
@@ -718,6 +729,11 @@ struct inkcell_rgb inkcell_theme_avatar(const struct inkcell_theme *theme, uint3
  */
 struct inkcell_rgb inkcell_theme_series(const struct inkcell_theme *theme, uint32_t index);
 const struct inkcell_metrics *inkcell_theme_metrics(const struct inkcell_theme *theme);
+
+/* How heavily `type` is set. REGULAR for a theme that states nothing, which is what a table
+   written before the weight existed does. */
+enum inkcell_weight inkcell_theme_type_weight(const struct inkcell_theme *theme,
+                                              enum inkcell_type type);
 
 /* The theme's glyph multiplier, clamped into [INKCELL_SCALE_MIN, INKCELL_SCALE_MAX]. */
 int inkcell_theme_scale(const struct inkcell_theme *theme);

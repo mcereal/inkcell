@@ -320,6 +320,10 @@ int inkcell_fb_space_at(const struct inkcell_backend_fb_state *state, enum inkce
 
 /* The glyph multiplier `type` is drawn at, given this state's body scale. */
 int inkcell_fb_type_scale(const struct inkcell_backend_fb_state *state, enum inkcell_type type);
+/* The weight that role is set in, the theme's answer. A widget names the role; it never picks
+   a weight. */
+enum inkcell_weight inkcell_fb_type_weight(const struct inkcell_backend_fb_state *state,
+                                           enum inkcell_type type);
 
 /*
  * The half-margin: the inset a panel sits in, and the row's own padding either side of it.
@@ -463,6 +467,10 @@ int inkcell_fb_cell_adv(const struct inkcell_backend_fb_state *state, uint32_t c
                         int scale);
 int inkcell_fb_text_width(const struct inkcell_backend_fb_state *state, const char *text,
                           int scale);
+/* The same at a weight, because a heavier cut sets a little wider and a heading measured in the
+   regular one would be a heading its own box clips. */
+int inkcell_fb_text_width_weight(const struct inkcell_backend_fb_state *state, const char *text,
+                                 int scale, enum inkcell_weight weight);
 /* The same width, rounded up to whole nominal cells - for the layouts that still reserve
    space in columns. See the note on the implementation. */
 size_t inkcell_fb_text_cols(const struct inkcell_backend_fb_state *state, const char *text,
@@ -531,6 +539,11 @@ void inkcell_fb_draw_row(const struct inkcell_backend_fb_state *state, int y, co
 void inkcell_fb_draw_text(const struct inkcell_backend_fb_state *state, int x, int y,
                           const char *text, int scale, struct inkcell_rgb ink,
                           struct inkcell_rgb ground);
+/* The same at a weight. The plain form is INKCELL_WEIGHT_REGULAR, which is what body text and
+   anything that has not asked for emphasis is set in. */
+void inkcell_fb_draw_text_weight(const struct inkcell_backend_fb_state *state, int x, int y,
+                                 const char *text, int scale, enum inkcell_weight weight,
+                                 struct inkcell_rgb ink, struct inkcell_rgb ground);
 /* The box an icon is drawn in: one text cell, so a row that puts one in front of its words is
    still measured in columns like every other row. */
 int inkcell_fb_icon_box(const struct inkcell_backend_fb_state *state, int scale);

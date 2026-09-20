@@ -699,7 +699,10 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state
     inkcell_line_reset(&line);
     inkcell_line_printf(&line, "%s", text != NULL ? text : "");
     inkcell_line_fit(&line, inkcell_fb_row_cols(state, scale));
-    inkcell_fb_draw_text(state, x, baseline, inkcell_line_text(&line), scale, ink, ground);
+    /* A section heading is a step *down* in size, which on its own reads as text that got
+       smaller rather than as a break. The weight is what makes it a heading. */
+    inkcell_fb_draw_text_weight(state, x, baseline, inkcell_line_text(&line), scale,
+                                inkcell_fb_type_weight(state, INKCELL_TYPE_LABEL), ink, ground);
     list->y += (int)rows * list->line;
 }
 

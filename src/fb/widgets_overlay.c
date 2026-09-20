@@ -309,9 +309,10 @@ void inkcell_fb_draw_dialog(const struct inkcell_backend_fb_state *state,
         inkcell_line_reset(&headline);
         inkcell_line_printf(&headline, "%s", dialog->headline);
         inkcell_line_fit(&headline, text_cols);
-        inkcell_fb_draw_text(state, content_x, y, inkcell_line_text(&headline), scale,
-                             inkcell_fb_tone_color(state, accent_tone),
-                             inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
+        inkcell_fb_draw_text_weight(state, content_x, y, inkcell_line_text(&headline), scale,
+                                    inkcell_fb_type_weight(state, INKCELL_TYPE_TITLE),
+                                    inkcell_fb_tone_color(state, accent_tone),
+                                    inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
         y += head_h;
     }
 

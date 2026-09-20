@@ -285,6 +285,11 @@ int inkcell_fb_type_scale(const struct inkcell_backend_fb_state *state, enum ink
     return inkcell_theme_type_scale(state->theme, type, state->scale);
 }
 
+enum inkcell_weight inkcell_fb_type_weight(const struct inkcell_backend_fb_state *state,
+                                           enum inkcell_type type) {
+    return inkcell_theme_type_weight(state->theme, type);
+}
+
 int inkcell_fb_gutter(const struct inkcell_backend_fb_state *state) {
     const int margin = inkcell_fb_margin(state);
     return margin > 1 ? margin / 2 : margin;
@@ -692,9 +697,15 @@ int inkcell_fb_cell_adv(const struct inkcell_backend_fb_state *state, uint32_t c
  */
 int inkcell_fb_text_width(const struct inkcell_backend_fb_state *state, const char *text,
                           int scale) {
+    return inkcell_fb_text_width_weight(state, text, scale, INKCELL_WEIGHT_REGULAR);
+}
+
+int inkcell_fb_text_width_weight(const struct inkcell_backend_fb_state *state, const char *text,
+                                 int scale, enum inkcell_weight weight) {
     if (text == NULL) {
         return 0;
     }
+    const struct inkcell_font *font = inkcell_font_at_weight(inkcell_fb_font(state), weight);
     int width = 0;
     int widest = 0;
     size_t offset = 0;
@@ -708,8 +719,8 @@ int inkcell_fb_text_width(const struct inkcell_backend_fb_state *state, const ch
             width = 0;
             continue;
         }
-        width += cell.is_emoji ? inkcell_fb_char_adv(state, scale)
-                               : inkcell_fb_cell_adv(state, cell.codepoint, scale);
+        width += cell.is_emoji ? inkcell_font_advance(font, scale)
+                               : inkcell_font_advance_cp(font, cell.codepoint, scale);
         if (width > widest) {
             widest = width;
         }
@@ -860,8 +871,8 @@ static int inkcell_fb_glyph_step(const uint8_t *row_lo, const uint8_t *row_hi,
  */
 static void inkcell_fb_draw_glyph_ramp(const struct inkcell_backend_fb_state *state, int x, int y,
                                        uint32_t codepoint, int scale,
+                                       const struct inkcell_font *font,
                                        const uint32_t blend[INKCELL_FB_BLEND_STEPS]) {
-    const struct inkcell_font *font = inkcell_fb_font(state);
     const int cell_rows = (int)font->master_h - (int)font->master_top;
     /*
      * The box the master resamples into, taken from the master rather than from the cell.
@@ -961,7 +972,7 @@ void inkcell_fb_draw_glyph(const struct inkcell_backend_fb_state *state, int x, 
                            struct inkcell_rgb ground) {
     uint32_t blend[INKCELL_FB_BLEND_STEPS];
     inkcell_fb_blend_table(state, ink, ground, blend);
-    inkcell_fb_draw_glyph_ramp(state, x, y, codepoint, scale, blend);
+    inkcell_fb_draw_glyph_ramp(state, x, y, codepoint, scale, inkcell_fb_font(state), blend);
 }
 
 /*
@@ -1308,6 +1319,13 @@ void inkcell_fb_draw_icon(const struct inkcell_backend_fb_state *state, int x, i
 void inkcell_fb_draw_text(const struct inkcell_backend_fb_state *state, int x, int y,
                           const char *text, int scale, struct inkcell_rgb ink,
                           struct inkcell_rgb ground) {
+    inkcell_fb_draw_text_weight(state, x, y, text, scale, INKCELL_WEIGHT_REGULAR, ink, ground);
+}
+
+void inkcell_fb_draw_text_weight(const struct inkcell_backend_fb_state *state, int x, int y,
+                                 const char *text, int scale, enum inkcell_weight weight,
+                                 struct inkcell_rgb ink, struct inkcell_rgb ground) {
+    const struct inkcell_font *font = inkcell_font_at_weight(inkcell_fb_font(state), weight);
     /* One ramp for the whole run: every character in it is the same ink over the same ground,
        and building the table per glyph would cost more than drawing one. */
     uint32_t blend[INKCELL_FB_BLEND_STEPS];
@@ -1334,8 +1352,8 @@ void inkcell_fb_draw_text(const struct inkcell_backend_fb_state *state, int x, i
             cursor = x;
             continue;
         }
-        inkcell_fb_draw_glyph_ramp(state, cursor, y, cell.codepoint, scale, blend);
-        cursor += inkcell_fb_cell_adv(state, cell.codepoint, scale);
+        inkcell_fb_draw_glyph_ramp(state, cursor, y, cell.codepoint, scale, font, blend);
+        cursor += inkcell_font_advance_cp(font, cell.codepoint, scale);
     }
 }
 

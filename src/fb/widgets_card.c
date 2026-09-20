@@ -105,12 +105,28 @@ inkcell_fb_card_measure(const struct inkcell_backend_fb_state *state,
     for (uint32_t i = 0U; i < card->action_count && i < INKCELL_FB_CARD_ACTIONS_MAX; ++i) {
         focused = focused || card->actions[i].selected;
     }
-    m.ring = m.edge;
+    /*
+     * A filled card has no edge.
+     *
+     * It had one - every card did, whatever its variant - and a stack of hairline boxes is what
+     * makes a screen read as an instrument panel rather than as a page: an outline says "this is
+     * a region of a form", where a fill says "this is a thing". The tiers already carry the
+     * distance from the ground, which is the job the edge was doing twice.
+     *
+     * The outlined variant keeps it, because its fill *is* the ground and the edge is then the
+     * whole of what says the card is there. And the focus ring stays on every variant: it is not
+     * decoration, it is which card the next press acts on, and that has to be findable before
+     * anything is read.
+     */
     if (focused) {
         m.ring = m.edge * 2;
         m.edge_ink = inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY);
-    } else {
+    } else if (card->variant == INKCELL_FB_CARD_OUTLINED) {
+        m.ring = m.edge;
         m.edge_ink = inkcell_fb_color(state, INKCELL_COLOR_OUTLINE);
+    } else {
+        m.ring = 0;
+        m.edge_ink = inkcell_fb_color(state, m.fill);
     }
     m.radius = inkcell_fb_radius(state, INKCELL_SHAPE_MD);
     /* A heading is drawn at the chrome scale, the size the tab strip and the footer are: a
@@ -669,10 +685,18 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state,
      * grows inward into the padding. See inkcell_fb_card_measure().
      */
     const int top = *y;
-    const int inner_radius = m.radius + m.edge - m.ring > 0 ? m.radius + m.edge - m.ring : 0;
-    inkcell_fb_fill_round_rect(state, m.x, top, m.width, height, m.radius + m.edge, m.edge_ink);
-    inkcell_fb_fill_round_rect(state, m.x + m.ring, top + m.ring, m.width - 2 * m.ring,
-                               height - 2 * m.ring, inner_radius, inkcell_fb_color(state, m.fill));
+    if (m.ring > 0) {
+        const int inner_radius = m.radius + m.edge - m.ring > 0 ? m.radius + m.edge - m.ring : 0;
+        inkcell_fb_fill_round_rect(state, m.x, top, m.width, height, m.radius + m.edge, m.edge_ink);
+        inkcell_fb_fill_round_rect(state, m.x + m.ring, top + m.ring, m.width - 2 * m.ring,
+                                   height - 2 * m.ring, inner_radius,
+                                   inkcell_fb_color(state, m.fill));
+    } else {
+        /* No edge to lay down first, so the fill is the whole panel - and it takes the outer
+           radius, because with nothing around it the fill's own corner is the card's corner. */
+        inkcell_fb_fill_round_rect(state, m.x, top, m.width, height, m.radius + m.edge,
+                                   inkcell_fb_color(state, m.fill));
+    }
 
     int row_y = top + m.pad_y + m.edge;
     /*
@@ -751,8 +775,10 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state,
         const int heading_adv = inkcell_fb_char_adv(state, layout->small);
         const int heading_w = actions_x - heading_x;
         inkcell_line_fit(&line, heading_w >= heading_adv ? (size_t)(heading_w / heading_adv) : 1U);
-        inkcell_fb_draw_text(state, heading_x, row_y, inkcell_line_text(&line), layout->small, ink,
-                             inkcell_fb_color(state, m.fill));
+        inkcell_fb_draw_text_weight(state, heading_x, row_y, inkcell_line_text(&line),
+                                    layout->small,
+                                    inkcell_fb_type_weight(state, INKCELL_TYPE_LABEL), ink,
+                                    inkcell_fb_color(state, m.fill));
     }
     if (m.heading_h > 0) {
         row_y += m.heading_h;

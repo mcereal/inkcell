@@ -265,10 +265,15 @@ def pack(values):
 
 
 def main():
-    if len(sys.argv) != 3:
+    if len(sys.argv) not in (3, 4):
         print(__doc__)
         return 1
     font_path, out_path = sys.argv[1], sys.argv[2]
+    # Which table the file defines. The regular face is the unsuffixed one; a second weight is
+    # the same data under another name, so one generator serves both rather than a second script
+    # that would drift from this one.
+    suffix = sys.argv[3] if len(sys.argv) == 4 else ""
+    table = "inkcell_font_ui%s_table" % (("_" + suffix) if suffix else "")
     # The repo root, spelled out rather than sliced off `__file__`: it is only absolute here
     # because Python has made it so since 3.9, and this script's whole job depends on finding
     # font5x7.c next to it.
@@ -363,7 +368,7 @@ def main():
               % (codepoint, offset, x, y, gw, gh, step))
         w("};\n\n")
 
-        w("const struct inkcell_font_ui_table inkcell_font_ui_table = {\n")
+        w("const struct inkcell_font_ui_table %s = {\n" % table)
         w("    .pixels = k_pixels,\n")
         w("    .glyphs = k_glyphs,\n")
         w("    .count = %d,\n" % len(entries))

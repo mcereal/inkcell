@@ -55,6 +55,22 @@ const struct inkcell_font *inkcell_font_by_id(const char *id) {
     return NULL;
 }
 
+const struct inkcell_font *inkcell_font_at_weight(const struct inkcell_font *font,
+                                                  enum inkcell_weight weight) {
+    if (font == NULL) {
+        font = inkcell_font_default();
+    }
+    if (weight != INKCELL_WEIGHT_STRONG || font == NULL || font->id == NULL) {
+        return font;
+    }
+    /* By identity rather than by a pointer on the descriptor: a face's heavier cut is a fact
+       about the family, and the registry is the one place that knows which files are one. */
+    if (strcmp(font->id, "ui") == 0) {
+        return inkcell_font_ui_bold();
+    }
+    return font;
+}
+
 static const struct inkcell_font *font_or_default(const struct inkcell_font *font) {
     return font != NULL ? font : inkcell_font_default();
 }

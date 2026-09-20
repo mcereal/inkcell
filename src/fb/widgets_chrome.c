@@ -441,8 +441,9 @@ void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state,
        is not drawn at is a title that runs off the panel. */
     const int room = right > text_x ? (right - text_x) / adv : 0;
     inkcell_line_fit(&line, (size_t)(room > 0 ? room : 0));
-    inkcell_fb_draw_text(state, text_x, y, inkcell_line_text(&line), scale,
-                         inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY), ground);
+    inkcell_fb_draw_text_weight(state, text_x, y, inkcell_line_text(&line), scale,
+                                inkcell_fb_type_weight(state, INKCELL_TYPE_TITLE),
+                                inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY), ground);
 
     /*
      * What is left of the body, recomputed rather than deducted.

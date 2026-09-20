@@ -100,9 +100,12 @@ struct inkcell_font_ui_table {
 };
 
 extern const struct inkcell_font_ui_table inkcell_font_ui_table;
+/* The same family at the heavier weight - see inkcell_font_ui_bold(). */
+extern const struct inkcell_font_ui_table inkcell_font_ui_bold_table;
 
 /* This face as a `struct inkcell_font`, which is how a theme reaches it. */
 const struct inkcell_font *inkcell_font_ui(void);
+const struct inkcell_font *inkcell_font_ui_bold(void);
 
 #ifdef __cplusplus
 }

@@ -203,6 +203,32 @@ bool inkcell_font_glyph(const struct inkcell_font *font, uint32_t codepoint,
                         struct inkcell_glyph *out);
 bool inkcell_font_has_glyph(const struct inkcell_font *font, uint32_t codepoint);
 
+/*
+ * How heavily text is set.
+ *
+ * Two, because two is what this panel can tell apart: a face rasterised into a 20-pixel cell
+ * has room for one clear step of weight and no more, and a scale of four that a reader cannot
+ * distinguish is a scale of one with extra data. REGULAR is body text and everything that has
+ * not said otherwise; STRONG is the line the eye should land on first.
+ *
+ * A weight, not a colour and not a size. That is the point of having it: hierarchy was being
+ * carried entirely by palette here, which is why a screen of headings, values and states read
+ * as though every line were competing with its neighbours.
+ */
+enum inkcell_weight {
+    INKCELL_WEIGHT_REGULAR = 0,
+    INKCELL_WEIGHT_STRONG,
+};
+
+/*
+ * `font` at `weight` - the same family, set heavier.
+ *
+ * A face with no heavier cut answers with itself, which is what the pixel font does: 5x7 has
+ * one weight and emboldening it by smearing a column would turn its letters into blocks.
+ */
+const struct inkcell_font *inkcell_font_at_weight(const struct inkcell_font *font,
+                                                  enum inkcell_weight weight);
+
 /* The registry a theme's `font_id` is resolved against. */
 size_t inkcell_font_count(void);
 const struct inkcell_font *inkcell_font_at(size_t index);
