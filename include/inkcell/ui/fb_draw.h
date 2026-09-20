@@ -603,6 +603,20 @@ int inkcell_fb_emoji_box_fit(int box);
 int inkcell_fb_draw_wrapped(const struct inkcell_backend_fb_state *state, int y, const char *text,
                             size_t width, int max_lines, struct inkcell_rgb color,
                             struct inkcell_rgb ground);
+/*
+ * The same, with every line centred in `width` about the leading margin.
+ *
+ * For the one shape that is centred rather than set: a symbol with a sentence under it. An
+ * empty state centres its icon on the panel, and a caption left-aligned under a centred symbol
+ * reads as a mistake rather than as a choice.
+ *
+ * Each line is measured and placed on its own, not the block on its widest line. A ragged
+ * paragraph centred as a block is a block with one straight edge, and on a proportional face
+ * two lines of the same character count are two different widths anyway.
+ */
+int inkcell_fb_draw_wrapped_centered(const struct inkcell_backend_fb_state *state, int y,
+                                     const char *text, size_t width, int max_lines,
+                                     struct inkcell_rgb color, struct inkcell_rgb ground);
 int inkcell_fb_draw_wrapped_at(const struct inkcell_backend_fb_state *state, int x, int y,
                                const char *text, size_t width, int max_lines,
                                struct inkcell_rgb color, struct inkcell_rgb ground);

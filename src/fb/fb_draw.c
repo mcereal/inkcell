@@ -1669,6 +1669,37 @@ int inkcell_fb_draw_wrapped_at(const struct inkcell_backend_fb_state *state, int
 }
 
 /* The same, from the body's left margin - which is where a screen's own wrapped text starts. */
+int inkcell_fb_draw_wrapped_centered(const struct inkcell_backend_fb_state *state, int y,
+                                     const char *text, size_t width, int max_lines,
+                                     struct inkcell_rgb color, struct inkcell_rgb ground) {
+    struct inkcell_fb_wrap_ctx wctx;
+    const struct inkcell_wrap_metric metric = inkcell_fb_wrap_metric(&wctx, state, state->scale);
+    struct inkcell_wrap wrap;
+    inkcell_wrap_begin_measured(&wrap, text, width, &metric);
+
+    /* The band the lines are centred in, rather than the panel: a caller that wrapped to a
+       narrower width meant that width, and centring on the panel would hang the text off the
+       side of the column it was measured for. */
+    const int left = inkcell_fb_margin(state);
+    int lines = 0;
+    while (lines < max_lines && inkcell_wrap_next(&wrap)) {
+        /*
+         * Each line on its own measurement, not the block on the widest.
+         *
+         * A ragged paragraph centred as a block is a block with one edge straight, which is
+         * the thing that reads as a mistake; and measuring is the only way to know how wide a
+         * line is on a proportional face, where two lines of the same character count are two
+         * different widths.
+         */
+        const int line_w = inkcell_fb_text_width(state, wrap.line, state->scale);
+        const int x = line_w < (int)width ? left + ((int)width - line_w) / 2 : left;
+        inkcell_fb_draw_text(state, x, y, wrap.line, state->scale, color, ground);
+        y += inkcell_fb_line_adv(state, state->scale);
+        ++lines;
+    }
+    return lines;
+}
+
 int inkcell_fb_draw_wrapped(const struct inkcell_backend_fb_state *state, int y, const char *text,
                             size_t width, int max_lines, struct inkcell_rgb color,
                             struct inkcell_rgb ground) {
