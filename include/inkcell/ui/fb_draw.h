@@ -208,7 +208,7 @@ struct inkcell_backend_fb_state {
 };
 
 /*
- * The clock for the next frame. Call before inkcell_fb_render_snapshot().
+ * The clock for the next frame. Call before drawing it.
  *
  * Time never goes backwards here: a caller that hands over an earlier reading than the last is
  * ignored, because an animation window that starts in the future never finishes and the knob
@@ -396,7 +396,8 @@ size_t inkcell_fb_row_cols(const struct inkcell_backend_fb_state *state, int sca
 const struct inkcell_metrics *inkcell_fb_metrics(const struct inkcell_backend_fb_state *state);
 const struct inkcell_font *inkcell_fb_font(const struct inkcell_backend_fb_state *state);
 
-/* Where the chrome ends and the body begins. Filled in by inkcell_fb_render_snapshot(). */
+/* Where the chrome ends and the body begins. Opened by inkcell_fb_layout_begin(), and moved
+   down by each piece of chrome as it takes its room - see include/inkcell/ui/widgets/chrome.h. */
 struct inkcell_fb_layout {
     int body_y;    /* first body row */
     int footer_y;  /* top of the two footer lines */
@@ -415,7 +416,7 @@ struct inkcell_fb_layout {
      */
     int body_w;
     /* The glyph multiplier chrome is drawn at: INKCELL_TYPE_LABEL, resolved once in
-       inkcell_fb_render_snapshot() and carried here so every piece of chrome in the frame agrees.
+       inkcell_fb_layout_begin() and carried here so every piece of chrome in the frame agrees.
      */
     int small;
     /*
@@ -435,8 +436,8 @@ struct inkcell_fb_layout {
      * Here rather than on `struct inkcell_fb_app_bar` because a screen renderer is the wrong place
      * to be asked: it is a fact about the nav, the tables in src/ui/tables/actions.c already decide
      * it for the action bar at the bottom, and the two pieces of chrome disagreeing about whether
-     * B leaves is exactly the drift a second opinion would introduce. inkcell_fb_render_snapshot()
-     * asks once and both bars read the same answer.
+     * B leaves is exactly the drift a second opinion would introduce. It is asked once, at
+     * inkcell_fb_layout_begin(), and both bars read the same answer.
      */
     bool back;
 };

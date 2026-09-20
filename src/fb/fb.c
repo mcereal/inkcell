@@ -158,8 +158,14 @@ size_t inkcell_fb_copy_damage(struct inkcell_backend_fb_state *state, const uint
                         page_bytes <= state->inkcell_fb_size / 2U;
     size_t written = 0U;
     for (uint32_t y = 0U; y < state->var.yres; ++y) {
+        /* The clip band, and the rows something animated into this frame from outside it -
+           see inkcell_fb_animation_damage(). A widget that slid above or below the band is a
+           row the band would otherwise skip, and skipping it leaves the last position of a
+           moving thing on the panel. */
         if (!force && state->clip_active &&
-            ((int)y < state->clip.y || (int)y >= state->clip.bottom)) {
+            ((int)y < state->clip.y || (int)y >= state->clip.bottom) &&
+            !(state->animation_damage.valid && (int)y >= state->animation_damage.y &&
+              (int)y < state->animation_damage.bottom)) {
             continue;
         }
         const size_t offset = (size_t)y * stride;

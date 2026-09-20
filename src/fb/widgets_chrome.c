@@ -17,6 +17,62 @@
 #include "inkcell/ui/emoji.h"
 #include "inkcell/utils/text.h"
 
+/* ---- the frame ------------------------------------------------------------------------------ */
+
+uint32_t inkcell_fb_layout_rows(const struct inkcell_backend_fb_state *state,
+                                const struct inkcell_fb_layout *layout) {
+    if (layout->line <= 0) {
+        return 0U;
+    }
+    /* The gutter is the body's own bottom margin: rows are counted to where content may stand,
+       not to where the footer's fill begins, or the last row would sit against the action bar's
+       rule with nothing between them. */
+    const int remaining = layout->footer_y - inkcell_fb_gutter(state) - layout->body_y;
+    return remaining > 0 ? (uint32_t)(remaining / layout->line) : 0U;
+}
+
+struct inkcell_fb_layout inkcell_fb_layout_begin(const struct inkcell_backend_fb_state *state,
+                                                 bool footer, bool back) {
+    struct inkcell_fb_layout layout = {0};
+
+    /* Chrome's glyph scale, resolved once here so that every bar in the frame agrees - see the
+       field's note. Everything below reads it rather than asking the theme again. */
+    layout.small = inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL);
+    layout.line = inkcell_fb_line_adv(state, state->scale);
+    layout.back = back;
+
+    /* The body starts at the edge the whole frame stands off. Nothing has been drawn above it,
+       so the first body row and the first row below the navigation bar are the same row; the
+       nav bar moves both when it draws. */
+    layout.body_y = inkcell_fb_edge(state);
+    layout.nav_y = layout.body_y;
+
+    /*
+     * The footer's room, taken now rather than when the bar is drawn.
+     *
+     * The action bar is drawn last, over a body that was laid out long before - so the room has
+     * to be missing from the body's count from the start. Reserving it here and drawing the bar
+     * at `footer_y` is what keeps a full list's last row off the keycaps.
+     */
+    layout.footer_y = (int)state->var.yres;
+    if (footer) {
+        layout.footer_y -= inkcell_fb_action_bar_height(state, &layout);
+        if (layout.footer_y < layout.body_y) {
+            layout.footer_y = layout.body_y;
+        }
+    }
+
+    layout.rows = inkcell_fb_layout_rows(state, &layout);
+    /* A character count at the body scale, and the pixel width that count is an estimate of.
+       Both, because a proportional face makes them different questions - see `body_w`. */
+    layout.cols = inkcell_fb_cols(state, state->scale);
+    layout.body_w = (int)state->var.xres - 2 * inkcell_fb_margin(state);
+    if (layout.body_w < 1) {
+        layout.body_w = 1;
+    }
+    return layout;
+}
+
 /* ---- the navigation bar --------------------------------------------------------------------- */
 
 void inkcell_fb_draw_nav_bar(const struct inkcell_backend_fb_state *state,
@@ -39,6 +95,11 @@ void inkcell_fb_draw_nav_bar(const struct inkcell_backend_fb_state *state,
     layout->nav_y = bar_h + inkcell_fb_rule_height(state, small);
     layout->body_y =
         bar_h + inkcell_fb_space_at(state, INKCELL_SPACE_MD, small) + inkcell_fb_gutter(state);
+    /* The rows the bar just cost, for the same reason the banner and the app bar recount after
+       moving the body: `rows` is a fact about where the body now starts, and a piece of chrome
+       that moves the top without recounting leaves a list measuring against a row it no longer
+       has. */
+    layout->rows = inkcell_fb_layout_rows(state, layout);
 }
 
 /* ---- the screen progress bar ---------------------------------------------------------------- */
@@ -459,7 +520,7 @@ void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state,
      * fit - on the Brick's panel the remainder is most of a row, so every titled screen lost
      * one for nothing.
      *
-     * So the count is taken again from the same two numbers inkcell_fb_render_snapshot() used,
+     * So the count is taken again from the same two numbers inkcell_fb_layout_begin() used,
      * against the body's real bottom. Measuring it the same way twice is what keeps the two answers
      * from disagreeing.
      */

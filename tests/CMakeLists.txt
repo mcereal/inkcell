@@ -7,6 +7,7 @@
 # them with it, silently. Add a new suite file to INKCELL_TEST_SUITES and it runs.
 set(INKCELL_TEST_SUITES
     suites/ui_anim.c
+    suites/ui_frame.c
     suites/ui_icon.c
     suites/ui_layout.c
     suites/ui_text.c
@@ -33,3 +34,4 @@ if(Python3_Interpreter_FOUND)
              COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/check-strings.py)
     set_tests_properties(inkcell_hardcoded_strings PROPERTIES LABELS unit)
 endif()
+

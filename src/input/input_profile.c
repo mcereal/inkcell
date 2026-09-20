@@ -1,6 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "inkcell/ui/input_profile.h"
+
+#include "inkcell/ui/input.h"
 #include "inkcell/utils/env.h"
 
 #include "inkcell/utils/array.h"
@@ -185,6 +187,29 @@ const char *inkcell_input_profile_cap(const struct inkcell_input_profile *profil
         return "";
     }
     return profile->caps[button];
+}
+
+/*
+ * The word printed on a button, for whoever is drawing a keycap.
+ *
+ * Two answers joined, because a pad has two kinds of button on it. Every key the hardware
+ * prints a letter beside is the profile's to name - which pad this is decides whether the
+ * eastern face button says A or B, and that is the whole reason profiles exist. The quit key
+ * is not one of them: it is whatever <PREFIX>_QUIT_KEYS says, so the module that parsed the
+ * variable answers for it.
+ *
+ * This is the call an action bar makes, and it makes it once per keycap per frame - both halves
+ * cache their lookup, so what a frame pays is an index into a table.
+ *
+ * Never NULL: an unknown button gets "". A bar that drew a NULL would be a crash in the one
+ * place a wrong answer is merely cosmetic, and a keycap is the last thing in this toolkit that
+ * should be able to take a screen down.
+ */
+const char *inkcell_button_cap(enum inkcell_button button) {
+    if (button == INKCELL_BUTTON_QUIT) {
+        return inkcell_input_quit_cap();
+    }
+    return inkcell_input_profile_cap(inkcell_input_profile_from_env(), button);
 }
 
 /* The four a profile is required to bind. The rest of the pad is a convention, so a profile

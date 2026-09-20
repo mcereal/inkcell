@@ -215,8 +215,74 @@ bool inkcell_fb_app_pending(const struct inkcell_backend_fb_state *state) {
     return state != NULL && state->app.pending != NULL && state->app.pending(state->app.ctx);
 }
 
+void inkcell_fb_animation_damage(struct inkcell_backend_fb_state *state, int x, int y, int w,
+                                 int h) {
+    if (state == NULL || w <= 0 || h <= 0) {
+        return;
+    }
+    /*
+     * Where something moved this frame, unioned with wherever else did.
+     *
+     * This exists for the one case a row-by-row compare gets wrong: a frame drawn under a clip
+     * band - a list repainting its own rows and nothing else - skips every row outside the
+     * band when it is copied to the panel, and a switch sliding two rows above the band is
+     * exactly such a row. The widget that slid is the only thing that knows it did, so it says
+     * so here and inkcell_fb_copy_damage() lets those rows through.
+     *
+     * A union rather than a list: the rows are what matter and a second rectangle beside the
+     * first costs at most the rows between them, which on a panel this size is cheaper than
+     * keeping and walking a list of them would be.
+     */
+    int right = x + w;
+    int bottom = y + h;
+    if (x < 0) {
+        x = 0;
+    }
+    if (y < 0) {
+        y = 0;
+    }
+    if (right > (int)state->var.xres) {
+        right = (int)state->var.xres;
+    }
+    if (bottom > (int)state->var.yres) {
+        bottom = (int)state->var.yres;
+    }
+    if (right <= x || bottom <= y) {
+        return;
+    }
+
+    struct inkcell_fb_damage_rect *damage = &state->animation_damage;
+    if (!damage->valid) {
+        damage->x = x;
+        damage->y = y;
+        damage->right = right;
+        damage->bottom = bottom;
+        damage->valid = true;
+        return;
+    }
+    if (x < damage->x) {
+        damage->x = x;
+    }
+    if (y < damage->y) {
+        damage->y = y;
+    }
+    if (right > damage->right) {
+        damage->right = right;
+    }
+    if (bottom > damage->bottom) {
+        damage->bottom = bottom;
+    }
+}
+
 void inkcell_fb_app_frame_begin(struct inkcell_backend_fb_state *state) {
-    if (state != NULL && state->app.frame_begin != NULL) {
+    if (state == NULL) {
+        return;
+    }
+    /* Last frame's moving parts are not this one's. Cleared here rather than after the copy so
+       that a caller which renders without presenting - the capture harness - does not carry a
+       rectangle from one page into the next. */
+    state->animation_damage = (struct inkcell_fb_damage_rect){0};
+    if (state->app.frame_begin != NULL) {
         state->app.frame_begin(state->app.ctx);
     }
 }
