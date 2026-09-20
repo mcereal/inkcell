@@ -902,14 +902,20 @@ void inkcell_fb_list_item(struct inkcell_backend_fb_state *state, struct inkcell
     /* Into the blank cell the label column and the value leave between them, and only when the
        value column actually got that far - a label column wider than the row is clipped, and a
        marker drawn at a column the words no longer reach would sit on top of the label. */
-    /* The control the row actually drew, if it drew one, supersedes a marker that was offering
-       the same thing - see marker_yields_to_control. A slider counts and is asked separately,
-       because it is a band under the words rather than a trailing slot, and it draws only if
-       the list gave this row its second step. */
+    /*
+     * The control the row actually drew, if it drew one, supersedes a marker that was offering
+     * the same thing - see marker_yields_to_control.
+     *
+     * The slider is asked separately because it is a band under the words rather than a trailing
+     * slot, and the test is the draw's own, term for term: it needs the second step the list may
+     * not have given, and it loses the bar to a meter that wants it. Writing "has a slider"
+     * here instead would suppress the mark on a row that drew a *meter* - a reading, which
+     * supersedes nothing.
+     */
+    const bool slider_drawn = item->slider != NULL && g.bar_h > 0 && item->meter == NULL;
     const bool marker_superseded =
         item->marker_yields_to_control &&
-        (inkcell_fb_trailing_is_control(state, g.cols, reserved, &item->trailing) ||
-         (item->slider != NULL && g.bar_h > 0));
+        (inkcell_fb_trailing_is_control(state, g.cols, reserved, &item->trailing) || slider_drawn);
     if (!marker_superseded && item->label_cols > 0U && inkcell_icon_is_valid(item->marker_icon) &&
         g.cols > item->label_cols + INKCELL_FB_ITEM_MARKER_CELLS) {
         inkcell_fb_draw_icon(
