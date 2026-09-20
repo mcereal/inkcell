@@ -39,6 +39,10 @@ static const struct gallery_scene k_scenes[] = {
        button and the one that looks wrong first. */
     {"keyboard", gallery_scene_keyboard, 0U},
     {"keyboard_emoji", gallery_scene_keyboard_emoji, 0U},
+    /* Not a component at all: the four presses from one cell of a ragged screen, drawn as the
+       finder answered them. Appended last for the manifest's sake - the table's order names the
+       pictures. */
+    {"focus", gallery_scene_focus, 0U},
 };
 
 const struct gallery_scene *gallery_scenes(size_t *count) {

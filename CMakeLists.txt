@@ -74,6 +74,10 @@ add_library(inkcell STATIC
     # the on-screen keyboard's model: the grid, the panel ring, the edits. No drawing, which is
     # what lets the whole thing be tested without a panel.
     src/keyboard.c
+    # where the d-pad goes: the rectangles a frame drew, and which one lies in a given
+    # direction. A model for the keyboard's reason - no panel in it, and a second backend
+    # resolving a press wants the same answer.
+    src/focus.c
     # evdev to a key, and the button profile of the device under it
     src/input/input.c
     src/input/input_profile.c

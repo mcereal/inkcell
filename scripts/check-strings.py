@@ -40,6 +40,7 @@ CHECKED = [
     "src/fb/widgets_list.c",
     "src/fb/widgets_meter.c",
     "src/fb/widgets_overlay.c",
+    "src/focus.c",
     "src/input/input.c",
     "src/keyboard.c",
 ]
