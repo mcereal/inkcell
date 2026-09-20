@@ -60,8 +60,8 @@
                 [INKCELL_TYPE_BODY] = 0,                                                           \
                 [INKCELL_TYPE_LABEL] = -1,                                                         \
             }, /* A title is heavier as well as larger, and a label is heavier *instead* of        \
-                  larger: section headings and chrome are a step down in size, which on its own                             \
-                  reads as text that got smaller rather than as a heading. */                                                \
+                  larger: section headings and chrome are a step down in size, which on its own    \
+                  reads as text that got smaller rather than as a heading. */                      \
             .type_weight =                                                                         \
                 {                                                                                  \
                     [INKCELL_TYPE_TITLE] = INKCELL_WEIGHT_STRONG,                                  \

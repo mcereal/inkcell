@@ -26,6 +26,10 @@
  */
 
 #include "inkcell/i18n/strings.h"
+/* For `struct inkcell_text_cell`, which the wrap metric below is handed. Declaring it inside
+   that prototype instead makes it a *different* type from the one this defines, which clang
+   rejects as an incompatible function pointer where gcc only warns about the visibility. */
+#include "inkcell/ui/emoji.h"
 
 #include <stdarg.h>
 #include <stdbool.h>

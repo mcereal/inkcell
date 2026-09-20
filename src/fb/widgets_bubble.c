@@ -149,7 +149,7 @@ static void inkcell_fb_bubble_part_icon(const struct inkcell_backend_fb_state *s
     parts[*count].text = NULL;
     parts[*count].icon = icon;
     parts[*count].cells =
-        (size_t)(INKCELL_FB_BUBBLE_ICON_CELLS * inkcell_fb_char_adv(state, state->scale));
+        (size_t)INKCELL_FB_BUBBLE_ICON_CELLS * (size_t)inkcell_fb_char_adv(state, state->scale);
     *count += 1U;
 }
 
@@ -189,14 +189,15 @@ static size_t inkcell_fb_bubble_run(const struct inkcell_backend_fb_state *state
     inkcell_fb_bubble_part_icon(state, parts, count, meta->state);
 
     size_t cells = inkcell_fb_bubble_run_cells(
-        parts, *count, INKCELL_FB_BUBBLE_META_GAP * inkcell_fb_char_adv(state, state->scale));
+        parts, *count, (int)INKCELL_FB_BUBBLE_META_GAP * inkcell_fb_char_adv(state, state->scale));
     while (*count > 0U && cells > budget) {
         for (size_t i = 1U; i < *count; ++i) {
             parts[i - 1U] = parts[i];
         }
         *count -= 1U;
-        cells = inkcell_fb_bubble_run_cells(
-            parts, *count, INKCELL_FB_BUBBLE_META_GAP * inkcell_fb_char_adv(state, state->scale));
+        cells = inkcell_fb_bubble_run_cells(parts, *count,
+                                            (int)INKCELL_FB_BUBBLE_META_GAP *
+                                                inkcell_fb_char_adv(state, state->scale));
     }
     return cells;
 }
@@ -251,7 +252,7 @@ inkcell_fb_bubble_measure(const struct inkcell_backend_fb_state *state,
     /* The indent is stated in cells because it is a *space*, and turned into pixels here
        because everything it is compared against is now measured. */
     const size_t quote_indent =
-        (size_t)(INKCELL_FB_BUBBLE_QUOTE_INDENT * inkcell_fb_char_adv(state, state->scale));
+        (size_t)INKCELL_FB_BUBBLE_QUOTE_INDENT * (size_t)inkcell_fb_char_adv(state, state->scale);
     if (inkcell_fb_bubble_has(bubble->quote) && max > quote_indent) {
         const size_t room = max - quote_indent;
         metrics.quote_cols = (size_t)inkcell_fb_text_width(state, bubble->quote, state->scale);
