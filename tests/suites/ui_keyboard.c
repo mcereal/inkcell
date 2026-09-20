@@ -12,6 +12,7 @@
 
 #include "inkcell/ui/keyboard.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -419,4 +420,41 @@ INKCELL_TEST_CASE(keyboard_cell_clamps_a_stale_page, unit) {
     layout.emoji = NULL;
     INKCELL_TEST_FAIL_IF(inkcell_keyboard_cell(&kb, &layout, 0U, 0U, scratch)[0] != '\0',
                          "an absent emoji layer should draw no key");
+}
+
+/*
+ * Any int is a step.
+ *
+ * The signature takes an `int` and says nothing about its range, so a caller passing one is
+ * within its rights - and adding the current panel to it before the modulo overflows for a step
+ * near INT_MAX, which is undefined behaviour rather than a wrong answer. Reducing the step first
+ * keeps both operands small; the landing is asserted as an invariant rather than an arithmetic
+ * result, because what the contract owes is a panel that exists.
+ */
+INKCELL_TEST_CASE(keyboard_panel_step_takes_any_int, unit) {
+    fill_page(test_page_two, INKCELL_KB_EMOJI_PAGE_CELLS * 2U, TEST_EMOJI);
+    struct inkcell_keyboard_layout layout = one_page_layout();
+    layout.emoji = test_page_two;
+    layout.pages = 2U;
+
+    const int deltas[] = {INT_MAX, INT_MIN, INT_MAX - 1, INT_MIN + 1, 1000003, -1000003};
+    for (size_t i = 0U; i < sizeof deltas / sizeof deltas[0]; ++i) {
+        for (unsigned panel = 0U; panel < INKCELL_KB_ASCII_LAYERS + layout.pages; ++panel) {
+            struct inkcell_keyboard kb;
+            inkcell_keyboard_reset(&kb);
+            /* Park the cursor on each panel in turn: the overflow only bites once the index
+               being added is non-zero. */
+            inkcell_keyboard_panel_step(&kb, &layout, (int)panel);
+            inkcell_keyboard_panel_step(&kb, &layout, deltas[i]);
+
+            char message[112];
+            snprintf(message, sizeof message, "delta %d from panel %u left layer %u", deltas[i],
+                     panel, kb.layer);
+            INKCELL_TEST_FAIL_IF(kb.layer >= INKCELL_KB_LAYER_COUNT, message);
+            snprintf(message, sizeof message, "delta %d from panel %u left page %u of %u",
+                     deltas[i], panel, kb.emoji_page, layout.pages);
+            INKCELL_TEST_FAIL_IF(kb.layer == INKCELL_KB_EMOJI && kb.emoji_page >= layout.pages,
+                                 message);
+        }
+    }
 }

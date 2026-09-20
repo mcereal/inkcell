@@ -237,9 +237,18 @@ void inkcell_keyboard_panel_step(struct inkcell_keyboard *kb,
         return;
     }
     const int panels = (int)keyboard_panels(layout);
-    /* Modulo on a negative left operand keeps the sign in C, so the step is made positive before
-       it wraps rather than after: one back from the first panel is the last one. */
-    int next = ((int)keyboard_panel_index(kb, layout) + delta) % panels;
+    /*
+     * The step is reduced before the current panel is added to it, not after.
+     *
+     * Both orders give the same panel, and only one of them is defined: this takes any `int`
+     * and says nothing about its range, so a step near INT_MAX added to a non-zero panel index
+     * overflows before the modulo ever runs. Reduced first, both operands are smaller than the
+     * ring and the sum cannot leave it. `panels` is always positive, so INT_MIN % panels is the
+     * well-defined case rather than the trapping one.
+     */
+    int next = ((int)keyboard_panel_index(kb, layout) + (delta % panels)) % panels;
+    /* Modulo on a negative left operand keeps the sign in C, so the step is made positive after
+       it wraps rather than before: one back from the first panel is the last one. */
     if (next < 0) {
         next += panels;
     }
