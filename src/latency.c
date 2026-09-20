@@ -314,10 +314,10 @@ void inkcell_latency_report(const char *why) {
         s_unanswered += 1U;
     }
     inkcell_log_info("latency",
-                  "%s: %u frames, %u with a tile, %u presses (%u inert, %u coalesced, "
-                  "%u unanswered), %llu KiB to the panel",
-                  moment, s_frames, s_tile_frames, s_presses, s_inert, s_coalesced, s_unanswered,
-                  (unsigned long long)(s_written / 1024U));
+                     "%s: %u frames, %u with a tile, %u presses (%u inert, %u coalesced, "
+                     "%u unanswered), %llu KiB to the panel",
+                     moment, s_frames, s_tile_frames, s_presses, s_inert, s_coalesced, s_unanswered,
+                     (unsigned long long)(s_written / 1024U));
 
     for (size_t i = 0; i < INKCELL_LATENCY_METRIC_COUNT; ++i) {
         const struct inkcell_latency_histogram *const histogram = &s_metrics[i];
@@ -339,10 +339,10 @@ void inkcell_latency_report(const char *why) {
         inkcell_latency_ms(mean, sizeof mean,
                            (uint32_t)(histogram->total_us / (uint64_t)histogram->count));
         inkcell_log_info("latency", "%-6s n=%u min=%s p50=%s p90=%s p99=%s max=%s mean=%s ms",
-                      k_metric_names[i], histogram->count, min, p50, p90, p99, max, mean);
+                         k_metric_names[i], histogram->count, min, p50, p90, p99, max, mean);
     }
     inkcell_log_info("latency", "percentiles are bucket edges: %u us below %u ms, %u ms above",
-                  INKCELL_LATENCY_FINE_US,
-                  (INKCELL_LATENCY_FINE_US * INKCELL_LATENCY_FINE_BUCKETS) / 1000U,
-                  INKCELL_LATENCY_COARSE_US / 1000U);
+                     INKCELL_LATENCY_FINE_US,
+                     (INKCELL_LATENCY_FINE_US * INKCELL_LATENCY_FINE_BUCKETS) / 1000U,
+                     INKCELL_LATENCY_COARSE_US / 1000U);
 }

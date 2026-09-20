@@ -35,4 +35,6 @@ uint32_t inkcell_time_wall_credible_s(void) {
     return now > INKCELL_TIME_CLOCK_MIN_EPOCH ? now : 0U;
 }
 
-void inkcell_time_wall_set_fixed(uint32_t epoch) { g_wall_fixed = epoch; }
+void inkcell_time_wall_set_fixed(uint32_t epoch) {
+    g_wall_fixed = epoch;
+}

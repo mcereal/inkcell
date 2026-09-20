@@ -138,7 +138,9 @@ size_t inkcell_line_width(const struct inkcell_line *line) {
     return inkcell_text_cells(line->text);
 }
 
-const char *inkcell_line_text(const struct inkcell_line *line) { return line->text; }
+const char *inkcell_line_text(const struct inkcell_line *line) {
+    return line->text;
+}
 
 /* Steps item `index` occupies, read off whichever of the two shapes the list was opened with.
    A height of 0 is read as 1: an item occupying nothing could never be scrolled onto, so the

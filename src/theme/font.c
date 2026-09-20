@@ -30,11 +30,17 @@ static const struct inkcell_font *font_slot(size_t index) {
     }
 }
 
-size_t inkcell_font_count(void) { return 2U; }
+size_t inkcell_font_count(void) {
+    return 2U;
+}
 
-const struct inkcell_font *inkcell_font_at(size_t index) { return font_slot(index); }
+const struct inkcell_font *inkcell_font_at(size_t index) {
+    return font_slot(index);
+}
 
-const struct inkcell_font *inkcell_font_default(void) { return font_slot(0U); }
+const struct inkcell_font *inkcell_font_default(void) {
+    return font_slot(0U);
+}
 
 const struct inkcell_font *inkcell_font_by_id(const char *id) {
     if (id == NULL || id[0] == '\0') {

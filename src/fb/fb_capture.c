@@ -149,8 +149,7 @@ uint32_t inkcell_capture_page_rows(const struct inkcell_capture *capture) {
     return capture != NULL ? capture->state.page_rows : 0U;
 }
 
-void inkcell_capture_render(struct inkcell_capture *capture,
-                            const void *snapshot) {
+void inkcell_capture_render(struct inkcell_capture *capture, const void *snapshot) {
     if (capture == NULL || snapshot == NULL) {
         return;
     }

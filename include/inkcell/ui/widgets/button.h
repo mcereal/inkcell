@@ -101,7 +101,8 @@ struct inkcell_fb_button {
     bool emoji_face;
 };
 
-void inkcell_fb_draw_button(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_button *button);
+void inkcell_fb_draw_button(const struct inkcell_backend_fb_state *state,
+                            const struct inkcell_fb_button *button);
 
 /*
  * A pill sized to its own label, laid out left to right. Returns the x the next chip starts
@@ -112,8 +113,9 @@ void inkcell_fb_draw_button(const struct inkcell_backend_fb_state *state, const 
  * INKCELL_SHAPE_FULL for the reason a badge is: a capsule sized to its own text is read as a
  * label rather than as a box, and a strip of them is read as a set.
  */
-int inkcell_fb_draw_chip(const struct inkcell_backend_fb_state *state, int x, int y, enum inkcell_icon icon,
-                 const char *label, bool active, enum inkcell_color ground, int scale);
+int inkcell_fb_draw_chip(const struct inkcell_backend_fb_state *state, int x, int y,
+                         enum inkcell_icon icon, const char *label, bool active,
+                         enum inkcell_color ground, int scale);
 
 /*
  * What a button wants to be, for the content it carries: its icon, its label, and the padding
@@ -126,13 +128,14 @@ int inkcell_fb_draw_chip(const struct inkcell_backend_fb_state *state, int x, in
  * agree with.
  */
 int inkcell_fb_button_width(const struct inkcell_backend_fb_state *state, enum inkcell_icon icon,
-                    const char *label, int scale);
+                            const char *label, int scale);
 
 /* What one chip takes, its trailing gap included - so a strip can ask whether it fits before it
-   draws anything. The same arithmetic inkcell_fb_draw_chip() advances by, because a strip that measured
-   itself differently from the way it draws is a strip whose last tab falls off the panel. */
+   draws anything. The same arithmetic inkcell_fb_draw_chip() advances by, because a strip that
+   measured itself differently from the way it draws is a strip whose last tab falls off the panel.
+ */
 int inkcell_fb_chip_width(const struct inkcell_backend_fb_state *state, enum inkcell_icon icon,
-                  const char *label, int scale);
+                          const char *label, int scale);
 
 /* ---- the chip strip ------------------------------------------------------------------------
  *
@@ -141,8 +144,8 @@ int inkcell_fb_chip_width(const struct inkcell_backend_fb_state *state, enum ink
  * inkcell_fb_draw_chip()'s own comment predicted this: a tab strip, a filter row and a segmented
  * control are one shape. The strip was written out in the screens layer for the tab bar's sake
  * and was private to it, so a filter row on Nodes - All / Direct / Favourites - would have had
- * to re-derive the measuring loop, which is the exact duplication inkcell_fb_chip_width() was added to
- * prevent. It is a component now, and the navigation bar below is its first caller.
+ * to re-derive the measuring loop, which is the exact duplication inkcell_fb_chip_width() was added
+ * to prevent. It is a component now, and the navigation bar below is its first caller.
  *
  * The elision is the part worth having in one place. A strip that does not fit drops the
  * labels, and it drops them in two steps rather than one: first every label but the active
@@ -158,8 +161,8 @@ struct inkcell_fb_chip {
      *
      * It is the navigation bar's item badge, and it is the one thing on the frame that speaks
      * for a screen the user is not looking at - which is why it belongs to the *strip* rather
-     * than to inkcell_fb_draw_chip(). The strip is what knows whether the labels have been elided, and
-     * that is what decides the badge's shape: with words on the chips there is room for the
+     * than to inkcell_fb_draw_chip(). The strip is what knows whether the labels have been elided,
+     * and that is what decides the badge's shape: with words on the chips there is room for the
      * figure, and with the strip down to bare icons a capsule holding "12" would be wider than
      * the tab it is about, so it becomes a plain dot. A dot still answers the question the
      * badge exists for - is there anything there - and it is the answer Material degrades to
@@ -177,27 +180,29 @@ enum inkcell_fb_chip_labels {
 };
 
 /* What the strip takes at this setting, trailing gaps included. */
-int inkcell_fb_chip_strip_width(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_chip *chips,
-                        size_t count, size_t active, enum inkcell_fb_chip_labels labels, int scale);
+int inkcell_fb_chip_strip_width(const struct inkcell_backend_fb_state *state,
+                                const struct inkcell_fb_chip *chips, size_t count, size_t active,
+                                enum inkcell_fb_chip_labels labels, int scale);
 
-/* The most labels that fit in `room`. INKCELL_FB_CHIP_LABELS_NONE when even the icons overrun, which
-   is not a case any theme reaches - a strip of five icons is about a fifth of the panel. */
+/* The most labels that fit in `room`. INKCELL_FB_CHIP_LABELS_NONE when even the icons overrun,
+   which is not a case any theme reaches - a strip of five icons is about a fifth of the panel. */
 enum inkcell_fb_chip_labels inkcell_fb_chip_strip_fit(const struct inkcell_backend_fb_state *state,
-                                      const struct inkcell_fb_chip *chips, size_t count, size_t active,
-                                      int room, int scale);
+                                                      const struct inkcell_fb_chip *chips,
+                                                      size_t count, size_t active, int room,
+                                                      int scale);
 
 /* Draws the strip from `x`, eliding to fit `room`, and returns the x after the last chip.
    `ground` is what the caller has filled behind it - see struct inkcell_fb_button. */
 int inkcell_fb_draw_chip_strip(const struct inkcell_backend_fb_state *state, int x, int y,
-                       const struct inkcell_fb_chip *chips, size_t count, size_t active, int room,
-                       enum inkcell_color ground, int scale);
+                               const struct inkcell_fb_chip *chips, size_t count, size_t active,
+                               int room, enum inkcell_color ground, int scale);
 
 /* ---- the badge ------------------------------------------------------------------------------
  *
  * A capsule of text, filled from a family. Two callers: a list row's trailing slot
- * (INKCELL_FB_TRAILING_BADGE) and the top app bar's, which is why it is a component of its own rather
- * than a few lines inside the slot - two places drawing their own round rect are two capsules
- * that end up different shapes.
+ * (INKCELL_FB_TRAILING_BADGE) and the top app bar's, which is why it is a component of its own
+ * rather than a few lines inside the slot - two places drawing their own round rect are two
+ * capsules that end up different shapes.
  *
  * It takes a family rather than a tone because it *fills* something, and a fill and the label
  * on it are a pair the theme was validated as a pair. It follows that anything a badge does
@@ -208,7 +213,8 @@ int inkcell_fb_draw_chip_strip(const struct inkcell_backend_fb_state *state, int
 
 /* What the capsule takes, its padding included and with no gap after it. Zero for empty text,
    so a caller can lay a slot out without testing first. */
-int inkcell_fb_badge_width(const struct inkcell_backend_fb_state *state, const char *text, int scale);
+int inkcell_fb_badge_width(const struct inkcell_backend_fb_state *state, const char *text,
+                           int scale);
 
 /*
  * Draws it: the capsule fills `box`, the words start at `text_y` - the same origin
@@ -218,8 +224,9 @@ int inkcell_fb_badge_width(const struct inkcell_backend_fb_state *state, const c
  * list row's slot is the row's cursor fill, which is one shape on a one-line row and another
  * on a two-line one; the app bar's is centred on the title's glyph body.
  */
-void inkcell_fb_draw_badge(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_rect *box,
-                   int text_y, const char *text, enum inkcell_family family, int scale);
+void inkcell_fb_draw_badge(const struct inkcell_backend_fb_state *state,
+                           const struct inkcell_fb_rect *box, int text_y, const char *text,
+                           enum inkcell_family family, int scale);
 
 /*
  * The badge's quieter sibling: a state, said as a capsule, in the middle of a row rather than
@@ -239,8 +246,9 @@ void inkcell_fb_draw_badge(const struct inkcell_backend_fb_state *state, const s
  * outlined one a state worth checking. `ground` and `ink` are the row's because that is what the
  * capsule's inside is; a caller that is not a list row hands in whatever it is drawing on.
  */
-void inkcell_fb_draw_state_chip(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_rect *box,
-                        int text_y, const char *text, enum inkcell_tone tone,
-                        enum inkcell_color ground, struct inkcell_rgb ink, int scale);
+void inkcell_fb_draw_state_chip(const struct inkcell_backend_fb_state *state,
+                                const struct inkcell_fb_rect *box, int text_y, const char *text,
+                                enum inkcell_tone tone, enum inkcell_color ground,
+                                struct inkcell_rgb ink, int scale);
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_BUTTON_H */

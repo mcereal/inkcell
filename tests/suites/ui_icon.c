@@ -179,9 +179,9 @@ INKCELL_TEST_CASE(icon_none_is_blank, unit) {
     }
 
     INKCELL_TEST_FAIL_IF(inkcell_icon_is_valid(INKCELL_ICON_NONE),
-                      "INKCELL_ICON_NONE is the absence of an icon, not one of them");
+                         "INKCELL_ICON_NONE is the absence of an icon, not one of them");
     INKCELL_TEST_FAIL_IF(inkcell_icon_name(INKCELL_ICON_NONE)[0] != '\0',
-                      "INKCELL_ICON_NONE should have no glyph name");
+                         "INKCELL_ICON_NONE should have no glyph name");
 
     /* An id from a newer build - a snapshot replayed, a capture scene naming an icon this
        binary does not have - decodes to nothing rather than reading past the table. */
@@ -191,7 +191,7 @@ INKCELL_TEST_CASE(icon_none_is_blank, unit) {
         INKCELL_TEST_FAIL_IF(alpha[p] != 0U, "an unknown icon should decode to nothing");
     }
     INKCELL_TEST_FAIL_IF(inkcell_icon_name((enum inkcell_icon)INKCELL_ICON_COUNT)[0] != '\0',
-                      "an unknown icon should have no glyph name");
+                         "an unknown icon should have no glyph name");
     record_success(test_name);
 }
 
@@ -203,7 +203,7 @@ INKCELL_TEST_CASE(icon_names_are_present, unit) {
         const char *name = inkcell_icon_name((enum inkcell_icon)i);
         INKCELL_TEST_FAIL_IF(name[0] == '\0', "every icon should name the glyph it was drawn from");
         INKCELL_TEST_FAIL_IF(!inkcell_icon_is_valid((enum inkcell_icon)i),
-                          "every id in the enum should be drawable");
+                             "every id in the enum should be drawable");
     }
     record_success(test_name);
 }

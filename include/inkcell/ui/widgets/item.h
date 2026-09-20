@@ -59,7 +59,8 @@
 enum inkcell_fb_trailing_kind {
     INKCELL_FB_TRAILING_NONE = 0,
     INKCELL_FB_TRAILING_TEXT,   /* right-aligned and quiet: an age, a "not loaded" */
-    INKCELL_FB_TRAILING_BADGE,  /* a filled capsule: an unread count, said the way messengers say it */
+    INKCELL_FB_TRAILING_BADGE,  /* a filled capsule: an unread count, said the way messengers say it
+                                 */
     INKCELL_FB_TRAILING_SWITCH, /* the boolean control - see struct inkcell_fb_switch */
     /* One cell against the trailing edge: the chevron that says a row opens something, the
        check that says this is the one in use. The slot every platform's list rows end with. */
@@ -92,17 +93,17 @@ enum inkcell_fb_trailing_kind {
      * A trend line against the trailing edge: which way a reading has been going - see struct
      * inkcell_fb_sparkline.
      *
-     * The slot's second picture of a reading, and the pair with INKCELL_FB_TRAILING_METER is the point:
-     * an inline bar says where a number sits between its ends *now*, and a row that already
+     * The slot's second picture of a reading, and the pair with INKCELL_FB_TRAILING_METER is the
+     * point: an inline bar says where a number sits between its ends *now*, and a row that already
      * carries a bar under its words - the node detail's battery, say - has said that twice
      * before it has said anything about the direction. Six cells of line is where the direction
      * fits, and it is the one thing on such a row that its figure, its bar and its band all
      * leave out.
      */
     INKCELL_FB_TRAILING_SPARK,
-    /* The two selection controls - see struct inkcell_fb_selection. A checkbox for a boolean that is
-       one of a set - the settings tab's flag rows, which are the bits of one word - and a
-       radio for one alternative among a column of them. */
+    /* The two selection controls - see struct inkcell_fb_selection. A checkbox for a boolean that
+       is one of a set - the settings tab's flag rows, which are the bits of one word - and a radio
+       for one alternative among a column of them. */
     INKCELL_FB_TRAILING_CHECKBOX,
     INKCELL_FB_TRAILING_RADIO,
     /*
@@ -122,11 +123,12 @@ struct inkcell_fb_trailing {
     /* BADGE: which family the capsule is filled with. Zero is INKCELL_FAMILY_PRIMARY - an
        unread count - and a row counting failures can name the error family instead. */
     enum inkcell_family family;
-    const char *text;       /* TEXT and BADGE, and the quiet figure beside SIGNAL */
-    enum inkcell_icon icon; /* ICON */
-    struct inkcell_fb_switch *sw;   /* SWITCH. Its rect is filled in by the row: where the value column
-                               ends is the row's business, not the caller's. */
-    struct inkcell_fb_meter *meter; /* METER. Its rect is filled in by the row, as the switch's is. */
+    const char *text;             /* TEXT and BADGE, and the quiet figure beside SIGNAL */
+    enum inkcell_icon icon;       /* ICON */
+    struct inkcell_fb_switch *sw; /* SWITCH. Its rect is filled in by the row: where the value
+                             column ends is the row's business, not the caller's. */
+    struct inkcell_fb_meter
+        *meter; /* METER. Its rect is filled in by the row, as the switch's is. */
     /* SPARK. Its rect is filled in by the row, as the meter's is. */
     struct inkcell_fb_sparkline *spark;
     /* CHECKBOX and RADIO. Its rect is filled in by the row, as the switch's is; `shape` is set
@@ -195,10 +197,10 @@ struct inkcell_fb_list_item {
      * Whether the label column is the row's quiet tier.
      *
      * A label and the value beside it are two tiers of one row, and until now they were one
-     * string: inkcell_fb_item_headline() pasted the column, the marker gutter and the value together
-     * and the row drew the result in a single colour - so on every fact this client states,
-     * the question and the answer were typographically identical and a card of them read as a
-     * block of text with no way into it. That is the bubble's trailing run one component over,
+     * string: inkcell_fb_item_headline() pasted the column, the marker gutter and the value
+     * together and the row drew the result in a single colour - so on every fact this client
+     * states, the question and the answer were typographically identical and a card of them read as
+     * a block of text with no way into it. That is the bubble's trailing run one component over,
      * and it is fixed the same way: the pieces are drawn as pieces, so each can take its own
      * ink.
      *
@@ -250,8 +252,8 @@ struct inkcell_fb_list_item {
      * Whether the value column is a *state* rather than a reading, and so is drawn as a capsule
      * instead of as words - the status bubble every phone app answers "is this thing OK?" with.
      *
-     * Which capsule is not a second thing the row says, for the reason INKCELL_FB_LEADING_TONAL's disc
-     * is not: it is `tone`'s family, and the neutral surface where the tone names none. So a
+     * Which capsule is not a second thing the row says, for the reason INKCELL_FB_LEADING_TONAL's
+     * disc is not: it is `tone`'s family, and the neutral surface where the tone names none. So a
      * verified key is a green pill and an unverified one a grey pill by the row having said
      * success and nothing, and the colour-blind theme's swap reaches both without this knowing
      * a palette exists.
@@ -263,12 +265,13 @@ struct inkcell_fb_list_item {
      *
      * It follows that a row whose value is a measurement, a name or an identifier must not set
      * it - a capsule round "6.75 dB" is a pill that shouts a number - and that a card where
-     * every row set it is a column of pills reporting nothing. Same bar inkcell_fb_draw_badge() states.
+     * every row set it is a column of pills reporting nothing. Same bar inkcell_fb_draw_badge()
+     * states.
      *
      * Ignored on a plain row, which has no value column, and silently declined when the value
      * column is too narrow for the capsule: the words are drawn instead, which is the fallback
-     * INKCELL_FB_TRAILING_SEGMENTED already has and is right for the same reason - a caller that has
-     * supplied the text has supplied something to fall back to.
+     * INKCELL_FB_TRAILING_SEGMENTED already has and is right for the same reason - a caller that
+     * has supplied the text has supplied something to fall back to.
      */
     bool value_chip;
     struct inkcell_fb_trailing trailing;
@@ -296,8 +299,8 @@ struct inkcell_fb_list_item {
      * A bar across the row, under the words rather than against the trailing edge. Costs the
      * item a second step, and is drawn only when the list was told to give it one.
      *
-     * The trailing slot's meter (INKCELL_FB_TRAILING_METER) is eight cells, which is enough to read as
-     * a length and not enough for anything else: threshold marks land on top of each other, and
+     * The trailing slot's meter (INKCELL_FB_TRAILING_METER) is eight cells, which is enough to read
+     * as a length and not enough for anything else: threshold marks land on top of each other, and
      * a domain with a negative end - a signal-to-noise ratio, which is the reading this screen
      * exists for - has its whole interesting half inside two cells. A bar with the row to
      * itself is the one that can carry bands, and it is what every phone puts under a reading
@@ -340,8 +343,8 @@ struct inkcell_fb_list_item {
  * is going - a meter and a progress bar want the same table - so it is the item API that
  * carries it rather than a second entry point per animated slot.
  */
-void inkcell_fb_list_item(struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list, uint32_t index,
-                  const struct inkcell_fb_list_item *item);
+void inkcell_fb_list_item(struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
+                          uint32_t index, const struct inkcell_fb_list_item *item);
 
 /*
  * A conversation cell: the component the Messages list is made of.
@@ -379,7 +382,7 @@ struct inkcell_fb_conversation {
      */
     enum inkcell_str_id armed_label;
     enum inkcell_str_id empty_label;
-    const char *badge;     /* unread count as it should read ("3", "99+"); "" for none */
+    const char *badge; /* unread count as it should read ("3", "99+"); "" for none */
     bool unread;
     /*
      * The user has asked this conversation not to interrupt them.
@@ -400,12 +403,13 @@ struct inkcell_fb_conversation {
 /* Draws one conversation into the next two rows of `list` and advances past them. Mutable
    state, like every inkcell_fb_list_item() caller: the item is the thing that can carry an animated
    control, so the whole entry point takes the table it would step. */
-void inkcell_fb_draw_conversation(struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
-                          uint32_t index, const struct inkcell_fb_conversation *conversation);
+void inkcell_fb_draw_conversation(struct inkcell_backend_fb_state *state,
+                                  struct inkcell_fb_list *list, uint32_t index,
+                                  const struct inkcell_fb_conversation *conversation);
 
 /* The label column width for a body this wide - narrow scales give the value more room, at the
    width the theme calls narrow. `preferred` of 0 takes the theme's own. */
 size_t inkcell_fb_field_label_cols(const struct inkcell_backend_fb_state *state,
-                           const struct inkcell_fb_layout *layout, size_t preferred);
+                                   const struct inkcell_fb_layout *layout, size_t preferred);
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_ITEM_H */

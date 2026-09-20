@@ -55,13 +55,15 @@ struct inkcell_fb_bubble_metrics {
 /* A bubble never spans the whole panel: the gutter down the other side is what says which end
    of the conversation it came from, so three quarters is a look rather than a limit. */
 static size_t inkcell_fb_bubble_max_cols(const struct inkcell_backend_fb_state *state,
-                                 const struct inkcell_fb_layout *layout) {
+                                         const struct inkcell_fb_layout *layout) {
     const size_t pct = inkcell_fb_metrics(state)->bubble_width_pct;
     const size_t max = layout->cols > 4U ? layout->cols * pct / 100U : layout->cols;
     return max > 0U ? max : 1U;
 }
 
-static bool inkcell_fb_bubble_has(const char *text) { return text != NULL && text[0] != '\0'; }
+static bool inkcell_fb_bubble_has(const char *text) {
+    return text != NULL && text[0] != '\0';
+}
 
 /*
  * The fill and the ink a bubble is drawn in.
@@ -77,7 +79,7 @@ static bool inkcell_fb_bubble_has(const char *text) { return text != NULL && tex
  * the ones inkcell_theme_validate() already holds, selected included.
  */
 static struct inkcell_paint inkcell_fb_bubble_paint(const struct inkcell_backend_fb_state *state,
-                                            const struct inkcell_fb_bubble *bubble) {
+                                                    const struct inkcell_fb_bubble *bubble) {
     const enum inkcell_state ui_state =
         bubble->selected ? INKCELL_STATE_SELECTED : INKCELL_STATE_REST;
     if (bubble->failed) {
@@ -87,7 +89,8 @@ static struct inkcell_paint inkcell_fb_bubble_paint(const struct inkcell_backend
         return inkcell_fb_paint(state, INKCELL_FAMILY_SECONDARY, INKCELL_SLOT_CONTAINER, ui_state);
     }
     return (struct inkcell_paint){
-        .fill = inkcell_fb_state_layer(state, INKCELL_COLOR_SURFACE_HIGH, INKCELL_COLOR_TEXT, ui_state),
+        .fill =
+            inkcell_fb_state_layer(state, INKCELL_COLOR_SURFACE_HIGH, INKCELL_COLOR_TEXT, ui_state),
         .ink = inkcell_fb_color(state, INKCELL_COLOR_TEXT),
     };
 }
@@ -109,15 +112,16 @@ static struct inkcell_paint inkcell_fb_bubble_paint(const struct inkcell_backend
  * validated on, instead of asking every palette for a sixth one.
  */
 static struct inkcell_rgb inkcell_fb_bubble_quiet(const struct inkcell_backend_fb_state *state,
-                                          const struct inkcell_fb_bubble *bubble,
-                                          struct inkcell_paint paint) {
+                                                  const struct inkcell_fb_bubble *bubble,
+                                                  struct inkcell_paint paint) {
     if (bubble->selected || bubble->failed) {
         return paint.ink;
     }
     return inkcell_fb_tone_color(state, INKCELL_TONE_DIM);
 }
 
-static void inkcell_fb_bubble_part_text(struct inkcell_fb_bubble_part *parts, size_t *count, const char *text) {
+static void inkcell_fb_bubble_part_text(struct inkcell_fb_bubble_part *parts, size_t *count,
+                                        const char *text) {
     if (!inkcell_fb_bubble_has(text) || *count >= INKCELL_FB_BUBBLE_META_PARTS) {
         return;
     }
@@ -128,7 +132,7 @@ static void inkcell_fb_bubble_part_text(struct inkcell_fb_bubble_part *parts, si
 }
 
 static void inkcell_fb_bubble_part_icon(struct inkcell_fb_bubble_part *parts, size_t *count,
-                                enum inkcell_icon icon) {
+                                        enum inkcell_icon icon) {
     if (!inkcell_icon_is_valid(icon) || *count >= INKCELL_FB_BUBBLE_META_PARTS) {
         return;
     }
@@ -139,7 +143,8 @@ static void inkcell_fb_bubble_part_icon(struct inkcell_fb_bubble_part *parts, si
 }
 
 /* The run's width: every part, plus a cell of air between each neighbouring pair. */
-static size_t inkcell_fb_bubble_run_cells(const struct inkcell_fb_bubble_part *parts, size_t count) {
+static size_t inkcell_fb_bubble_run_cells(const struct inkcell_fb_bubble_part *parts,
+                                          size_t count) {
     if (count == 0U) {
         return 0U;
     }
@@ -163,7 +168,7 @@ static size_t inkcell_fb_bubble_run_cells(const struct inkcell_fb_bubble_part *p
  * nothing, which is the honest answer for a bubble too narrow to say anything in the corner.
  */
 static size_t inkcell_fb_bubble_run(const struct inkcell_fb_bubble_meta *meta, size_t budget,
-                            struct inkcell_fb_bubble_part *parts, size_t *count) {
+                                    struct inkcell_fb_bubble_part *parts, size_t *count) {
     *count = 0U;
     inkcell_fb_bubble_part_text(parts, count, meta->reactions);
     inkcell_fb_bubble_part_text(parts, count, meta->relay);
@@ -197,9 +202,10 @@ static uint32_t inkcell_fb_bubble_wrap(const char *text, size_t max, size_t *wid
     return lines;
 }
 
-static struct inkcell_fb_bubble_metrics inkcell_fb_bubble_measure(const struct inkcell_backend_fb_state *state,
-                                                  const struct inkcell_fb_layout *layout,
-                                                  const struct inkcell_fb_bubble *bubble) {
+static struct inkcell_fb_bubble_metrics
+inkcell_fb_bubble_measure(const struct inkcell_backend_fb_state *state,
+                          const struct inkcell_fb_layout *layout,
+                          const struct inkcell_fb_bubble *bubble) {
     const size_t max = inkcell_fb_bubble_max_cols(state, layout);
     struct inkcell_fb_bubble_metrics metrics;
     memset(&metrics, 0, sizeof metrics);
@@ -244,7 +250,8 @@ static struct inkcell_fb_bubble_metrics inkcell_fb_bubble_measure(const struct i
      * because the bubble is then widened to hold it, the draw's right-aligned run cannot reach
      * past the left padding. That is the invariant the whole component turns on.
      */
-    metrics.meta_cols = inkcell_fb_bubble_run(&bubble->meta, max, metrics.parts, &metrics.part_count);
+    metrics.meta_cols =
+        inkcell_fb_bubble_run(&bubble->meta, max, metrics.parts, &metrics.part_count);
     if (metrics.meta_cols > 0U) {
         const size_t tucked = metrics.last + INKCELL_FB_BUBBLE_META_GAP + metrics.meta_cols;
         if (tucked <= max) {
@@ -273,12 +280,13 @@ static struct inkcell_fb_bubble_metrics inkcell_fb_bubble_measure(const struct i
 }
 
 uint32_t inkcell_fb_bubble_rows(const struct inkcell_backend_fb_state *state,
-                        const struct inkcell_fb_layout *layout, const struct inkcell_fb_bubble *bubble) {
+                                const struct inkcell_fb_layout *layout,
+                                const struct inkcell_fb_bubble *bubble) {
     return inkcell_fb_bubble_measure(state, layout, bubble).rows;
 }
 
-void inkcell_fb_draw_separator(const struct inkcell_backend_fb_state *state, int y, const char *label,
-                       enum inkcell_tone tone) {
+void inkcell_fb_draw_separator(const struct inkcell_backend_fb_state *state, int y,
+                               const char *label, enum inkcell_tone tone) {
     const int adv = inkcell_fb_char_adv(state, state->scale);
     const int rule_y = y + ((int)inkcell_fb_font(state)->height * state->scale) / 2;
     const int left = inkcell_fb_margin(state);
@@ -294,16 +302,16 @@ void inkcell_fb_draw_separator(const struct inkcell_backend_fb_state *state, int
     const int x = left + (right - left - width) / 2;
     inkcell_fb_draw_rule(state, left, rule_y, x - left - adv, state->scale, INKCELL_COLOR_RULE);
     inkcell_fb_draw_rule(state, x + width + adv, rule_y, right - (x + width + adv), state->scale,
-                 INKCELL_COLOR_RULE);
+                         INKCELL_COLOR_RULE);
     inkcell_fb_draw_text(state, x, y, label, state->scale, inkcell_fb_tone_color(state, tone),
-                 inkcell_fb_color(state, INKCELL_COLOR_BG));
+                         inkcell_fb_color(state, INKCELL_COLOR_BG));
 }
 
 /* Paints one block of wrapped text from `y` down, and reports where the next row starts. The
    walk the measure made, so the rows painted are the rows reserved. */
-static int inkcell_fb_bubble_draw_wrapped(const struct inkcell_backend_fb_state *state, int x, int y,
-                                  const char *text, size_t max, int line_h, struct inkcell_rgb ink,
-                                  struct inkcell_rgb fill) {
+static int inkcell_fb_bubble_draw_wrapped(const struct inkcell_backend_fb_state *state, int x,
+                                          int y, const char *text, size_t max, int line_h,
+                                          struct inkcell_rgb ink, struct inkcell_rgb fill) {
     struct inkcell_wrap wrap;
     inkcell_wrap_begin(&wrap, text, max);
     while (inkcell_wrap_next(&wrap)) {
@@ -313,9 +321,11 @@ static int inkcell_fb_bubble_draw_wrapped(const struct inkcell_backend_fb_state 
     return y;
 }
 
-void inkcell_fb_draw_bubble(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_layout *layout,
-                    int y, const struct inkcell_fb_bubble *bubble) {
-    const struct inkcell_fb_bubble_metrics metrics = inkcell_fb_bubble_measure(state, layout, bubble);
+void inkcell_fb_draw_bubble(const struct inkcell_backend_fb_state *state,
+                            const struct inkcell_fb_layout *layout, int y,
+                            const struct inkcell_fb_bubble *bubble) {
+    const struct inkcell_fb_bubble_metrics metrics =
+        inkcell_fb_bubble_measure(state, layout, bubble);
     const int adv = inkcell_fb_char_adv(state, state->scale);
     const int scale = state->scale;
     const size_t max = inkcell_fb_bubble_max_cols(state, layout);
@@ -330,8 +340,8 @@ void inkcell_fb_draw_bubble(const struct inkcell_backend_fb_state *state, const 
        separate messages rather than as one block. */
     const int pad = adv / 2 > 0 ? adv / 2 : 1;
     const int box_w = (int)metrics.cols * adv + 2 * pad;
-    const int box_x =
-        bubble->outbound ? (int)state->var.xres - inkcell_fb_margin(state) - box_w : inkcell_fb_margin(state);
+    const int box_x = bubble->outbound ? (int)state->var.xres - inkcell_fb_margin(state) - box_w
+                                       : inkcell_fb_margin(state);
     const uint32_t box_rows = metrics.rows - (inkcell_fb_bubble_has(bubble->separator) ? 1U : 0U);
     const int box_h = (int)box_rows * layout->line - scale;
 
@@ -352,7 +362,7 @@ void inkcell_fb_draw_bubble(const struct inkcell_backend_fb_state *state, const 
     const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_MD);
     if (bubble->selected) {
         inkcell_fb_fill_round_rect(state, box_x, y - scale, box_w, box_h, radius,
-                           inkcell_fb_color(state, INKCELL_COLOR_PRIMARY));
+                                   inkcell_fb_color(state, INKCELL_COLOR_PRIMARY));
     }
     const int fill_x = (bubble->selected && !bubble->outbound) ? box_x + scale : box_x;
     const int fill_w = bubble->selected ? box_w - scale : box_w;
@@ -393,25 +403,27 @@ void inkcell_fb_draw_bubble(const struct inkcell_backend_fb_state *state, const 
     if (metrics.quote_cols > 0U) {
         const int bar_w = scale;
         inkcell_fb_fill_rect(state, text_x, y, bar_w, layout->line - scale,
-                     inkcell_fb_tone_color(state, INKCELL_TONE_DIM));
+                             inkcell_fb_tone_color(state, INKCELL_TONE_DIM));
         struct inkcell_line quote;
         inkcell_line_reset(&quote);
         inkcell_line_printf(&quote, "%s", bubble->quote);
         inkcell_line_fit(&quote, metrics.quote_cols);
         inkcell_fb_draw_text(state, text_x + (int)INKCELL_FB_BUBBLE_QUOTE_INDENT * adv, y,
-                     inkcell_line_text(&quote), scale, quiet, fill);
+                             inkcell_line_text(&quote), scale, quiet, fill);
         y += layout->line;
     }
 
     int last_y = y;
-    y = inkcell_fb_bubble_draw_wrapped(state, text_x, y, bubble->text, max, layout->line, body, fill);
+    y = inkcell_fb_bubble_draw_wrapped(state, text_x, y, bubble->text, max, layout->line, body,
+                                       fill);
     if (y == last_y) {
         y += layout->line; /* the measure reserves a row for an empty message; spend it */
     }
     /* The reason under it, in the same ink: the bubble is already the error container, so a
        second red here would be the fill saying the same thing twice. */
     if (metrics.notes > 0U) {
-        y = inkcell_fb_bubble_draw_wrapped(state, text_x, y, bubble->note, max, layout->line, body, fill);
+        y = inkcell_fb_bubble_draw_wrapped(state, text_x, y, bubble->note, max, layout->line, body,
+                                           fill);
     }
     last_y = y - layout->line;
 

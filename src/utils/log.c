@@ -17,9 +17,13 @@
 
 static enum inkcell_log_level g_log_level = INKCELL_LOG_LEVEL_INFO;
 
-void inkcell_log_set_level(enum inkcell_log_level level) { g_log_level = level; }
+void inkcell_log_set_level(enum inkcell_log_level level) {
+    g_log_level = level;
+}
 
-enum inkcell_log_level inkcell_log_get_level(void) { return g_log_level; }
+enum inkcell_log_level inkcell_log_get_level(void) {
+    return g_log_level;
+}
 
 const char *inkcell_log_level_to_string(enum inkcell_log_level level) {
     switch (level) {
@@ -84,7 +88,9 @@ static void format_timestamp(char *buffer, size_t buffer_len) {
 
 static void (*g_sink)(const char *line);
 
-void inkcell_log_set_sink(void (*sink)(const char *line)) { g_sink = sink; }
+void inkcell_log_set_sink(void (*sink)(const char *line)) {
+    g_sink = sink;
+}
 
 static void log_capture(const char *timestamp, enum inkcell_log_level level, const char *component,
                         const char *fmt, va_list args) __attribute__((format(printf, 4, 0)));
@@ -92,7 +98,8 @@ static void log_capture(const char *timestamp, enum inkcell_log_level level, con
 static void log_capture(const char *timestamp, enum inkcell_log_level level, const char *component,
                         const char *fmt, va_list args) {
     char line[INKCELL_LOG_SINK_LINE_MAX];
-    int used = snprintf(line, sizeof line, "%s [%s]", timestamp, inkcell_log_level_to_string(level));
+    int used =
+        snprintf(line, sizeof line, "%s [%s]", timestamp, inkcell_log_level_to_string(level));
     if (used < 0) {
         return;
     }
@@ -124,7 +131,7 @@ static void log_capture(const char *timestamp, enum inkcell_log_level level, con
 }
 
 void inkcell_log_message_v(enum inkcell_log_level level, const char *component, const char *fmt,
-                        va_list args) {
+                           va_list args) {
     if (level < g_log_level || level == INKCELL_LOG_LEVEL_NONE) {
         return;
     }
@@ -387,6 +394,6 @@ void inkcell_log_file_compact_default(void) {
         inkcell_log_warn("log", "Could not cut back %s: %s", path, strerror((int)-reclaimed));
     } else if (reclaimed > 0) {
         inkcell_log_info("log", "Cut %s back to its newest %u KB (reclaimed %ld KB)", path,
-                      (unsigned)(INKCELL_LOG_FILE_KEEP_BYTES / 1024U), reclaimed / 1024L);
+                         (unsigned)(INKCELL_LOG_FILE_KEEP_BYTES / 1024U), reclaimed / 1024L);
     }
 }

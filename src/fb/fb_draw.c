@@ -4,8 +4,9 @@
  * Pixels, glyphs and the page geometry.
  *
  * Everything above this file measures in cells rather than bytes: a name is four *characters*
- * wide whether it is "Andy" or one emoji, so inkcell_fb_cols()/inkcell_fb_fit()/inkcell_fb_width() are the only
- * legitimate way to ask how much fits. A strlen() or a "%-12s" up in a screen is a bug.
+ * wide whether it is "Andy" or one emoji, so inkcell_fb_cols()/inkcell_fb_fit()/inkcell_fb_width()
+ * are the only legitimate way to ask how much fits. A strlen() or a "%-12s" up in a screen is a
+ * bug.
  */
 
 #include "inkcell/ui/fb_draw.h"
@@ -35,7 +36,8 @@ struct inkcell_fb_cached_glyph {
 };
 struct inkcell_fb_glyph_cache {
     uint64_t clock;
-    struct inkcell_fb_cached_glyph entries[INKCELL_FB_GLYPH_CACHE_SETS][INKCELL_FB_GLYPH_CACHE_WAYS];
+    struct inkcell_fb_cached_glyph entries[INKCELL_FB_GLYPH_CACHE_SETS]
+                                          [INKCELL_FB_GLYPH_CACHE_WAYS];
 };
 
 void inkcell_fb_glyph_cache_free(struct inkcell_backend_fb_state *state) {
@@ -51,8 +53,8 @@ void inkcell_fb_glyph_cache_free(struct inkcell_backend_fb_state *state) {
  * They are trivial on purpose: the point is that there is exactly one path from "what does
  * this mean" to "which pixels", so a theme switch cannot leave a corner of the UI behind.
  */
-void inkcell_fb_state_set_theme(struct inkcell_backend_fb_state *state, const struct inkcell_theme *theme,
-                        int scale) {
+void inkcell_fb_state_set_theme(struct inkcell_backend_fb_state *state,
+                                const struct inkcell_theme *theme, int scale) {
     if (state == NULL) {
         return;
     }
@@ -94,10 +96,10 @@ bool inkcell_fb_state_animating(const struct inkcell_backend_fb_state *state) {
  * How far a screen travels on its way in, as a fraction of the panel: a quarter of it.
  *
  * Not the whole width, and this is the one measurement in the transition that had to be looked
- * at rather than reasoned about. Only one screen is drawn (see inkcell_fb_transition_offset()), so a
- * screen that started a full panel out left the body *empty* on the frame the press landed -
- * one blank frame, every time, before anything arrived. A blink is a worse artefact than no
- * animation at all.
+ * at rather than reasoned about. Only one screen is drawn (see inkcell_fb_transition_offset()), so
+ * a screen that started a full panel out left the body *empty* on the frame the press landed - one
+ * blank frame, every time, before anything arrived. A blink is a worse artefact than no animation
+ * at all.
  *
  * A quarter is also what Material's shared-axis transition does, and for the same reason
  * arrived at from the other end: there the displacement is small because the cross-fade is what
@@ -235,25 +237,27 @@ void inkcell_fb_render(struct inkcell_backend_fb_state *state, const void *snaps
     state->app.render(state, snapshot, state->app.ctx);
 }
 
-struct inkcell_rgb inkcell_fb_color(const struct inkcell_backend_fb_state *state, enum inkcell_color role) {
+struct inkcell_rgb inkcell_fb_color(const struct inkcell_backend_fb_state *state,
+                                    enum inkcell_color role) {
     return inkcell_theme_color(state != NULL ? state->theme : NULL, role);
 }
 
 struct inkcell_rgb inkcell_fb_tone_color(const struct inkcell_backend_fb_state *state,
-                                 enum inkcell_tone tone) {
+                                         enum inkcell_tone tone) {
     return inkcell_theme_tone(state != NULL ? state->theme : NULL, tone);
 }
 
 struct inkcell_paint inkcell_fb_paint(const struct inkcell_backend_fb_state *state,
-                              enum inkcell_family family, enum inkcell_slot slot,
-                              enum inkcell_state ui_state) {
+                                      enum inkcell_family family, enum inkcell_slot slot,
+                                      enum inkcell_state ui_state) {
     return inkcell_theme_paint(state != NULL ? state->theme : NULL, family, slot, ui_state);
 }
 
 struct inkcell_rgb inkcell_fb_state_layer(const struct inkcell_backend_fb_state *state,
-                                  enum inkcell_color fill, enum inkcell_color ink,
-                                  enum inkcell_state ui_state) {
-    return inkcell_theme_state_layer(inkcell_fb_color(state, fill), inkcell_fb_color(state, ink), ui_state);
+                                          enum inkcell_color fill, enum inkcell_color ink,
+                                          enum inkcell_state ui_state) {
+    return inkcell_theme_state_layer(inkcell_fb_color(state, fill), inkcell_fb_color(state, ink),
+                                     ui_state);
 }
 
 const struct inkcell_metrics *inkcell_fb_metrics(const struct inkcell_backend_fb_state *state) {
@@ -272,7 +276,8 @@ int inkcell_fb_space(const struct inkcell_backend_fb_state *state, enum inkcell_
     return inkcell_theme_space(state->theme, space, state->scale);
 }
 
-int inkcell_fb_space_at(const struct inkcell_backend_fb_state *state, enum inkcell_space space, int scale) {
+int inkcell_fb_space_at(const struct inkcell_backend_fb_state *state, enum inkcell_space space,
+                        int scale) {
     return inkcell_theme_space(state->theme, space, scale);
 }
 
@@ -285,7 +290,8 @@ int inkcell_fb_gutter(const struct inkcell_backend_fb_state *state) {
     return margin > 1 ? margin / 2 : margin;
 }
 
-uint32_t inkcell_fb_motion(const struct inkcell_backend_fb_state *state, enum inkcell_motion motion) {
+uint32_t inkcell_fb_motion(const struct inkcell_backend_fb_state *state,
+                           enum inkcell_motion motion) {
     return inkcell_theme_motion(state->theme, motion);
 }
 
@@ -298,7 +304,9 @@ int inkcell_fb_margin(const struct inkcell_backend_fb_state *state) {
     return (int)inkcell_fb_metrics(state)->margin;
 }
 
-int inkcell_fb_rail_gutter(const struct inkcell_backend_fb_state *state) { return inkcell_fb_gutter(state); }
+int inkcell_fb_rail_gutter(const struct inkcell_backend_fb_state *state) {
+    return inkcell_fb_gutter(state);
+}
 
 struct inkcell_fb_row_box inkcell_fb_row_box(const struct inkcell_backend_fb_state *state) {
     const int gutter = inkcell_fb_gutter(state);
@@ -355,7 +363,8 @@ static inline uint32_t compose_color(const struct inkcell_backend_fb_state *stat
     if (has_fields) {
         color = inkcell_fb_pack_channel(r, &var->red) | inkcell_fb_pack_channel(g, &var->green) |
                 inkcell_fb_pack_channel(b, &var->blue);
-        color_mask = inkcell_fb_pack_channel(0xFFU, &var->red) | inkcell_fb_pack_channel(0xFFU, &var->green) |
+        color_mask = inkcell_fb_pack_channel(0xFFU, &var->red) |
+                     inkcell_fb_pack_channel(0xFFU, &var->green) |
                      inkcell_fb_pack_channel(0xFFU, &var->blue);
     } else {
         switch (var->bits_per_pixel) {
@@ -396,8 +405,8 @@ struct inkcell_fb_clipped_box {
     int dx, dy;
 };
 
-static bool inkcell_fb_clip_box(const struct inkcell_backend_fb_state *state, int x, int y, int w, int h,
-                        struct inkcell_fb_clipped_box *out) {
+static bool inkcell_fb_clip_box(const struct inkcell_backend_fb_state *state, int x, int y, int w,
+                                int h, struct inkcell_fb_clipped_box *out) {
     int dx = 0;
     int dy = 0;
     /*
@@ -518,8 +527,8 @@ static inline void inkcell_fb_store_span(uint8_t *row, int w, uint32_t packed, s
  * pixel: a full screen of text is ~200k scaled sub-pixels, and packing each one separately was
  * about a third of the frame.
  */
-static void inkcell_fb_fill_packed(const struct inkcell_backend_fb_state *state, int x, int y, int w, int h,
-                           uint32_t packed) {
+static void inkcell_fb_fill_packed(const struct inkcell_backend_fb_state *state, int x, int y,
+                                   int w, int h, uint32_t packed) {
     if (w <= 0 || h <= 0) {
         return;
     }
@@ -563,23 +572,23 @@ static bool inkcell_fb_blit_is_direct(const struct inkcell_backend_fb_state *sta
 /*
  * Draw a rectangle of BGRA pixels - a decoded image: a map tile, a sprite, a photo.
  *
- * It goes through inkcell_fb_clip_box() rather than clamping for itself, which is what makes the map's
- * own clip cover the picture as well as the ink: every fill, glyph and icon in this backend is
- * clipped by that one function, and a blit that did its own arithmetic would be the one thing
- * on the frame that could paint over the app bar. The part of the box that was trimmed is the
- * part of the source that is skipped, which is what `dx` and `dy` come back for.
+ * It goes through inkcell_fb_clip_box() rather than clamping for itself, which is what makes the
+ * map's own clip cover the picture as well as the ink: every fill, glyph and icon in this backend
+ * is clipped by that one function, and a blit that did its own arithmetic would be the one thing on
+ * the frame that could paint over the app bar. The part of the box that was trimmed is the part of
+ * the source that is skipped, which is what `dx` and `dy` come back for.
  *
  * `stride` is the source's own row length in bytes, so a caller can hand over a sub-rectangle
  * of a larger image without copying it out first.
  *
- * The slow path coalesces runs of one colour before packing it, for the reason inkcell_fb_fill_packed()
- * exists: compose_color() per pixel is about a third of a frame, and a map tile quantised to a
- * palette - which is what a tile pack produces - is long runs of one colour with detail drawn
- * through it. A photograph degenerates to a pack per pixel, so a caller with one of those
- * wants a direct-blit surface instead.
+ * The slow path coalesces runs of one colour before packing it, for the reason
+ * inkcell_fb_fill_packed() exists: compose_color() per pixel is about a third of a frame, and a map
+ * tile quantised to a palette - which is what a tile pack produces - is long runs of one colour
+ * with detail drawn through it. A photograph degenerates to a pack per pixel, so a caller with one
+ * of those wants a direct-blit surface instead.
  */
 void inkcell_fb_blit_bgra(const struct inkcell_backend_fb_state *state, int x, int y, int w, int h,
-                  const uint8_t *pixels, size_t stride) {
+                          const uint8_t *pixels, size_t stride) {
     if (state == NULL || pixels == NULL || w <= 0 || h <= 0) {
         return;
     }
@@ -592,8 +601,7 @@ void inkcell_fb_blit_bgra(const struct inkcell_backend_fb_state *state, int x, i
     const size_t dst_stride = state->fix.line_length;
     const bool direct = inkcell_fb_blit_is_direct(state);
     uint8_t *dst = state->inkcell_fb_ptr + (size_t)box.y * dst_stride + (size_t)box.x * bpp;
-    const uint8_t *src =
-        pixels + (size_t)box.dy * stride + (size_t)box.dx * INKCELL_FB_BGRA_BYTES;
+    const uint8_t *src = pixels + (size_t)box.dy * stride + (size_t)box.dx * INKCELL_FB_BGRA_BYTES;
 
     for (int row = 0; row < box.h; ++row, dst += dst_stride, src += stride) {
         if ((size_t)(dst - state->inkcell_fb_ptr) + (size_t)box.w * bpp > state->inkcell_fb_size) {
@@ -646,8 +654,9 @@ void inkcell_fb_blit_bgra(const struct inkcell_backend_fb_state *state, int x, i
  */
 #define INKCELL_FB_BLEND_STEPS 32
 
-static void inkcell_fb_blend_table(const struct inkcell_backend_fb_state *state, struct inkcell_rgb ink,
-                           struct inkcell_rgb ground, uint32_t out[INKCELL_FB_BLEND_STEPS]) {
+static void inkcell_fb_blend_table(const struct inkcell_backend_fb_state *state,
+                                   struct inkcell_rgb ink, struct inkcell_rgb ground,
+                                   uint32_t out[INKCELL_FB_BLEND_STEPS]) {
     for (int step = 0; step < INKCELL_FB_BLEND_STEPS; ++step) {
         const int32_t a = (int32_t)step * 255 / (INKCELL_FB_BLEND_STEPS - 1);
         const uint8_t r = (uint8_t)(((int32_t)ink.r * a + (int32_t)ground.r * (255 - a)) / 255);
@@ -666,8 +675,8 @@ int inkcell_fb_line_adv(const struct inkcell_backend_fb_state *state, int scale)
     return inkcell_font_line(inkcell_fb_font(state), scale);
 }
 
-/* The widest cell inkcell_fb_draw_glyph() will resample into: the largest cell a font may declare, at
-   the largest scale the type scale can clamp to. */
+/* The widest cell inkcell_fb_draw_glyph() will resample into: the largest cell a font may declare,
+   at the largest scale the type scale can clamp to. */
 #define INKCELL_FB_GLYPH_BOX_MAX (INKCELL_GLYPH_MAX_WIDTH * INKCELL_SCALE_MAX)
 
 /*
@@ -685,7 +694,7 @@ struct inkcell_fb_glyph_tap {
 };
 
 static struct inkcell_fb_glyph_tap inkcell_fb_glyph_tap(int index, int box, int master,
-                                        enum inkcell_font_sampling sampling) {
+                                                        enum inkcell_font_sampling sampling) {
     struct inkcell_fb_glyph_tap tap = {0, 0, 0};
     if (master <= 0 || box <= 0) {
         return tap;
@@ -722,7 +731,7 @@ static struct inkcell_fb_glyph_tap inkcell_fb_glyph_tap(int index, int box, int 
    lives here rather than at the call site for the reason inkcell_fb_icon_step()'s does: measuring a
    span and drawing it must round identically or the span boundaries move. */
 static int inkcell_fb_glyph_step(const uint8_t *row_lo, const uint8_t *row_hi,
-                         const struct inkcell_fb_glyph_tap *tap, int32_t fy) {
+                                 const struct inkcell_fb_glyph_tap *tap, int32_t fy) {
     const int32_t fx = tap->frac;
     const int32_t upper = row_lo[tap->lo] * (256 - fx) + row_lo[tap->hi] * fx;
     const int32_t lower = row_hi[tap->lo] * (256 - fx) + row_hi[tap->hi] * fx;
@@ -734,16 +743,16 @@ static int inkcell_fb_glyph_step(const uint8_t *row_lo, const uint8_t *row_hi,
  * Draw one glyph's coverage into its cell, in a ramp the caller has already built.
  *
  * The master is resampled into `width * scale` by `height * scale` and emitted as spans of
- * equal coverage, the way inkcell_fb_draw_icon() emits a symbol. Taking the ramp rather than a colour
- * pair is what keeps a line of text to one table build instead of one per character.
+ * equal coverage, the way inkcell_fb_draw_icon() emits a symbol. Taking the ramp rather than a
+ * colour pair is what keeps a line of text to one table build instead of one per character.
  *
  * The master's overhang rows are drawn too, above `y` - they are the same resample continued
  * upward, not a second pass, which is why the whole glyph is one box placed by its baseline
  * rather than a cell plus an accent stuck on top of it.
  */
 static void inkcell_fb_draw_glyph_ramp(const struct inkcell_backend_fb_state *state, int x, int y,
-                               uint32_t codepoint, int scale,
-                               const uint32_t blend[INKCELL_FB_BLEND_STEPS]) {
+                                       uint32_t codepoint, int scale,
+                                       const uint32_t blend[INKCELL_FB_BLEND_STEPS]) {
     const struct inkcell_font *font = inkcell_fb_font(state);
     const int cell_rows = (int)font->master_h - (int)font->master_top;
     const int box_w = (int)font->width * scale;
@@ -763,7 +772,8 @@ static void inkcell_fb_draw_glyph_ramp(const struct inkcell_backend_fb_state *st
 
     struct inkcell_fb_cached_glyph *cached = NULL;
     bool hit = false;
-    if (state->glyph_cache != NULL && (size_t)box_w * (size_t)full_h <= INKCELL_FB_GLYPH_CACHE_PIXELS) {
+    if (state->glyph_cache != NULL &&
+        (size_t)box_w * (size_t)full_h <= INKCELL_FB_GLYPH_CACHE_PIXELS) {
         struct inkcell_fb_glyph_cache *cache = state->glyph_cache;
         const size_t set = (codepoint * 31U + (uint32_t)scale * 17U) % INKCELL_FB_GLYPH_CACHE_SETS;
         cached = &cache->entries[set][0];
@@ -823,8 +833,9 @@ static void inkcell_fb_draw_glyph_ramp(const struct inkcell_backend_fb_state *st
     }
 }
 
-void inkcell_fb_draw_glyph(const struct inkcell_backend_fb_state *state, int x, int y, uint32_t codepoint,
-                   int scale, struct inkcell_rgb ink, struct inkcell_rgb ground) {
+void inkcell_fb_draw_glyph(const struct inkcell_backend_fb_state *state, int x, int y,
+                           uint32_t codepoint, int scale, struct inkcell_rgb ink,
+                           struct inkcell_rgb ground) {
     uint32_t blend[INKCELL_FB_BLEND_STEPS];
     inkcell_fb_blend_table(state, ink, ground, blend);
     inkcell_fb_draw_glyph_ramp(state, x, y, codepoint, scale, blend);
@@ -851,7 +862,7 @@ static uint64_t inkcell_fb_format_signature(const struct inkcell_backend_fb_stat
 #define INKCELL_FB_EMOJI_PALETTE_SLOTS 256
 
 static const uint32_t *inkcell_fb_emoji_palette(const struct inkcell_backend_fb_state *state,
-                                        const bool **opaque_out) {
+                                                const bool **opaque_out) {
     static uint32_t packed[INKCELL_FB_EMOJI_PALETTE_SLOTS];
     static bool opaque[INKCELL_FB_EMOJI_PALETTE_SLOTS];
     static uint64_t signature;
@@ -917,8 +928,8 @@ int inkcell_fb_emoji_box_fit(int box) {
  * Emoji carry no ink colour and take none. Their own is the point of having them: the red of a
  * flag and the yellow of a lightning bolt are most of what makes one recognisable at 20 px.
  */
-void inkcell_fb_draw_emoji_box(const struct inkcell_backend_fb_state *state, int x, int top, int box,
-                       uint16_t sprite) {
+void inkcell_fb_draw_emoji_box(const struct inkcell_backend_fb_state *state, int x, int top,
+                               int box, uint16_t sprite) {
     if (box <= 0) {
         return;
     }
@@ -940,8 +951,8 @@ void inkcell_fb_draw_emoji_box(const struct inkcell_backend_fb_state *state, int
      * It is also where a box too wide for the general path's column map lands, snapped to the
      * whole multiple inside it and centred in what was asked for. The alternative was the bug
      * this replaced: the bound sat above this path although this path has no use for the map,
-     * so on a panel with room for a key over INKCELL_FB_EMOJI_BOX_MAX across - which the capture tool
-     * will render - every emoji keycap drew nothing at all and the selected one drew a bare
+     * so on a panel with room for a key over INKCELL_FB_EMOJI_BOX_MAX across - which the capture
+     * tool will render - every emoji keycap drew nothing at all and the selected one drew a bare
      * fill. A cap costing a shift of at most fifteen pixels at that size is one nobody sees.
      */
     const int drawn = box > INKCELL_FB_EMOJI_BOX_MAX ? inkcell_fb_emoji_box_fit(box) : box;
@@ -959,7 +970,7 @@ void inkcell_fb_draw_emoji_box(const struct inkcell_backend_fb_state *state, int
                 }
                 if (opaque[index]) {
                     inkcell_fb_fill_packed(state, x + inset + sx * block, top + inset + sy * block,
-                                   (end - sx) * block, block, palette[index]);
+                                           (end - sx) * block, block, palette[index]);
                 }
                 sx = end;
             }
@@ -1006,9 +1017,10 @@ void inkcell_fb_draw_emoji_box(const struct inkcell_backend_fb_state *state, int
  * the same optical line as those capitals - one font row of padding above and below.
  */
 static void inkcell_fb_draw_emoji(const struct inkcell_backend_fb_state *state, int x, int y,
-                          uint16_t sprite, int scale) {
+                                  uint16_t sprite, int scale) {
     const int box = inkcell_fb_char_adv(state, scale);
-    inkcell_fb_draw_emoji_box(state, x, y + ((int)inkcell_fb_font(state)->height * scale - box) / 2, box, sprite);
+    inkcell_fb_draw_emoji_box(state, x, y + ((int)inkcell_fb_font(state)->height * scale - box) / 2,
+                              box, sprite);
 }
 
 /* An icon occupies exactly one text cell, which is what lets a screen put one in a line's
@@ -1038,12 +1050,12 @@ int inkcell_fb_icon_drawn(const struct inkcell_backend_fb_state *state, int scal
     return (body * INKCELL_ICON_WINDOW + INKCELL_ICON_BODY / 2) / INKCELL_ICON_BODY;
 }
 
-/* The largest box inkcell_fb_draw_icon() can be asked for: the empty state's symbol at the largest glyph
-   scale, plus the air its window carries around it. Rounded the way inkcell_fb_icon_drawn() rounds, not
-   merely scaled the same way - a bound a pixel under what it is bounding fails the check below,
-   and an icon that fails that check is not drawn at all. */
-#define INKCELL_FB_ICON_DRAWN_MAX                                                                          \
-    ((INKCELL_GLYPH_MAX_HEIGHT * INKCELL_FB_ICON_SCALE_MAX * INKCELL_ICON_WINDOW +                         \
+/* The largest box inkcell_fb_draw_icon() can be asked for: the empty state's symbol at the largest
+   glyph scale, plus the air its window carries around it. Rounded the way inkcell_fb_icon_drawn()
+   rounds, not merely scaled the same way - a bound a pixel under what it is bounding fails the
+   check below, and an icon that fails that check is not drawn at all. */
+#define INKCELL_FB_ICON_DRAWN_MAX                                                                  \
+    ((INKCELL_GLYPH_MAX_HEIGHT * INKCELL_FB_ICON_SCALE_MAX * INKCELL_ICON_WINDOW +                 \
       INKCELL_ICON_BODY / 2) /                                                                     \
      INKCELL_ICON_BODY)
 
@@ -1056,7 +1068,8 @@ int inkcell_fb_icon_drawn(const struct inkcell_backend_fb_state *state, int scal
  * here rather than at the call site - measuring a span and drawing it must round identically or
  * the span boundaries move.
  */
-static int inkcell_fb_icon_step(const uint8_t *row0, const uint8_t *row1, int32_t sample_x, int32_t fy) {
+static int inkcell_fb_icon_step(const uint8_t *row0, const uint8_t *row1, int32_t sample_x,
+                                int32_t fy) {
     const int32_t x0 = sample_x >> 8;
     const int32_t x1 = (x0 + 1 < INKCELL_ICON_SIZE) ? x0 + 1 : x0;
     const int32_t fx = sample_x & 0xFF;
@@ -1090,8 +1103,8 @@ static int inkcell_fb_icon_step(const uint8_t *row0, const uint8_t *row1, int32_
  * pixel, because coverage is quantised into INKCELL_FB_BLEND_STEPS packed colours first.
  */
 void inkcell_fb_draw_icon(const struct inkcell_backend_fb_state *state, int x, int y,
-                  enum inkcell_icon icon, int scale, struct inkcell_rgb ink,
-                  struct inkcell_rgb ground) {
+                          enum inkcell_icon icon, int scale, struct inkcell_rgb ink,
+                          struct inkcell_rgb ground) {
     if (!inkcell_icon_is_valid(icon) || scale <= 0 || scale > INKCELL_FB_ICON_SCALE_MAX) {
         return;
     }
@@ -1156,8 +1169,9 @@ void inkcell_fb_draw_icon(const struct inkcell_backend_fb_state *state, int x, i
  * ASCII range separately. Everything below measures with the same walker, so a line is always
  * as wide as it draws.
  */
-void inkcell_fb_draw_text(const struct inkcell_backend_fb_state *state, int x, int y, const char *text,
-                  int scale, struct inkcell_rgb ink, struct inkcell_rgb ground) {
+void inkcell_fb_draw_text(const struct inkcell_backend_fb_state *state, int x, int y,
+                          const char *text, int scale, struct inkcell_rgb ink,
+                          struct inkcell_rgb ground) {
     /* One ramp for the whole run: every character in it is the same ink over the same ground,
        and building the table per glyph would cost more than drawing one. */
     uint32_t blend[INKCELL_FB_BLEND_STEPS];
@@ -1186,13 +1200,13 @@ void inkcell_fb_draw_text(const struct inkcell_backend_fb_state *state, int x, i
 }
 
 void inkcell_fb_fill_rect(const struct inkcell_backend_fb_state *state, int x, int y, int w, int h,
-                  struct inkcell_rgb color) {
+                          struct inkcell_rgb color) {
     inkcell_fb_fill_packed(state, x, y, w, h, compose_color(state, color.r, color.g, color.b));
 }
 
-void inkcell_fb_fill_round_rect_ends(const struct inkcell_backend_fb_state *state, int x, int y, int w,
-                             int h, int radius, struct inkcell_rgb color, bool round_top,
-                             bool round_bottom) {
+void inkcell_fb_fill_round_rect_ends(const struct inkcell_backend_fb_state *state, int x, int y,
+                                     int w, int h, int radius, struct inkcell_rgb color,
+                                     bool round_top, bool round_bottom) {
     if (w <= 0 || h <= 0) {
         return;
     }
@@ -1246,8 +1260,8 @@ void inkcell_fb_fill_round_rect_ends(const struct inkcell_backend_fb_state *stat
     }
 }
 
-void inkcell_fb_fill_round_rect(const struct inkcell_backend_fb_state *state, int x, int y, int w, int h,
-                        int radius, struct inkcell_rgb color) {
+void inkcell_fb_fill_round_rect(const struct inkcell_backend_fb_state *state, int x, int y, int w,
+                                int h, int radius, struct inkcell_rgb color) {
     inkcell_fb_fill_round_rect_ends(state, x, y, w, h, radius, color, true, true);
 }
 
@@ -1278,10 +1292,14 @@ size_t inkcell_fb_row_cols(const struct inkcell_backend_fb_state *state, int sca
    cut in half - half a sequence would draw as the replacement box and, on the paths that also
    log or serialise the line, would be malformed UTF-8 - and a flag or a ZWJ sequence is never
    split into the pieces it is spelled with. */
-void inkcell_fb_fit(char *line, size_t cols) { inkcell_text_cell_truncate(line, cols); }
+void inkcell_fb_fit(char *line, size_t cols) {
+    inkcell_text_cell_truncate(line, cols);
+}
 
 /* Columns a line occupies once drawn. */
-size_t inkcell_fb_width(const char *line) { return inkcell_text_cells(line); }
+size_t inkcell_fb_width(const char *line) {
+    return inkcell_text_cells(line);
+}
 
 /*
  * The cursor's highlight, and the ground everything on the row is drawn against.
@@ -1297,7 +1315,8 @@ size_t inkcell_fb_width(const char *line) { return inkcell_text_cells(line); }
  * it walks, and two copies of `y - scale` is exactly how that happens.
  */
 struct inkcell_rgb inkcell_fb_draw_row_fill_on(const struct inkcell_backend_fb_state *state, int y,
-                                       uint32_t rows, bool selected, enum inkcell_color ground) {
+                                               uint32_t rows, bool selected,
+                                               enum inkcell_color ground) {
     if (!selected) {
         /* Nothing is painted: the row is already standing on whatever laid that colour down -
            the panel, or the card surface a grouped list drew before any row was placed. What is
@@ -1308,24 +1327,26 @@ struct inkcell_rgb inkcell_fb_draw_row_fill_on(const struct inkcell_backend_fb_s
     const struct inkcell_rgb fill = inkcell_fb_color(state, INKCELL_COLOR_SURFACE_SEL);
     const int line = inkcell_fb_line_adv(state, state->scale);
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
-    inkcell_fb_fill_round_rect(state, box.x, y - state->scale, box.w, (int)(rows > 0U ? rows : 1U) * line,
-                       inkcell_fb_radius(state, INKCELL_SHAPE_SM), fill);
+    inkcell_fb_fill_round_rect(state, box.x, y - state->scale, box.w,
+                               (int)(rows > 0U ? rows : 1U) * line,
+                               inkcell_fb_radius(state, INKCELL_SHAPE_SM), fill);
     return fill;
 }
 
 struct inkcell_rgb inkcell_fb_draw_row_fill(const struct inkcell_backend_fb_state *state, int y,
-                                    uint32_t rows, bool selected) {
+                                            uint32_t rows, bool selected) {
     return inkcell_fb_draw_row_fill_on(state, y, rows, selected, INKCELL_COLOR_BG);
 }
 
 /* One list row of text, highlighted when it is the cursor: the fill above, then the words. */
 void inkcell_fb_draw_row(const struct inkcell_backend_fb_state *state, int y, const char *text,
-                 struct inkcell_rgb color, bool selected) {
+                         struct inkcell_rgb color, bool selected) {
     const struct inkcell_rgb ground = inkcell_fb_draw_row_fill(state, y, 1U, selected);
     if (selected) {
         color = inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL);
     }
-    inkcell_fb_draw_text(state, inkcell_fb_row_box(state).text_x, y, text, state->scale, color, ground);
+    inkcell_fb_draw_text(state, inkcell_fb_row_box(state).text_x, y, text, state->scale, color,
+                         ground);
 }
 
 /* "3m", "2h", "5d" since a radio-reported epoch; "?" when either clock is unusable. */
@@ -1370,9 +1391,9 @@ void inkcell_fb_format_clock(uint32_t rx_time, char *out, size_t out_len) {
    The x is a parameter because a dialog's paragraph is inset from its panel's edge rather than
    from the body's - the body margin was the only answer while the only wrapped text on screen
    was a screen's own. */
-int inkcell_fb_draw_wrapped_at(const struct inkcell_backend_fb_state *state, int x, int y, const char *text,
-                       size_t cols, int max_lines, struct inkcell_rgb color,
-                       struct inkcell_rgb ground) {
+int inkcell_fb_draw_wrapped_at(const struct inkcell_backend_fb_state *state, int x, int y,
+                               const char *text, size_t cols, int max_lines,
+                               struct inkcell_rgb color, struct inkcell_rgb ground) {
     int lines = 0;
     const char *cursor = text;
     char line[160];
@@ -1407,7 +1428,8 @@ int inkcell_fb_draw_wrapped_at(const struct inkcell_backend_fb_state *state, int
 
 /* The same, from the body's left margin - which is where a screen's own wrapped text starts. */
 int inkcell_fb_draw_wrapped(const struct inkcell_backend_fb_state *state, int y, const char *text,
-                    size_t cols, int max_lines, struct inkcell_rgb color,
-                    struct inkcell_rgb ground) {
-    return inkcell_fb_draw_wrapped_at(state, inkcell_fb_margin(state), y, text, cols, max_lines, color, ground);
+                            size_t cols, int max_lines, struct inkcell_rgb color,
+                            struct inkcell_rgb ground) {
+    return inkcell_fb_draw_wrapped_at(state, inkcell_fb_margin(state), y, text, cols, max_lines,
+                                      color, ground);
 }

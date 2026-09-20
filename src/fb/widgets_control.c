@@ -5,12 +5,12 @@
  * scale so that a row can leave it room before it knows what will go in.
  */
 
-#include "inkcell/ui/widgets/control.h"
 #include "inkcell/ui/widgets/button.h"
+#include "inkcell/ui/widgets/control.h"
 
 #include "inkcell/ui/anim.h"
-#include "inkcell/ui/layout.h"
 #include "inkcell/ui/emoji.h"
+#include "inkcell/ui/layout.h"
 
 #include <stdio.h>
 
@@ -29,7 +29,8 @@
 /* Shorter than the line advance, which carries the gap between rows: a control as tall as the
    advance touches the row above it. */
 static int inkcell_fb_switch_height(const struct inkcell_backend_fb_state *state, int scale) {
-    const int height = inkcell_fb_line_adv(state, scale) - inkcell_fb_space_at(state, INKCELL_SPACE_MD, scale);
+    const int height =
+        inkcell_fb_line_adv(state, scale) - inkcell_fb_space_at(state, INKCELL_SPACE_MD, scale);
     return height < 6 ? 6 : height;
 }
 
@@ -41,7 +42,8 @@ static int inkcell_fb_switch_height(const struct inkcell_backend_fb_state *state
  * sits in, how far it travels - falls out of the height below, so a theme that asks for bigger
  * text gets a proportionally bigger control and no renderer is touched.
  */
-void inkcell_fb_switch_size(const struct inkcell_backend_fb_state *state, int scale, int *w, int *h) {
+void inkcell_fb_switch_size(const struct inkcell_backend_fb_state *state, int scale, int *w,
+                            int *h) {
     const int height = inkcell_fb_switch_height(state, scale);
     if (h != NULL) {
         *h = height;
@@ -51,7 +53,8 @@ void inkcell_fb_switch_size(const struct inkcell_backend_fb_state *state, int sc
     }
 }
 
-void inkcell_fb_draw_switch(struct inkcell_backend_fb_state *state, const struct inkcell_fb_switch *sw) {
+void inkcell_fb_draw_switch(struct inkcell_backend_fb_state *state,
+                            const struct inkcell_fb_switch *sw) {
     if (sw == NULL || sw->rect.w <= 0 || sw->rect.h <= 0) {
         return;
     }
@@ -67,7 +70,7 @@ void inkcell_fb_draw_switch(struct inkcell_backend_fb_state *state, const struct
 
     const int damage_pad = inkcell_fb_space(state, INKCELL_SPACE_XS);
     inkcell_fb_animation_damage(state, sw->rect.x - damage_pad, sw->rect.y - damage_pad,
-                        sw->rect.w + 2 * damage_pad, sw->rect.h + 2 * damage_pad);
+                                sw->rect.w + 2 * damage_pad, sw->rect.h + 2 * damage_pad);
     const int radius = sw->rect.h / 2;
 
     /*
@@ -82,7 +85,8 @@ void inkcell_fb_draw_switch(struct inkcell_backend_fb_state *state, const struct
            control overhung the highlight bar top and bottom and notched it. */
         const int pad = inkcell_fb_space(state, INKCELL_SPACE_XS);
         inkcell_fb_fill_round_rect(state, sw->rect.x - pad, sw->rect.y - pad, sw->rect.w + 2 * pad,
-                           sw->rect.h + 2 * pad, radius + pad, inkcell_fb_color(state, sw->ground));
+                                   sw->rect.h + 2 * pad, radius + pad,
+                                   inkcell_fb_color(state, sw->ground));
     }
 
     /*
@@ -105,7 +109,8 @@ void inkcell_fb_draw_switch(struct inkcell_backend_fb_state *state, const struct
     struct inkcell_rgb track;
     struct inkcell_rgb knob;
     if (sw->dim) {
-        track = inkcell_fb_color(state, past_middle ? INKCELL_COLOR_RULE_STRONG : INKCELL_COLOR_RULE);
+        track =
+            inkcell_fb_color(state, past_middle ? INKCELL_COLOR_RULE_STRONG : INKCELL_COLOR_RULE);
         knob = inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM);
     } else if (past_middle) {
         /* The on end is the family, fill and knob taken from the one pair. */
@@ -115,14 +120,16 @@ void inkcell_fb_draw_switch(struct inkcell_backend_fb_state *state, const struct
         track = inkcell_fb_color(state, INKCELL_COLOR_SURFACE_SEL);
         knob = inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL);
     }
-    inkcell_fb_fill_round_rect(state, sw->rect.x, sw->rect.y, sw->rect.w, sw->rect.h, radius, track);
+    inkcell_fb_fill_round_rect(state, sw->rect.x, sw->rect.y, sw->rect.w, sw->rect.h, radius,
+                               track);
 
     /* The knob: a disc inside a ring of track, travelling the width less that ring. */
     const int inset = sw->rect.h / 8 + 1;
     const int knob_size = sw->rect.h - 2 * inset;
     const int travel = sw->rect.w - 2 * inset - knob_size;
     const int x = sw->rect.x + inset + (travel > 0 ? (travel * position) / INKCELL_ANIM_ONE : 0);
-    inkcell_fb_fill_round_rect(state, x, sw->rect.y + inset, knob_size, knob_size, knob_size / 2, knob);
+    inkcell_fb_fill_round_rect(state, x, sw->rect.y + inset, knob_size, knob_size, knob_size / 2,
+                               knob);
 }
 
 /* ---- the selection control ----------------------------------------------------------------- */
@@ -133,7 +140,8 @@ void inkcell_fb_draw_switch(struct inkcell_backend_fb_state *state, const struct
  */
 #define INKCELL_FB_SELECTION_MOTION INKCELL_MOTION_SHORT
 
-void inkcell_fb_selection_size(const struct inkcell_backend_fb_state *state, int scale, int *w, int *h) {
+void inkcell_fb_selection_size(const struct inkcell_backend_fb_state *state, int scale, int *w,
+                               int *h) {
     /* A square of the switch's height, so a list mixing the two controls has them the same
        distance off its rows' top and bottom edges. */
     const int side = inkcell_fb_switch_height(state, scale);
@@ -163,7 +171,8 @@ static int inkcell_fb_icon_scale_within(const struct inkcell_backend_fb_state *s
     return 0;
 }
 
-void inkcell_fb_draw_selection(struct inkcell_backend_fb_state *state, const struct inkcell_fb_selection *sel) {
+void inkcell_fb_draw_selection(struct inkcell_backend_fb_state *state,
+                               const struct inkcell_fb_selection *sel) {
     if (sel == NULL || sel->rect.w <= 0 || sel->rect.h <= 0) {
         return;
     }
@@ -180,7 +189,7 @@ void inkcell_fb_draw_selection(struct inkcell_backend_fb_state *state, const str
 
     const int damage_pad = inkcell_fb_space(state, INKCELL_SPACE_XS);
     inkcell_fb_animation_damage(state, sel->rect.x - damage_pad, sel->rect.y - damage_pad,
-                        sel->rect.w + 2 * damage_pad, sel->rect.h + 2 * damage_pad);
+                                sel->rect.w + 2 * damage_pad, sel->rect.h + 2 * damage_pad);
     const bool radio = (sel->shape == INKCELL_FB_SELECTION_RADIO);
     const int side = sel->rect.w < sel->rect.h ? sel->rect.w : sel->rect.h;
     /* A circle for one-of-these, a rounded square for any-of-these. The shape scale answers the
@@ -201,15 +210,16 @@ void inkcell_fb_draw_selection(struct inkcell_backend_fb_state *state, const str
     const struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_BG);
     if (sel->selected) {
         const int pad = inkcell_fb_space(state, INKCELL_SPACE_XS);
-        inkcell_fb_fill_round_rect(state, sel->rect.x - pad, sel->rect.y - pad, sel->rect.w + 2 * pad,
-                           sel->rect.h + 2 * pad, radius + pad, ground);
+        inkcell_fb_fill_round_rect(state, sel->rect.x - pad, sel->rect.y - pad,
+                                   sel->rect.w + 2 * pad, sel->rect.h + 2 * pad, radius + pad,
+                                   ground);
     }
 
     /*
-     * The colours flip at the midpoint rather than fading, which is the rule inkcell_fb_draw_switch()
-     * arrived at and wrote down: the theme validates pairs, and a colour halfway between two of
-     * them is validated against neither - so the one moment the eye is following the control is
-     * the moment its contrast is unaccounted for.
+     * The colours flip at the midpoint rather than fading, which is the rule
+     * inkcell_fb_draw_switch() arrived at and wrote down: the theme validates pairs, and a colour
+     * halfway between two of them is validated against neither - so the one moment the eye is
+     * following the control is the moment its contrast is unaccounted for.
      *
      * A dim control reports a state rather than offering one, so it never takes the accent.
      */
@@ -230,7 +240,7 @@ void inkcell_fb_draw_selection(struct inkcell_backend_fb_state *state, const str
     /* The ring, hollowed out. Two fills, the way every outline in this file is drawn. */
     inkcell_fb_fill_round_rect(state, sel->rect.x, sel->rect.y, side, side, radius, outline);
     inkcell_fb_fill_round_rect(state, sel->rect.x + ring, sel->rect.y + ring, side - 2 * ring,
-                       side - 2 * ring, radius - ring > 0 ? radius - ring : 0, ground);
+                               side - 2 * ring, radius - ring > 0 ? radius - ring : 0, ground);
 
     /*
      * The mark, grown from the centre.
@@ -248,21 +258,22 @@ void inkcell_fb_draw_selection(struct inkcell_backend_fb_state *state, const str
     const int mark_x = sel->rect.x + (side - size) / 2;
     const int mark_y = sel->rect.y + (side - size) / 2;
     inkcell_fb_fill_round_rect(state, mark_x, mark_y, size, size,
-                       radio ? size / 2 : (radius < size / 2 ? radius : size / 2), mark);
+                               radio ? size / 2 : (radius < size / 2 ? radius : size / 2), mark);
     if (radio || !past_middle) {
         return;
     }
 
     /* The tick, once there is a fill validated to draw it on. Sized to the box rather than to
-       the row's text, and centred on the control: inkcell_fb_draw_icon() places an icon against a text
-       baseline, so what it is handed here is the baseline that would put one there. */
+       the row's text, and centred on the control: inkcell_fb_draw_icon() places an icon against a
+       text baseline, so what it is handed here is the baseline that would put one there. */
     const int icon_scale = inkcell_fb_icon_scale_within(state, size - 2 * ring);
     if (icon_scale <= 0) {
         return;
     }
     inkcell_fb_draw_icon(state, sel->rect.x + (side - inkcell_fb_icon_box(state, icon_scale)) / 2,
-                 sel->rect.y + (side - (int)inkcell_fb_font(state)->height * icon_scale) / 2,
-                 INKCELL_ICON_CHECK, icon_scale, on_paint.ink, mark);
+                         sel->rect.y +
+                             (side - (int)inkcell_fb_font(state)->height * icon_scale) / 2,
+                         INKCELL_ICON_CHECK, icon_scale, on_paint.ink, mark);
 }
 
 /* ---- the segmented button ------------------------------------------------------------------ */
@@ -272,15 +283,16 @@ int inkcell_fb_segmented_height(const struct inkcell_backend_fb_state *state, in
 }
 
 int inkcell_fb_segmented_width(const struct inkcell_backend_fb_state *state,
-                       const struct inkcell_fb_segmented *segmented, int scale) {
-    if (segmented == NULL || segmented->count == 0U || segmented->count > INKCELL_FB_SEGMENTED_MAX) {
+                               const struct inkcell_fb_segmented *segmented, int scale) {
+    if (segmented == NULL || segmented->count == 0U ||
+        segmented->count > INKCELL_FB_SEGMENTED_MAX) {
         return 0;
     }
     /*
      * Every segment as wide as the widest label, and a segment is exactly a button's worth of
-     * room around it - inkcell_fb_button_width() rather than a padding of this component's own, because
-     * that is what actually draws here and a strip that measured itself differently from the
-     * way it draws is a strip whose last segment falls off the row.
+     * room around it - inkcell_fb_button_width() rather than a padding of this component's own,
+     * because that is what actually draws here and a strip that measured itself differently from
+     * the way it draws is a strip whose last segment falls off the row.
      *
      * Equal shares are not a simplification. A strip whose segments were each sized to their own
      * words is a chip strip, and what separates the two components is precisely that these are
@@ -289,17 +301,19 @@ int inkcell_fb_segmented_width(const struct inkcell_backend_fb_state *state,
      */
     int widest = 0;
     for (size_t i = 0; i < segmented->count; ++i) {
-        const int width = inkcell_fb_button_width(state, INKCELL_ICON_NONE, segmented->labels[i], scale);
+        const int width =
+            inkcell_fb_button_width(state, INKCELL_ICON_NONE, segmented->labels[i], scale);
         widest = width > widest ? width : widest;
     }
     return (int)segmented->count * widest;
 }
 
-void inkcell_fb_draw_segmented(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_rect *rect,
-                       const struct inkcell_fb_segmented *segmented, bool selected,
-                       enum inkcell_color ground, int scale) {
-    /* `active` is checked rather than clamped, and that is the point: inkcell_fb_segmented_cols() sends
-       a choice outside the set to the words, so reaching here with one means the measure and
+void inkcell_fb_draw_segmented(const struct inkcell_backend_fb_state *state,
+                               const struct inkcell_fb_rect *rect,
+                               const struct inkcell_fb_segmented *segmented, bool selected,
+                               enum inkcell_color ground, int scale) {
+    /* `active` is checked rather than clamped, and that is the point: inkcell_fb_segmented_cols()
+       sends a choice outside the set to the words, so reaching here with one means the measure and
        the draw have disagreed - and drawing the first segment lit would answer the disagreement
        with a claim about the radio's configuration. Nothing is the safe answer. */
     if (rect == NULL || segmented == NULL || segmented->count == 0U ||
@@ -319,15 +333,15 @@ void inkcell_fb_draw_segmented(const struct inkcell_backend_fb_state *state, con
         const int pad = inkcell_fb_space(state, INKCELL_SPACE_XS);
         behind = inkcell_fb_color(state, INKCELL_COLOR_BG);
         inkcell_fb_fill_round_rect(state, rect->x - pad, rect->y - pad, rect->w + 2 * pad,
-                           rect->h + 2 * pad, radius, behind);
+                                   rect->h + 2 * pad, radius, behind);
     }
 
     /* The container: one outline around the set, which is the whole of what says these are
        alternatives rather than a row of separate offers. Two fills, as every outline here is. */
     inkcell_fb_fill_round_rect(state, rect->x, rect->y, rect->w, rect->h, radius,
-                       inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
+                               inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
     inkcell_fb_fill_round_rect(state, rect->x + edge, rect->y + edge, rect->w - 2 * edge,
-                       rect->h - 2 * edge, radius, behind);
+                               rect->h - 2 * edge, radius, behind);
 
     const size_t active = segmented->active;
     for (size_t i = 0; i < segmented->count; ++i) {
@@ -343,13 +357,13 @@ void inkcell_fb_draw_segmented(const struct inkcell_backend_fb_state *state, con
          */
         if (i > 0U && i != active && i - 1U != active) {
             inkcell_fb_fill_rect(state, left, rect->y + edge, edge, rect->h - 2 * edge,
-                         inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
+                                 inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
         }
 
         /*
          * The segment itself is a button, because that is what it is: the tonal fill on the
-         * chosen one and a dim label on the rest is the pairing inkcell_fb_draw_chip() already uses for
-         * a tab, and a second opinion about it here would be a segmented control that drifted
+         * chosen one and a dim label on the rest is the pairing inkcell_fb_draw_chip() already uses
+         * for a tab, and a second opinion about it here would be a segmented control that drifted
          * away from the tab strip it is a sibling of.
          *
          * Inset by the hairline so the container's outline survives underneath the fill, and by
@@ -377,7 +391,8 @@ void inkcell_fb_draw_segmented(const struct inkcell_backend_fb_state *state, con
 
 /* The box's own height, without the label over it or the counter under it. */
 static int inkcell_fb_text_field_box_h(const struct inkcell_backend_fb_state *state,
-                               const struct inkcell_fb_layout *layout, const struct inkcell_fb_text_field *field) {
+                                       const struct inkcell_fb_layout *layout,
+                                       const struct inkcell_fb_text_field *field) {
     const uint32_t lines = field->lines > 0U ? field->lines : 1U;
     return (int)lines * layout->line + state->scale;
 }
@@ -386,30 +401,35 @@ static int inkcell_fb_text_field_box_h(const struct inkcell_backend_fb_state *st
    being part of what is in it, so they are drawn at the smaller scale the footer and the tab
    strip use. Zero when the field carries neither. */
 static int inkcell_fb_text_field_label_h(const struct inkcell_backend_fb_state *state,
-                                 const struct inkcell_fb_layout *layout,
-                                 const struct inkcell_fb_text_field *field) {
-    return (field->label != NULL && field->label[0] != '\0') ? inkcell_fb_line_adv(state, layout->small)
-                                                             : 0;
+                                         const struct inkcell_fb_layout *layout,
+                                         const struct inkcell_fb_text_field *field) {
+    return (field->label != NULL && field->label[0] != '\0')
+               ? inkcell_fb_line_adv(state, layout->small)
+               : 0;
 }
 
 static int inkcell_fb_text_field_counter_h(const struct inkcell_backend_fb_state *state,
-                                   const struct inkcell_fb_layout *layout,
-                                   const struct inkcell_fb_text_field *field) {
-    return (field->counter != NULL && field->counter[0] != '\0') ? inkcell_fb_line_adv(state, layout->small)
-                                                                 : 0;
+                                           const struct inkcell_fb_layout *layout,
+                                           const struct inkcell_fb_text_field *field) {
+    return (field->counter != NULL && field->counter[0] != '\0')
+               ? inkcell_fb_line_adv(state, layout->small)
+               : 0;
 }
 
 int inkcell_fb_text_field_height(const struct inkcell_backend_fb_state *state,
-                         const struct inkcell_fb_layout *layout, const struct inkcell_fb_text_field *field) {
+                                 const struct inkcell_fb_layout *layout,
+                                 const struct inkcell_fb_text_field *field) {
     if (field == NULL) {
         return 0;
     }
-    return inkcell_fb_text_field_label_h(state, layout, field) + inkcell_fb_text_field_box_h(state, layout, field) +
+    return inkcell_fb_text_field_label_h(state, layout, field) +
+           inkcell_fb_text_field_box_h(state, layout, field) +
            inkcell_fb_text_field_counter_h(state, layout, field) + state->scale;
 }
 
 void inkcell_fb_draw_text_field(const struct inkcell_backend_fb_state *state,
-                        const struct inkcell_fb_layout *layout, int *y, const struct inkcell_fb_text_field *field) {
+                                const struct inkcell_fb_layout *layout, int *y,
+                                const struct inkcell_fb_text_field *field) {
     if (field == NULL || y == NULL) {
         return;
     }
@@ -422,9 +442,10 @@ void inkcell_fb_draw_text_field(const struct inkcell_backend_fb_state *state,
     int top = *y;
 
     if (inkcell_fb_text_field_label_h(state, layout, field) > 0) {
-        inkcell_fb_draw_text(state, margin, top, field->label, layout->small,
-                     inkcell_fb_tone_color(state, field->error ? INKCELL_TONE_ERROR : INKCELL_TONE_DIM),
-                     inkcell_fb_color(state, INKCELL_COLOR_BG));
+        inkcell_fb_draw_text(
+            state, margin, top, field->label, layout->small,
+            inkcell_fb_tone_color(state, field->error ? INKCELL_TONE_ERROR : INKCELL_TONE_DIM),
+            inkcell_fb_color(state, INKCELL_COLOR_BG));
         top += inkcell_fb_text_field_label_h(state, layout, field);
     }
 
@@ -435,10 +456,11 @@ void inkcell_fb_draw_text_field(const struct inkcell_backend_fb_state *state,
      */
     const int edge = inkcell_fb_edge(state);
     const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_MD);
-    inkcell_fb_fill_round_rect(state, box_x, top, box_w, box_h, radius + edge,
-                       inkcell_fb_color(state, field->error ? INKCELL_COLOR_ERROR : INKCELL_COLOR_OUTLINE));
-    inkcell_fb_fill_round_rect(state, box_x + edge, top + edge, box_w - 2 * edge, box_h - 2 * edge, radius,
-                       inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
+    inkcell_fb_fill_round_rect(
+        state, box_x, top, box_w, box_h, radius + edge,
+        inkcell_fb_color(state, field->error ? INKCELL_COLOR_ERROR : INKCELL_COLOR_OUTLINE));
+    inkcell_fb_fill_round_rect(state, box_x + edge, top + edge, box_w - 2 * edge, box_h - 2 * edge,
+                               radius, inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
 
     /*
      * The value, with the caret on the end of it, showing the *tail* when it is longer than the
@@ -458,8 +480,8 @@ void inkcell_fb_draw_text_field(const struct inkcell_backend_fb_state *state,
     /* The value sits a scale down from the box's own top edge, which is the inset every other
        container here gives its contents. */
     inkcell_fb_draw_wrapped(state, top + scale, tail, layout->cols, (int)lines,
-                    inkcell_fb_tone_color(state, INKCELL_TONE_STRONG),
-                    inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
+                            inkcell_fb_tone_color(state, INKCELL_TONE_STRONG),
+                            inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
     top += box_h;
 
     if (inkcell_fb_text_field_counter_h(state, layout, field) > 0) {
@@ -467,9 +489,10 @@ void inkcell_fb_draw_text_field(const struct inkcell_backend_fb_state *state,
            and a figure that does not line up with the container it reports on reads as loose. */
         const int adv = inkcell_fb_char_adv(state, layout->small);
         const int x = box_x + box_w - (int)inkcell_text_cells(field->counter) * adv;
-        inkcell_fb_draw_text(state, x, top, field->counter, layout->small,
-                     inkcell_fb_tone_color(state, field->error ? INKCELL_TONE_ERROR : INKCELL_TONE_DIM),
-                     inkcell_fb_color(state, INKCELL_COLOR_BG));
+        inkcell_fb_draw_text(
+            state, x, top, field->counter, layout->small,
+            inkcell_fb_tone_color(state, field->error ? INKCELL_TONE_ERROR : INKCELL_TONE_DIM),
+            inkcell_fb_color(state, INKCELL_COLOR_BG));
         top += inkcell_fb_text_field_counter_h(state, layout, field);
     }
 

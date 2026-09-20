@@ -211,9 +211,9 @@ enum inkcell_color {
  * The six colours that mean something.
  *
  * A widget takes one of these rather than a fill and an ink, and asks the theme for the slot it
- * needs. That is what lets one `inkcell_fb_draw_button` be the plain button, the destructive confirm
- * and the "connected" pill without three branches inside it - and what stops the fourth caller
- * inventing a fill nothing has checked the label against.
+ * needs. That is what lets one `inkcell_fb_draw_button` be the plain button, the destructive
+ * confirm and the "connected" pill without three branches inside it - and what stops the fourth
+ * caller inventing a fill nothing has checked the label against.
  */
 enum inkcell_family {
     INKCELL_FAMILY_PRIMARY = 0,

@@ -1,7 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
-#include "inkcell/utils/env.h"
 #include "inkcell/ui/input_profile.h"
+#include "inkcell/utils/env.h"
 
 #include "inkcell/utils/array.h"
 #include "inkcell/utils/log.h"
@@ -113,13 +113,17 @@ static const struct inkcell_input_profile k_profiles[] = {
 static const struct inkcell_input_profile *s_profile;
 static bool s_profile_loaded;
 
-size_t inkcell_input_profile_count(void) { return INKCELL_ARRAY_LEN(k_profiles); }
+size_t inkcell_input_profile_count(void) {
+    return INKCELL_ARRAY_LEN(k_profiles);
+}
 
 const struct inkcell_input_profile *inkcell_input_profile_at(size_t index) {
     return index < INKCELL_ARRAY_LEN(k_profiles) ? &k_profiles[index] : NULL;
 }
 
-const struct inkcell_input_profile *inkcell_input_profile_default(void) { return &k_profiles[0]; }
+const struct inkcell_input_profile *inkcell_input_profile_default(void) {
+    return &k_profiles[0];
+}
 
 const struct inkcell_input_profile *inkcell_input_profile_by_name(const char *name) {
     if (name == NULL || name[0] == '\0') {
@@ -144,7 +148,7 @@ const struct inkcell_input_profile *inkcell_input_profile_from_env(void) {
     if (profile == NULL) {
         if (name != NULL && name[0] != '\0') {
             inkcell_log_warn("input", "Unknown <PREFIX>_INPUT_PROFILE='%s'; using %s", name,
-                          inkcell_input_profile_default()->name);
+                             inkcell_input_profile_default()->name);
         }
         profile = inkcell_input_profile_default();
     } else {

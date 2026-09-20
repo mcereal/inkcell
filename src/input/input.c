@@ -90,11 +90,11 @@ static void inkcell_input_load_quit_keys(void) {
         if (s_quit_key_count > 0U) {
             s_quit_hint_is_key_code = true;
             inkcell_log_info("input", "Quit keys overridden by <PREFIX>_QUIT_KEYS (%zu codes)",
-                          s_quit_key_count);
+                             s_quit_key_count);
             return;
         }
         inkcell_log_warn("input", "<PREFIX>_QUIT_KEYS='%s' parsed to nothing; using defaults",
-                      override);
+                         override);
     }
 
     for (size_t i = 0; i < INKCELL_ARRAY_LEN(k_default_quit_keys); ++i) {
@@ -133,7 +133,7 @@ static void inkcell_input_load_key_repeat(void) {
     /* Tunable on-device from launch.sh, the same escape hatch <PREFIX>_QUIT_KEYS is; a delay
        of 0 turns hold-to-scroll off and restores one row per press. */
     s_repeat_delay_ms = (unsigned int)inkcell_env_int("KEY_REPEAT_DELAY_MS", 0, 5000,
-                                                   INKCELL_INPUT_REPEAT_DELAY_MS);
+                                                      INKCELL_INPUT_REPEAT_DELAY_MS);
     s_repeat_interval_ms =
         (unsigned int)inkcell_env_int("KEY_REPEAT_MS", 10, 2000, INKCELL_INPUT_REPEAT_MS);
 }
@@ -310,7 +310,7 @@ const char *inkcell_input_quit_hint(void) {
     inkcell_input_load_quit_keys();
     if (s_quit_hint_is_key_code) {
         inkcell_str_format(s_quit_hint, sizeof s_quit_hint, INKCELL_STR_HINT_QUIT_KEY_CODE,
-                        s_quit_keys[0]);
+                           s_quit_keys[0]);
     } else {
         inkcell_str_copy(s_quit_hint, sizeof s_quit_hint, inkcell_str(INKCELL_STR_HINT_QUIT_MENU));
     }
@@ -396,7 +396,9 @@ enum inkcell_key inkcell_input_map_key(uint16_t code) {
  * for a racing game, and a pad that really does report the whole way up should fire at the
  * top of the travel rather than at the bottom of it.
  */
-bool inkcell_input_axis_is_trigger(uint16_t code) { return code == ABS_Z || code == ABS_RZ; }
+bool inkcell_input_axis_is_trigger(uint16_t code) {
+    return code == ABS_Z || code == ABS_RZ;
+}
 
 uint8_t inkcell_input_trigger_bit(uint16_t code) {
     return (uint8_t)(code == ABS_Z ? 1U : code == ABS_RZ ? 2U : 0U);
@@ -739,8 +741,7 @@ static void inkcell_input_setup_repeat_timer(struct inkcell_input *input,
         return;
     }
 
-    const int add_result =
-        host->add_fd(host->ctx, fd, inkcell_input_repeat_callback, input);
+    const int add_result = host->add_fd(host->ctx, fd, inkcell_input_repeat_callback, input);
     if (add_result < 0) {
         inkcell_log_warn("input", "Failed to watch the key repeat timer: %d", add_result);
         close(fd);
@@ -767,7 +768,7 @@ int inkcell_input_init(struct inkcell_input *input, const struct inkcell_input_h
     for (unsigned int index = 0; index < INKCELL_INPUT_SCAN_NODES; ++index) {
         if (input->count >= INKCELL_INPUT_MAX_DEVICES) {
             inkcell_log_warn("input", "Watching %u devices already; not looking past event%u",
-                          (unsigned)INKCELL_INPUT_MAX_DEVICES, index);
+                             (unsigned)INKCELL_INPUT_MAX_DEVICES, index);
             break;
         }
 
@@ -788,8 +789,7 @@ int inkcell_input_init(struct inkcell_input *input, const struct inkcell_input_h
             continue;
         }
 
-        const int add_result =
-            host->add_fd(host->ctx, fd, inkcell_input_event_callback, input);
+        const int add_result = host->add_fd(host->ctx, fd, inkcell_input_event_callback, input);
         if (add_result < 0) {
             inkcell_log_warn("input", "Failed to watch %s: %d", path, add_result);
             close(fd);
@@ -806,15 +806,17 @@ int inkcell_input_init(struct inkcell_input *input, const struct inkcell_input_h
            where everything was *skipped* is the other case, and worth telling apart: it means
            nodes were readable and none of them reported a button this profile knows. */
         if (skipped > 0U) {
-            inkcell_log_warn("input",
-                          "None of %zu readable input device(s) report a button this client maps; "
-                          "check <PREFIX>_INPUT_PROFILE",
-                          skipped);
+            inkcell_log_warn(
+                "input",
+                "None of %zu readable input device(s) report a button this client maps; "
+                "check <PREFIX>_INPUT_PROFILE",
+                skipped);
         }
-        inkcell_log_warn("input", "No readable /dev/input devices; buttons will not quit the client");
+        inkcell_log_warn("input",
+                         "No readable /dev/input devices; buttons will not quit the client");
     } else {
         inkcell_log_info("input", "Watching %zu input device(s); %s", input->count,
-                      inkcell_input_quit_hint());
+                         inkcell_input_quit_hint());
     }
 
     return (int)input->count;

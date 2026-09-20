@@ -7,7 +7,6 @@
 extern "C" {
 #endif
 
-
 struct inkcell_backend {
     const char *name;
     int (*init)(void **state, void *userdata);
@@ -26,8 +25,9 @@ struct inkcell_backend {
      */
     bool (*animating)(void *state, void *userdata);
     /*
-     * How many body rows the last frame's paged list had room for. Optional: a backend that leaves it NULL pages nothing, which is right for
-     * one that prints every row rather than scrolling a window over them.
+     * How many body rows the last frame's paged list had room for. Optional: a backend that leaves
+     * it NULL pages nothing, which is right for one that prints every row rather than scrolling a
+     * window over them.
      */
     uint32_t (*page_rows)(void *state, void *userdata);
 };

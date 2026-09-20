@@ -25,7 +25,7 @@
 
 static const char *const k_english[INKCELL_STR_COUNT] = {
 #define INKCELL_STR_ENTRY(id, text) [INKCELL_STR_##id] = text,
-#define INKCELL_STR_PLURAL_ENTRY(id, one, other)                                                      \
+#define INKCELL_STR_PLURAL_ENTRY(id, one, other)                                                   \
     [INKCELL_STR_##id##_ONE] = one, [INKCELL_STR_##id##_OTHER] = other,
 #include "inkcell/i18n/catalog.def"
 #undef INKCELL_STR_ENTRY
@@ -36,7 +36,7 @@ static const char *const k_english[INKCELL_STR_COUNT] = {
    entry it is complaining about. */
 static const char *const k_id_names[INKCELL_STR_COUNT] = {
 #define INKCELL_STR_ENTRY(id, text) [INKCELL_STR_##id] = #id,
-#define INKCELL_STR_PLURAL_ENTRY(id, one, other)                                                      \
+#define INKCELL_STR_PLURAL_ENTRY(id, one, other)                                                   \
     [INKCELL_STR_##id##_ONE] = #id "_ONE", [INKCELL_STR_##id##_OTHER] = #id "_OTHER",
 #include "inkcell/i18n/catalog.def"
 #undef INKCELL_STR_ENTRY
@@ -51,7 +51,9 @@ static const char *const k_id_names[INKCELL_STR_COUNT] = {
  * Polish, Russian and Arabic need more forms than INKCELL_STR_PLURAL_FORMS has - see docs/i18n.md
  * before adding one of those.
  */
-static uint8_t plural_english(uint32_t n) { return (uint8_t)(n == 1U ? 0 : 1); }
+static uint8_t plural_english(uint32_t n) {
+    return (uint8_t)(n == 1U ? 0 : 1);
+}
 
 /*
  * inkcell's own languages: English, and that is all there will ever be here.
@@ -120,15 +122,21 @@ void inkcell_i18n_set_catalog(const struct inkcell_i18n_catalog *catalog) {
     s_current = &cat_locales()[0];
 }
 
-size_t inkcell_i18n_string_count(void) { return cat_count(); }
+size_t inkcell_i18n_string_count(void) {
+    return cat_count();
+}
 
-size_t inkcell_i18n_locale_count(void) { return cat_locale_count(); }
+size_t inkcell_i18n_locale_count(void) {
+    return cat_locale_count();
+}
 
 const struct inkcell_i18n_locale *inkcell_i18n_locale_at(size_t index) {
     return index < cat_locale_count() ? &cat_locales()[index] : NULL;
 }
 
-const struct inkcell_i18n_locale *inkcell_i18n_locale_english(void) { return &cat_locales()[0]; }
+const struct inkcell_i18n_locale *inkcell_i18n_locale_english(void) {
+    return &cat_locales()[0];
+}
 
 const struct inkcell_i18n_locale *inkcell_i18n_locale(void) {
     return s_current != NULL ? s_current : &cat_locales()[0];
@@ -242,7 +250,9 @@ const char *inkcell_str_in(const struct inkcell_i18n_locale *locale, enum inkcel
     return english != NULL ? english : "";
 }
 
-const char *inkcell_str(enum inkcell_str_id id) { return inkcell_str_in(inkcell_i18n_locale(), id); }
+const char *inkcell_str(enum inkcell_str_id id) {
+    return inkcell_str_in(inkcell_i18n_locale(), id);
+}
 
 const char *inkcell_str_id_name(enum inkcell_str_id id) {
     const int index = (int)id;
@@ -297,8 +307,8 @@ int inkcell_str_format(char *out, size_t out_len, enum inkcell_str_id id, ...) {
     return written;
 }
 
-int inkcell_str_format_plural(char *out, size_t out_len, enum inkcell_str_id one_form, uint32_t count,
-                           ...) {
+int inkcell_str_format_plural(char *out, size_t out_len, enum inkcell_str_id one_form,
+                              uint32_t count, ...) {
     va_list args;
     va_start(args, count);
     const int written = inkcell_str_vformat(out, out_len, plural_pick(one_form, count), args);
@@ -382,7 +392,8 @@ static bool format_signature(const char *format, char *out, size_t out_len) {
     return true;
 }
 
-bool inkcell_i18n_validate(const struct inkcell_i18n_locale *locale, char *reason, size_t reason_len) {
+bool inkcell_i18n_validate(const struct inkcell_i18n_locale *locale, char *reason,
+                           size_t reason_len) {
     if (reason != NULL && reason_len > 0U) {
         reason[0] = '\0';
     }
@@ -425,10 +436,10 @@ bool inkcell_i18n_validate(const struct inkcell_i18n_locale *locale, char *reaso
         }
         if (strcmp(english_signature, translated_signature) != 0) {
             if (reason != NULL) {
-                snprintf(reason, reason_len,
-                         "%s: expected the arguments %s, the translation has %s", cat_id_names()[id],
-                         english_signature[0] != '\0' ? english_signature : "(none)",
-                         translated_signature[0] != '\0' ? translated_signature : "(none)");
+                snprintf(
+                    reason, reason_len, "%s: expected the arguments %s, the translation has %s",
+                    cat_id_names()[id], english_signature[0] != '\0' ? english_signature : "(none)",
+                    translated_signature[0] != '\0' ? translated_signature : "(none)");
             }
             return false;
         }

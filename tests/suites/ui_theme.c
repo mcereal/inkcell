@@ -29,29 +29,29 @@
 INKCELL_TEST_CASE(ui_theme_registry_round_trips, unit) {
     INKCELL_TEST_FAIL_IF(inkcell_theme_count() == 0U, "no themes are registered");
     INKCELL_TEST_FAIL_IF(inkcell_theme_default() != inkcell_theme_at(0U),
-                      "the default is not the first theme");
+                         "the default is not the first theme");
 
     for (size_t i = 0; i < inkcell_theme_count(); ++i) {
         const struct inkcell_theme *theme = inkcell_theme_at(i);
         INKCELL_TEST_FAIL_IF(theme == NULL, "a registered theme is NULL");
         INKCELL_TEST_FAIL_IF(inkcell_theme_by_id(theme->id) != theme,
-                          "a theme does not come back under its own id");
+                             "a theme does not come back under its own id");
         for (size_t j = 0; j < i; ++j) {
             INKCELL_TEST_FAIL_IF(strcmp(inkcell_theme_at(j)->id, theme->id) == 0,
-                              "two themes share an id");
+                                 "two themes share an id");
         }
     }
 
     INKCELL_TEST_FAIL_IF(inkcell_theme_at(inkcell_theme_count()) != NULL,
-                      "an index past the end returned a theme");
+                         "an index past the end returned a theme");
     INKCELL_TEST_FAIL_IF(inkcell_theme_by_id("no-such-theme") != NULL,
-                      "an unknown id returned a theme");
+                         "an unknown id returned a theme");
     INKCELL_TEST_FAIL_IF(inkcell_theme_by_id(NULL) != NULL, "a NULL id returned a theme");
 
     /* The dark theme is the one the device has always drawn, and the id is what a saved
        preference and <PREFIX>_THEME will carry, so it is a compatibility surface. */
     INKCELL_TEST_FAIL_IF(strcmp(inkcell_theme_default()->id, "dark") != 0,
-                      "the default theme is no longer 'dark'");
+                         "the default theme is no longer 'dark'");
     record_success(test_name);
 }
 
@@ -71,7 +71,7 @@ INKCELL_TEST_CASE(ui_theme_tables_are_readable, unit) {
         const struct inkcell_rgb good = inkcell_theme_tone(theme, INKCELL_TONE_SUCCESS);
         const struct inkcell_rgb bad = inkcell_theme_tone(theme, INKCELL_TONE_ERROR);
         INKCELL_TEST_FAIL_IF(good.r == bad.r && good.g == bad.g && good.b == bad.b,
-                          "a theme draws good and bad in the same colour");
+                             "a theme draws good and bad in the same colour");
     }
     record_success(test_name);
 }
@@ -90,8 +90,9 @@ INKCELL_TEST_CASE(ui_theme_tables_are_readable, unit) {
 INKCELL_TEST_CASE(ui_theme_avatar_palettes, unit) {
     for (size_t i = 0; i < inkcell_theme_count(); ++i) {
         const struct inkcell_theme *theme = inkcell_theme_at(i);
-        INKCELL_TEST_FAIL_IF(theme->avatar_count == 0U || theme->avatar_count > INKCELL_AVATAR_TINTS,
-                          "a theme states no avatar tints, or more than fit");
+        INKCELL_TEST_FAIL_IF(theme->avatar_count == 0U ||
+                                 theme->avatar_count > INKCELL_AVATAR_TINTS,
+                             "a theme states no avatar tints, or more than fit");
 
         /* Node numbers are consecutive off a vendor's block, so the seeds that matter are
            adjacent ones - and the palette has to spread them rather than hand a whole mesh the
@@ -108,21 +109,22 @@ INKCELL_TEST_CASE(ui_theme_avatar_palettes, unit) {
                     known = true;
                 }
             }
-            INKCELL_TEST_FAIL_IF(!known, "an avatar seed resolved to a colour the theme never stated");
+            INKCELL_TEST_FAIL_IF(!known,
+                                 "an avatar seed resolved to a colour the theme never stated");
         }
         uint8_t used = 0U;
         for (uint8_t slot = 0; slot < theme->avatar_count; ++slot) {
             used = (uint8_t)(used + (seen[slot] ? 1U : 0U));
         }
         INKCELL_TEST_FAIL_IF(theme->avatar_count > 1U && used < 2U,
-                          "a run of neighbouring node numbers all got the same avatar tint");
+                             "a run of neighbouring node numbers all got the same avatar tint");
 
         /* The same conversation is the same colour every time, which is the whole reason the
            seed is an identity rather than a name. */
         const struct inkcell_rgb once = inkcell_theme_avatar(theme, 0x3000U);
         const struct inkcell_rgb twice = inkcell_theme_avatar(theme, 0x3000U);
         INKCELL_TEST_FAIL_IF(once.r != twice.r || once.g != twice.g || once.b != twice.b,
-                          "the same seed gave two different tints");
+                             "the same seed gave two different tints");
     }
 
     /* A theme that states no palette at all still has to answer, because the lookup is on the
@@ -132,7 +134,7 @@ INKCELL_TEST_CASE(ui_theme_avatar_palettes, unit) {
     const struct inkcell_rgb fallback = inkcell_theme_avatar(&bare, 7U);
     const struct inkcell_rgb accent = inkcell_theme_color(&bare, INKCELL_COLOR_PRIMARY);
     INKCELL_TEST_FAIL_IF(fallback.r != accent.r || fallback.g != accent.g || fallback.b != accent.b,
-                      "a theme with no palette should fall back to the accent it already owes");
+                         "a theme with no palette should fall back to the accent it already owes");
     record_success(test_name);
 }
 
@@ -144,8 +146,9 @@ INKCELL_TEST_CASE(ui_theme_contrast_is_the_wcag_ratio, unit) {
     const double extreme = inkcell_theme_contrast(black, white);
     INKCELL_TEST_FAIL_IF(extreme < 20.9 || extreme > 21.1, "black on white is not 21:1");
     INKCELL_TEST_FAIL_IF(inkcell_theme_contrast(white, black) != extreme,
-                      "the ratio depends on the order of its arguments");
-    INKCELL_TEST_FAIL_IF(inkcell_theme_contrast(white, white) != 1.0, "a colour on itself is not 1:1");
+                         "the ratio depends on the order of its arguments");
+    INKCELL_TEST_FAIL_IF(inkcell_theme_contrast(white, white) != 1.0,
+                         "a colour on itself is not 1:1");
     record_success(test_name);
 }
 
@@ -157,24 +160,24 @@ INKCELL_TEST_CASE(ui_theme_contrast_is_the_wcag_ratio, unit) {
  */
 INKCELL_TEST_CASE(ui_theme_tone_for_load_bands, unit) {
     INKCELL_TEST_FAIL_IF(inkcell_tone_for_load(0, 250, 500) != INKCELL_TONE_SUCCESS,
-                      "nothing used should be good news");
+                         "nothing used should be good news");
     INKCELL_TEST_FAIL_IF(inkcell_tone_for_load(249, 250, 500) != INKCELL_TONE_SUCCESS,
-                      "just under the warning is still good");
+                         "just under the warning is still good");
     /* Both thresholds are inclusive lower bounds, which is the half of this most likely to be
        got wrong later: exactly 25% of the air is already a mesh worth looking at. */
     INKCELL_TEST_FAIL_IF(inkcell_tone_for_load(250, 250, 500) != INKCELL_TONE_WARNING,
-                      "the warning threshold itself should warn");
+                         "the warning threshold itself should warn");
     INKCELL_TEST_FAIL_IF(inkcell_tone_for_load(499, 250, 500) != INKCELL_TONE_WARNING,
-                      "just under the bad threshold is still a warning");
+                         "just under the bad threshold is still a warning");
     INKCELL_TEST_FAIL_IF(inkcell_tone_for_load(500, 250, 500) != INKCELL_TONE_ERROR,
-                      "the bad threshold itself should be bad");
+                         "the bad threshold itself should be bad");
     INKCELL_TEST_FAIL_IF(inkcell_tone_for_load(1000, 250, 500) != INKCELL_TONE_ERROR,
-                      "a full track is bad news");
+                         "a full track is bad news");
 
     /* Thresholds handed over backwards must not make the middle band unreachable: a screen
        permanently in the red reads as a mesh in trouble rather than as a caller's typo. */
     INKCELL_TEST_FAIL_IF(inkcell_tone_for_load(300, 500, 250) != INKCELL_TONE_WARNING,
-                      "swapped thresholds should still band the middle");
+                         "swapped thresholds should still band the middle");
 
     /* Every tone it can answer with names a family, which is exactly what a meter is allowed
        to be filled with: inkcell_theme_validate() holds every family against the track and
@@ -183,7 +186,7 @@ INKCELL_TEST_CASE(ui_theme_tone_for_load_bands, unit) {
     for (int32_t level = 0; level <= INKCELL_ANIM_ONE; level += 50) {
         const enum inkcell_tone tone = inkcell_tone_for_load(level, 250, 500);
         INKCELL_TEST_FAIL_IF(inkcell_tone_family(tone) == INKCELL_FAMILY_COUNT,
-                          "a load tone escaped the families a meter is validated for");
+                             "a load tone escaped the families a meter is validated for");
     }
     record_success(test_name);
 }
@@ -201,36 +204,43 @@ INKCELL_TEST_CASE(ui_theme_band_tone_directions, unit) {
 
     /* No band earns nothing, so a caller without thresholds need not branch. */
     INKCELL_TEST_FAIL_IF(inkcell_band_tone(NULL, 900, INKCELL_TONE_PRIMARY) != INKCELL_TONE_PRIMARY,
-                      "a reading with no band earned a tone anyway");
+                         "a reading with no band earned a tone anyway");
 
-    INKCELL_TEST_FAIL_IF(inkcell_band_tone(&rising, 0, INKCELL_TONE_PRIMARY) != INKCELL_TONE_PRIMARY,
-                      "a reading below every boundary did not rest in the tone it was given");
-    INKCELL_TEST_FAIL_IF(inkcell_band_tone(&rising, 250, INKCELL_TONE_SUCCESS) != INKCELL_TONE_WARNING,
-                      "the warning boundary itself did not warn");
-    INKCELL_TEST_FAIL_IF(inkcell_band_tone(&rising, 500, INKCELL_TONE_SUCCESS) != INKCELL_TONE_ERROR,
-                      "the bad boundary itself was not bad");
+    INKCELL_TEST_FAIL_IF(inkcell_band_tone(&rising, 0, INKCELL_TONE_PRIMARY) !=
+                             INKCELL_TONE_PRIMARY,
+                         "a reading below every boundary did not rest in the tone it was given");
+    INKCELL_TEST_FAIL_IF(inkcell_band_tone(&rising, 250, INKCELL_TONE_SUCCESS) !=
+                             INKCELL_TONE_WARNING,
+                         "the warning boundary itself did not warn");
+    INKCELL_TEST_FAIL_IF(inkcell_band_tone(&rising, 500, INKCELL_TONE_SUCCESS) !=
+                             INKCELL_TONE_ERROR,
+                         "the bad boundary itself was not bad");
 
     /* The half that is delegated: past a boundary the two must give the same answer, or the
        generalisation has quietly become a second set of thresholds. */
     for (int32_t level = 250; level <= INKCELL_ANIM_ONE; level += 25) {
         INKCELL_TEST_FAIL_IF(inkcell_band_tone(&rising, level, INKCELL_TONE_SUCCESS) !=
-                              inkcell_tone_for_load(level, rising.warn, rising.bad),
-                          "an ascending band disagreed with the load tones it delegates to");
+                                 inkcell_tone_for_load(level, rising.warn, rising.bad),
+                             "an ascending band disagreed with the load tones it delegates to");
     }
 
     /* Descending: a battery, in percent, worse as it falls. The pair is stated in the order it
        is read - warn first, then bad - so the reversal is the sentence rather than a typo. */
     const struct inkcell_band falling = {.warn = 30, .bad = 15};
-    INKCELL_TEST_FAIL_IF(inkcell_band_tone(&falling, 87, INKCELL_TONE_SUCCESS) != INKCELL_TONE_SUCCESS,
-                      "a healthy battery did not rest");
-    INKCELL_TEST_FAIL_IF(inkcell_band_tone(&falling, 30, INKCELL_TONE_SUCCESS) != INKCELL_TONE_WARNING,
-                      "the low boundary itself did not warn");
-    INKCELL_TEST_FAIL_IF(inkcell_band_tone(&falling, 16, INKCELL_TONE_SUCCESS) != INKCELL_TONE_WARNING,
-                      "just above critical stopped being a warning");
-    INKCELL_TEST_FAIL_IF(inkcell_band_tone(&falling, 15, INKCELL_TONE_SUCCESS) != INKCELL_TONE_ERROR,
-                      "the critical boundary itself was not bad");
+    INKCELL_TEST_FAIL_IF(inkcell_band_tone(&falling, 87, INKCELL_TONE_SUCCESS) !=
+                             INKCELL_TONE_SUCCESS,
+                         "a healthy battery did not rest");
+    INKCELL_TEST_FAIL_IF(inkcell_band_tone(&falling, 30, INKCELL_TONE_SUCCESS) !=
+                             INKCELL_TONE_WARNING,
+                         "the low boundary itself did not warn");
+    INKCELL_TEST_FAIL_IF(inkcell_band_tone(&falling, 16, INKCELL_TONE_SUCCESS) !=
+                             INKCELL_TONE_WARNING,
+                         "just above critical stopped being a warning");
+    INKCELL_TEST_FAIL_IF(inkcell_band_tone(&falling, 15, INKCELL_TONE_SUCCESS) !=
+                             INKCELL_TONE_ERROR,
+                         "the critical boundary itself was not bad");
     INKCELL_TEST_FAIL_IF(inkcell_band_tone(&falling, 0, INKCELL_TONE_SUCCESS) != INKCELL_TONE_ERROR,
-                      "a flat battery was not bad news");
+                         "a flat battery was not bad news");
 
     /* Whatever it answers, a meter may be filled with it: inkcell_theme_validate() holds every
        family against the track. The resting tone is the caller's, so only the earned ones are
@@ -238,7 +248,7 @@ INKCELL_TEST_CASE(ui_theme_band_tone_directions, unit) {
     for (int32_t level = 0; level <= 100; level += 5) {
         const enum inkcell_tone tone = inkcell_band_tone(&falling, level, INKCELL_TONE_SUCCESS);
         INKCELL_TEST_FAIL_IF(inkcell_tone_family(tone) == INKCELL_FAMILY_COUNT,
-                          "a band tone escaped the families a meter is validated for");
+                             "a band tone escaped the families a meter is validated for");
     }
     record_success(test_name);
 }
@@ -255,13 +265,13 @@ INKCELL_TEST_CASE(ui_theme_validate_holds_the_meter_pairs, unit) {
     flat.colors[INKCELL_COLOR_SUCCESS] = flat.colors[INKCELL_COLOR_METER_TRACK];
     reason[0] = '\0';
     INKCELL_TEST_FAIL_IF(inkcell_theme_validate(&flat, reason, sizeof reason),
-                      "a meter fill the colour of its own track passed validation");
+                         "a meter fill the colour of its own track passed validation");
     INKCELL_TEST_FAIL_IF(reason[0] == '\0', "validation failed without saying why");
 
     struct inkcell_theme invisible_track = *inkcell_theme_default();
     invisible_track.colors[INKCELL_COLOR_METER_TRACK] = invisible_track.colors[INKCELL_COLOR_BG];
     INKCELL_TEST_FAIL_IF(inkcell_theme_validate(&invisible_track, reason, sizeof reason),
-                      "a meter track the colour of the ground passed validation");
+                         "a meter track the colour of the ground passed validation");
 
     /* And on a card, which is the half a borrowed SURFACE_SEL could not hold: a track validated
        against the body and invisible on a surface is a bar that exists on one screen. */
@@ -269,14 +279,14 @@ INKCELL_TEST_CASE(ui_theme_validate_holds_the_meter_pairs, unit) {
     invisible_on_card.colors[INKCELL_COLOR_METER_TRACK] =
         invisible_on_card.colors[INKCELL_COLOR_SURFACE];
     INKCELL_TEST_FAIL_IF(inkcell_theme_validate(&invisible_on_card, reason, sizeof reason),
-                      "a meter track the colour of a card passed validation");
+                         "a meter track the colour of a card passed validation");
 
     /* And the geometry half: a bar with no thickness draws nothing at all, which is the one
        way a theme can turn the widget off without saying so. */
     struct inkcell_theme thin = *inkcell_theme_default();
     thin.metrics.meter_thickness = 0U;
     INKCELL_TEST_FAIL_IF(inkcell_theme_validate(&thin, reason, sizeof reason),
-                      "a theme drawing meters no pixels tall passed validation");
+                         "a theme drawing meters no pixels tall passed validation");
     record_success(test_name);
 }
 
@@ -299,17 +309,17 @@ INKCELL_TEST_CASE(ui_theme_series_palette, unit) {
         for (uint32_t slot = 0; slot < INKCELL_SERIES_COLORS; ++slot) {
             const struct inkcell_rgb color = inkcell_theme_series(theme, slot);
             INKCELL_TEST_FAIL_IF(color.r == theme->colors[INKCELL_COLOR_BG].r &&
-                                  color.g == theme->colors[INKCELL_COLOR_BG].g &&
-                                  color.b == theme->colors[INKCELL_COLOR_BG].b,
-                              "a theme left a series colour the same as its ground");
+                                     color.g == theme->colors[INKCELL_COLOR_BG].g &&
+                                     color.b == theme->colors[INKCELL_COLOR_BG].b,
+                                 "a theme left a series colour the same as its ground");
             /* Distinct as *values*, which is a weaker claim than validate()'s 1.4:1 and is here
                to catch the copy-paste rather than the contrast: a theme that stated one colour
                four times would otherwise read as a palette right up until the validator ran. */
             for (uint32_t other = 0; other < slot; ++other) {
                 const struct inkcell_rgb earlier = inkcell_theme_series(theme, other);
                 INKCELL_TEST_FAIL_IF(color.r == earlier.r && color.g == earlier.g &&
-                                      color.b == earlier.b,
-                                  "a theme states one colour in two series slots");
+                                         color.b == earlier.b,
+                                     "a theme states one colour in two series slots");
             }
         }
 
@@ -319,7 +329,7 @@ INKCELL_TEST_CASE(ui_theme_series_palette, unit) {
         const struct inkcell_rgb wrapped = inkcell_theme_series(theme, INKCELL_SERIES_COLORS + 1U);
         const struct inkcell_rgb first = inkcell_theme_series(theme, 1U);
         INKCELL_TEST_FAIL_IF(wrapped.r != first.r || wrapped.g != first.g || wrapped.b != first.b,
-                          "a series index past the end did not wrap");
+                             "a series index past the end did not wrap");
     }
     record_success(test_name);
 }
@@ -339,7 +349,7 @@ INKCELL_TEST_CASE(ui_theme_validate_holds_the_series_palette, unit) {
     collapsed.series[2] = collapsed.series[1];
     reason[0] = '\0';
     INKCELL_TEST_FAIL_IF(inkcell_theme_validate(&collapsed, reason, sizeof reason),
-                      "two series colours the eye cannot separate passed validation");
+                         "two series colours the eye cannot separate passed validation");
     INKCELL_TEST_FAIL_IF(reason[0] == '\0', "validation failed without saying why");
 
     /* The outward half, on a card rather than on the body - the ground a composition is actually
@@ -347,7 +357,7 @@ INKCELL_TEST_CASE(ui_theme_validate_holds_the_series_palette, unit) {
     struct inkcell_theme invisible = *inkcell_theme_default();
     invisible.series[0] = invisible.colors[INKCELL_COLOR_SURFACE];
     INKCELL_TEST_FAIL_IF(inkcell_theme_validate(&invisible, reason, sizeof reason),
-                      "a series colour the colour of a card passed validation");
+                         "a series colour the colour of a card passed validation");
     record_success(test_name);
 }
 
@@ -358,13 +368,13 @@ INKCELL_TEST_CASE(ui_theme_validate_rejects_an_unreadable_palette, unit) {
     char reason[128];
     reason[0] = '\0';
     INKCELL_TEST_FAIL_IF(inkcell_theme_validate(&broken, reason, sizeof reason),
-                      "text drawn in the background colour passed validation");
+                         "text drawn in the background colour passed validation");
     INKCELL_TEST_FAIL_IF(reason[0] == '\0', "validation failed without saying why");
 
     struct inkcell_theme no_font = *inkcell_theme_default();
     no_font.font_id = "not-a-font";
     INKCELL_TEST_FAIL_IF(inkcell_theme_validate(&no_font, reason, sizeof reason),
-                      "a theme naming a font that does not exist passed validation");
+                         "a theme naming a font that does not exist passed validation");
     record_success(test_name);
 }
 
@@ -391,7 +401,7 @@ INKCELL_TEST_CASE(ui_theme_states_its_geometry, unit) {
            and a bar as tall as the text beside it is a block, not a meter. */
         INKCELL_TEST_FAIL_IF(metrics->meter_thickness == 0U, "a theme draws meters no pixels tall");
         INKCELL_TEST_FAIL_IF(metrics->meter_thickness > 3U,
-                          "a theme's meter is as tall as the row it sits in");
+                             "a theme's meter is as tall as the row it sits in");
         /*
          * The shape scale has to be a scale: rounder as it goes up, and never so round that a
          * corner eats the row it belongs to. A flat table - every shape the same radius - is
@@ -401,22 +411,22 @@ INKCELL_TEST_CASE(ui_theme_states_its_geometry, unit) {
          */
         for (int shape = INKCELL_SHAPE_NONE; shape < INKCELL_SHAPE_FULL; ++shape) {
             INKCELL_TEST_FAIL_IF(metrics->shape[shape] > 4U,
-                              "a theme's corners are rounder than the box they are on");
+                                 "a theme's corners are rounder than the box they are on");
             if (shape > INKCELL_SHAPE_NONE) {
                 INKCELL_TEST_FAIL_IF(metrics->shape[shape] < metrics->shape[shape - 1],
-                                  "a theme's shape scale gets squarer as it goes up");
+                                     "a theme's shape scale gets squarer as it goes up");
             }
         }
         INKCELL_TEST_FAIL_IF(metrics->shape[INKCELL_SHAPE_NONE] != 0U,
-                          "a theme rounds the corners of INKCELL_SHAPE_NONE");
+                             "a theme rounds the corners of INKCELL_SHAPE_NONE");
     }
 
     /*
      * The radius accessor: steps times the scale, and the pill answering with something the
      * fill primitive will clamp rather than with a length of its own.
      *
-     * The clamp is the contract worth pinning. inkcell_fb_fill_round_rect() takes half the shorter side
-     * when a radius overshoots it, so INKCELL_SHAPE_FULL only has to be bigger than any box it
+     * The clamp is the contract worth pinning. inkcell_fb_fill_round_rect() takes half the shorter
+     * side when a radius overshoots it, so INKCELL_SHAPE_FULL only has to be bigger than any box it
      * could be handed - and a number that merely looks big (a hundred pixels, say) stops being
      * big the day somebody draws a full-screen panel.
      */
@@ -426,16 +436,16 @@ INKCELL_TEST_CASE(ui_theme_states_its_geometry, unit) {
     for (int shape = INKCELL_SHAPE_NONE; shape < INKCELL_SHAPE_FULL; ++shape) {
         const int want = (int)shaped_metrics->shape[shape] * scale;
         INKCELL_TEST_FAIL_IF(inkcell_theme_radius(shaped, (enum inkcell_shape)shape, scale) != want,
-                          "a shape's radius is not its step count times the glyph scale");
+                             "a shape's radius is not its step count times the glyph scale");
     }
     INKCELL_TEST_FAIL_IF(inkcell_theme_radius(shaped, INKCELL_SHAPE_FULL, scale) < 4096,
-                      "a pill's radius is small enough for a panel to outgrow it");
+                         "a pill's radius is small enough for a panel to outgrow it");
     /* A NULL theme resolves to the default, like every other lookup here, and a shape outside
        the enum is square rather than undefined - a renderer with a stale enum draws a box, not
        a corner of garbage. */
     INKCELL_TEST_FAIL_IF(inkcell_theme_radius(NULL, INKCELL_SHAPE_MD, scale) !=
-                          inkcell_theme_radius(shaped, INKCELL_SHAPE_MD, scale),
-                      "a NULL theme did not resolve to the default for a radius");
+                             inkcell_theme_radius(shaped, INKCELL_SHAPE_MD, scale),
+                         "a NULL theme did not resolve to the default for a radius");
     INKCELL_TEST_FAIL_IF(
         inkcell_theme_radius(shaped, (enum inkcell_shape)INKCELL_SHAPE_COUNT, scale) != 0,
         "a shape outside the scale was not square");
@@ -445,13 +455,13 @@ INKCELL_TEST_CASE(ui_theme_states_its_geometry, unit) {
     swallowed.colors[INKCELL_COLOR_SURFACE] = swallowed.colors[INKCELL_COLOR_PRIMARY];
     reason[0] = '\0';
     INKCELL_TEST_FAIL_IF(inkcell_theme_validate(&swallowed, reason, sizeof reason),
-                      "a card fill that swallows the accent heading passed validation");
+                         "a card fill that swallows the accent heading passed validation");
 
     struct inkcell_theme edgeless = *inkcell_theme_default();
     edgeless.colors[INKCELL_COLOR_RULE] = edgeless.colors[INKCELL_COLOR_SURFACE];
     reason[0] = '\0';
     INKCELL_TEST_FAIL_IF(inkcell_theme_validate(&edgeless, reason, sizeof reason),
-                      "a card edge invisible against its own fill passed validation");
+                         "a card edge invisible against its own fill passed validation");
     record_success(test_name);
 }
 
@@ -475,14 +485,14 @@ INKCELL_TEST_CASE(ui_theme_states_its_type_scale, unit) {
                reason the table holds offsets and the accessor clamps: a title one step above a
                body already at the maximum is a size nothing can draw. */
             INKCELL_TEST_FAIL_IF(title < INKCELL_SCALE_MIN || title > INKCELL_SCALE_MAX,
-                              "a title scale fell outside the drawable range");
+                                 "a title scale fell outside the drawable range");
             INKCELL_TEST_FAIL_IF(label < INKCELL_SCALE_MIN || label > INKCELL_SCALE_MAX,
-                              "a label scale fell outside the drawable range");
+                                 "a label scale fell outside the drawable range");
 
             /* The body role is the body scale by definition - it is the zero the other two are
                offsets from, and a theme that moved it would be renaming the scale. */
             INKCELL_TEST_FAIL_IF(body != inkcell_theme_clamp_scale(theme, scale),
-                              "the body role is not the body scale");
+                                 "the body role is not the body scale");
 
             /*
              * The ordering is the vocabulary. A screen naming TITLE must never get something
@@ -497,12 +507,12 @@ INKCELL_TEST_CASE(ui_theme_states_its_type_scale, unit) {
         /* At the top of the range the title has nowhere to go and collapses onto the body; at
            the bottom the label does. Pinned because it is the behaviour a caller relies on
            instead of a bounds check of its own. */
-        INKCELL_TEST_FAIL_IF(inkcell_theme_type_scale(theme, INKCELL_TYPE_TITLE, INKCELL_SCALE_MAX) !=
-                              INKCELL_SCALE_MAX,
-                          "a title at the maximum scale did not collapse onto it");
-        INKCELL_TEST_FAIL_IF(inkcell_theme_type_scale(theme, INKCELL_TYPE_LABEL, INKCELL_SCALE_MIN) !=
-                              INKCELL_SCALE_MIN,
-                          "a label at the minimum scale did not collapse onto it");
+        INKCELL_TEST_FAIL_IF(inkcell_theme_type_scale(theme, INKCELL_TYPE_TITLE,
+                                                      INKCELL_SCALE_MAX) != INKCELL_SCALE_MAX,
+                             "a title at the maximum scale did not collapse onto it");
+        INKCELL_TEST_FAIL_IF(inkcell_theme_type_scale(theme, INKCELL_TYPE_LABEL,
+                                                      INKCELL_SCALE_MIN) != INKCELL_SCALE_MIN,
+                             "a label at the minimum scale did not collapse onto it");
     }
 
     /* Out of range answers the body scale rather than reading past the table, and NULL is the
@@ -510,12 +520,12 @@ INKCELL_TEST_CASE(ui_theme_states_its_type_scale, unit) {
     const struct inkcell_theme *theme = inkcell_theme_default();
     const int body = inkcell_theme_type_scale(theme, INKCELL_TYPE_BODY, 4);
     INKCELL_TEST_FAIL_IF(inkcell_theme_type_scale(theme, (enum inkcell_type) - 1, 4) != body,
-                      "a negative type role read something");
+                         "a negative type role read something");
     INKCELL_TEST_FAIL_IF(inkcell_theme_type_scale(theme, INKCELL_TYPE_COUNT, 4) != body,
-                      "a type role past the end read something");
+                         "a type role past the end read something");
     INKCELL_TEST_FAIL_IF(inkcell_theme_type_scale(NULL, INKCELL_TYPE_TITLE, 4) !=
-                          inkcell_theme_type_scale(theme, INKCELL_TYPE_TITLE, 4),
-                      "a NULL theme did not fall back to the default");
+                             inkcell_theme_type_scale(theme, INKCELL_TYPE_TITLE, 4),
+                         "a NULL theme did not fall back to the default");
     record_success(test_name);
 }
 
@@ -525,7 +535,7 @@ INKCELL_TEST_CASE(ui_theme_states_its_spacing, unit) {
         const int scale = inkcell_theme_scale(theme);
 
         INKCELL_TEST_FAIL_IF(inkcell_theme_space(theme, INKCELL_SPACE_NONE, scale) != 0,
-                          "INKCELL_SPACE_NONE is not nothing");
+                             "INKCELL_SPACE_NONE is not nothing");
 
         int previous = 0;
         for (int space = INKCELL_SPACE_XS; space < INKCELL_SPACE_COUNT; ++space) {
@@ -536,30 +546,31 @@ INKCELL_TEST_CASE(ui_theme_states_its_spacing, unit) {
             INKCELL_TEST_FAIL_IF(gap < 1, "a spacing step rounded away to nothing");
             /* And it has to be a scale, for the reason the shape steps do - a widget naming MD
                and getting less room than one naming SM is a vocabulary that lies. */
-            INKCELL_TEST_FAIL_IF(gap < previous, "a theme's spacing scale gets tighter as it goes up");
+            INKCELL_TEST_FAIL_IF(gap < previous,
+                                 "a theme's spacing scale gets tighter as it goes up");
             /* Nothing in the scale is a whole row: these are gaps between things, not rows.
                Four steps is already taller than the glyph cell at any scale, so a table that
                reaches it is a theme spending body rows on its own furniture. */
             INKCELL_TEST_FAIL_IF(gap > 4 * scale,
-                              "a theme's spacing step is as tall as the row it separates");
+                                 "a theme's spacing step is as tall as the row it separates");
             previous = gap;
         }
 
         /* The scale is glyph-relative, so it grows with the text. A theme whose gaps did not
            move when the glyph scale did would be the literals this replaced. */
         INKCELL_TEST_FAIL_IF(inkcell_theme_space(theme, INKCELL_SPACE_MD, INKCELL_SCALE_MAX) <
-                              inkcell_theme_space(theme, INKCELL_SPACE_MD, INKCELL_SCALE_MIN),
-                          "a spacing step did not grow with the glyph scale");
+                                 inkcell_theme_space(theme, INKCELL_SPACE_MD, INKCELL_SCALE_MIN),
+                             "a spacing step did not grow with the glyph scale");
     }
 
     const struct inkcell_theme *theme = inkcell_theme_default();
     INKCELL_TEST_FAIL_IF(inkcell_theme_space(theme, (enum inkcell_space) - 1, 4) != 0,
-                      "a negative spacing token read something");
+                         "a negative spacing token read something");
     INKCELL_TEST_FAIL_IF(inkcell_theme_space(theme, INKCELL_SPACE_COUNT, 4) != 0,
-                      "a spacing token past the end read something");
+                         "a spacing token past the end read something");
     INKCELL_TEST_FAIL_IF(inkcell_theme_space(NULL, INKCELL_SPACE_SM, 4) !=
-                          inkcell_theme_space(theme, INKCELL_SPACE_SM, 4),
-                      "a NULL theme did not fall back to the default");
+                             inkcell_theme_space(theme, INKCELL_SPACE_SM, 4),
+                         "a NULL theme did not fall back to the default");
     record_success(test_name);
 }
 
@@ -583,7 +594,7 @@ INKCELL_TEST_CASE(ui_theme_states_its_motion, unit) {
              * than in - is exactly this ordering.
              */
             INKCELL_TEST_FAIL_IF(motion > INKCELL_MOTION_SHORT && ms <= previous,
-                              "a theme's motion scale does not get longer as it goes up");
+                                 "a theme's motion scale does not get longer as it goes up");
             previous = ms;
         }
 
@@ -599,13 +610,13 @@ INKCELL_TEST_CASE(ui_theme_states_its_motion, unit) {
        buffer overrun instead of a still control. */
     const struct inkcell_theme *theme = inkcell_theme_default();
     INKCELL_TEST_FAIL_IF(inkcell_theme_motion(theme, (enum inkcell_motion) - 1) != 0U,
-                      "a negative motion token read something");
+                         "a negative motion token read something");
     INKCELL_TEST_FAIL_IF(inkcell_theme_motion(theme, INKCELL_MOTION_COUNT) != 0U,
-                      "a motion token past the end read something");
+                         "a motion token past the end read something");
     /* NULL is the default theme, as it is everywhere else in this header. */
     INKCELL_TEST_FAIL_IF(inkcell_theme_motion(NULL, INKCELL_MOTION_SHORT) !=
-                          inkcell_theme_motion(theme, INKCELL_MOTION_SHORT),
-                      "a NULL theme did not fall back to the default");
+                             inkcell_theme_motion(theme, INKCELL_MOTION_SHORT),
+                         "a NULL theme did not fall back to the default");
     record_success(test_name);
 }
 
@@ -615,7 +626,7 @@ INKCELL_TEST_CASE(ui_theme_cycles_through_every_theme, unit) {
     bool seen[16];
     memset(seen, 0, sizeof seen);
     INKCELL_TEST_FAIL_IF(count > (sizeof seen / sizeof seen[0]),
-                      "more themes than this case can track; raise `seen`");
+                         "more themes than this case can track; raise `seen`");
 
     for (size_t step = 0; step < count; ++step) {
         for (size_t i = 0; i < count; ++i) {
@@ -631,26 +642,26 @@ INKCELL_TEST_CASE(ui_theme_cycles_through_every_theme, unit) {
         INKCELL_TEST_FAIL_IF(!seen[i], "cycling never reached one of the themes");
     }
     INKCELL_TEST_FAIL_IF(theme != inkcell_theme_default(),
-                      "a full cycle did not come back to where it started");
+                         "a full cycle did not come back to where it started");
 
     /* A theme that is not in the registry at all - a copy, say - lands somewhere usable
        rather than nowhere. */
     struct inkcell_theme stray = *inkcell_theme_default();
     INKCELL_TEST_FAIL_IF(inkcell_theme_next(&stray) != inkcell_theme_default(),
-                      "cycling from an unregistered theme did not fall back to the default");
+                         "cycling from an unregistered theme did not fall back to the default");
     record_success(test_name);
 }
 
 /* What a saved preference is read back through, and what the environment is asked with. */
 INKCELL_TEST_CASE(ui_theme_resolves_ids_and_the_environment, unit) {
     INKCELL_TEST_FAIL_IF(inkcell_theme_resolve("light") != inkcell_theme_by_id("light"),
-                      "a known id did not resolve to its theme");
+                         "a known id did not resolve to its theme");
     INKCELL_TEST_FAIL_IF(inkcell_theme_resolve("no-such-theme") != inkcell_theme_default(),
-                      "an unknown id did not resolve to the default");
+                         "an unknown id did not resolve to the default");
     INKCELL_TEST_FAIL_IF(inkcell_theme_resolve("") != inkcell_theme_default(),
-                      "an empty id did not resolve to the default");
+                         "an empty id did not resolve to the default");
     INKCELL_TEST_FAIL_IF(inkcell_theme_resolve(NULL) != inkcell_theme_default(),
-                      "a NULL id did not resolve to the default");
+                         "a NULL id did not resolve to the default");
 
     /* inkcell_theme_env() answers NULL when nobody named one, which is what tells the app the
        choice is the user's to make rather than the environment's. */
@@ -665,17 +676,17 @@ INKCELL_TEST_CASE(ui_theme_resolves_ids_and_the_environment, unit) {
     (void)unsetenv("INKCELL_THEME");
     INKCELL_TEST_FAIL_IF(inkcell_theme_env() != NULL, "an unset <PREFIX>_THEME named a theme");
     INKCELL_TEST_FAIL_IF(inkcell_theme_from_env() != inkcell_theme_default(),
-                      "an unset <PREFIX>_THEME did not fall back to the default");
+                         "an unset <PREFIX>_THEME did not fall back to the default");
 
     (void)setenv("INKCELL_THEME", "light", 1);
     INKCELL_TEST_FAIL_IF(inkcell_theme_env() != inkcell_theme_by_id("light"),
-                      "<PREFIX>_THEME did not name its theme");
+                         "<PREFIX>_THEME did not name its theme");
 
     /* A typo must not leave a handheld with no UI, and must not read as a deliberate pin. */
     (void)setenv("INKCELL_THEME", "not-a-theme", 1);
     INKCELL_TEST_FAIL_IF(inkcell_theme_env() != NULL, "an unknown <PREFIX>_THEME named a theme");
     INKCELL_TEST_FAIL_IF(inkcell_theme_from_env() != inkcell_theme_default(),
-                      "an unknown <PREFIX>_THEME did not fall back to the default");
+                         "an unknown <PREFIX>_THEME did not fall back to the default");
 
     if (had_env) {
         (void)setenv("INKCELL_THEME", saved, 1);
@@ -689,18 +700,19 @@ INKCELL_TEST_CASE(ui_theme_resolves_ids_and_the_environment, unit) {
 INKCELL_TEST_CASE(ui_theme_scale_is_clamped, unit) {
     const struct inkcell_theme *theme = inkcell_theme_default();
     INKCELL_TEST_FAIL_IF(inkcell_theme_clamp_scale(theme, 0) != inkcell_theme_scale(theme),
-                      "scale 0 is not the theme's own");
+                         "scale 0 is not the theme's own");
     INKCELL_TEST_FAIL_IF(inkcell_theme_clamp_scale(theme, 99) != INKCELL_SCALE_MAX,
-                      "an absurd scale was not clamped down");
+                         "an absurd scale was not clamped down");
     INKCELL_TEST_FAIL_IF(inkcell_theme_clamp_scale(theme, -4) != inkcell_theme_scale(theme),
-                      "a negative scale is not the theme's own");
+                         "a negative scale is not the theme's own");
     INKCELL_TEST_FAIL_IF(inkcell_theme_clamp_scale(NULL, 1) != INKCELL_SCALE_MIN,
-                      "a NULL theme did not fall back to the default and clamp");
+                         "a NULL theme did not fall back to the default and clamp");
 
     /* Chrome is smaller than the body but never below the floor, whatever the body is at. */
     for (int scale = INKCELL_SCALE_MIN; scale <= INKCELL_SCALE_MAX; ++scale) {
         const int chrome = inkcell_theme_type_scale(theme, INKCELL_TYPE_LABEL, scale);
-        INKCELL_TEST_FAIL_IF(chrome < INKCELL_SCALE_MIN, "chrome text fell below the minimum scale");
+        INKCELL_TEST_FAIL_IF(chrome < INKCELL_SCALE_MIN,
+                             "chrome text fell below the minimum scale");
         INKCELL_TEST_FAIL_IF(chrome > scale, "chrome text is bigger than the body text");
     }
     record_success(test_name);
@@ -714,33 +726,35 @@ INKCELL_TEST_CASE(ui_theme_fonts_measure, unit) {
         const struct inkcell_font *font = inkcell_font_at(i);
         INKCELL_TEST_FAIL_IF(font == NULL || font->id == NULL, "a registered font is unusable");
         INKCELL_TEST_FAIL_IF(inkcell_font_by_id(font->id) != font,
-                          "a font does not come back under its own id");
+                             "a font does not come back under its own id");
         INKCELL_TEST_FAIL_IF(font->width == 0U || font->width > INKCELL_GLYPH_MAX_WIDTH,
-                          "a font is wider than the glyph buffer");
+                             "a font is wider than the glyph buffer");
         INKCELL_TEST_FAIL_IF(font->height == 0U || font->height > INKCELL_GLYPH_MAX_HEIGHT,
-                          "a font is taller than the glyph buffer");
+                             "a font is taller than the glyph buffer");
         /* The master is what the coverage is stored at, and it is what the resampler indexes
            with - a font declaring one bigger than the buffer would read off the end of it. */
-        INKCELL_TEST_FAIL_IF(font->master_w == 0U || font->master_w > INKCELL_GLYPH_MASTER_MAX_WIDTH,
-                          "a font's master is wider than the glyph buffer");
-        INKCELL_TEST_FAIL_IF(font->master_h == 0U || font->master_h > INKCELL_GLYPH_MASTER_MAX_HEIGHT,
-                          "a font's master is taller than the glyph buffer");
+        INKCELL_TEST_FAIL_IF(font->master_w == 0U ||
+                                 font->master_w > INKCELL_GLYPH_MASTER_MAX_WIDTH,
+                             "a font's master is wider than the glyph buffer");
+        INKCELL_TEST_FAIL_IF(font->master_h == 0U ||
+                                 font->master_h > INKCELL_GLYPH_MASTER_MAX_HEIGHT,
+                             "a font's master is taller than the glyph buffer");
         INKCELL_TEST_FAIL_IF(font->sampling != INKCELL_FONT_PIXEL &&
-                              font->sampling != INKCELL_FONT_SMOOTH,
-                          "a font asks for a sampling this layer does not have");
+                                 font->sampling != INKCELL_FONT_SMOOTH,
+                             "a font asks for a sampling this layer does not have");
 
         /* Advances have to grow with the multiplier, or every measurement above breaks. */
         INKCELL_TEST_FAIL_IF(inkcell_font_advance(font, 2) <= inkcell_font_advance(font, 1),
-                          "the character advance does not grow with the scale");
+                             "the character advance does not grow with the scale");
         INKCELL_TEST_FAIL_IF(inkcell_font_line(font, 1) < (int)font->height,
-                          "the line advance does not clear the cell");
+                             "the line advance does not clear the cell");
 
         /* A glyph the font has, and one nothing has: both are drawable, one is the tofu. */
         struct inkcell_glyph glyph;
         INKCELL_TEST_FAIL_IF(!inkcell_font_glyph(font, (uint32_t)'A', &glyph),
-                          "the font has no capital A");
+                             "the font has no capital A");
         INKCELL_TEST_FAIL_IF(inkcell_font_glyph(font, 0x10FFFDU, &glyph),
-                          "the font claims a private-use codepoint");
+                             "the font claims a private-use codepoint");
 
         /*
          * Coverage, not a mask. Every value has to be inside the ramp the renderer quantises
@@ -778,7 +792,7 @@ INKCELL_TEST_CASE(ui_theme_fonts_measure, unit) {
     struct inkcell_theme no_font = *inkcell_theme_default();
     no_font.font_id = "not-a-font";
     INKCELL_TEST_FAIL_IF(inkcell_theme_font(&no_font) != inkcell_font_default(),
-                      "an unknown font id did not fall back to the default");
+                         "an unknown font id did not fall back to the default");
     INKCELL_TEST_FAIL_IF(inkcell_theme_font(NULL) == NULL, "a NULL theme resolved to no font");
     record_success(test_name);
 }
@@ -829,7 +843,7 @@ INKCELL_TEST_CASE(ui_theme_fonts_cap_height, unit) {
             const int cap = inkcell_font_cap(font, scale);
             INKCELL_TEST_FAIL_IF(cap <= 0, "a font's capitals have no height");
             INKCELL_TEST_FAIL_IF(cap > (int)font->height * scale,
-                              "a font's capitals are taller than its cell");
+                                 "a font's capitals are taller than its cell");
         }
 
         /* And the number is the truth about the glyphs: a capital must not reach into the
@@ -847,7 +861,7 @@ INKCELL_TEST_CASE(ui_theme_fonts_cap_height, unit) {
         }
         INKCELL_TEST_FAIL_IF(highest >= (int)font->master_h, "a capital H has no ink");
         INKCELL_TEST_FAIL_IF(highest < (int)font->master_top,
-                          "a capital reaches into the accent overhang");
+                             "a capital reaches into the accent overhang");
     }
     record_success(test_name);
 }
@@ -877,8 +891,8 @@ INKCELL_TEST_CASE(ui_env_prefix_is_applied_once, unit) {
 
     /* The bug: a name that already carries the prefix must not resolve. */
     (void)setenv("TESTPREFIX_TESTPREFIX_KNOB", "yes", 1);
-    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_env_get("KNOB") == NULL,
-                                 inkcell_env_set_prefix(saved), "the knob went missing");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_env_get("KNOB") == NULL, inkcell_env_set_prefix(saved),
+                                 "the knob went missing");
     INKCELL_TEST_FAIL_IF_CLEANUP(
         strcmp(inkcell_env_get("TESTPREFIX_KNOB"), "yes") != 0, inkcell_env_set_prefix(saved),
         "a prefixed name resolved to something other than the doubly-prefixed variable");

@@ -76,7 +76,8 @@ enum inkcell_fb_meter_kind {
  */
 
 struct inkcell_fb_meter {
-    struct inkcell_fb_rect rect; /* the track; inkcell_fb_meter_thickness() is the height one wants */
+    struct inkcell_fb_rect
+        rect; /* the track; inkcell_fb_meter_thickness() is the height one wants */
     /*
      * Identity for the animation, 0 for none - the same contract the switch has.
      *
@@ -125,7 +126,8 @@ int inkcell_fb_meter_thickness(const struct inkcell_backend_fb_state *state, int
 
 /* Draws it, advancing the fill towards its target - or the pill along its loop. Needs the
    mutable state for the same reason the switch does. */
-void inkcell_fb_draw_meter(struct inkcell_backend_fb_state *state, const struct inkcell_fb_meter *meter);
+void inkcell_fb_draw_meter(struct inkcell_backend_fb_state *state,
+                           const struct inkcell_fb_meter *meter);
 
 /* ---- the slider ------------------------------------------------------------------------------
  *
@@ -153,7 +155,8 @@ void inkcell_fb_draw_meter(struct inkcell_backend_fb_state *state, const struct 
  */
 
 struct inkcell_fb_slider {
-    struct inkcell_fb_rect rect; /* the track's box; inkcell_fb_slider_height() is the height one wants */
+    struct inkcell_fb_rect
+        rect; /* the track's box; inkcell_fb_slider_height() is the height one wants */
     /* Identity for the animation, 0 for none - the meter's contract, and it matters here for
        the same reason it matters on the switch: a press should move the handle, and a screen
        opening on a value should not animate up to it from zero. */
@@ -163,8 +166,8 @@ struct inkcell_fb_slider {
        among them is unit-tested there. */
     int32_t position;
     /* How many choices to mark on the track, 0 for an unmarked one. The component decides
-       whether they are drawn - see inkcell_fb_draw_slider() - because a mark the eye cannot separate
-       from its neighbour is worse than no mark, and the width that decides it is not known
+       whether they are drawn - see inkcell_fb_draw_slider() - because a mark the eye cannot
+       separate from its neighbour is worse than no mark, and the width that decides it is not known
        until the row has laid the track out. */
     uint32_t stops;
     /* The active track and the handle, from one tone. ACCENT, GOOD or BAD - the meter's three,
@@ -197,7 +200,8 @@ int inkcell_fb_slider_height(const struct inkcell_backend_fb_state *state, int s
 
 /* Draws the track, its stops, and the handle at `position`, easing the handle towards it. Needs
    the mutable state for the reason the meter and the switch do. */
-void inkcell_fb_draw_slider(struct inkcell_backend_fb_state *state, const struct inkcell_fb_slider *slider);
+void inkcell_fb_draw_slider(struct inkcell_backend_fb_state *state,
+                            const struct inkcell_fb_slider *slider);
 
 /* ---- the signal staircase -------------------------------------------------------------------
  *
@@ -224,8 +228,9 @@ void inkcell_fb_draw_slider(struct inkcell_backend_fb_state *state, const struct
  * from the row it is on - which is what the trailing slot already does for every other thing it
  * draws, and what keeps this from being a fifth colour every theme has to be validated for.
  */
-void inkcell_fb_draw_signal(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_rect *box,
-                    uint8_t level, struct inkcell_rgb ink, struct inkcell_rgb unlit);
+void inkcell_fb_draw_signal(const struct inkcell_backend_fb_state *state,
+                            const struct inkcell_fb_rect *box, uint8_t level,
+                            struct inkcell_rgb ink, struct inkcell_rgb unlit);
 
 /* ---- the sparkline --------------------------------------------------------------------------
  *
@@ -271,7 +276,8 @@ void inkcell_fb_draw_signal(const struct inkcell_backend_fb_state *state, const 
 #define INKCELL_FB_SPARK_CELLS 6U
 
 struct inkcell_fb_sparkline {
-    struct inkcell_fb_rect rect; /* the box the line is drawn in; inkcell_fb_sparkline_height() is the height */
+    struct inkcell_fb_rect
+        rect; /* the box the line is drawn in; inkcell_fb_sparkline_height() is the height */
     /*
      * The samples, already normalised - x across the box, y up it, both in permille, oldest
      * first. inkcell_series_project() is what produces one, so the arithmetic that decides
@@ -301,7 +307,7 @@ int inkcell_fb_sparkline_height(const struct inkcell_backend_fb_state *state, in
 /* Draws the floor and the line. Const state, unlike the meter and the slider: there is no
    animation to step - see above. */
 void inkcell_fb_draw_sparkline(const struct inkcell_backend_fb_state *state,
-                       const struct inkcell_fb_sparkline *spark);
+                               const struct inkcell_fb_sparkline *spark);
 
 /* ---- the proportion bar ----------------------------------------------------------------------
  *
@@ -382,7 +388,7 @@ int inkcell_fb_proportion_thickness(const struct inkcell_backend_fb_state *state
 /* Draws it. Const state, like the sparkline and unlike the meter: there is no animation to step
    - see above. Fewer than two parts, or parts that sum to nothing, draws nothing at all. */
 void inkcell_fb_draw_proportion(const struct inkcell_backend_fb_state *state,
-                        const struct inkcell_fb_proportion *bar);
+                                const struct inkcell_fb_proportion *bar);
 
 /* ---- the chart ------------------------------------------------------------------------------
  *
@@ -522,9 +528,9 @@ struct inkcell_fb_chart {
      * How far back the picture goes, as the set of spans the reader may pick between, drawn as a
      * segmented button above the plot. NULL draws none and gives the room back to the plot.
      *
-     * A `struct inkcell_fb_segmented` rather than anything that knows what a span is, which is the rule
-     * every slot in this component set follows: the strip draws four labels and lights one, and
-     * what those labels *mean* is include/inkcell/ui/trend.h's business. It is inside the chart
+     * A `struct inkcell_fb_segmented` rather than anything that knows what a span is, which is the
+     * rule every slot in this component set follows: the strip draws four labels and lights one,
+     * and what those labels *mean* is include/inkcell/ui/trend.h's business. It is inside the chart
      * rather than beside it because the two are one statement - a picture and the words saying
      * how much of the record is on it - and a caller placing the strip itself would be a caller
      * computing coordinates, which is the thing a screen renderer does not do.
@@ -582,14 +588,14 @@ struct inkcell_fb_chart {
  * no clipped chart, for the reason there is no clipped card.
  */
 int inkcell_fb_chart_min_height(const struct inkcell_backend_fb_state *state,
-                        const struct inkcell_fb_layout *layout);
+                                const struct inkcell_fb_layout *layout);
 
 /*
  * How many reading rows would fit, for a screen that has to cut its window before it can hand
  * the rows over.
  *
- * The measure-then-draw split the note list is on (inkcell_fb_list_note_steps()), and it exists for the
- * same reason: only this file knows what the span strip and the caption leave, and only the
+ * The measure-then-draw split the note list is on (inkcell_fb_list_note_steps()), and it exists for
+ * the same reason: only this file knows what the span strip and the caption leave, and only the
  * screen knows which readings there are. It is also what the nav is told as `page_rows`, so the
  * window the reader scrolls and the window drawn are one number.
  *
@@ -597,12 +603,14 @@ int inkcell_fb_chart_min_height(const struct inkcell_backend_fb_state *state,
  * there is not enough of it - the same answer inkcell_fb_draw_chart() gives by drawing nothing.
  */
 uint32_t inkcell_fb_chart_reading_rows(const struct inkcell_backend_fb_state *state,
-                               const struct inkcell_fb_layout *layout, const struct inkcell_fb_rect *rect,
-                               const struct inkcell_fb_segmented *spans);
+                                       const struct inkcell_fb_layout *layout,
+                                       const struct inkcell_fb_rect *rect,
+                                       const struct inkcell_fb_segmented *spans);
 
 /* Draws the frame, the threshold rules, the lines and the legend. Const state, like the
    sparkline and the composition: there is nothing here to animate. */
-void inkcell_fb_draw_chart(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_layout *layout,
-                   const struct inkcell_fb_chart *chart);
+void inkcell_fb_draw_chart(const struct inkcell_backend_fb_state *state,
+                           const struct inkcell_fb_layout *layout,
+                           const struct inkcell_fb_chart *chart);
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_METER_H */

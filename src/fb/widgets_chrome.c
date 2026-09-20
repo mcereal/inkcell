@@ -4,13 +4,13 @@
  * The chrome: the navigation bar, the action bar, the app bar and its trail, the empty state
  * under it, the hairline, and the banner and progress bar that drop in below the title.
  *
- * The bars are strips of inkcell_fb_widgets_button.h's shapes given a place on the panel - which is the
- * whole of the split: what a chip looks like is one question, and whether it belongs at the top
+ * The bars are strips of inkcell_fb_widgets_button.h's shapes given a place on the panel - which is
+ * the whole of the split: what a chip looks like is one question, and whether it belongs at the top
  * of the screen or the bottom is another.
  */
 
-#include "inkcell/ui/widgets/chrome.h"
 #include "inkcell/ui/widgets/button.h"
+#include "inkcell/ui/widgets/chrome.h"
 #include "inkcell/ui/widgets/meter.h"
 
 #include "inkcell/i18n/strings.h"
@@ -19,22 +19,26 @@
 
 /* ---- the navigation bar --------------------------------------------------------------------- */
 
-void inkcell_fb_draw_nav_bar(const struct inkcell_backend_fb_state *state, struct inkcell_fb_layout *layout,
-                     const struct inkcell_fb_chip *tabs, size_t count, size_t active) {
+void inkcell_fb_draw_nav_bar(const struct inkcell_backend_fb_state *state,
+                             struct inkcell_fb_layout *layout, const struct inkcell_fb_chip *tabs,
+                             size_t count, size_t active) {
     const int small = layout->small;
     const int y = inkcell_fb_gutter(state) + small;
     const int bar_h = y + inkcell_fb_line_adv(state, small);
     const int width = (int)state->var.xres;
 
-    inkcell_fb_fill_rect(state, 0, 0, width, bar_h, inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
+    inkcell_fb_fill_rect(state, 0, 0, width, bar_h,
+                         inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
     /* The bar under them, not the body ground: an unselected tab draws no fill of its own, and
        its icon has to blend into what the bar filled behind it. */
     (void)inkcell_fb_draw_chip_strip(state, inkcell_fb_gutter(state), y, tabs, count, active,
-                             width - inkcell_fb_margin(state), INKCELL_COLOR_SURFACE_LOW, small);
+                                     width - inkcell_fb_margin(state), INKCELL_COLOR_SURFACE_LOW,
+                                     small);
     inkcell_fb_draw_rule(state, 0, bar_h, width, small, INKCELL_COLOR_RULE_STRONG);
 
     layout->nav_y = bar_h + inkcell_fb_rule_height(state, small);
-    layout->body_y = bar_h + inkcell_fb_space_at(state, INKCELL_SPACE_MD, small) + inkcell_fb_gutter(state);
+    layout->body_y =
+        bar_h + inkcell_fb_space_at(state, INKCELL_SPACE_MD, small) + inkcell_fb_gutter(state);
 }
 
 /* ---- the screen progress bar ---------------------------------------------------------------- */
@@ -57,8 +61,8 @@ static int inkcell_fb_progress_thickness(const struct inkcell_backend_fb_state *
     return inkcell_fb_meter_thickness(state, state->scale);
 }
 
-void inkcell_fb_draw_progress(struct inkcell_backend_fb_state *state, const struct inkcell_fb_layout *layout,
-                      bool busy) {
+void inkcell_fb_draw_progress(struct inkcell_backend_fb_state *state,
+                              const struct inkcell_fb_layout *layout, bool busy) {
     if (state == NULL || layout == NULL || !busy) {
         return;
     }
@@ -85,8 +89,9 @@ void inkcell_fb_draw_progress(struct inkcell_backend_fb_state *state, const stru
 
 /* ---- the banner ------------------------------------------------------------------------------ */
 
-void inkcell_fb_draw_banner(const struct inkcell_backend_fb_state *state, struct inkcell_fb_layout *layout,
-                    const struct inkcell_fb_banner *banner) {
+void inkcell_fb_draw_banner(const struct inkcell_backend_fb_state *state,
+                            struct inkcell_fb_layout *layout,
+                            const struct inkcell_fb_banner *banner) {
     if (state == NULL || layout == NULL || banner == NULL || banner->text == NULL ||
         banner->text[0] == '\0') {
         return;
@@ -129,15 +134,16 @@ void inkcell_fb_draw_banner(const struct inkcell_backend_fb_state *state, struct
      */
     bool supporting = banner->supporting != NULL && banner->supporting[0] != '\0';
     int height = 2 * pad_y + head_h + (supporting ? sup_gap + sup_h : 0);
-    if (supporting && layout->footer_y - inkcell_fb_gutter(state) - (top + height + gap) < layout->line) {
+    if (supporting &&
+        layout->footer_y - inkcell_fb_gutter(state) - (top + height + gap) < layout->line) {
         supporting = false;
         height = 2 * pad_y + head_h;
     }
 
     const struct inkcell_paint paint =
         inkcell_fb_paint(state, banner->family, INKCELL_SLOT_CONTAINER, INKCELL_STATE_REST);
-    inkcell_fb_fill_round_rect(state, margin, top, width, height, inkcell_fb_radius(state, INKCELL_SHAPE_MD),
-                       paint.fill);
+    inkcell_fb_fill_round_rect(state, margin, top, width, height,
+                               inkcell_fb_radius(state, INKCELL_SHAPE_MD), paint.fill);
 
     int x = margin + pad_x;
     int right = margin + width - pad_x;
@@ -160,8 +166,8 @@ void inkcell_fb_draw_banner(const struct inkcell_backend_fb_state *state, struct
             right -= detail_w;
             /* Centred on the headline's glyph body rather than sharing its top edge: a smaller
                face hung from the same line reads as having slipped up off it. */
-            inkcell_fb_draw_text(state, right, head_top + (head_h - sup_h) / 2, banner->detail, small,
-                         paint.ink, paint.fill);
+            inkcell_fb_draw_text(state, right, head_top + (head_h - sup_h) / 2, banner->detail,
+                                 small, paint.ink, paint.fill);
             right -= small_adv;
         }
     }
@@ -170,7 +176,8 @@ void inkcell_fb_draw_banner(const struct inkcell_backend_fb_state *state, struct
     inkcell_line_reset(&headline);
     inkcell_line_printf(&headline, "%s", banner->text);
     inkcell_line_fit(&headline, (size_t)(right > x ? (right - x) / adv : 0));
-    inkcell_fb_draw_text(state, x, head_top, inkcell_line_text(&headline), scale, paint.ink, paint.fill);
+    inkcell_fb_draw_text(state, x, head_top, inkcell_line_text(&headline), scale, paint.ink,
+                         paint.fill);
 
     if (supporting) {
         const int room = margin + width - pad_x - x;
@@ -182,7 +189,7 @@ void inkcell_fb_draw_banner(const struct inkcell_backend_fb_state *state, struct
            banner rather than only its first line, so a hint starting under it would read as a
            second, unmarked notice. */
         inkcell_fb_draw_text(state, x, head_top + head_h + sup_gap, inkcell_line_text(&hint), small,
-                     paint.ink, paint.fill);
+                             paint.ink, paint.fill);
     }
 
     /* What is left of the body, recomputed from its real bottom rather than deducted - see the
@@ -200,15 +207,16 @@ void inkcell_fb_draw_banner(const struct inkcell_backend_fb_state *state, struct
    label pair in this file uses. Measured rather than assumed, because the pill's padding is
    the button's business (see INKCELL_FB_CHIP_PAD_STEPS). */
 static int inkcell_fb_action_width(const struct inkcell_backend_fb_state *state,
-                           const struct inkcell_button_action *action, int scale) {
+                                   const struct inkcell_button_action *action, int scale) {
     const int adv = inkcell_fb_char_adv(state, scale);
     const char *label = inkcell_str(action->label);
-    return inkcell_fb_button_width(state, INKCELL_ICON_NONE, inkcell_button_cap(action->button), scale) +
+    return inkcell_fb_button_width(state, INKCELL_ICON_NONE, inkcell_button_cap(action->button),
+                                   scale) +
            adv / 2 + (int)inkcell_text_cells(label) * adv;
 }
 
 int inkcell_fb_action_bar_height(const struct inkcell_backend_fb_state *state,
-                         const struct inkcell_fb_layout *layout) {
+                                 const struct inkcell_fb_layout *layout) {
     const int small = layout->small;
     /* The keycap row, the status line under it, and a margin below - the same margin the two
        plain lines this replaced left, so the bar sits off the panel edge by the amount the rest
@@ -219,7 +227,8 @@ int inkcell_fb_action_bar_height(const struct inkcell_backend_fb_state *state,
 }
 
 void inkcell_fb_draw_action_bar(const struct inkcell_backend_fb_state *state,
-                        const struct inkcell_fb_layout *layout, const struct inkcell_fb_action_bar *bar) {
+                                const struct inkcell_fb_layout *layout,
+                                const struct inkcell_fb_action_bar *bar) {
     const int small = layout->small;
     const int width = (int)state->var.xres;
     const int top = layout->footer_y;
@@ -228,7 +237,7 @@ void inkcell_fb_draw_action_bar(const struct inkcell_backend_fb_state *state,
        edge. Chrome that is a surface at the top and bare ground at the bottom reads as a frame
        with one side missing. */
     inkcell_fb_fill_rect(state, 0, top, width, (int)state->var.yres - top,
-                 inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
+                         inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
     inkcell_fb_draw_rule(state, 0, top, width, small, INKCELL_COLOR_RULE_STRONG);
 
     const int keys_y = top + inkcell_fb_space_at(state, INKCELL_SPACE_SM, small) + small;
@@ -247,7 +256,10 @@ void inkcell_fb_draw_action_bar(const struct inkcell_backend_fb_state *state,
         }
 
         const struct inkcell_fb_button key = {
-            .rect = {.x = x, .y = keys_y - small, .w = cap_w, .h = inkcell_fb_line_adv(state, small)},
+            .rect = {.x = x,
+                     .y = keys_y - small,
+                     .w = cap_w,
+                     .h = inkcell_fb_line_adv(state, small)},
             .label = cap,
             .variant = INKCELL_FB_BUTTON_FILLED,
             .shape = INKCELL_SHAPE_SM,
@@ -258,9 +270,11 @@ void inkcell_fb_draw_action_bar(const struct inkcell_backend_fb_state *state,
 
         x += cap_w + inkcell_fb_char_adv(state, small) / 2;
         inkcell_fb_draw_text(state, x, keys_y, inkcell_str(action->label), small,
-                     inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
-                     inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
-        x += (int)inkcell_text_cells(inkcell_str(action->label)) * inkcell_fb_char_adv(state, small) + gap;
+                             inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
+                             inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
+        x += (int)inkcell_text_cells(inkcell_str(action->label)) *
+                 inkcell_fb_char_adv(state, small) +
+             gap;
     }
 
     if (bar->status == NULL || bar->status[0] == '\0') {
@@ -273,10 +287,10 @@ void inkcell_fb_draw_action_bar(const struct inkcell_backend_fb_state *state,
     inkcell_str_copy(status, sizeof status, bar->status);
     inkcell_fb_fit(status, inkcell_fb_cols(state, small));
     inkcell_fb_draw_text(state, inkcell_fb_margin(state),
-                 keys_y - small + inkcell_fb_line_adv(state, small) +
-                     inkcell_fb_space_at(state, INKCELL_SPACE_XS, small),
-                 status, small, inkcell_fb_tone_color(state, bar->status_tone),
-                 inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
+                         keys_y - small + inkcell_fb_line_adv(state, small) +
+                             inkcell_fb_space_at(state, INKCELL_SPACE_XS, small),
+                         status, small, inkcell_fb_tone_color(state, bar->status_tone),
+                         inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
 }
 
 /* ---- the top app bar ------------------------------------------------------------------------ */
@@ -285,8 +299,8 @@ void inkcell_fb_draw_action_bar(const struct inkcell_backend_fb_state *state,
    a trail that runs out of room stops, because the level nearest the title is the one worth
    keeping and it is drawn last. */
 static void inkcell_fb_draw_app_bar_trail(const struct inkcell_backend_fb_state *state,
-                                  const struct inkcell_fb_app_bar *bar, int x, int y, int right,
-                                  int scale) {
+                                          const struct inkcell_fb_app_bar *bar, int x, int y,
+                                          int right, int scale) {
     const int adv = inkcell_fb_char_adv(state, scale);
     const struct inkcell_rgb ink = inkcell_fb_tone_color(state, INKCELL_TONE_DIM);
     const struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_BG);
@@ -325,16 +339,16 @@ static void inkcell_fb_draw_app_bar_trail(const struct inkcell_backend_fb_state 
     }
 }
 
-int inkcell_fb_app_bar_height(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_layout *layout,
-                      size_t trail_count) {
+int inkcell_fb_app_bar_height(const struct inkcell_backend_fb_state *state,
+                              const struct inkcell_fb_layout *layout, size_t trail_count) {
     /*
      * The same three terms inkcell_fb_draw_app_bar() advances `body_y` by, in the same order.
      *
      * Written out rather than shared with the drawing path because sharing it would mean the
      * draw calling this and then re-deriving `y` from it, which is the arithmetic in a different
      * arrangement rather than in one place. Two expressions for one height is a real risk and
-     * the test below the fold is what holds them together: inkcell_fb_map's body is measured from this
-     * and drawn under a bar laid out by that, so any disagreement puts the map's ground a few
+     * the test below the fold is what holds them together: inkcell_fb_map's body is measured from
+     * this and drawn under a bar laid out by that, so any disagreement puts the map's ground a few
      * pixels off its own heading, where it is visible in a capture.
      */
     int height = 0;
@@ -347,8 +361,9 @@ int inkcell_fb_app_bar_height(const struct inkcell_backend_fb_state *state, cons
     return height;
 }
 
-void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state, struct inkcell_fb_layout *layout,
-                     const struct inkcell_fb_app_bar *bar) {
+void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state,
+                             struct inkcell_fb_layout *layout,
+                             const struct inkcell_fb_app_bar *bar) {
     /*
      * A title is drawn at INKCELL_TYPE_TITLE, which is a step above the body.
      *
@@ -384,7 +399,8 @@ void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state, struc
            carries the gap between two lines of running text, and the trail is not running text
            - it is a caption sitting on the title. Spending the advance here cost a body row on
            every screen with a trail, which is a row of content for a gap nobody sees. */
-        y += (int)inkcell_fb_font(state)->height * small + inkcell_fb_space_at(state, INKCELL_SPACE_XS, small);
+        y += (int)inkcell_fb_font(state)->height * small +
+             inkcell_fb_space_at(state, INKCELL_SPACE_XS, small);
     }
 
     /*
@@ -394,7 +410,7 @@ void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state, struc
      */
     if (layout->back) {
         inkcell_fb_draw_icon(state, margin, y, INKCELL_ICON_BACK, scale,
-                     inkcell_fb_tone_color(state, INKCELL_TONE_DIM), ground);
+                             inkcell_fb_tone_color(state, INKCELL_TONE_DIM), ground);
     }
 
     /*
@@ -412,9 +428,9 @@ void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state, struc
         const int badge_h = (int)inkcell_fb_font(state)->height * small;
         const int text_y = y + (title_h - badge_h) / 2;
         const struct inkcell_fb_rect box = {.x = right - badge_w,
-                                    .y = text_y - small,
-                                    .w = badge_w,
-                                    .h = inkcell_fb_line_adv(state, small) - small};
+                                            .y = text_y - small,
+                                            .w = badge_w,
+                                            .h = inkcell_fb_line_adv(state, small) - small};
         inkcell_fb_draw_badge(state, &box, text_y, bar->badge, bar->badge_family, small);
         right -= badge_w + inkcell_fb_char_adv(state, small);
     }
@@ -428,7 +444,7 @@ void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state, struc
     const int room = right > text_x ? (right - text_x) / adv : 0;
     inkcell_line_fit(&line, (size_t)(room > 0 ? room : 0));
     inkcell_fb_draw_text(state, text_x, y, inkcell_line_text(&line), scale,
-                 inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY), ground);
+                         inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY), ground);
 
     /*
      * What is left of the body, recomputed rather than deducted.
@@ -444,19 +460,21 @@ void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state, struc
      * fit - on the Brick's panel the remainder is most of a row, so every titled screen lost
      * one for nothing.
      *
-     * So the count is taken again from the same two numbers inkcell_fb_render_snapshot() used, against
-     * the body's real bottom. Measuring it the same way twice is what keeps the two answers
+     * So the count is taken again from the same two numbers inkcell_fb_render_snapshot() used,
+     * against the body's real bottom. Measuring it the same way twice is what keeps the two answers
      * from disagreeing.
      */
-    layout->body_y = y + inkcell_fb_line_adv(state, scale) + inkcell_fb_space(state, INKCELL_SPACE_SM);
+    layout->body_y =
+        y + inkcell_fb_line_adv(state, scale) + inkcell_fb_space(state, INKCELL_SPACE_SM);
     if (layout->line > 0) {
         const int remaining = layout->footer_y - inkcell_fb_gutter(state) - layout->body_y;
         layout->rows = remaining > 0 ? (uint32_t)(remaining / layout->line) : 0U;
     }
 }
 
-void inkcell_fb_draw_empty(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_layout *layout,
-                   enum inkcell_icon icon, const char *text) {
+void inkcell_fb_draw_empty(const struct inkcell_backend_fb_state *state,
+                           const struct inkcell_fb_layout *layout, enum inkcell_icon icon,
+                           const char *text) {
     int y = layout->body_y;
     uint32_t rows = layout->rows;
 
@@ -471,7 +489,8 @@ void inkcell_fb_draw_empty(const struct inkcell_backend_fb_state *state, const s
     if (inkcell_icon_is_valid(icon) && big <= INKCELL_FB_ICON_SCALE_MAX && rows > cost + 1U) {
         const int box = inkcell_fb_icon_box(state, big);
         inkcell_fb_draw_icon(state, ((int)state->var.xres - box) / 2, y, icon, big,
-                     inkcell_fb_tone_color(state, INKCELL_TONE_DIM), inkcell_fb_color(state, INKCELL_COLOR_BG));
+                             inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
+                             inkcell_fb_color(state, INKCELL_COLOR_BG));
         y += (int)cost * layout->line;
         rows -= cost;
     }
@@ -479,20 +498,22 @@ void inkcell_fb_draw_empty(const struct inkcell_backend_fb_state *state, const s
     /* Wrapped rather than drawn flat: these strings say which button to press next, and at a
        large glyph scale a flat one ran off the right edge with the verb on it. */
     (void)inkcell_fb_draw_wrapped(state, y, text, layout->cols, (int)rows,
-                          inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
-                          inkcell_fb_color(state, INKCELL_COLOR_BG));
+                                  inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
+                                  inkcell_fb_color(state, INKCELL_COLOR_BG));
 }
 
 int inkcell_fb_rule_height(const struct inkcell_backend_fb_state *state, int scale) {
     return inkcell_fb_space_at(state, INKCELL_SPACE_XS, scale);
 }
 
-void inkcell_fb_draw_rule(const struct inkcell_backend_fb_state *state, int x, int y, int w, int scale,
-                  enum inkcell_color role) {
-    inkcell_fb_fill_rect(state, x, y, w, inkcell_fb_rule_height(state, scale), inkcell_fb_color(state, role));
+void inkcell_fb_draw_rule(const struct inkcell_backend_fb_state *state, int x, int y, int w,
+                          int scale, enum inkcell_color role) {
+    inkcell_fb_fill_rect(state, x, y, w, inkcell_fb_rule_height(state, scale),
+                         inkcell_fb_color(state, role));
 }
 
-void inkcell_fb_title_count(char *out, size_t out_len, const char *name, uint32_t count, uint32_t dropped) {
+void inkcell_fb_title_count(char *out, size_t out_len, const char *name, uint32_t count,
+                            uint32_t dropped) {
     if (dropped > 0U) {
         inkcell_str_format(out, out_len, INKCELL_STR_LIST_TITLE_COUNT_OLDER, name, count, dropped);
     } else {

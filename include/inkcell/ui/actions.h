@@ -14,7 +14,8 @@
  * So the answer is the same one the colours, the icons and the shapes got: a screen names a
  * *token*, and a table answers. Here the token is a (button, verb) pair, the table is
  * inkcell_actions_for(), and the drawing - keycaps, elision, where the bar sits - belongs to
- * whichever backend is up. See inkcell_fb_draw_action_bar() in src/ui/backends/inkcell_fb_widgets.h.
+ * whichever backend is up. See inkcell_fb_draw_action_bar() in
+ * src/ui/backends/inkcell_fb_widgets.h.
  *
  * This lives in include/inkcell/ui/ rather than beside the framebuffer backend because it is not
  * a drawing concern at all: which buttons mean something in a given state is a fact about the
@@ -26,7 +27,6 @@
 
 #include <stdbool.h>
 #include <stddef.h>
-
 
 /*
  * A keycap, not a key code.

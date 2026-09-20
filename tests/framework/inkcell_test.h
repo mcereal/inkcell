@@ -29,7 +29,7 @@ struct inkcell_test_case {
 };
 
 void inkcell_test_register(struct inkcell_test_case *node, const char *name, const char *category,
-                        const char *file, int line, void (*fn)(void));
+                           const char *file, int line, void (*fn)(void));
 
 /* Outcome reporting: a case records exactly one of these and returns. */
 void record_failure(const char *test_name, const char *message);
@@ -44,23 +44,25 @@ void record_success(const char *test_name);
  *
  *     INKCELL_TEST_CASE(config_defaults, unit) {
  *         struct mesh_app_config config = mesh_app_config_default();
- *         INKCELL_TEST_FAIL_IF(config.idle_timeout_ms != 1000, "idle timeout should default to 1s");
- *         record_success(test_name);
+ *         INKCELL_TEST_FAIL_IF(config.idle_timeout_ms != 1000, "idle timeout should default to
+ * 1s"); record_success(test_name);
  *     }
  */
-#define INKCELL_TEST_CASE(case_name, case_category)                                                   \
-    static void inkcell_test_body_##case_name(const char *test_name);                                 \
-    static void inkcell_test_entry_##case_name(void) { inkcell_test_body_##case_name(#case_name); }      \
-    static void inkcell_test_ctor_##case_name(void) __attribute__((constructor));                     \
-    static void inkcell_test_ctor_##case_name(void) {                                                 \
-        static struct inkcell_test_case node;                                                         \
-        inkcell_test_register(&node, #case_name, #case_category, __FILE__, __LINE__,                  \
-                           inkcell_test_entry_##case_name);                                           \
+#define INKCELL_TEST_CASE(case_name, case_category)                                                \
+    static void inkcell_test_body_##case_name(const char *test_name);                              \
+    static void inkcell_test_entry_##case_name(void) {                                             \
+        inkcell_test_body_##case_name(#case_name);                                                 \
+    }                                                                                              \
+    static void inkcell_test_ctor_##case_name(void) __attribute__((constructor));                  \
+    static void inkcell_test_ctor_##case_name(void) {                                              \
+        static struct inkcell_test_case node;                                                      \
+        inkcell_test_register(&node, #case_name, #case_category, __FILE__, __LINE__,               \
+                              inkcell_test_entry_##case_name);                                     \
     }                                                                                              \
     static void inkcell_test_body_##case_name(const char *test_name)
 
 /* Records `message` against the running case and returns from it when `condition` holds. */
-#define INKCELL_TEST_FAIL_IF(condition, message)                                                      \
+#define INKCELL_TEST_FAIL_IF(condition, message)                                                   \
     do {                                                                                           \
         if (condition) {                                                                           \
             record_failure(test_name, (message));                                                  \
@@ -74,7 +76,7 @@ void record_success(const char *test_name);
  *
  *     INKCELL_TEST_FAIL_IF_CLEANUP(result != 0, mesh_event_loop_shutdown(&loop), "start failed");
  */
-#define INKCELL_TEST_FAIL_IF_CLEANUP(condition, cleanup, message)                                     \
+#define INKCELL_TEST_FAIL_IF_CLEANUP(condition, cleanup, message)                                  \
     do {                                                                                           \
         if (condition) {                                                                           \
             cleanup;                                                                               \

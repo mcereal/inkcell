@@ -24,7 +24,9 @@ void inkcell_env_set_prefix(const char *prefix) {
     (void)snprintf(g_prefix, sizeof g_prefix, "%s", prefix);
 }
 
-const char *inkcell_env_prefix(void) { return g_prefix; }
+const char *inkcell_env_prefix(void) {
+    return g_prefix;
+}
 
 const char *inkcell_env_get(const char *name) {
     if (name == NULL || name[0] == '\0') {
@@ -59,7 +61,7 @@ bool inkcell_env_bool(const char *name, const char *label, bool fallback) {
         return false;
     }
     inkcell_log_warn("env", "%s='%s' is not a boolean; keeping %s %s", name, value,
-                  label != NULL ? label : name, fallback ? "on" : "off");
+                     label != NULL ? label : name, fallback ? "on" : "off");
     return fallback;
 }
 
@@ -72,8 +74,8 @@ long inkcell_env_int(const char *name, long min, long max, long fallback) {
     errno = 0;
     const long parsed = strtol(value, &end, 10);
     if (end == value || *end != '\0' || errno == ERANGE || parsed < min || parsed > max) {
-        inkcell_log_warn("env", "%s='%s' is not an integer in %ld..%ld; using %ld", name, value, min,
-                      max, fallback);
+        inkcell_log_warn("env", "%s='%s' is not an integer in %ld..%ld; using %ld", name, value,
+                         min, max, fallback);
         return fallback;
     }
     return parsed;

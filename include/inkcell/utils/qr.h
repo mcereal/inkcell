@@ -87,7 +87,8 @@ struct inkcell_qr {
  * half a code. Deterministic: the same bytes and level always give the same matrix, including
  * the mask chosen, which is what lets a test pin one.
  */
-bool inkcell_qr_encode(const uint8_t *data, size_t len, enum inkcell_qr_ecc ecc, struct inkcell_qr *out);
+bool inkcell_qr_encode(const uint8_t *data, size_t len, enum inkcell_qr_ecc ecc,
+                       struct inkcell_qr *out);
 
 /* True when the module at (x, y) is dark. Out of range is light, so a drawing loop that runs
    over the edge draws quiet zone rather than reading past the matrix. */

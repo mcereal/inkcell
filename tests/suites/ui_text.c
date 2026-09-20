@@ -21,7 +21,7 @@ INKCELL_TEST_CASE(font5x7_coverage, unit) {
     struct inkcell_font_glyph glyph;
 
     INKCELL_TEST_FAIL_IF(!inkcell_font5x7_glyph('A', &glyph) || glyph.columns[0] == 0U,
-                      "ASCII 'A' should have a glyph");
+                         "ASCII 'A' should have a glyph");
     /* An unaccented letter never reaches into the line gap. */
     for (int col = 0; col < INKCELL_FONT_WIDTH; ++col) {
         INKCELL_TEST_FAIL_IF(glyph.above[col] != 0U, "'A' should not draw above its cell");
@@ -31,8 +31,9 @@ INKCELL_TEST_CASE(font5x7_coverage, unit) {
        'e' glyph with extra bits in those rows and nothing hanging above. */
     struct inkcell_font_glyph base;
     struct inkcell_font_glyph accented;
-    INKCELL_TEST_FAIL_IF(!inkcell_font5x7_glyph('e', &base) || !inkcell_font5x7_glyph(0x00E9U, &accented),
-                      "e and e-acute should both have glyphs");
+    INKCELL_TEST_FAIL_IF(!inkcell_font5x7_glyph('e', &base) ||
+                             !inkcell_font5x7_glyph(0x00E9U, &accented),
+                         "e and e-acute should both have glyphs");
     bool mark_in_cell = false;
     for (int col = 0; col < INKCELL_FONT_WIDTH; ++col) {
         if ((accented.columns[col] & ~base.columns[col]) != 0U) {
@@ -144,13 +145,13 @@ INKCELL_TEST_CASE(ui_text_cells, unit) {
     snprintf(line, sizeof line, "%s", "\xF0\x9F\x8C\xB2\xF0\x9F\x8F\xA0\xF0\x9F\x9A\x97");
     inkcell_text_cell_truncate(line, 2U);
     INKCELL_TEST_FAIL_IF(strcmp(line, "\xF0\x9F\x8C\xB2\xF0\x9F\x8F\xA0") != 0,
-                      "truncate split a cell");
+                         "truncate split a cell");
 
     /* A flag is never split into the two letters it is spelled with. */
     snprintf(line, sizeof line, "%s", "\xF0\x9F\x87\xB5\xF0\x9F\x87\xB7x");
     inkcell_text_cell_truncate(line, 1U);
     INKCELL_TEST_FAIL_IF(strcmp(line, "\xF0\x9F\x87\xB5\xF0\x9F\x87\xB7") != 0,
-                      "truncate split a flag into regional indicators");
+                         "truncate split a flag into regional indicators");
 
     record_success(test_name);
 }
@@ -180,13 +181,14 @@ INKCELL_TEST_CASE(ui_text_cell_kinds, unit) {
     for (size_t i = 0; i < sizeof cases / sizeof cases[0]; ++i) {
         const struct inkcell_text_cell cell = inkcell_text_cell_next(cases[i].text);
         INKCELL_TEST_FAIL_IF(cell.is_emoji != cases[i].is_emoji || cell.bytes != cases[i].bytes,
-                          cases[i].label);
+                             cases[i].label);
     }
 
     /* Every sprite id a match hands back has to be in range and decode to something. */
     uint16_t sprite = 0;
     const uint32_t tree[] = {0x1F332U};
-    INKCELL_TEST_FAIL_IF(inkcell_emoji_match(tree, 1U, &sprite) != 1U, "the evergreen should match");
+    INKCELL_TEST_FAIL_IF(inkcell_emoji_match(tree, 1U, &sprite) != 1U,
+                         "the evergreen should match");
     uint8_t pixels[INKCELL_EMOJI_SIZE * INKCELL_EMOJI_SIZE];
     inkcell_emoji_decode(sprite, pixels);
     bool opaque = false;
@@ -250,18 +252,19 @@ INKCELL_TEST_CASE(emoji_ascii_fast_path_precondition, unit) {
 
         for (uint32_t i = 0; i < table->single_count; ++i) {
             INKCELL_TEST_FAIL_IF(table->singles[i].codepoint == cp,
-                              "an emoji single is led by ASCII the fast path skips");
+                                 "an emoji single is led by ASCII the fast path skips");
         }
         for (uint32_t i = 0; i < table->sequence_count; ++i) {
             INKCELL_TEST_FAIL_IF(table->sequences[i].first == cp,
-                              "an emoji sequence is led by ASCII the fast path skips");
+                                 "an emoji sequence is led by ASCII the fast path skips");
         }
     }
 
     /* A combining mark, selector, ZWJ or skin tone in ASCII would let a second cell attach to
        a character the fast path has already answered for. */
     for (uint32_t cp = 0U; cp < 0x80U; ++cp) {
-        INKCELL_TEST_FAIL_IF(inkcell_emoji_is_zero_width(cp), "a zero-width codepoint lives in ASCII");
+        INKCELL_TEST_FAIL_IF(inkcell_emoji_is_zero_width(cp),
+                             "a zero-width codepoint lives in ASCII");
     }
 
     /* And the path itself: every other printable ASCII character is one non-emoji cell of one
@@ -276,7 +279,7 @@ INKCELL_TEST_CASE(emoji_ascii_fast_path_precondition, unit) {
             continue;
         }
         INKCELL_TEST_FAIL_IF(cell.is_emoji || cell.bytes != 1U || cell.codepoint != cp,
-                          "printable ASCII should be one plain cell");
+                             "printable ASCII should be one plain cell");
     }
 
     record_success(test_name);
@@ -286,21 +289,22 @@ INKCELL_TEST_CASE(emoji_table_integrity, unit) {
     const struct inkcell_emoji_table *table = &inkcell_emoji_table;
 
     INKCELL_TEST_FAIL_IF(table->single_count == 0U || table->sequence_count == 0U,
-                      "the emoji table is empty");
+                         "the emoji table is empty");
 
     for (uint32_t i = 1; i < table->single_count; ++i) {
         INKCELL_TEST_FAIL_IF(table->singles[i - 1U].codepoint >= table->singles[i].codepoint,
-                          "singles are not sorted, so bisecting them is wrong");
+                             "singles are not sorted, so bisecting them is wrong");
     }
 
     for (uint32_t i = 1; i < table->sequence_count; ++i) {
         const struct inkcell_emoji_sequence *previous = &table->sequences[i - 1U];
         const struct inkcell_emoji_sequence *current = &table->sequences[i];
         INKCELL_TEST_FAIL_IF(previous->first > current->first,
-                          "sequences are not sorted by their first codepoint");
+                             "sequences are not sorted by their first codepoint");
         /* Longest first within a leading codepoint is what makes the match greedy. */
-        INKCELL_TEST_FAIL_IF(previous->first == current->first && previous->length < current->length,
-                          "sequences are not ordered longest first");
+        INKCELL_TEST_FAIL_IF(previous->first == current->first &&
+                                 previous->length < current->length,
+                             "sequences are not ordered longest first");
     }
 
     uint8_t pixels[INKCELL_EMOJI_SIZE * INKCELL_EMOJI_SIZE];
@@ -310,7 +314,7 @@ INKCELL_TEST_CASE(emoji_table_integrity, unit) {
     for (uint32_t i = 0; i < table->sequence_count; ++i) {
         const struct inkcell_emoji_sequence *entry = &table->sequences[i];
         INKCELL_TEST_FAIL_IF(entry->length < 2U || entry->length > EMOJI_TEST_MAX_SEQUENCE,
-                          "a sequence has an implausible length");
+                             "a sequence has an implausible length");
         inkcell_emoji_decode(entry->sprite, pixels);
     }
 

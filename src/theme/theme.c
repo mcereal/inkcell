@@ -497,13 +497,17 @@ static const struct inkcell_theme
 
 #define INKCELL_THEME_COUNT (sizeof k_themes / sizeof k_themes[0])
 
-size_t inkcell_theme_count(void) { return INKCELL_THEME_COUNT; }
+size_t inkcell_theme_count(void) {
+    return INKCELL_THEME_COUNT;
+}
 
 const struct inkcell_theme *inkcell_theme_at(size_t index) {
     return index < INKCELL_THEME_COUNT ? &k_themes[index] : NULL;
 }
 
-const struct inkcell_theme *inkcell_theme_default(void) { return &k_themes[0]; }
+const struct inkcell_theme *inkcell_theme_default(void) {
+    return &k_themes[0];
+}
 
 const struct inkcell_theme *inkcell_theme_by_id(const char *id) {
     if (id == NULL || id[0] == '\0') {
@@ -527,7 +531,7 @@ const struct inkcell_theme *inkcell_theme_env(void) {
         /* Warned rather than refused: a typo in an environment variable should not leave a
            handheld with no UI. Warned once per call site, and there are two. */
         inkcell_log_warn("ui", "Unknown <PREFIX>_THEME '%s'; using '%s'", name,
-                      inkcell_theme_default()->id);
+                         inkcell_theme_default()->id);
         return NULL;
     }
     return theme;
@@ -811,8 +815,8 @@ int inkcell_theme_radius(const struct inkcell_theme *theme, enum inkcell_shape s
     theme = theme_or_default(theme);
     scale = inkcell_theme_clamp_scale(theme, scale);
     if (shape == INKCELL_SHAPE_FULL) {
-        /* Bigger than any panel this runs on. inkcell_fb_fill_round_rect() clamps a radius to half the
-           shorter side, so "as round as it goes" is answered where the box is finally known
+        /* Bigger than any panel this runs on. inkcell_fb_fill_round_rect() clamps a radius to half
+           the shorter side, so "as round as it goes" is answered where the box is finally known
            rather than guessed at here - a pill and a circle are the same request. */
         return INT16_MAX;
     }

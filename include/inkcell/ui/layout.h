@@ -576,8 +576,8 @@ uint8_t inkcell_signal_level(float snr);
 /* Parts one composition may have. It is INKCELL_SERIES_COLORS (include/inkcell/ui/theme.h) counted
    from the other side of the seam this file keeps with the theme - what a part *is* is layout's
    half, and what colour it takes is the theme's - so the two are stated separately and held
-   equal where they meet, by the static assertion in inkcell_fb_widgets_meter.c. Four is the number of
-   categorical fills the panel's lightness range can hold apart; see that file. */
+   equal where they meet, by the static assertion in inkcell_fb_widgets_meter.c. Four is the number
+   of categorical fills the panel's lightness range can hold apart; see that file. */
 #define INKCELL_PROPORTION_PARTS 4U
 
 /*

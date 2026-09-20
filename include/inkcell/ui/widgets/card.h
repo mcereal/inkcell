@@ -192,18 +192,19 @@ struct inkcell_fb_card {
    row list. The variant is stated here rather than defaulted, because which of three weights a
    card is asking for is a decision about the column it sits in and not a property of the card
    on its own. */
-void inkcell_fb_card_begin(struct inkcell_fb_card *card, enum inkcell_fb_card_variant variant, enum inkcell_icon icon,
-                   enum inkcell_str_id heading, enum inkcell_tone tone);
+void inkcell_fb_card_begin(struct inkcell_fb_card *card, enum inkcell_fb_card_variant variant,
+                           enum inkcell_icon icon, enum inkcell_str_id heading,
+                           enum inkcell_tone tone);
 
 /* A label and a value formatted from the catalog, which is the shape most rows have. */
-void inkcell_fb_card_row(struct inkcell_fb_card *card, enum inkcell_tone tone, enum inkcell_str_id label,
-                 enum inkcell_str_id value, ...);
+void inkcell_fb_card_row(struct inkcell_fb_card *card, enum inkcell_tone tone,
+                         enum inkcell_str_id label, enum inkcell_str_id value, ...);
 
 /* The same row for a value that is already text - a device name, an age, a percentage a caller
    has formatted. It exists so no "%s" pass-through ends up in the catalog, where it would be a
    line for a translator to wonder about. Same split as inkcell_fb_draw_status_row/_text. */
-void inkcell_fb_card_row_text(struct inkcell_fb_card *card, enum inkcell_tone tone, enum inkcell_str_id label,
-                      const char *value);
+void inkcell_fb_card_row_text(struct inkcell_fb_card *card, enum inkcell_tone tone,
+                              enum inkcell_str_id label, const char *value);
 
 /* A sentence, wrapped across the card's whole width with no label column. What the radio said
    about itself goes here: a firmware sentence in the value gutter is three words and a cut. */
@@ -231,17 +232,17 @@ void inkcell_fb_card_note(struct inkcell_fb_card *card, enum inkcell_tone tone, 
  * It never carries the figure either way. A row that drew both would spend the card's width
  * saying one thing twice.
  */
-void inkcell_fb_card_meter(struct inkcell_fb_card *card, enum inkcell_tone tone, enum inkcell_str_id label,
-                   int32_t value, struct inkcell_scale scale, const struct inkcell_band *band,
-                   uint32_t id);
+void inkcell_fb_card_meter(struct inkcell_fb_card *card, enum inkcell_tone tone,
+                           enum inkcell_str_id label, int32_t value, struct inkcell_scale scale,
+                           const struct inkcell_band *band, uint32_t id);
 
 /*
  * A divided bar: the row for what a reading is *made of*.
  *
  * `values` are the parts in the order they are drawn, and `tone` colours the label rather than
  * the bar - the parts take the theme's series palette, because which part a slice is is not a
- * judgement about it. See struct inkcell_fb_proportion for what a caller is promising by calling this:
- * that the parts are disjoint, and that whatever row names them names them in this order.
+ * judgement about it. See struct inkcell_fb_proportion for what a caller is promising by calling
+ * this: that the parts are disjoint, and that whatever row names them names them in this order.
  *
  * Fewer than two parts, or parts summing to zero, adds no row at all - the sparkline's rule, for
  * the sparkline's reason. A bar with nothing in it says the radio heard nothing; a radio that
@@ -251,8 +252,8 @@ void inkcell_fb_card_meter(struct inkcell_fb_card *card, enum inkcell_tone tone,
  * to reach for: this row goes under the row that names its parts, exactly as the airtime meter
  * goes under the airtime figures, and a label here would be naming the subject a third time.
  */
-void inkcell_fb_card_proportion(struct inkcell_fb_card *card, enum inkcell_tone tone, enum inkcell_str_id label,
-                        const uint32_t *values, uint32_t count);
+void inkcell_fb_card_proportion(struct inkcell_fb_card *card, enum inkcell_tone tone,
+                                enum inkcell_str_id label, const uint32_t *values, uint32_t count);
 
 /*
  * A verb, as a button on the card's heading line. Declared left to right: the first call is the
@@ -274,8 +275,8 @@ bool inkcell_fb_card_is_empty(const struct inkcell_fb_card *card);
 /*
  * The room a card needs to say *everything* it holds: its heading, every row, and its padding.
  * The other half of the reservation pair below - and on the same terms, so a screen can hand
- * either to inkcell_fb_draw_card_reserving() and get what it asked for. Neither carries the gap between
- * the two cards, because that gap belongs to the card doing the reserving.
+ * either to inkcell_fb_draw_card_reserving() and get what it asked for. Neither carries the gap
+ * between the two cards, because that gap belongs to the card doing the reserving.
  *
  * Which of the two a screen reserves is an editorial decision and is allowed to be a *reading*
  * rather than a constant. The Status tab is the worked example: its Radio card is a heading over
@@ -283,8 +284,9 @@ bool inkcell_fb_card_is_empty(const struct inkcell_fb_card *card);
  * card above it promises the minimum in the first case and the whole in the second. See
  * inkcell_fb_render_status().
  */
-int inkcell_fb_card_height(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_layout *layout,
-                   const struct inkcell_fb_card *card);
+int inkcell_fb_card_height(const struct inkcell_backend_fb_state *state,
+                           const struct inkcell_fb_layout *layout,
+                           const struct inkcell_fb_card *card);
 
 /*
  * Draws the card with its top edge at `*y` and advances `*y` past it.
@@ -315,16 +317,17 @@ int inkcell_fb_card_height(const struct inkcell_backend_fb_state *state, const s
  * The first *row* rather than a line, because a card is refused outright at the point it has
  * nothing but a heading - so this is the smallest height that actually draws something.
  */
-int inkcell_fb_card_min_height(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_layout *layout,
-                       const struct inkcell_fb_card *card);
+int inkcell_fb_card_min_height(const struct inkcell_backend_fb_state *state,
+                               const struct inkcell_fb_layout *layout,
+                               const struct inkcell_fb_card *card);
 
 /*
  * inkcell_fb_draw_card(), keeping `reserve` pixels of the body free below this card.
  *
  * Why a card needs to be told this at all. A column of cards is drawn in order and each takes
  * what it wants, so the *last* card pays for everything above it - and paying means not being
- * drawn, because inkcell_fb_draw_card() refuses a card it cannot fit rather than drawing an empty box.
- * Losing a card is worse than losing a row, and not only because it is more content: a card
+ * drawn, because inkcell_fb_draw_card() refuses a card it cannot fit rather than drawing an empty
+ * box. Losing a card is worse than losing a row, and not only because it is more content: a card
  * carries **verbs**, and which verbs a screen offers is a table (src/ui/tables/status.c) with no
  * idea how tall anything came out. The cursor therefore keeps walking onto a button that is not on
  * the frame - which is exactly the failure "a card that can end up with no rows must not be
@@ -334,17 +337,19 @@ int inkcell_fb_card_min_height(const struct inkcell_backend_fb_state *state, con
  * that would have vanished survives. It is also the right order editorially, because rows are
  * clipped from the end and a screen declares its least important rows last.
  *
- * Pair it with inkcell_fb_card_min_height() of whatever comes next rather than with that card's full
- * height: the promise worth making is *that the card exists*, and a card given more room than
+ * Pair it with inkcell_fb_card_min_height() of whatever comes next rather than with that card's
+ * full height: the promise worth making is *that the card exists*, and a card given more room than
  * its minimum will use it.
  *
  * A reservation that cannot be afforded is dropped rather than honoured - two cards missing is
  * not an improvement on one - so this never draws less than inkcell_fb_draw_card() would have.
  */
-bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state, const struct inkcell_fb_layout *layout,
-                            int *y, const struct inkcell_fb_card *card, int reserve);
+bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state,
+                                    const struct inkcell_fb_layout *layout, int *y,
+                                    const struct inkcell_fb_card *card, int reserve);
 
-bool inkcell_fb_draw_card(struct inkcell_backend_fb_state *state, const struct inkcell_fb_layout *layout, int *y,
-                  const struct inkcell_fb_card *card);
+bool inkcell_fb_draw_card(struct inkcell_backend_fb_state *state,
+                          const struct inkcell_fb_layout *layout, int *y,
+                          const struct inkcell_fb_card *card);
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_CARD_H */

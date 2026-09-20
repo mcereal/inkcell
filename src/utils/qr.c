@@ -71,7 +71,9 @@ static const uint8_t k_ecc_format_bits[4] = {1U, 0U, 3U, 2U};
 /* ---- the version's shape ------------------------------------------------------------------ */
 
 /* How many alignment patterns a version has along one edge (none below version 2). */
-static int align_count(int version) { return version == 1 ? 0 : version / 7 + 2; }
+static int align_count(int version) {
+    return version == 1 ? 0 : version / 7 + 2;
+}
 
 /* Where they sit. The first is always at 6 and the last at size - 7; the rest are evenly spaced
    between, rounded to an even step. Returns how many were written. */
@@ -112,7 +114,9 @@ static size_t data_codewords(int version, enum inkcell_qr_ecc ecc) {
 }
 
 /* Byte mode's character-count field widens once, at version 10. */
-static int count_bits(int version) { return version < 10 ? 8 : 16; }
+static int count_bits(int version) {
+    return version < 10 ? 8 : 16;
+}
 
 /* ---- GF(256) and Reed-Solomon -------------------------------------------------------------- */
 
@@ -491,7 +495,8 @@ static size_t interleave(const uint8_t *data, int version, enum inkcell_qr_ecc e
     return written;
 }
 
-bool inkcell_qr_encode(const uint8_t *data, size_t len, enum inkcell_qr_ecc ecc, struct inkcell_qr *out) {
+bool inkcell_qr_encode(const uint8_t *data, size_t len, enum inkcell_qr_ecc ecc,
+                       struct inkcell_qr *out) {
     if (out == NULL) {
         return false;
     }

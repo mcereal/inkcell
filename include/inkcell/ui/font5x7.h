@@ -22,10 +22,10 @@ extern "C" {
  * `above` is a single extra row drawn immediately above the cell, and is zero for all but
  * accented capitals. The cell has no room for their diacritic - this font's capitals and
  * ascenders occupy all seven rows, unlike its lowercase, which starts at row 2 - so the mark
- * goes into the top half of the two-pixel gap `inkcell_fb_line_adv` leaves between lines. One row is
- * all a mark gets there, which is why every capital's mark collapses to a horizontal
- * silhouette: O-circumflex, O-macron and O-ring are all "O with something over it". The letter
- * underneath is always right, which is what makes the name readable.
+ * goes into the top half of the two-pixel gap `inkcell_fb_line_adv` leaves between lines. One row
+ * is all a mark gets there, which is why every capital's mark collapses to a horizontal silhouette:
+ * O-circumflex, O-macron and O-ring are all "O with something over it". The letter underneath is
+ * always right, which is what makes the name readable.
  */
 struct inkcell_font_glyph {
     uint8_t columns[INKCELL_FONT_WIDTH];

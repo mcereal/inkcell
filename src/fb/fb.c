@@ -39,7 +39,7 @@ static void inkcell_fb_apply_theme_from_env(struct inkcell_backend_fb_state *sta
        this panel, where a theme's own scale is only that theme's default. */
     state->scale_pinned = inkcell_env_get("INKCELL_FB_SCALE") != NULL;
     const int scale = (int)inkcell_env_int("INKCELL_FB_SCALE", INKCELL_SCALE_MIN, INKCELL_SCALE_MAX,
-                                        inkcell_theme_scale(theme));
+                                           inkcell_theme_scale(theme));
     inkcell_fb_state_set_theme(state, theme, scale);
 }
 
@@ -80,7 +80,8 @@ static int inkcell_backend_fb_init(void **state_out, void *userdata) {
        reach today, and a wrapped inkcell_fb_size would be a short mapping that every later bounds
        check believes - so it takes the cast page_bytes below already takes. */
     state->inkcell_fb_size = (size_t)state->line_bytes * (size_t)state->var.yres_virtual;
-    state->inkcell_fb_ptr = mmap(NULL, state->inkcell_fb_size, PROT_READ | PROT_WRITE, MAP_SHARED, state->inkcell_fb_fd, 0);
+    state->inkcell_fb_ptr = mmap(NULL, state->inkcell_fb_size, PROT_READ | PROT_WRITE, MAP_SHARED,
+                                 state->inkcell_fb_fd, 0);
     if (state->inkcell_fb_ptr == MAP_FAILED) {
         inkcell_log_warn("ui", "mmap on framebuffer failed: %s", strerror(errno));
         close(state->inkcell_fb_fd);
@@ -104,11 +105,11 @@ static int inkcell_backend_fb_init(void **state_out, void *userdata) {
     inkcell_fb_set_app(state, context->app);
 
     inkcell_log_info("ui",
-                  "Framebuffer UI backend active (%ux%u %u bpp, virtual %ux%u, offset %u,%u, "
-                  "theme %s at scale %d)",
-                  state->var.xres, state->var.yres, state->var.bits_per_pixel,
-                  state->var.xres_virtual, state->var.yres_virtual, state->var.xoffset,
-                  state->var.yoffset, state->theme->id, state->scale);
+                     "Framebuffer UI backend active (%ux%u %u bpp, virtual %ux%u, offset %u,%u, "
+                     "theme %s at scale %d)",
+                     state->var.xres, state->var.yres, state->var.bits_per_pixel,
+                     state->var.xres_virtual, state->var.yres_virtual, state->var.xoffset,
+                     state->var.yoffset, state->theme->id, state->scale);
 
     if (state_out != NULL) {
         *state_out = state;
@@ -146,15 +147,15 @@ static void inkcell_backend_fb_shutdown(void *state_ptr, void *userdata) {
  * the display mapping to find differences would itself be expensive on the device.
  */
 size_t inkcell_fb_copy_damage(struct inkcell_backend_fb_state *state, const uint8_t *frame,
-                      uint8_t *previous, bool force) {
+                              uint8_t *previous, bool force) {
     const size_t stride = state->line_bytes;
     const size_t page_bytes = stride * state->var.yres;
     const size_t bpp = state->bytes_per_pixel;
     if (bpp == 0U || page_bytes > state->inkcell_fb_size) {
         return 0U;
     }
-    const bool mirror =
-        state->var.yres_virtual >= 2U * state->var.yres && page_bytes <= state->inkcell_fb_size / 2U;
+    const bool mirror = state->var.yres_virtual >= 2U * state->var.yres &&
+                        page_bytes <= state->inkcell_fb_size / 2U;
     size_t written = 0U;
     for (uint32_t y = 0U; y < state->var.yres; ++y) {
         if (!force && state->clip_active &&
@@ -201,14 +202,13 @@ static void inkcell_fb_show_page0(struct inkcell_backend_fb_state *state) {
     if (ioctl(state->inkcell_fb_fd, FBIOPAN_DISPLAY, &var) < 0) {
         if (!state->pan_failed_logged) {
             inkcell_log_warn("ui", "FBIOPAN_DISPLAY failed: %s; relying on the mirrored page",
-                          strerror(errno));
+                             strerror(errno));
             state->pan_failed_logged = true;
         }
     }
 }
 
-static void inkcell_backend_fb_present(void *state_ptr, const void *snapshot,
-                                       void *userdata) {
+static void inkcell_backend_fb_present(void *state_ptr, const void *snapshot, void *userdata) {
     struct inkcell_backend_fb_state *state = (struct inkcell_backend_fb_state *)state_ptr;
     (void)userdata;
     if (state == NULL || snapshot == NULL || state->inkcell_fb_ptr == NULL) {
@@ -230,14 +230,15 @@ static void inkcell_backend_fb_present(void *state_ptr, const void *snapshot,
         inkcell_fb_render(state, snapshot);
         state->inkcell_fb_ptr = mapping;
         state->inkcell_fb_size = mapping_size;
-        written =
-            inkcell_fb_copy_damage(state, state->draw_buffer, state->previous_frame, !state->frame_valid);
+        written = inkcell_fb_copy_damage(state, state->draw_buffer, state->previous_frame,
+                                         !state->frame_valid);
         state->frame_valid = true;
     } else {
         state->partial_disabled = true;
         inkcell_fb_render(state, snapshot);
         written = page_bytes;
-        if (state->var.yres_virtual >= 2U * state->var.yres && page_bytes <= state->inkcell_fb_size / 2U) {
+        if (state->var.yres_virtual >= 2U * state->var.yres &&
+            page_bytes <= state->inkcell_fb_size / 2U) {
             memcpy(state->inkcell_fb_ptr + page_bytes, state->inkcell_fb_ptr, page_bytes);
             written *= 2U;
         }
@@ -245,10 +246,10 @@ static void inkcell_backend_fb_present(void *state_ptr, const void *snapshot,
     inkcell_latency_frame_drawn(written);
     if (written > 0U) {
         inkcell_fb_show_page0(state);
-        const size_t pages =
-            state->var.yres_virtual >= 2U * state->var.yres && page_bytes <= state->inkcell_fb_size / 2U
-                ? 2U
-                : 1U;
+        const size_t pages = state->var.yres_virtual >= 2U * state->var.yres &&
+                                     page_bytes <= state->inkcell_fb_size / 2U
+                                 ? 2U
+                                 : 1U;
         msync(state->inkcell_fb_ptr, page_bytes * pages, MS_ASYNC);
     }
     /* After the pan, because the pan is what puts the frame in front of the reader - a
@@ -276,6 +277,10 @@ static const struct inkcell_backend k_fb_backend = {
     .page_rows = inkcell_backend_fb_page_rows,
 };
 
-bool inkcell_backend_fb_is_available(void) { return access("/dev/fb0", R_OK | W_OK) == 0; }
+bool inkcell_backend_fb_is_available(void) {
+    return access("/dev/fb0", R_OK | W_OK) == 0;
+}
 
-const struct inkcell_backend *inkcell_backend_fb(void) { return &k_fb_backend; }
+const struct inkcell_backend *inkcell_backend_fb(void) {
+    return &k_fb_backend;
+}

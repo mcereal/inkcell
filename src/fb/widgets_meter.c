@@ -6,8 +6,8 @@
  * to step, because a reading that is already history does not move.
  */
 
-#include "inkcell/ui/widgets/meter.h"
 #include "inkcell/ui/widgets/control.h"
+#include "inkcell/ui/widgets/meter.h"
 
 #include "inkcell/i18n/strings.h"
 #include "inkcell/ui/anim.h"
@@ -85,14 +85,15 @@ static int inkcell_fb_band_mark(const struct inkcell_fb_meter *meter, int32_t bo
     return (int)(((int64_t)meter->rect.w * permille) / INKCELL_ANIM_ONE);
 }
 
-void inkcell_fb_draw_meter(struct inkcell_backend_fb_state *state, const struct inkcell_fb_meter *meter) {
+void inkcell_fb_draw_meter(struct inkcell_backend_fb_state *state,
+                           const struct inkcell_fb_meter *meter) {
     if (meter == NULL || meter->rect.w <= 0 || meter->rect.h <= 0) {
         return;
     }
     const struct inkcell_fb_rect r = meter->rect;
     const int damage_pad = inkcell_fb_space(state, INKCELL_SPACE_XS);
     inkcell_fb_animation_damage(state, r.x - damage_pad, r.y - damage_pad, r.w + 2 * damage_pad,
-                        r.h + 2 * damage_pad);
+                                r.h + 2 * damage_pad);
     /* A pill, always: a bar with square ends reads as a region of the screen that has been
        filled in, and one with round ends reads as a quantity in a container. */
     const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_FULL);
@@ -107,17 +108,18 @@ void inkcell_fb_draw_meter(struct inkcell_backend_fb_state *state, const struct 
      */
     if (meter->selected) {
         const int pad = inkcell_fb_space(state, INKCELL_SPACE_XS);
-        inkcell_fb_fill_round_rect(state, r.x - pad, r.y - pad, r.w + 2 * pad, r.h + 2 * pad, radius + pad,
-                           inkcell_fb_color(state, meter->ground));
+        inkcell_fb_fill_round_rect(state, r.x - pad, r.y - pad, r.w + 2 * pad, r.h + 2 * pad,
+                                   radius + pad, inkcell_fb_color(state, meter->ground));
     }
 
     inkcell_fb_fill_round_rect(state, r.x, r.y, r.w, r.h, radius,
-                       inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK));
+                               inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK));
 
     if (meter->kind == INKCELL_FB_METER_INDETERMINATE) {
         /* A band says where a reading changes meaning and an indeterminate bar has no reading,
            so nothing here consults one: the pill is drawn in the tone it was given. */
-        const struct inkcell_rgb ink = inkcell_fb_tone_color(state, inkcell_fb_meter_tone(meter->tone));
+        const struct inkcell_rgb ink =
+            inkcell_fb_tone_color(state, inkcell_fb_meter_tone(meter->tone));
         /*
          * A pill crossing the track, from entirely off the leading edge to entirely off the
          * trailing one. Both ends of the travel are off the track on purpose: the loop's wrap
@@ -128,22 +130,24 @@ void inkcell_fb_draw_meter(struct inkcell_backend_fb_state *state, const struct 
          * one speed - which is the difference between a thing that is working and a thing on a
          * conveyor belt.
          */
-        const int pill = r.w * INKCELL_FB_METER_PILL_PCT / 100 > 1 ? r.w * INKCELL_FB_METER_PILL_PCT / 100 : 1;
+        const int pill =
+            r.w * INKCELL_FB_METER_PILL_PCT / 100 > 1 ? r.w * INKCELL_FB_METER_PILL_PCT / 100 : 1;
         /* The phase is added before the curve, not after: shifting the sawtooth rotates where
            the cycle begins and leaves the wrap exactly where it was - at the point the pill is
            off the track entirely, which is what keeps a loop that never ends from visibly
            restarting. Shifting the eased value instead would put a jump in the middle of the
            travel. */
-        const int32_t phase = (inkcell_anim_loop(&state->anim, meter->id, state->now_ms,
-                                                 inkcell_fb_motion(state, INKCELL_FB_METER_LOOP_MOTION)) +
-                               INKCELL_FB_METER_PILL_PHASE) %
-                              INKCELL_ANIM_ONE;
+        const int32_t phase =
+            (inkcell_anim_loop(&state->anim, meter->id, state->now_ms,
+                               inkcell_fb_motion(state, INKCELL_FB_METER_LOOP_MOTION)) +
+             INKCELL_FB_METER_PILL_PHASE) %
+            INKCELL_ANIM_ONE;
         const int32_t t = inkcell_ease(INKCELL_EASE_IN_OUT, phase);
         const int travel = r.w + pill;
         int x = r.x - pill + (int)(((int64_t)travel * t) / INKCELL_ANIM_ONE);
         int w = pill;
-        /* Clipped to the track rather than drawn past it: inkcell_fb_fill_round_rect() is happy to fill
-           outside a container it knows nothing about, and the container here is the thing that
+        /* Clipped to the track rather than drawn past it: inkcell_fb_fill_round_rect() is happy to
+           fill outside a container it knows nothing about, and the container here is the thing that
            gives the pill its meaning. */
         if (x < r.x) {
             w -= r.x - x;
@@ -201,7 +205,9 @@ void inkcell_fb_draw_meter(struct inkcell_backend_fb_state *state, const struct 
      * Same ground the widget lays under a selected track above, for the same reason: that is
      * what is behind the bar on the row the cursor is on.
      */
-    const int notch = inkcell_fb_space(state, INKCELL_SPACE_XS) > 0 ? inkcell_fb_space(state, INKCELL_SPACE_XS) : 1;
+    const int notch = inkcell_fb_space(state, INKCELL_SPACE_XS) > 0
+                          ? inkcell_fb_space(state, INKCELL_SPACE_XS)
+                          : 1;
     /* The ground the *row* is on, not the panel's: a notch is a gap, and a gap is only a gap
        when it is the colour of what is behind the bar. On a card, BG would punch a hole. */
     const struct inkcell_rgb ground = inkcell_fb_color(state, meter->ground);
@@ -255,7 +261,8 @@ void inkcell_fb_draw_meter(struct inkcell_backend_fb_state *state, const struct 
 #define INKCELL_FB_SLIDER_HANDLE_FOCUS 4
 
 int inkcell_fb_slider_height(const struct inkcell_backend_fb_state *state, int scale) {
-    return inkcell_fb_meter_thickness(state, scale) * INKCELL_FB_SLIDER_TRACK * INKCELL_FB_SLIDER_HANDLE_FOCUS / 2;
+    return inkcell_fb_meter_thickness(state, scale) * INKCELL_FB_SLIDER_TRACK *
+           INKCELL_FB_SLIDER_HANDLE_FOCUS / 2;
 }
 
 /*
@@ -274,9 +281,11 @@ int inkcell_fb_slider_height(const struct inkcell_backend_fb_state *state, int s
  * a notch at the very edge of a track is the edge of the track.
  */
 static void inkcell_fb_slider_stops(const struct inkcell_backend_fb_state *state,
-                            const struct inkcell_fb_rect *track, int handle_w, uint32_t stops,
-                            struct inkcell_rgb ground) {
-    const int notch = inkcell_fb_space(state, INKCELL_SPACE_XS) > 0 ? inkcell_fb_space(state, INKCELL_SPACE_XS) : 1;
+                                    const struct inkcell_fb_rect *track, int handle_w,
+                                    uint32_t stops, struct inkcell_rgb ground) {
+    const int notch = inkcell_fb_space(state, INKCELL_SPACE_XS) > 0
+                          ? inkcell_fb_space(state, INKCELL_SPACE_XS)
+                          : 1;
     const int travel = track->w - handle_w;
     if (stops < 2U || travel <= 0 || (uint32_t)travel < (stops - 1U) * (uint32_t)(notch * 4)) {
         return;
@@ -290,14 +299,15 @@ static void inkcell_fb_slider_stops(const struct inkcell_backend_fb_state *state
     }
 }
 
-void inkcell_fb_draw_slider(struct inkcell_backend_fb_state *state, const struct inkcell_fb_slider *slider) {
+void inkcell_fb_draw_slider(struct inkcell_backend_fb_state *state,
+                            const struct inkcell_fb_slider *slider) {
     if (slider == NULL || slider->rect.w <= 0 || slider->rect.h <= 0) {
         return;
     }
     const struct inkcell_fb_rect box = slider->rect;
     const int damage_pad = inkcell_fb_space(state, INKCELL_SPACE_XS);
-    inkcell_fb_animation_damage(state, box.x - damage_pad, box.y - damage_pad, box.w + 2 * damage_pad,
-                        box.h + 2 * damage_pad);
+    inkcell_fb_animation_damage(state, box.x - damage_pad, box.y - damage_pad,
+                                box.w + 2 * damage_pad, box.h + 2 * damage_pad);
 
     /* The track is a slice of the box the handle has the rest of, centred in it - so the ends of
        the track and the middle of the handle are on one line however tall either is. Recovered
@@ -321,12 +331,12 @@ void inkcell_fb_draw_slider(struct inkcell_backend_fb_state *state, const struct
      */
     if (slider->selected) {
         const int pad = inkcell_fb_space(state, INKCELL_SPACE_XS);
-        inkcell_fb_fill_round_rect(state, box.x - pad, box.y - pad, box.w + 2 * pad, box.h + 2 * pad,
-                           radius + pad, ground);
+        inkcell_fb_fill_round_rect(state, box.x - pad, box.y - pad, box.w + 2 * pad,
+                                   box.h + 2 * pad, radius + pad, ground);
     }
 
     inkcell_fb_fill_round_rect(state, track.x, track.y, track.w, track.h, radius,
-                       inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK));
+                               inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK));
 
     /* Narrower than the track is thick, which is the shape Material settled on and the right one
        here for a reason of its own: the handle marks a *position*, and a wide one is a range. */
@@ -350,10 +360,12 @@ void inkcell_fb_draw_slider(struct inkcell_backend_fb_state *state, const struct
     }
     const int32_t position =
         slider->id != 0U ? inkcell_anim_track(&state->anim, slider->id, state->now_ms, target,
-                                              inkcell_fb_motion(state, INKCELL_FB_SLIDER_MOTION), INKCELL_EASE_OUT)
+                                              inkcell_fb_motion(state, INKCELL_FB_SLIDER_MOTION),
+                                              INKCELL_EASE_OUT)
                          : target;
 
-    const struct inkcell_rgb ink = inkcell_fb_tone_color(state, inkcell_fb_meter_tone(slider->tone));
+    const struct inkcell_rgb ink =
+        inkcell_fb_tone_color(state, inkcell_fb_meter_tone(slider->tone));
     const int handle_x =
         track.x + (travel > 0 ? (int)(((int64_t)travel * position) / INKCELL_ANIM_ONE) : 0);
     const int active = handle_x - track.x;
@@ -366,8 +378,8 @@ void inkcell_fb_draw_slider(struct inkcell_backend_fb_state *state, const struct
      * A notch is a gap cut out of whatever is there, which is the whole reason it needs no ink
      * of its own - and a gap painted before the fill is a gap the fill closes. Drawn early, the
      * stops behind the handle vanished one by one as the value climbed, and at the top of the
-     * scale a track that offers a dozen choices showed none of them. Same order inkcell_fb_draw_meter()
-     * cuts a band's boundaries in, for the same reason. */
+     * scale a track that offers a dozen choices showed none of them. Same order
+     * inkcell_fb_draw_meter() cuts a band's boundaries in, for the same reason. */
     inkcell_fb_slider_stops(state, &track, handle_w, slider->stops, ground);
 
     /*
@@ -379,19 +391,23 @@ void inkcell_fb_draw_slider(struct inkcell_backend_fb_state *state, const struct
      * thing sitting *on* the track.
      */
     const int handle_h =
-        thickness * (slider->selected ? INKCELL_FB_SLIDER_HANDLE_FOCUS : INKCELL_FB_SLIDER_HANDLE_REST) / 2;
+        thickness *
+        (slider->selected ? INKCELL_FB_SLIDER_HANDLE_FOCUS : INKCELL_FB_SLIDER_HANDLE_REST) / 2;
     const int handle_y = box.y + (box.h - handle_h) / 2;
     /* Wide enough to be a gap rather than a seam: the handle and the fill it ends are one ink,
        so this is the whole of what separates them. */
-    const int gap = inkcell_fb_space(state, INKCELL_SPACE_SM) > 1 ? inkcell_fb_space(state, INKCELL_SPACE_SM) : 1;
+    const int gap = inkcell_fb_space(state, INKCELL_SPACE_SM) > 1
+                        ? inkcell_fb_space(state, INKCELL_SPACE_SM)
+                        : 1;
     inkcell_fb_fill_rect(state, handle_x - gap, track.y, handle_w + 2 * gap, track.h, ground);
     inkcell_fb_fill_round_rect(state, handle_x, handle_y, handle_w, handle_h, handle_w / 2, ink);
 }
 
 /* ---- the signal staircase ------------------------------------------------------------------ */
 
-void inkcell_fb_draw_signal(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_rect *box,
-                    uint8_t level, struct inkcell_rgb ink, struct inkcell_rgb unlit) {
+void inkcell_fb_draw_signal(const struct inkcell_backend_fb_state *state,
+                            const struct inkcell_fb_rect *box, uint8_t level,
+                            struct inkcell_rgb ink, struct inkcell_rgb unlit) {
     if (box == NULL || box->w <= 0 || box->h <= 0) {
         return;
     }
@@ -419,8 +435,8 @@ void inkcell_fb_draw_signal(const struct inkcell_backend_fb_state *state, const 
     for (int i = 0; i < steps; i++) {
         /*
          * Rising left to right, bottom aligned, the shortest rung a quarter of the tallest.
-         * Every rung is drawn whether or not it is lit - see INKCELL_FB_TRAILING_SIGNAL: what is being
-         * read is lit rungs against a constant total, and an indicator that shortened as the
+         * Every rung is drawn whether or not it is lit - see INKCELL_FB_TRAILING_SIGNAL: what is
+         * being read is lit rungs against a constant total, and an indicator that shortened as the
          * signal fell would be claiming a proportion four buckets cannot support.
          */
         int h = box->h * (i + 1) / steps;
@@ -428,7 +444,8 @@ void inkcell_fb_draw_signal(const struct inkcell_backend_fb_state *state, const 
             h = 1;
         }
         const int x = box->x + i * (rung + gap);
-        inkcell_fb_fill_round_rect(state, x, bottom - h, rung, h, radius, i < (int)level ? ink : unlit);
+        inkcell_fb_fill_round_rect(state, x, bottom - h, rung, h, radius,
+                                   i < (int)level ? ink : unlit);
     }
 }
 
@@ -463,8 +480,8 @@ static int inkcell_fb_spark_stroke(int scale) {
  * axis is time, steep is the ordinary case: two readings a minute apart on a line spanning an
  * hour land within a few columns of each other.
  */
-static void inkcell_fb_spark_segment(const struct inkcell_backend_fb_state *state, int x0, int y0, int x1,
-                             int y1, int stroke, struct inkcell_rgb color) {
+static void inkcell_fb_spark_segment(const struct inkcell_backend_fb_state *state, int x0, int y0,
+                                     int x1, int y1, int stroke, struct inkcell_rgb color) {
     if (x1 < x0) {
         const int swap_x = x0, swap_y = y0;
         x0 = x1;
@@ -493,7 +510,7 @@ static void inkcell_fb_spark_segment(const struct inkcell_backend_fb_state *stat
 }
 
 void inkcell_fb_draw_sparkline(const struct inkcell_backend_fb_state *state,
-                       const struct inkcell_fb_sparkline *spark) {
+                               const struct inkcell_fb_sparkline *spark) {
     if (spark == NULL || spark->points == NULL || spark->rect.w <= 0 || spark->rect.h <= 0) {
         return;
     }
@@ -521,9 +538,9 @@ void inkcell_fb_draw_sparkline(const struct inkcell_backend_fb_state *state,
      * for the same reason: two of the four themes make the track the cursor fill, so a floor in
      * that role would vanish on precisely the row being pointed at.
      */
-    const struct inkcell_rgb floor_ink = spark->selected
-                                             ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL_DIM)
-                                             : inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK);
+    const struct inkcell_rgb floor_ink =
+        spark->selected ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL_DIM)
+                        : inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK);
     inkcell_fb_fill_rect(state, r.x, r.y + r.h - stroke, r.w, stroke, floor_ink);
 
     /*
@@ -537,9 +554,9 @@ void inkcell_fb_draw_sparkline(const struct inkcell_backend_fb_state *state,
      * laying a ground of its own under its track; a line has no track to lay one under - it is
      * a stroke among the row's words - so it takes the pairing those words take.
      */
-    const struct inkcell_rgb ink = spark->selected
-                                       ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL)
-                                       : inkcell_fb_tone_color(state, inkcell_fb_meter_tone(spark->tone));
+    const struct inkcell_rgb ink =
+        spark->selected ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL)
+                        : inkcell_fb_tone_color(state, inkcell_fb_meter_tone(spark->tone));
     int previous_x = 0;
     int previous_y = 0;
     for (uint32_t i = 0U; i < points->count && i < INKCELL_SERIES_MAX; ++i) {
@@ -602,7 +619,7 @@ int inkcell_fb_proportion_thickness(const struct inkcell_backend_fb_state *state
 }
 
 void inkcell_fb_draw_proportion(const struct inkcell_backend_fb_state *state,
-                        const struct inkcell_fb_proportion *bar) {
+                                const struct inkcell_fb_proportion *bar) {
     if (bar == NULL || bar->count < 2U || bar->rect.w <= 0 || bar->rect.h <= 0) {
         return;
     }
@@ -620,8 +637,8 @@ void inkcell_fb_draw_proportion(const struct inkcell_backend_fb_state *state,
     /* The meter's ground under a cursor fill, for the meter's reason - see `selected`. */
     if (bar->selected) {
         const int pad = inkcell_fb_space(state, INKCELL_SPACE_XS);
-        inkcell_fb_fill_round_rect(state, r.x - pad, r.y - pad, r.w + 2 * pad, r.h + 2 * pad, radius + pad,
-                           inkcell_fb_color(state, INKCELL_COLOR_BG));
+        inkcell_fb_fill_round_rect(state, r.x - pad, r.y - pad, r.w + 2 * pad, r.h + 2 * pad,
+                                   radius + pad, inkcell_fb_color(state, INKCELL_COLOR_BG));
     }
 
     /*
@@ -641,7 +658,7 @@ void inkcell_fb_draw_proportion(const struct inkcell_backend_fb_state *state,
     for (uint32_t i = parts; i-- > 0U;) {
         if (widths[i] > 0 && end > 0) {
             inkcell_fb_fill_round_rect(state, r.x, r.y, end, r.h, radius,
-                               inkcell_theme_series(state->theme, i));
+                                       inkcell_theme_series(state->theme, i));
         }
         end -= widths[i];
     }
@@ -665,7 +682,9 @@ void inkcell_fb_draw_proportion(const struct inkcell_backend_fb_state *state,
      * It costs each part half a pixel of length at one end. That is the same price the band marks
      * pay and it is the right way round: the boundary is what the picture is *for*.
      */
-    const int gap = inkcell_fb_space(state, INKCELL_SPACE_XS) > 0 ? inkcell_fb_space(state, INKCELL_SPACE_XS) : 1;
+    const int gap = inkcell_fb_space(state, INKCELL_SPACE_XS) > 0
+                        ? inkcell_fb_space(state, INKCELL_SPACE_XS)
+                        : 1;
     const struct inkcell_rgb ground =
         bar->selected ? inkcell_fb_color(state, INKCELL_COLOR_BG) : bar->ground;
     int boundary = 0;
@@ -723,7 +742,7 @@ static int inkcell_fb_chart_rule(int scale) {
 }
 
 int inkcell_fb_chart_min_height(const struct inkcell_backend_fb_state *state,
-                        const struct inkcell_fb_layout *layout) {
+                                const struct inkcell_fb_layout *layout) {
     (void)state;
     /* The chrome, and a plot at least as tall again as the chrome under it. Below that the
        picture is shorter than its own caption, which reads as a rendering fault rather than as a
@@ -740,8 +759,9 @@ int inkcell_fb_chart_min_height(const struct inkcell_backend_fb_state *state,
  * the eye has already found; there is no track here to cut, so the mark has to be visibly a mark.
  */
 static void inkcell_fb_chart_threshold(const struct inkcell_backend_fb_state *state,
-                               const struct inkcell_fb_rect *plot, int travel, int32_t value,
-                               struct inkcell_scale scale, int rule, struct inkcell_rgb ink) {
+                                       const struct inkcell_fb_rect *plot, int travel,
+                                       int32_t value, struct inkcell_scale scale, int rule,
+                                       struct inkcell_rgb ink) {
     /*
      * Outside the domain the lines are drawn on. Nothing is clamped to an edge here: a threshold
      * pinned to the top of a chart is a threshold the trend can never be seen crossing, which is
@@ -781,8 +801,8 @@ static void inkcell_fb_chart_threshold(const struct inkcell_backend_fb_state *st
  * contrast pairs per theme, to say what a swatch already says.
  */
 static void inkcell_fb_chart_legend(const struct inkcell_backend_fb_state *state,
-                            const struct inkcell_fb_layout *layout, const struct inkcell_fb_chart *chart, int x,
-                            int y) {
+                                    const struct inkcell_fb_layout *layout,
+                                    const struct inkcell_fb_chart *chart, int x, int y) {
     const int scale = layout->small;
     const int adv = inkcell_fb_char_adv(state, scale);
     const int cap = inkcell_font_cap(inkcell_fb_font(state), scale);
@@ -814,8 +834,8 @@ static void inkcell_fb_chart_legend(const struct inkcell_backend_fb_state *state
            icon slot's rule - a square sized to the cell stands a seventh taller than the word it
            is labelling on any face with real descenders. */
         inkcell_fb_fill_round_rect(state, x, y + (line - cap) / 2, cap, cap,
-                           inkcell_fb_radius(state, INKCELL_SHAPE_SM),
-                           inkcell_theme_series(state->theme, i));
+                                   inkcell_fb_radius(state, INKCELL_SHAPE_SM),
+                                   inkcell_theme_series(state->theme, i));
         int text_x = x + cap + adv;
         if (word != NULL) {
             inkcell_fb_draw_text(state, text_x, y, word, scale, ink, ground);
@@ -824,8 +844,8 @@ static void inkcell_fb_chart_legend(const struct inkcell_backend_fb_state *state
         if (value != NULL) {
             /* The reading in the body's own ink rather than dimmed: it is the only number on
                this line and the words beside it are its label, not the other way round. */
-            inkcell_fb_draw_text(state, text_x, y, value, scale, inkcell_fb_color(state, INKCELL_COLOR_TEXT),
-                         ground);
+            inkcell_fb_draw_text(state, text_x, y, value, scale,
+                                 inkcell_fb_color(state, INKCELL_COLOR_TEXT), ground);
         }
         x += width + adv * 2;
     }
@@ -846,10 +866,11 @@ static void inkcell_fb_chart_legend(const struct inkcell_backend_fb_state *state
  *
  * True when it put a mark on the panel.
  */
-static bool inkcell_fb_chart_bins(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_rect *plot,
-                          int travel, int stroke, int rule, struct inkcell_scale scale,
-                          const struct inkcell_fb_chart_line *line, struct inkcell_rgb colour,
-                          struct inkcell_rgb ground) {
+static bool inkcell_fb_chart_bins(const struct inkcell_backend_fb_state *state,
+                                  const struct inkcell_fb_rect *plot, int travel, int stroke,
+                                  int rule, struct inkcell_scale scale,
+                                  const struct inkcell_fb_chart_line *line,
+                                  struct inkcell_rgb colour, struct inkcell_rgb ground) {
     const struct inkcell_trend_bins *bins = line->bins;
     const uint32_t count =
         bins->count < INKCELL_TREND_BINS_MAX ? bins->count : INKCELL_TREND_BINS_MAX;
@@ -922,8 +943,9 @@ static bool inkcell_fb_chart_bins(const struct inkcell_backend_fb_state *state, 
  * caption. Centred, because it is about the whole horizontal rather than either end of it.
  */
 static int inkcell_fb_chart_strip(const struct inkcell_backend_fb_state *state,
-                          const struct inkcell_fb_layout *layout, const struct inkcell_fb_rect *rect,
-                          const struct inkcell_fb_segmented *spans, int *out_width) {
+                                  const struct inkcell_fb_layout *layout,
+                                  const struct inkcell_fb_rect *rect,
+                                  const struct inkcell_fb_segmented *spans, int *out_width) {
     *out_width = 0;
     if (spans == NULL) {
         return 0;
@@ -941,8 +963,9 @@ static int inkcell_fb_chart_strip(const struct inkcell_backend_fb_state *state,
 }
 
 uint32_t inkcell_fb_chart_reading_rows(const struct inkcell_backend_fb_state *state,
-                               const struct inkcell_fb_layout *layout, const struct inkcell_fb_rect *rect,
-                               const struct inkcell_fb_segmented *spans) {
+                                       const struct inkcell_fb_layout *layout,
+                                       const struct inkcell_fb_rect *rect,
+                                       const struct inkcell_fb_segmented *spans) {
     if (state == NULL || layout == NULL || rect == NULL || rect->w <= 0 || rect->h <= 0) {
         return 0U;
     }
@@ -972,8 +995,9 @@ uint32_t inkcell_fb_chart_reading_rows(const struct inkcell_backend_fb_state *st
  * a zero there is a duration the reader has to work out is not a reading.
  */
 static void inkcell_fb_draw_chart_readings(const struct inkcell_backend_fb_state *state,
-                                   const struct inkcell_fb_layout *layout, const struct inkcell_fb_chart *chart,
-                                   const struct inkcell_fb_rect *body) {
+                                           const struct inkcell_fb_layout *layout,
+                                           const struct inkcell_fb_chart *chart,
+                                           const struct inkcell_fb_rect *body) {
     const int scale = state->scale;
     const int adv = inkcell_fb_char_adv(state, scale);
     const struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_BG);
@@ -1036,12 +1060,13 @@ static void inkcell_fb_draw_chart_readings(const struct inkcell_backend_fb_state
         const int small = inkcell_fb_char_adv(state, layout->small);
         const int width = (int)inkcell_text_cells(chart->readings_note) * small;
         inkcell_fb_draw_text(state, body->x + (body->w > width ? (body->w - width) / 2 : 0), y,
-                     chart->readings_note, layout->small, dim, ground);
+                             chart->readings_note, layout->small, dim, ground);
     }
 }
 
-void inkcell_fb_draw_chart(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_layout *layout,
-                   const struct inkcell_fb_chart *chart) {
+void inkcell_fb_draw_chart(const struct inkcell_backend_fb_state *state,
+                           const struct inkcell_fb_layout *layout,
+                           const struct inkcell_fb_chart *chart) {
     if (chart == NULL || chart->rect.w <= 0 || chart->rect.h <= 0) {
         return;
     }
@@ -1067,7 +1092,8 @@ void inkcell_fb_draw_chart(const struct inkcell_backend_fb_state *state, const s
      */
     struct inkcell_fb_rect body = chart->rect;
     int strip_width = 0;
-    const int strip_takes = inkcell_fb_chart_strip(state, layout, &chart->rect, chart->spans, &strip_width);
+    const int strip_takes =
+        inkcell_fb_chart_strip(state, layout, &chart->rect, chart->spans, &strip_width);
     if (strip_takes > 0) {
         const int strip = inkcell_fb_segmented_height(state, scale);
         const struct inkcell_fb_rect box = {
@@ -1136,20 +1162,22 @@ void inkcell_fb_draw_chart(const struct inkcell_backend_fb_state *state, const s
     /* The thresholds, under the lines: a mark the data can be seen crossing has to be behind it,
        or the mark is what is on top of the reading. */
     if (chart->band != NULL) {
-        inkcell_fb_chart_threshold(state, &plot, travel, chart->band->warn, chart->scale, rule, furniture);
-        inkcell_fb_chart_threshold(state, &plot, travel, chart->band->bad, chart->scale, rule, furniture);
+        inkcell_fb_chart_threshold(state, &plot, travel, chart->band->warn, chart->scale, rule,
+                                   furniture);
+        inkcell_fb_chart_threshold(state, &plot, travel, chart->band->bad, chart->scale, rule,
+                                   furniture);
     }
 
     /* The two ends of the vertical, against the plot's own top and bottom. */
     const int label_line = inkcell_fb_line_adv(state, scale);
     const struct inkcell_rgb ink = inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM);
     if (chart->top != NULL) {
-        inkcell_fb_draw_text(state, plot.x - (int)(top_cells + 1U) * adv, plot.y, chart->top, scale, ink,
-                     ground);
+        inkcell_fb_draw_text(state, plot.x - (int)(top_cells + 1U) * adv, plot.y, chart->top, scale,
+                             ink, ground);
     }
     if (chart->bottom != NULL) {
-        inkcell_fb_draw_text(state, plot.x - (int)(bottom_cells + 1U) * adv, plot.y + interior - label_line,
-                     chart->bottom, scale, ink, ground);
+        inkcell_fb_draw_text(state, plot.x - (int)(bottom_cells + 1U) * adv,
+                             plot.y + interior - label_line, chart->bottom, scale, ink, ground);
     }
 
     /*
@@ -1172,8 +1200,8 @@ void inkcell_fb_draw_chart(const struct inkcell_backend_fb_state *state, const s
             }
             const struct inkcell_rgb colour = inkcell_theme_series(state->theme, i);
             if (line->bins != NULL) {
-                drawn = inkcell_fb_chart_bins(state, &plot, travel, stroke, rule, chart->scale, line,
-                                      colour, ground) ||
+                drawn = inkcell_fb_chart_bins(state, &plot, travel, stroke, rule, chart->scale,
+                                              line, colour, ground) ||
                         drawn;
                 continue;
             }
@@ -1210,8 +1238,8 @@ void inkcell_fb_draw_chart(const struct inkcell_backend_fb_state *state, const s
         const char *word = inkcell_str(chart->empty);
         const int width = (int)inkcell_text_cells(word) * adv;
         const int x = plot.x + (plot.w - width) / 2;
-        inkcell_fb_draw_text(state, x > plot.x ? x : plot.x, plot.y + (interior - layout->line) / 2, word,
-                     scale, inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM), ground);
+        inkcell_fb_draw_text(state, x > plot.x ? x : plot.x, plot.y + (interior - layout->line) / 2,
+                             word, scale, inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM), ground);
     }
 
     /*

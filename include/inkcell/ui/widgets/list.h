@@ -5,8 +5,8 @@
  * The list: the window onto the items, the card surfaces under them, the scroll rail beside
  * them, and the two rows that are not items - a subheader and a note.
  *
- * This is the window and its furniture; what one row *says* is inkcell_fb_widgets_item.h. The two split
- * where a screen's own reach does: every screen opens a list and walks it, and only some of
+ * This is the window and its furniture; what one row *says* is inkcell_fb_widgets_item.h. The two
+ * split where a screen's own reach does: every screen opens a list and walks it, and only some of
  * them fill it with the full slotted row.
  */
 
@@ -55,8 +55,8 @@ struct inkcell_fb_list {
      */
     const uint8_t *cards;
     /* Whether the chrome - the card surfaces, then the scroll rail - has been drawn for this
-       list. It is drawn by the first row that draws, not by the screen: see inkcell_fb_list_chrome() in
-       inkcell_fb_widgets_list.c. */
+       list. It is drawn by the first row that draws, not by the screen: see
+       inkcell_fb_list_chrome() in inkcell_fb_widgets_list.c. */
     bool chrome_drawn;
     /* The cursor stands on its card rather than on its row: no row takes the highlight and the
        card draws the focus ring instead. See inkcell_fb_list_begin_focus(). */
@@ -64,31 +64,33 @@ struct inkcell_fb_list {
 };
 
 /* One row per item, filling the body. */
-struct inkcell_fb_list inkcell_fb_list_begin(const struct inkcell_fb_layout *layout, uint32_t count, uint32_t cursor);
+struct inkcell_fb_list inkcell_fb_list_begin(const struct inkcell_fb_layout *layout, uint32_t count,
+                                             uint32_t cursor);
 
 /* `per_item` rows per item - the conversation list spends two, a name and a preview. */
-struct inkcell_fb_list inkcell_fb_list_begin_rows(const struct inkcell_fb_layout *layout, uint32_t count, uint32_t cursor,
-                                  uint32_t per_item);
+struct inkcell_fb_list inkcell_fb_list_begin_rows(const struct inkcell_fb_layout *layout,
+                                                  uint32_t count, uint32_t cursor,
+                                                  uint32_t per_item);
 
 /*
  * ---- a list drawn as a column of cards ----
  *
  * The same scrolling list, with its groups standing on card surfaces instead of on the panel.
  *
- * It exists for the reason inkcell_fb_card does one screen over: a hundred and twenty label-and-value
- * rows separated by dimmed words is a wall, and nothing in it says that Long name and Short name
- * are one subject while Temperature and Humidity are another. A dimmed heading is a group
- * distinguished from its own rows by *colour alone*, which is the one thing the type scale
+ * It exists for the reason inkcell_fb_card does one screen over: a hundred and twenty
+ * label-and-value rows separated by dimmed words is a wall, and nothing in it says that Long name
+ * and Short name are one subject while Temperature and Humidity are another. A dimmed heading is a
+ * group distinguished from its own rows by *colour alone*, which is the one thing the type scale
  * landed to stop; a fill and an edge say it the way every phone and desktop platform says it.
  *
- * What it is not is inkcell_fb_draw_card(). That component is declared-then-drawn and measures itself
- * against the body, which is right for the Status tab's fixed column of four and impossible
+ * What it is not is inkcell_fb_draw_card(). That component is declared-then-drawn and measures
+ * itself against the body, which is right for the Status tab's fixed column of four and impossible
  * here: this list is longer than the panel by a factor of eight, the window moves a row at a
  * time, and a card is routinely cut by both edges of it at once. So a card here is a *surface
  * behind a run of rows the list already knows how to place* - no second measure, no second
  * clip, and above all no second opinion about how tall a row is. The model stays the authority
- * on every height, exactly as it is for inkcell_fb_list_begin_heights(), and the cards are painted from
- * the window it settled.
+ * on every height, exactly as it is for inkcell_fb_list_begin_heights(), and the cards are painted
+ * from the window it settled.
  *
  * A screen declares the grouping the same way it declares the heights: one byte per item,
  * borrowed for the life of the list. Items carrying the same card ordinal *and lying next to
@@ -111,14 +113,15 @@ struct inkcell_fb_list inkcell_fb_list_begin_rows(const struct inkcell_fb_layout
  *     point below takes that from the model, so a screen cannot get it wrong by forgetting.
  *
  * What separates two cards is a group's own heading, standing between them rather than inside
- * either: a screen gives its heading rows INKCELL_FB_LIST_NO_CARD, so the card above closes under its
- * last row and the card below opens at its first, with the label in the break naming the group
+ * either: a screen gives its heading rows INKCELL_FB_LIST_NO_CARD, so the card above closes under
+ * its last row and the card below opens at its first, with the label in the break naming the group
  * it opens. That is where the column gets the only air it has. A card here is a surface painted
  * round row boxes that were laid out for a flat list, so the room it can be padded with is
  * whatever a heading's step is not using - a line advance less a label's, which is a few pixels
  * at the device's scale - and split three ways between a card's bottom, the break and the next
  * card's top, none of the three was big enough to see. Spent on two edges instead of three, with
- * the heading itself standing in the break, each is the inset inkcell_fb_draw_card() uses one tab over.
+ * the heading itself standing in the break, each is the inset inkcell_fb_draw_card() uses one tab
+ * over.
  *
  * The inset is at the bottom only, and the hairline is spent outward at the top. A row's box is
  * a line advance tall and a glyph's ink sits high in its cell, so the top of a card's first row
@@ -156,8 +159,9 @@ struct inkcell_fb_list inkcell_fb_list_begin_rows(const struct inkcell_fb_layout
  * inkcell_transcript_window() takes the same shape, for the same reason - see include/inkcell/ui/
  * layout.h, where the window arithmetic lives and is unit tested.
  */
-struct inkcell_fb_list inkcell_fb_list_begin_heights(const struct inkcell_fb_layout *layout, uint32_t count,
-                                     uint32_t cursor, const uint8_t *heights);
+struct inkcell_fb_list inkcell_fb_list_begin_heights(const struct inkcell_fb_layout *layout,
+                                                     uint32_t count, uint32_t cursor,
+                                                     const uint8_t *heights);
 
 /*
  * The same, with the items grouped onto card surfaces: `cards` is one ordinal per item and is
@@ -166,20 +170,23 @@ struct inkcell_fb_list inkcell_fb_list_begin_heights(const struct inkcell_fb_lay
  * `heights` may be NULL for a list whose rows are all one row tall, and `cards` may be NULL for
  * no grouping - in which case this is inkcell_fb_list_begin_heights() and nothing is painted.
  */
-struct inkcell_fb_list inkcell_fb_list_begin_cards(const struct inkcell_fb_layout *layout, uint32_t count, uint32_t cursor,
-                                   const uint8_t *heights, const uint8_t *cards);
+struct inkcell_fb_list inkcell_fb_list_begin_cards(const struct inkcell_fb_layout *layout,
+                                                   uint32_t count, uint32_t cursor,
+                                                   const uint8_t *heights, const uint8_t *cards);
 
 /*
  * A card list whose window keeps items [first, last] in view around the cursor
  * (inkcell_list_begin_span()), and which, when `card` is set, focuses the cursor's card as a
- * whole: the card draws inkcell_fb_draw_card()'s focus ring and no row under it draws the highlight.
+ * whole: the card draws inkcell_fb_draw_card()'s focus ring and no row under it draws the
+ * highlight.
  *
  * For a list whose cursor can stand on a group of facts rather than on a row - a fact is not a
  * control, and a row highlight over one promises a press that does nothing.
  */
-struct inkcell_fb_list inkcell_fb_list_begin_focus(const struct inkcell_fb_layout *layout, uint32_t count, uint32_t cursor,
-                                   const uint8_t *heights, const uint8_t *cards, uint32_t first,
-                                   uint32_t last, bool card);
+struct inkcell_fb_list inkcell_fb_list_begin_focus(const struct inkcell_fb_layout *layout,
+                                                   uint32_t count, uint32_t cursor,
+                                                   const uint8_t *heights, const uint8_t *cards,
+                                                   uint32_t first, uint32_t last, bool card);
 
 /*
  * The colour item `index` is standing on: a card's surface, or the panel's background.
@@ -191,8 +198,9 @@ struct inkcell_fb_list inkcell_fb_list_begin_focus(const struct inkcell_fb_layou
 enum inkcell_color inkcell_fb_list_ground(const struct inkcell_fb_list *list, uint32_t index);
 
 /* An explicit window, for a screen that reserves body rows for something else. */
-struct inkcell_fb_list inkcell_fb_list_begin_visible(const struct inkcell_fb_layout *layout, uint32_t count,
-                                     uint32_t cursor, uint32_t visible);
+struct inkcell_fb_list inkcell_fb_list_begin_visible(const struct inkcell_fb_layout *layout,
+                                                     uint32_t count, uint32_t cursor,
+                                                     uint32_t visible);
 
 bool inkcell_fb_list_next(struct inkcell_fb_list *list, uint32_t *index);
 
@@ -228,12 +236,13 @@ uint32_t inkcell_fb_list_row_height(const struct inkcell_fb_list *list, uint32_t
  */
 
 /* Draws the row - highlighted when `index` is the cursor - and advances. */
-void inkcell_fb_list_row(const struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list, uint32_t index,
-                 const char *text, enum inkcell_tone tone);
+void inkcell_fb_list_row(const struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
+                         uint32_t index, const char *text, enum inkcell_tone tone);
 
 /* Same, taking the line builder directly, which is how most rows are assembled. */
-void inkcell_fb_list_row_line(const struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
-                      uint32_t index, struct inkcell_line *line, enum inkcell_tone tone);
+void inkcell_fb_list_row_line(const struct inkcell_backend_fb_state *state,
+                              struct inkcell_fb_list *list, uint32_t index,
+                              struct inkcell_line *line, enum inkcell_tone tone);
 
 /* What sits at the row's leading edge. */
 enum inkcell_fb_leading_kind {
@@ -272,8 +281,8 @@ enum inkcell_fb_leading_kind {
     /*
      * The tonal gutter, reserved and left empty.
      *
-     * INKCELL_FB_LEADING_ICON has always reserved its slot on every row of a list whether or not the row
-     * filled it, because a list that indents only the rows with something to show is a list
+     * INKCELL_FB_LEADING_ICON has always reserved its slot on every row of a list whether or not
+     * the row filled it, because a list that indents only the rows with something to show is a list
      * whose text starts in two columns. A disc is wider than an icon, so a list mixing the two
      * needs the same promise kept at the disc's width - and until now there was no way to say
      * it: a row with nothing to put in a disc had to pick between drawing an empty circle and
@@ -286,8 +295,8 @@ enum inkcell_fb_leading_kind {
      * why removing a card that was saying nothing is what made it visible.
      *
      * A kind rather than TONAL with an empty icon, so a row that means "nothing here" cannot be
-     * confused with one that forgot its symbol, and so inkcell_fb_draw_avatar() is never asked to draw a
-     * disc with nothing in it.
+     * confused with one that forgot its symbol, and so inkcell_fb_draw_avatar() is never asked to
+     * draw a disc with nothing in it.
      */
     INKCELL_FB_LEADING_TONAL_SLOT,
 };
@@ -326,8 +335,8 @@ struct inkcell_fb_leading {
  * heading is the one cell the eye finds when it is looking for Signal rather than Identity,
  * which is the same argument struct inkcell_fb_card's own icon is there for.
  */
-void inkcell_fb_list_subheader(const struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
-                       uint32_t index, const char *text);
+void inkcell_fb_list_subheader(const struct inkcell_backend_fb_state *state,
+                               struct inkcell_fb_list *list, uint32_t index, const char *text);
 
 /*
  * The same heading, indented to a list that declares a leading slot.
@@ -340,14 +349,15 @@ void inkcell_fb_list_subheader(const struct inkcell_backend_fb_state *state, str
  * group there is a break between runs of rows and a symbol on it would repeat the words beside
  * it - the icons on such a list say what each row is about, and a group has no single answer to
  * that. On a column of cards the heading is the card's own, and there the symbol is what the eye
- * finds first when it is looking for Signal rather than Identity: the argument struct inkcell_fb_card
- * states for the icon beside *its* heading, which this is. The list knows which it is drawing,
- * so a caller passes the icon either way and nothing has to decide twice.
+ * finds first when it is looking for Signal rather than Identity: the argument struct
+ * inkcell_fb_card states for the icon beside *its* heading, which this is. The list knows which it
+ * is drawing, so a caller passes the icon either way and nothing has to decide twice.
  *
  * inkcell_fb_list_subheader() is this with no slot, which is every list that has no icons in it.
  */
-void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
-                            uint32_t index, const char *text, struct inkcell_fb_leading leading);
+void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state,
+                                    struct inkcell_fb_list *list, uint32_t index, const char *text,
+                                    struct inkcell_fb_leading leading);
 
 /*
  * ---- the note row ----
@@ -356,24 +366,26 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state
  * wrapped across the list's whole width. What the help screen is made of, and the one row shape
  * here whose height is not a property of the row's *kind* but of the words in it.
  *
- * It exists because the two shapes that already wrap were both the wrong one. inkcell_fb_card_note()
- * stops at INKCELL_FB_CARD_NOTE_LINES, which is right for a sentence the radio wrote into a card of
- * other rows and wrong for the only content on a screen; and a list item's supporting line is
- * one line, elided, which is the shape for a reminder rather than for an explanation.
+ * It exists because the two shapes that already wrap were both the wrong one.
+ * inkcell_fb_card_note() stops at INKCELL_FB_CARD_NOTE_LINES, which is right for a sentence the
+ * radio wrote into a card of other rows and wrong for the only content on a screen; and a list
+ * item's supporting line is one line, elided, which is the shape for a reminder rather than for an
+ * explanation.
  *
- * inkcell_fb_list_note_steps() is the measure and inkcell_fb_list_note() is the draw, and the screen must ask
- * the first before it opens the list - a note whose height the model was not told about draws
- * over the row beneath it. Two calls rather than one for the reason the settings slider has
- * two: the model is the authority on every height, and it can only be if it is told before the
+ * inkcell_fb_list_note_steps() is the measure and inkcell_fb_list_note() is the draw, and the
+ * screen must ask the first before it opens the list - a note whose height the model was not told
+ * about draws over the row beneath it. Two calls rather than one for the reason the settings slider
+ * has two: the model is the authority on every height, and it can only be if it is told before the
  * first row is placed.
  *
  * `heading` may be NULL for a paragraph that names nothing, which is what the topic's own
  * opening note is.
  */
-uint32_t inkcell_fb_list_note_steps(const struct inkcell_backend_fb_state *state, const char *heading,
-                            const char *body);
+uint32_t inkcell_fb_list_note_steps(const struct inkcell_backend_fb_state *state,
+                                    const char *heading, const char *body);
 
-void inkcell_fb_list_note(const struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
-                  uint32_t index, const char *heading, const char *body);
+void inkcell_fb_list_note(const struct inkcell_backend_fb_state *state,
+                          struct inkcell_fb_list *list, uint32_t index, const char *heading,
+                          const char *body);
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_LIST_H */

@@ -41,9 +41,9 @@ extern "C" {
 /*
  * How far back a chart looks.
  *
- * Four, because INKCELL_FB_SEGMENTED_MAX is four and a segmented button is what draws it: above four the
- * words stop fitting the strip, and the set that cannot be read at a glance is not a set the
- * d-pad should be stepping either.
+ * Four, because INKCELL_FB_SEGMENTED_MAX is four and a segmented button is what draws it: above
+ * four the words stop fitting the strip, and the set that cannot be read at a glance is not a set
+ * the d-pad should be stepping either.
  *
  * The three fixed ones bracket the intervals the readings actually arrive on. LocalStats is a few
  * minutes, so a quarter of an hour is "what just happened" and an hour is "this session"; a node's

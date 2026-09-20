@@ -111,8 +111,8 @@ int inkcell_str_vformat(char *out, size_t out_len, enum inkcell_str_id id, va_li
 
 /* The same, choosing the plural form for `count` first. `count` is not passed on to the
    format; pass it again in the arguments if the sentence shows the number. */
-int inkcell_str_format_plural(char *out, size_t out_len, enum inkcell_str_id one_form, uint32_t count,
-                           ...);
+int inkcell_str_format_plural(char *out, size_t out_len, enum inkcell_str_id one_form,
+                              uint32_t count, ...);
 
 /* ---- locales ------------------------------------------------------------------------------ */
 
@@ -147,7 +147,8 @@ bool inkcell_i18n_is_overridden(void);
  *
  * `reason` is filled with a one-line explanation on failure when it is non-NULL.
  */
-bool inkcell_i18n_validate(const struct inkcell_i18n_locale *locale, char *reason, size_t reason_len);
+bool inkcell_i18n_validate(const struct inkcell_i18n_locale *locale, char *reason,
+                           size_t reason_len);
 
 /* The catalog id's spelling, for the translation template and for test failures:
    "TAB_NODES", not the text. NULL when `id` is out of range. */

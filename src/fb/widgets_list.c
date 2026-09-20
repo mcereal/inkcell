@@ -46,7 +46,7 @@
  * and chose the ink itself would be drawing the second combination against the first's contract.
  */
 void inkcell_fb_draw_avatar(const struct inkcell_backend_fb_state *state, int x, int y, int size,
-                    const char *label, enum inkcell_icon icon, struct inkcell_paint paint) {
+                            const char *label, enum inkcell_icon icon, struct inkcell_paint paint) {
     inkcell_fb_fill_round_rect(state, x, y, size, size, size / 2, paint.fill);
     const bool has_icon = inkcell_icon_is_valid(icon);
     if (!has_icon && (label == NULL || label[0] == '\0')) {
@@ -71,18 +71,20 @@ void inkcell_fb_draw_avatar(const struct inkcell_backend_fb_state *state, int x,
     const int text_h = (int)inkcell_fb_font(state)->height * scale;
     const int content_y = y + (size - text_h) / 2;
     if (has_icon) {
-        inkcell_fb_draw_icon(state, x + (size - inkcell_fb_icon_box(state, scale)) / 2, content_y, icon, scale,
-                     paint.ink, paint.fill);
+        inkcell_fb_draw_icon(state, x + (size - inkcell_fb_icon_box(state, scale)) / 2, content_y,
+                             icon, scale, paint.ink, paint.fill);
         return;
     }
     const int text_w = (int)cells * inkcell_fb_char_adv(state, scale);
-    inkcell_fb_draw_text(state, x + (size - text_w) / 2, content_y, label, scale, paint.ink, paint.fill);
+    inkcell_fb_draw_text(state, x + (size - text_w) / 2, content_y, label, scale, paint.ink,
+                         paint.fill);
 }
 
 /* ---- the list window ------------------------------------------------------------------------ */
 
 /* Everything but the window, which is the one thing the three entry points differ in. */
-static struct inkcell_fb_list inkcell_fb_list_open(const struct inkcell_fb_layout *layout, struct inkcell_list model) {
+static struct inkcell_fb_list inkcell_fb_list_open(const struct inkcell_fb_layout *layout,
+                                                   struct inkcell_list model) {
     struct inkcell_fb_list list;
     memset(&list, 0, sizeof list);
     list.model = model;
@@ -96,17 +98,20 @@ static struct inkcell_fb_list inkcell_fb_list_open(const struct inkcell_fb_layou
     return list;
 }
 
-struct inkcell_fb_list inkcell_fb_list_begin_visible(const struct inkcell_fb_layout *layout, uint32_t count,
-                                     uint32_t cursor, uint32_t visible) {
+struct inkcell_fb_list inkcell_fb_list_begin_visible(const struct inkcell_fb_layout *layout,
+                                                     uint32_t count, uint32_t cursor,
+                                                     uint32_t visible) {
     return inkcell_fb_list_open(layout, inkcell_list_begin(count, cursor, visible));
 }
 
-struct inkcell_fb_list inkcell_fb_list_begin(const struct inkcell_fb_layout *layout, uint32_t count, uint32_t cursor) {
+struct inkcell_fb_list inkcell_fb_list_begin(const struct inkcell_fb_layout *layout, uint32_t count,
+                                             uint32_t cursor) {
     return inkcell_fb_list_begin_visible(layout, count, cursor, layout->rows);
 }
 
-struct inkcell_fb_list inkcell_fb_list_begin_rows(const struct inkcell_fb_layout *layout, uint32_t count, uint32_t cursor,
-                                  uint32_t per_item) {
+struct inkcell_fb_list inkcell_fb_list_begin_rows(const struct inkcell_fb_layout *layout,
+                                                  uint32_t count, uint32_t cursor,
+                                                  uint32_t per_item) {
     /*
      * The division is the model's now rather than this line's, and that is not tidying: a body
      * of fifteen rows holding two-row items used to arrive here as a window of seven, and the
@@ -115,26 +120,31 @@ struct inkcell_fb_list inkcell_fb_list_begin_rows(const struct inkcell_fb_layout
      * list of mixed heights spend it on a one-row item.
      */
     const uint32_t step = per_item > 0U && per_item < 0xFFU ? per_item : 1U;
+    return inkcell_fb_list_open(
+        layout, inkcell_list_begin_step(count, cursor, layout->rows, (uint8_t)step));
+}
+
+struct inkcell_fb_list inkcell_fb_list_begin_heights(const struct inkcell_fb_layout *layout,
+                                                     uint32_t count, uint32_t cursor,
+                                                     const uint8_t *heights) {
     return inkcell_fb_list_open(layout,
-                        inkcell_list_begin_step(count, cursor, layout->rows, (uint8_t)step));
+                                inkcell_list_begin_heights(count, cursor, layout->rows, heights));
 }
 
-struct inkcell_fb_list inkcell_fb_list_begin_heights(const struct inkcell_fb_layout *layout, uint32_t count,
-                                     uint32_t cursor, const uint8_t *heights) {
-    return inkcell_fb_list_open(layout, inkcell_list_begin_heights(count, cursor, layout->rows, heights));
-}
-
-struct inkcell_fb_list inkcell_fb_list_begin_cards(const struct inkcell_fb_layout *layout, uint32_t count, uint32_t cursor,
-                                   const uint8_t *heights, const uint8_t *cards) {
-    struct inkcell_fb_list list = heights != NULL ? inkcell_fb_list_begin_heights(layout, count, cursor, heights)
-                                          : inkcell_fb_list_begin(layout, count, cursor);
+struct inkcell_fb_list inkcell_fb_list_begin_cards(const struct inkcell_fb_layout *layout,
+                                                   uint32_t count, uint32_t cursor,
+                                                   const uint8_t *heights, const uint8_t *cards) {
+    struct inkcell_fb_list list =
+        heights != NULL ? inkcell_fb_list_begin_heights(layout, count, cursor, heights)
+                        : inkcell_fb_list_begin(layout, count, cursor);
     list.cards = cards;
     return list;
 }
 
-struct inkcell_fb_list inkcell_fb_list_begin_focus(const struct inkcell_fb_layout *layout, uint32_t count, uint32_t cursor,
-                                   const uint8_t *heights, const uint8_t *cards, uint32_t first,
-                                   uint32_t last, bool card) {
+struct inkcell_fb_list inkcell_fb_list_begin_focus(const struct inkcell_fb_layout *layout,
+                                                   uint32_t count, uint32_t cursor,
+                                                   const uint8_t *heights, const uint8_t *cards,
+                                                   uint32_t first, uint32_t last, bool card) {
     struct inkcell_fb_list list = inkcell_fb_list_open(
         layout, inkcell_list_begin_span(count, cursor, first, last, layout->rows, heights));
     list.cards = cards;
@@ -148,8 +158,8 @@ bool inkcell_fb_list_is_cursor(const struct inkcell_fb_list *list, uint32_t inde
     return !list->focus_card && inkcell_list_is_cursor(&list->model, index);
 }
 
-/* Which card item `index` is on, or INKCELL_FB_LIST_NO_CARD. Past the end counts as no card, which is
-   what lets the run walk below terminate without knowing the list's length. */
+/* Which card item `index` is on, or INKCELL_FB_LIST_NO_CARD. Past the end counts as no card, which
+   is what lets the run walk below terminate without knowing the list's length. */
 static uint8_t inkcell_fb_list_card_of(const struct inkcell_fb_list *list, uint32_t index) {
     if (list == NULL || list->cards == NULL || index >= list->model.count) {
         return INKCELL_FB_LIST_NO_CARD;
@@ -164,16 +174,18 @@ bool inkcell_fb_list_on_card(const struct inkcell_fb_list *list, uint32_t index)
 }
 
 /* Whether this list draws its groups as cards at all, which is a question about the list and
-   not about one row of it - see inkcell_fb_list_subheader_icon(), where a heading stands *between* two
-   cards and so has a card list's ground under it either way. */
-bool inkcell_fb_list_has_cards(const struct inkcell_fb_list *list) { return list != NULL && list->cards != NULL; }
+   not about one row of it - see inkcell_fb_list_subheader_icon(), where a heading stands *between*
+   two cards and so has a card list's ground under it either way. */
+bool inkcell_fb_list_has_cards(const struct inkcell_fb_list *list) {
+    return list != NULL && list->cards != NULL;
+}
 
 /*
  * A card's vertical inset, and the gap it leaves between one card and the next.
  *
- * The same number inkcell_fb_draw_card() insets by, so a card in a list and a card on the Status tab are
- * padded alike. Asked in two places - the surface takes it below its last row, and a group's
- * heading is centred in what it leaves - which is why it is a function rather than a local.
+ * The same number inkcell_fb_draw_card() insets by, so a card in a list and a card on the Status
+ * tab are padded alike. Asked in two places - the surface takes it below its last row, and a
+ * group's heading is centred in what it leaves - which is why it is a function rather than a local.
  *
  * Never more than the heading's own step can spare, and that bound is not a belt-and-braces
  * clamp: at INKCELL_SCALE_MIN the type scale clamps the label *onto* the body - a label cannot
@@ -191,7 +203,8 @@ static int inkcell_fb_list_card_pad(const struct inkcell_backend_fb_state *state
         pad = edge;
     }
     const int label = inkcell_theme_type_scale(state->theme, INKCELL_TYPE_LABEL, state->scale);
-    const int spare = inkcell_fb_line_adv(state, state->scale) - (int)inkcell_fb_font(state)->height * label - edge;
+    const int spare = inkcell_fb_line_adv(state, state->scale) -
+                      (int)inkcell_fb_font(state)->height * label - edge;
     if (pad > spare) {
         pad = spare;
     }
@@ -218,7 +231,8 @@ uint32_t inkcell_fb_list_row_height(const struct inkcell_fb_list *list, uint32_t
  * for the same reason every other measurement here does: the list is the authority once it has
  * been told, so a card can never be a row out from the rows standing on it.
  */
-static void inkcell_fb_list_cards(const struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list) {
+static void inkcell_fb_list_cards(const struct inkcell_backend_fb_state *state,
+                                  struct inkcell_fb_list *list) {
     if (list == NULL || list->cards == NULL || list->model.visible == 0U) {
         return;
     }
@@ -240,9 +254,9 @@ static void inkcell_fb_list_cards(const struct inkcell_backend_fb_state *state, 
     const int x = box.x - edge;
     const int width = box.w + 2 * edge;
     /*
-     * The row highlight's shape, not inkcell_fb_draw_card()'s - and that is the same rule as the width,
-     * one axis over. A card's fill and a row's highlight are the same rectangle here (the fill
-     * is the card inset by its hairline, which is exactly the row gutter), so wherever the two
+     * The row highlight's shape, not inkcell_fb_draw_card()'s - and that is the same rule as the
+     * width, one axis over. A card's fill and a row's highlight are the same rectangle here (the
+     * fill is the card inset by its hairline, which is exactly the row gutter), so wherever the two
      * disagree about a corner the highlight wins: it reaches its full width while the card is
      * still curving, and the cursor's ends stand outside the card on the first and last rows of
      * every group. Drawn to one shape they nest exactly, and the hairline stays outside the
@@ -253,14 +267,14 @@ static void inkcell_fb_list_cards(const struct inkcell_backend_fb_state *state, 
     /*
      * The card's vertical inset, and it is spent at the bottom only.
      *
-     * The same number inkcell_fb_draw_card() insets by, so a card here and a card on the Status tab are
-     * padded alike - but a list row is not a card row, and where that inset is *needed* differs.
-     * A row's box is a line advance tall and a glyph's ink sits high in its cell, so the top of
-     * the first row already carries most of a line's leading as air while the bottom of the last
-     * carries none: its descenders run to the box's edge. Padding both ends equally would leave
-     * the card top-heavy by exactly that leading. So the top of the box is the first row's own,
-     * which is also what keeps the cursor's highlight inside the card on the row that opens it,
-     * and the whole of the inset goes under the last row.
+     * The same number inkcell_fb_draw_card() insets by, so a card here and a card on the Status tab
+     * are padded alike - but a list row is not a card row, and where that inset is *needed*
+     * differs. A row's box is a line advance tall and a glyph's ink sits high in its cell, so the
+     * top of the first row already carries most of a line's leading as air while the bottom of the
+     * last carries none: its descenders run to the box's edge. Padding both ends equally would
+     * leave the card top-heavy by exactly that leading. So the top of the box is the first row's
+     * own, which is also what keeps the cursor's highlight inside the card on the row that opens
+     * it, and the whole of the inset goes under the last row.
      */
     const int pad = inkcell_fb_list_card_pad(state);
 
@@ -275,7 +289,8 @@ static void inkcell_fb_list_cards(const struct inkcell_backend_fb_state *state, 
         const uint8_t card = inkcell_fb_list_card_of(list, i);
         int height = (int)inkcell_list_item_height(&list->model, i) * list->line;
         uint32_t run = i + 1U;
-        while (run < last && run < list->model.count && inkcell_fb_list_card_of(list, run) == card) {
+        while (run < last && run < list->model.count &&
+               inkcell_fb_list_card_of(list, run) == card) {
             height += (int)inkcell_list_item_height(&list->model, run) * list->line;
             run++;
         }
@@ -296,7 +311,8 @@ static void inkcell_fb_list_cards(const struct inkcell_backend_fb_state *state, 
          * where the visible steps do, so there is nothing to clip.
          */
         const bool cut_top = i > 0U && inkcell_fb_list_card_of(list, i - 1U) == card;
-        const bool cut_bottom = run < list->model.count && inkcell_fb_list_card_of(list, run) == card;
+        const bool cut_bottom =
+            run < list->model.count && inkcell_fb_list_card_of(list, run) == card;
         /*
          * The hairline is spent outward at the top, exactly as it is at the sides and for the
          * same reason: the first row of a card is a row the cursor can stand on, and a fill
@@ -309,8 +325,8 @@ static void inkcell_fb_list_cards(const struct inkcell_backend_fb_state *state, 
          * a node's verbs are - could not spend the hairline at all, and lost its top edge under
          * the cursor on the row it opens with: precisely the failure this whole paragraph is
          * about, reached from the one direction the clamp did not cover. The room is there to
-         * spend: inkcell_fb_draw_app_bar() leaves a space and a gutter between the bar and body_y, and
-         * an edge is one or two pixels of it.
+         * spend: inkcell_fb_draw_app_bar() leaves a space and a gutter between the bar and body_y,
+         * and an edge is one or two pixels of it.
          */
         int box_top = top;
         if (!cut_top) {
@@ -344,35 +360,36 @@ static void inkcell_fb_list_cards(const struct inkcell_backend_fb_state *state, 
         const int box_h = box_bottom - box_top;
 
         /*
-         * The edge first and the fill inside it, which is inkcell_fb_draw_card()'s shape and for its
-         * reason: inkcell_fb_fill_round_rect() fills rather than strokes, so an outline is the larger
-         * shape with the smaller one laid over it. The hairline is not decoration - on every
+         * The edge first and the fill inside it, which is inkcell_fb_draw_card()'s shape and for
+         * its reason: inkcell_fb_fill_round_rect() fills rather than strokes, so an outline is the
+         * larger shape with the smaller one laid over it. The hairline is not decoration - on every
          * theme that ships the surface is one step off the ground, and the edge is most of what
-         * says a card is there. It is OUTLINE rather than RULE for inkcell_fb_draw_card()'s reason too:
-         * a separator may fade politely into what it divides and an edge may not.
+         * says a card is there. It is OUTLINE rather than RULE for inkcell_fb_draw_card()'s reason
+         * too: a separator may fade politely into what it divides and an edge may not.
          *
          * A cut end loses its inset along with its corners. Insetting there would draw the
          * hairline *across* the cut, which is the card claiming to end again - in a straight
          * line this time.
          */
         /*
-         * The card the cursor stands on, when it stands on a card: inkcell_fb_draw_card()'s focus ring,
-         * in the accent and twice the hairline, grown inward so nothing else on the list moves.
-         * The rows of a focused card draw no highlight, so there is nothing for it to paint over.
+         * The card the cursor stands on, when it stands on a card: inkcell_fb_draw_card()'s focus
+         * ring, in the accent and twice the hairline, grown inward so nothing else on the list
+         * moves. The rows of a focused card draw no highlight, so there is nothing for it to paint
+         * over.
          */
         const bool focused =
             list->focus_card && list->model.cursor >= i && list->model.cursor < run;
         const int ring = focused ? 2 * edge : edge;
         inkcell_fb_fill_round_rect_ends(state, x, box_top, width, box_h, radius + edge,
-                                focused ? inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY)
-                                        : inkcell_fb_color(state, INKCELL_COLOR_OUTLINE),
-                                !cut_top, !cut_bottom);
+                                        focused ? inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY)
+                                                : inkcell_fb_color(state, INKCELL_COLOR_OUTLINE),
+                                        !cut_top, !cut_bottom);
         const int inner_top = cut_top ? box_top : box_top + ring;
         const int inner_bottom = cut_bottom ? box_top + box_h : box_top + box_h - ring;
         const int inner_radius = radius + edge - ring > 0 ? radius + edge - ring : 0;
-        inkcell_fb_fill_round_rect_ends(state, x + ring, inner_top, width - 2 * ring,
-                                inner_bottom - inner_top, inner_radius,
-                                inkcell_fb_color(state, INKCELL_COLOR_SURFACE), !cut_top, !cut_bottom);
+        inkcell_fb_fill_round_rect_ends(
+            state, x + ring, inner_top, width - 2 * ring, inner_bottom - inner_top, inner_radius,
+            inkcell_fb_color(state, INKCELL_COLOR_SURFACE), !cut_top, !cut_bottom);
 
         top += height;
         i = run;
@@ -382,13 +399,14 @@ static void inkcell_fb_list_cards(const struct inkcell_backend_fb_state *state, 
 /*
  * The scroll rail. Drawn once per list, by the first row that draws - see inkcell_fb_widgets.h.
  *
- * It stands in inkcell_fb_rail_gutter()'s strip, which every list has already been measured to leave
- * clear - so it is beside the content rather than over it, on a flat list and on a column of
- * cards alike. Where that strip *is* is asked of inkcell_fb_row_box() rather than worked out from the
- * margin: the card spends its hairline outward from the box, so the free space starts one
+ * It stands in inkcell_fb_rail_gutter()'s strip, which every list has already been measured to
+ * leave clear - so it is beside the content rather than over it, on a flat list and on a column of
+ * cards alike. Where that strip *is* is asked of inkcell_fb_row_box() rather than worked out from
+ * the margin: the card spends its hairline outward from the box, so the free space starts one
  * hairline past the box's own edge and a rail measured from the margin lands on the card.
  */
-static void inkcell_fb_list_rail(const struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list) {
+static void inkcell_fb_list_rail(const struct inkcell_backend_fb_state *state,
+                                 struct inkcell_fb_list *list) {
     if (list->track_h <= 0) {
         return;
     }
@@ -442,9 +460,9 @@ static void inkcell_fb_list_rail(const struct inkcell_backend_fb_state *state, s
        findable on all four, which a second neutral role chosen by eye against the track was
        not. */
     inkcell_fb_fill_round_rect(state, x, list->track_y, width, list->track_h, radius,
-                       inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK));
-    inkcell_fb_fill_round_rect(state, x, list->track_y + scroll.offset, width, scroll.length, radius,
-                       inkcell_fb_tone_color(state, INKCELL_TONE_DIM));
+                               inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK));
+    inkcell_fb_fill_round_rect(state, x, list->track_y + scroll.offset, width, scroll.length,
+                               radius, inkcell_fb_tone_color(state, INKCELL_TONE_DIM));
 }
 
 /*
@@ -460,7 +478,8 @@ static void inkcell_fb_list_rail(const struct inkcell_backend_fb_state *state, s
  * The order is the only thing this function decides, and it decides it once: a surface goes
  * under the ink standing on it, and the rail is outside both.
  */
-void inkcell_fb_list_chrome(const struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list) {
+void inkcell_fb_list_chrome(const struct inkcell_backend_fb_state *state,
+                            struct inkcell_fb_list *list) {
     if (list == NULL || list->chrome_drawn) {
         return;
     }
@@ -473,18 +492,20 @@ bool inkcell_fb_list_next(struct inkcell_fb_list *list, uint32_t *index) {
     return inkcell_list_next(&list->model, index);
 }
 
-void inkcell_fb_list_row(const struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list, uint32_t index,
-                 const char *text, enum inkcell_tone tone) {
+void inkcell_fb_list_row(const struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
+                         uint32_t index, const char *text, enum inkcell_tone tone) {
     inkcell_fb_list_chrome(state, list);
     /* Drawn out rather than through inkcell_fb_draw_row(), which lays its fill on the panel's own
        ground: a row in a list may be standing on a card, and the ink its glyph edges blend into
        has to be the colour actually under it. */
     const bool selected = inkcell_fb_list_is_cursor(list, index);
-    const struct inkcell_rgb ground = inkcell_fb_draw_row_fill_on(
-        state, list->y, inkcell_fb_list_row_height(list, index), selected, inkcell_fb_list_ground(list, index));
+    const struct inkcell_rgb ground =
+        inkcell_fb_draw_row_fill_on(state, list->y, inkcell_fb_list_row_height(list, index),
+                                    selected, inkcell_fb_list_ground(list, index));
     inkcell_fb_draw_text(state, inkcell_fb_row_box(state).text_x, list->y, text, state->scale,
-                 selected ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL) : inkcell_fb_tone_color(state, tone),
-                 ground);
+                         selected ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL)
+                                  : inkcell_fb_tone_color(state, tone),
+                         ground);
     /* By what the model says this row is, not by one row: a plain row in a list of mixed
        heights is still whatever height that list gave it, and advancing by a row would put
        every row under it in the wrong place. */
@@ -503,21 +524,24 @@ void inkcell_fb_list_row(const struct inkcell_backend_fb_state *state, struct in
  * Shared by the headline, its label column and the supporting line, because the three were
  * three copies of this conditional and the supporting one had already grown a flag of its own.
  */
-struct inkcell_rgb inkcell_fb_item_ink(const struct inkcell_backend_fb_state *state, enum inkcell_tone tone,
-                               bool selected, bool quiet) {
+struct inkcell_rgb inkcell_fb_item_ink(const struct inkcell_backend_fb_state *state,
+                                       enum inkcell_tone tone, bool selected, bool quiet) {
     if (!selected) {
         return inkcell_fb_tone_color(state, tone);
     }
-    return inkcell_fb_color(state, quiet ? INKCELL_COLOR_TEXT_ON_SEL_DIM : INKCELL_COLOR_TEXT_ON_SEL);
+    return inkcell_fb_color(state,
+                            quiet ? INKCELL_COLOR_TEXT_ON_SEL_DIM : INKCELL_COLOR_TEXT_ON_SEL);
 }
 
-void inkcell_fb_list_subheader(const struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
-                       uint32_t index, const char *text) {
-    inkcell_fb_list_subheader_icon(state, list, index, text, (struct inkcell_fb_leading){.kind = INKCELL_FB_LEADING_NONE});
+void inkcell_fb_list_subheader(const struct inkcell_backend_fb_state *state,
+                               struct inkcell_fb_list *list, uint32_t index, const char *text) {
+    inkcell_fb_list_subheader_icon(state, list, index, text,
+                                   (struct inkcell_fb_leading){.kind = INKCELL_FB_LEADING_NONE});
 }
 
-void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
-                            uint32_t index, const char *text, struct inkcell_fb_leading leading) {
+void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state,
+                                    struct inkcell_fb_list *list, uint32_t index, const char *text,
+                                    struct inkcell_fb_leading leading) {
     inkcell_fb_list_chrome(state, list);
     const int scale = inkcell_theme_type_scale(state->theme, INKCELL_TYPE_LABEL, state->scale);
     const uint32_t rows = inkcell_fb_list_row_height(list, index);
@@ -526,8 +550,8 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state
     /* The fill is the whole step whatever size the words are, and it is the same rectangle a
        plain row lays down - a highlight that shrank to the label would be a cursor that changes
        shape as it walks down a list. */
-    const struct inkcell_rgb ground =
-        inkcell_fb_draw_row_fill_on(state, list->y, rows, selected, inkcell_fb_list_ground(list, index));
+    const struct inkcell_rgb ground = inkcell_fb_draw_row_fill_on(
+        state, list->y, rows, selected, inkcell_fb_list_ground(list, index));
 
     /*
      * Sat on the bottom of the step, so the space the smaller glyphs free is air above the
@@ -537,13 +561,15 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state
      * On a column of cards it is centred instead, because there the heading is not a break
      * between two runs of rows - it is the label of the card under it, standing in the gap
      * between that card and the one that ended. The gap is the whole of this step bar the inset
-     * the card above took out of its top (inkcell_fb_list_cards()), and the *cell* is what is centred
-     * in it rather than the line advance: a line carries its leading at the top, so centring
-     * the advance would seat the words low and leave the heading hanging off the card above.
+     * the card above took out of its top (inkcell_fb_list_cards()), and the *cell* is what is
+     * centred in it rather than the line advance: a line carries its leading at the top, so
+     * centring the advance would seat the words low and leave the heading hanging off the card
+     * above.
      */
     const int step_top = list->y - state->scale;
     const int step_h = (int)rows * list->line;
-    int baseline = list->y + inkcell_fb_line_adv(state, state->scale) - inkcell_fb_line_adv(state, scale);
+    int baseline =
+        list->y + inkcell_fb_line_adv(state, state->scale) - inkcell_fb_line_adv(state, scale);
     if (inkcell_fb_list_has_cards(list)) {
         const int gap_top = step_top + inkcell_fb_list_card_pad(state);
         const int gap_bottom = step_top + step_h - inkcell_fb_edge(state);
@@ -566,8 +592,8 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state
      * second thing saying what the words underneath say - the icons on such a list are what each
      * row is about, and a group has no single answer to that. On a column of cards the heading
      * names the card below it, and there the symbol is the cell the eye finds when it is looking
-     * for Signal rather than Identity, which is exactly what struct inkcell_fb_card's icon is for. The
-     * list is asked which it is drawing, so a caller passes the icon either way and nothing
+     * for Signal rather than Identity, which is exactly what struct inkcell_fb_card's icon is for.
+     * The list is asked which it is drawing, so a caller passes the icon either way and nothing
      * decides twice - and the indent is the same whether or not it was drawn.
      */
     /*
@@ -580,8 +606,8 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state
      * On a column of cards it is the card's label, and there quiet is wrong twice over. It is
      * the cell the eye lands on when it is looking for Signal rather than Identity on a screen a
      * hundred and twenty rows long, which is the argument its icon is already drawn for - and
-     * inkcell_fb_draw_card() has been inking the heading beside *its* icon in the card's own tone since
-     * the Status tab got cards, so a heading dimmed here was the two card kinds holding two
+     * inkcell_fb_draw_card() has been inking the heading beside *its* icon in the card's own tone
+     * since the Status tab got cards, so a heading dimmed here was the two card kinds holding two
      * opinions about the same line. The primary is what a card with nothing wrong with it takes
      * there, and it is what a group of a node's facts is: the brand colour marking where the
      * reader is meant to look, which is the whole of what this palette keeps it for.
@@ -592,7 +618,8 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state
      */
     const enum inkcell_tone tone =
         inkcell_fb_list_has_cards(list) ? INKCELL_TONE_PRIMARY : INKCELL_TONE_DIM;
-    const struct inkcell_rgb ink = inkcell_fb_item_ink(state, tone, selected, tone == INKCELL_TONE_DIM);
+    const struct inkcell_rgb ink =
+        inkcell_fb_item_ink(state, tone, selected, tone == INKCELL_TONE_DIM);
 
     int x = inkcell_fb_row_box(state).text_x;
     if (leading.kind == INKCELL_FB_LEADING_TONAL || leading.kind == INKCELL_FB_LEADING_TONAL_SLOT) {
@@ -641,9 +668,9 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state
                 size = gutter;
             }
             const enum inkcell_family family = inkcell_tone_family(tone);
-            const struct inkcell_paint disc =
-                inkcell_fb_paint(state, family != INKCELL_FAMILY_COUNT ? family : INKCELL_FAMILY_PRIMARY,
-                         INKCELL_SLOT_CONTAINER, INKCELL_STATE_REST);
+            const struct inkcell_paint disc = inkcell_fb_paint(
+                state, family != INKCELL_FAMILY_COUNT ? family : INKCELL_FAMILY_PRIMARY,
+                INKCELL_SLOT_CONTAINER, INKCELL_STATE_REST);
             /* The empty slot takes the gutter and draws nothing in it, which is the whole of
                what it is for here: a group whose subject this client has no rune for - "Sent
                with a position" is a sentence about ten bits - still has to begin where its rows
@@ -651,8 +678,8 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state
                a disc, which is the heading "naming a column nothing is in" that the note above
                is about, seen from the one side that had no answer. */
             if (size > 0 && leading.kind == INKCELL_FB_LEADING_TONAL) {
-                inkcell_fb_draw_avatar(state, x + (gutter - size) / 2, gap_top + (gap_h - size) / 2, size,
-                               NULL, leading.icon, disc);
+                inkcell_fb_draw_avatar(state, x + (gutter - size) / 2, gap_top + (gap_h - size) / 2,
+                                       size, NULL, leading.icon, disc);
             }
         }
         x += gutter + inkcell_fb_char_adv(state, state->scale) / 2;
@@ -663,7 +690,8 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state
                clear of the word it belongs to. */
             inkcell_fb_draw_icon(state, x, baseline, leading.icon, scale, ink, ground);
         }
-        x += inkcell_fb_icon_box(state, state->scale) + inkcell_fb_char_adv(state, state->scale) / 2;
+        x +=
+            inkcell_fb_icon_box(state, state->scale) + inkcell_fb_char_adv(state, state->scale) / 2;
     }
     struct inkcell_line line;
     inkcell_line_reset(&line);
@@ -681,8 +709,8 @@ static size_t inkcell_fb_note_cols(const struct inkcell_backend_fb_state *state)
     return inkcell_fb_row_cols(state, state->scale);
 }
 
-uint32_t inkcell_fb_list_note_steps(const struct inkcell_backend_fb_state *state, const char *heading,
-                            const char *body) {
+uint32_t inkcell_fb_list_note_steps(const struct inkcell_backend_fb_state *state,
+                                    const char *heading, const char *body) {
     if (state == NULL) {
         return 1U;
     }
@@ -696,16 +724,18 @@ uint32_t inkcell_fb_list_note_steps(const struct inkcell_backend_fb_state *state
     return steps > 0U ? steps : 1U;
 }
 
-void inkcell_fb_list_note(const struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
-                  uint32_t index, const char *heading, const char *body) {
+void inkcell_fb_list_note(const struct inkcell_backend_fb_state *state,
+                          struct inkcell_fb_list *list, uint32_t index, const char *heading,
+                          const char *body) {
     inkcell_fb_list_chrome(state, list);
     const uint32_t rows = inkcell_fb_list_row_height(list, index);
     const bool selected = inkcell_fb_list_is_cursor(list, index);
     /* One fill for the whole note, the height the *model* gave it - not the height its words
-       want. The two agree when the screen measured with inkcell_fb_list_note_steps(), and when they do
-       not it is the model that is right, because it is what every row below was placed against. */
-    const struct inkcell_rgb ground =
-        inkcell_fb_draw_row_fill_on(state, list->y, rows, selected, inkcell_fb_list_ground(list, index));
+       want. The two agree when the screen measured with inkcell_fb_list_note_steps(), and when they
+       do not it is the model that is right, because it is what every row below was placed against.
+     */
+    const struct inkcell_rgb ground = inkcell_fb_draw_row_fill_on(
+        state, list->y, rows, selected, inkcell_fb_list_ground(list, index));
 
     const int margin = inkcell_fb_row_box(state).text_x;
     const int body_line = inkcell_fb_line_adv(state, state->scale);
@@ -727,10 +757,10 @@ void inkcell_fb_list_note(const struct inkcell_backend_fb_state *state, struct i
          * not cover, because on a light palette they are two shades of the same hue.
          */
         inkcell_fb_draw_text(state, margin, y + body_line - inkcell_fb_line_adv(state, scale),
-                     inkcell_line_text(&line), scale,
-                     selected ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL)
-                              : inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY),
-                     ground);
+                             inkcell_line_text(&line), scale,
+                             selected ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL)
+                                      : inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY),
+                             ground);
         y += body_line;
     }
 
@@ -747,9 +777,9 @@ void inkcell_fb_list_note(const struct inkcell_backend_fb_state *state, struct i
     inkcell_wrap_begin(&wrap, body != NULL ? body : "", inkcell_fb_note_cols(state));
     while (drawn < rows && inkcell_wrap_next(&wrap)) {
         inkcell_fb_draw_text(state, margin, y, wrap.line, state->scale,
-                     selected ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL)
-                              : inkcell_fb_tone_color(state, INKCELL_TONE_NORMAL),
-                     ground);
+                             selected ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL)
+                                      : inkcell_fb_tone_color(state, INKCELL_TONE_NORMAL),
+                             ground);
         y += body_line;
         drawn++;
     }
@@ -757,10 +787,12 @@ void inkcell_fb_list_note(const struct inkcell_backend_fb_state *state, struct i
     list->y += (int)rows * list->line;
 }
 
-void inkcell_fb_list_row_line(const struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
-                      uint32_t index, struct inkcell_line *line, enum inkcell_tone tone) {
-    /* The row's columns, not the panel's: inkcell_fb_rail_gutter() is kept clear of the box every row
-       is drawn in, so a line fitted to inkcell_fb_cols() is a line fitted to a width no row has. */
+void inkcell_fb_list_row_line(const struct inkcell_backend_fb_state *state,
+                              struct inkcell_fb_list *list, uint32_t index,
+                              struct inkcell_line *line, enum inkcell_tone tone) {
+    /* The row's columns, not the panel's: inkcell_fb_rail_gutter() is kept clear of the box every
+       row is drawn in, so a line fitted to inkcell_fb_cols() is a line fitted to a width no row
+       has. */
     inkcell_line_fit(line, inkcell_fb_row_cols(state, state->scale));
     inkcell_fb_list_row(state, list, index, inkcell_line_text(line), tone);
 }

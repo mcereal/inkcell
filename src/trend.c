@@ -36,9 +36,13 @@ static uint8_t span_or_all(uint8_t span) {
     return span < (uint8_t)INKCELL_TREND_SPAN_COUNT ? span : (uint8_t)INKCELL_TREND_SPAN_ALL;
 }
 
-uint32_t inkcell_trend_span_ms(uint8_t span) { return k_spans[span_or_all(span)].ms; }
+uint32_t inkcell_trend_span_ms(uint8_t span) {
+    return k_spans[span_or_all(span)].ms;
+}
 
-enum inkcell_str_id inkcell_trend_span_label(uint8_t span) { return k_spans[span_or_all(span)].label; }
+enum inkcell_str_id inkcell_trend_span_label(uint8_t span) {
+    return k_spans[span_or_all(span)].label;
+}
 
 uint8_t inkcell_trend_span_step(uint8_t span, int delta) {
     const int count = (int)INKCELL_TREND_SPAN_COUNT;

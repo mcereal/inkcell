@@ -42,7 +42,7 @@ const char *inkcell_log_level_to_string(enum inkcell_log_level level);
  * it cannot see. Without it the vfprintf() inside is a -Wformat-nonliteral on every clang build.
  */
 void inkcell_log_message_v(enum inkcell_log_level level, const char *component, const char *fmt,
-                        va_list args) __attribute__((format(printf, 3, 0)));
+                           va_list args) __attribute__((format(printf, 3, 0)));
 
 static inline void inkcell_log_trace(const char *component, const char *fmt, ...)
     __attribute__((format(printf, 2, 3)));
@@ -166,9 +166,9 @@ bool inkcell_log_file_default_path(char *out, size_t out_len);
  */
 long inkcell_log_file_compact(const char *path);
 
-/* inkcell_log_file_default_path() and then inkcell_log_file_compact(), which is all a startup wants.
-   Reports what it did through the log itself, so the reason a log begins where it does is in the
-   file the reader is already holding. */
+/* inkcell_log_file_default_path() and then inkcell_log_file_compact(), which is all a startup
+   wants. Reports what it did through the log itself, so the reason a log begins where it does is in
+   the file the reader is already holding. */
 void inkcell_log_file_compact_default(void);
 
 #ifdef __cplusplus

@@ -63,8 +63,9 @@ struct inkcell_fb_dialog {
 };
 
 /* Draws the dialog into the body. It owns the whole of it, so there is no `y` to advance. */
-void inkcell_fb_draw_dialog(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_layout *layout,
-                    const struct inkcell_fb_dialog *dialog);
+void inkcell_fb_draw_dialog(const struct inkcell_backend_fb_state *state,
+                            const struct inkcell_fb_layout *layout,
+                            const struct inkcell_fb_dialog *dialog);
 
 /* ---- the snackbar -------------------------------------------------------------------------
  *
@@ -110,8 +111,9 @@ struct inkcell_fb_snackbar {
  * Mutable state, like every animated component here: the position it is coming from and the
  * words it is still carrying both live on the state.
  */
-void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state, const struct inkcell_fb_layout *layout,
-                      const struct inkcell_fb_snackbar *bar);
+void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state,
+                              const struct inkcell_fb_layout *layout,
+                              const struct inkcell_fb_snackbar *bar);
 
 /* ---- the QR code ----------------------------------------------------------------------------
  *
@@ -144,6 +146,7 @@ struct inkcell_fb_qr {
 int inkcell_fb_qr_side(const struct inkcell_fb_qr *qr);
 
 /* Draws it centred in its box. Nothing is drawn when inkcell_fb_qr_side() is 0. */
-void inkcell_fb_draw_qr(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_qr *qr);
+void inkcell_fb_draw_qr(const struct inkcell_backend_fb_state *state,
+                        const struct inkcell_fb_qr *qr);
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_OVERLAY_H */

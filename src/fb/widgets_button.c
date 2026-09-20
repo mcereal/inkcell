@@ -24,8 +24,9 @@ struct inkcell_fb_button_paint {
     struct inkcell_paint paint;
 };
 
-static struct inkcell_fb_button_paint inkcell_fb_button_paint(const struct inkcell_backend_fb_state *state,
-                                              const struct inkcell_fb_button *button) {
+static struct inkcell_fb_button_paint
+inkcell_fb_button_paint(const struct inkcell_backend_fb_state *state,
+                        const struct inkcell_fb_button *button) {
     const bool selected = button->selected;
     switch (button->variant) {
     case INKCELL_FB_BUTTON_FILLED:
@@ -33,7 +34,8 @@ static struct inkcell_fb_button_paint inkcell_fb_button_paint(const struct inkce
            statement about what pressing it means. */
         return (struct inkcell_fb_button_paint){
             true,
-            {inkcell_fb_color(state, selected ? INKCELL_COLOR_SURFACE_ACTIVE : INKCELL_COLOR_SURFACE_SEL),
+            {inkcell_fb_color(state,
+                              selected ? INKCELL_COLOR_SURFACE_ACTIVE : INKCELL_COLOR_SURFACE_SEL),
              inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL)}};
     case INKCELL_FB_BUTTON_TONAL:
         /* Under the cursor a tonal control commits to the family's full strength: the container
@@ -41,17 +43,21 @@ static struct inkcell_fb_button_paint inkcell_fb_button_paint(const struct inkce
            being something to read. One call, so the fill and the ink cannot come from different
            halves of the family. */
         return (struct inkcell_fb_button_paint){
-            true,
-            inkcell_fb_paint(state, button->family, selected ? INKCELL_SLOT_BASE : INKCELL_SLOT_CONTAINER,
-                     INKCELL_STATE_REST)};
+            true, inkcell_fb_paint(state, button->family,
+                                   selected ? INKCELL_SLOT_BASE : INKCELL_SLOT_CONTAINER,
+                                   INKCELL_STATE_REST)};
     case INKCELL_FB_BUTTON_TEXT:
     default:
-        return selected ? (struct inkcell_fb_button_paint){true,
-                                                   {inkcell_fb_color(state, INKCELL_COLOR_SURFACE_ACTIVE),
-                                                    inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL)}}
-                        : (struct inkcell_fb_button_paint){false,
-                                                   {inkcell_fb_color(state, INKCELL_COLOR_BG),
-                                                    inkcell_fb_color(state, INKCELL_COLOR_TEXT)}};
+        return selected
+                   ? (struct inkcell_fb_button_paint){true,
+                                                      {inkcell_fb_color(
+                                                           state, INKCELL_COLOR_SURFACE_ACTIVE),
+                                                       inkcell_fb_color(state,
+                                                                        INKCELL_COLOR_TEXT_ON_SEL)}}
+                   : (struct inkcell_fb_button_paint){
+                         false,
+                         {inkcell_fb_color(state, INKCELL_COLOR_BG),
+                          inkcell_fb_color(state, INKCELL_COLOR_TEXT)}};
     }
 }
 
@@ -62,7 +68,8 @@ static struct inkcell_fb_button_paint inkcell_fb_button_paint(const struct inkce
  * after the sprite is a line of text that happens to open with a picture, and it is measured
  * and centred as text like any other.
  */
-static bool inkcell_fb_button_face_sprite(const struct inkcell_fb_button *button, uint16_t *sprite) {
+static bool inkcell_fb_button_face_sprite(const struct inkcell_fb_button *button,
+                                          uint16_t *sprite) {
     if (!button->emoji_face || inkcell_icon_is_valid(button->icon) || button->label == NULL) {
         return false;
     }
@@ -77,7 +84,7 @@ static bool inkcell_fb_button_face_sprite(const struct inkcell_fb_button *button
 /* What a button's content occupies: its icon, the gap after it, and its label - all in cells
    except that gap, which is half of one. */
 static int inkcell_fb_button_content_w(const struct inkcell_backend_fb_state *state,
-                               const struct inkcell_fb_button *button) {
+                                       const struct inkcell_fb_button *button) {
     const int adv = inkcell_fb_char_adv(state, button->scale);
     const bool has_label = button->label != NULL && button->label[0] != '\0';
     const bool has_icon = inkcell_icon_is_valid(button->icon);
@@ -86,11 +93,13 @@ static int inkcell_fb_button_content_w(const struct inkcell_backend_fb_state *st
            ((has_icon && has_label) ? adv / 2 : 0);
 }
 
-void inkcell_fb_draw_button(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_button *button) {
+void inkcell_fb_draw_button(const struct inkcell_backend_fb_state *state,
+                            const struct inkcell_fb_button *button) {
     const struct inkcell_fb_button_paint paint = inkcell_fb_button_paint(state, button);
     if (paint.has_fill) {
-        inkcell_fb_fill_round_rect(state, button->rect.x, button->rect.y, button->rect.w, button->rect.h,
-                           inkcell_fb_radius(state, button->shape), paint.paint.fill);
+        inkcell_fb_fill_round_rect(state, button->rect.x, button->rect.y, button->rect.w,
+                                   button->rect.h, inkcell_fb_radius(state, button->shape),
+                                   paint.paint.fill);
     }
 
     const bool has_label = button->label != NULL && button->label[0] != '\0';
@@ -104,9 +113,10 @@ void inkcell_fb_draw_button(const struct inkcell_backend_fb_state *state, const 
     uint16_t face = 0;
     if (inkcell_fb_button_face_sprite(button, &face)) {
         const int shorter = button->rect.w < button->rect.h ? button->rect.w : button->rect.h;
-        const int box = inkcell_fb_emoji_box_fit(shorter - 2 * inkcell_fb_space(state, INKCELL_SPACE_MD));
+        const int box =
+            inkcell_fb_emoji_box_fit(shorter - 2 * inkcell_fb_space(state, INKCELL_SPACE_MD));
         inkcell_fb_draw_emoji_box(state, button->rect.x + (button->rect.w - box) / 2,
-                          button->rect.y + (button->rect.h - box) / 2, box, face);
+                                  button->rect.y + (button->rect.h - box) / 2, box, face);
         return;
     }
 
@@ -117,8 +127,9 @@ void inkcell_fb_draw_button(const struct inkcell_backend_fb_state *state, const 
        box. */
     const int adv = inkcell_fb_char_adv(state, button->scale);
     /* Half a cell between a symbol and the word after it, which is the gap Material puts
-       there and about what the eye needs to stop reading them as one shape. inkcell_fb_button_content_w()
-       is the same sum, so a caller sizing a box around this gets the box this fills. */
+       there and about what the eye needs to stop reading them as one shape.
+       inkcell_fb_button_content_w() is the same sum, so a caller sizing a box around this gets the
+       box this fills. */
     const int text_w = inkcell_fb_button_content_w(state, button);
     const int text_h = (int)inkcell_fb_font(state)->height * button->scale;
     int x = button->rect.x + (button->rect.w - text_w) / 2;
@@ -134,12 +145,14 @@ void inkcell_fb_draw_button(const struct inkcell_backend_fb_state *state, const 
            caller says it is sitting on when it laid none - the two colours the ink was chosen
            against. */
         inkcell_fb_draw_icon(state, x, y, button->icon, button->scale, ink,
-                     paint.has_fill ? paint.paint.fill : inkcell_fb_color(state, button->ground));
+                             paint.has_fill ? paint.paint.fill
+                                            : inkcell_fb_color(state, button->ground));
         x += inkcell_fb_icon_box(state, button->scale) + (has_label ? adv / 2 : 0);
     }
     if (has_label) {
         inkcell_fb_draw_text(state, x, y, button->label, button->scale, ink,
-                     paint.has_fill ? paint.paint.fill : inkcell_fb_color(state, button->ground));
+                             paint.has_fill ? paint.paint.fill
+                                            : inkcell_fb_color(state, button->ground));
     }
 }
 
@@ -162,24 +175,26 @@ void inkcell_fb_draw_button(const struct inkcell_backend_fb_state *state, const 
 #define INKCELL_FB_CHIP_PAD_STEPS 4
 
 int inkcell_fb_button_width(const struct inkcell_backend_fb_state *state, enum inkcell_icon icon,
-                    const char *label, int scale) {
+                            const char *label, int scale) {
     const struct inkcell_fb_button button = {.icon = icon, .label = label, .scale = scale};
     return inkcell_fb_button_content_w(state, &button) + INKCELL_FB_CHIP_PAD_STEPS * scale;
 }
 
 int inkcell_fb_chip_width(const struct inkcell_backend_fb_state *state, enum inkcell_icon icon,
-                  const char *label, int scale) {
+                          const char *label, int scale) {
     /* The pill itself, then the gap before the next one. */
     return inkcell_fb_button_width(state, icon, label, scale) + inkcell_fb_char_adv(state, scale);
 }
 
-int inkcell_fb_draw_chip(const struct inkcell_backend_fb_state *state, int x, int y, enum inkcell_icon icon,
-                 const char *label, bool active, enum inkcell_color ground, int scale) {
+int inkcell_fb_draw_chip(const struct inkcell_backend_fb_state *state, int x, int y,
+                         enum inkcell_icon icon, const char *label, bool active,
+                         enum inkcell_color ground, int scale) {
     const int width = inkcell_fb_chip_width(state, icon, label, scale);
     const struct inkcell_fb_button button = {
         .rect = {.x = x,
                  .y = y - scale,
-                 .w = width - inkcell_fb_char_adv(state, scale), /* the pill, without the gap after it */
+                 .w = width -
+                      inkcell_fb_char_adv(state, scale), /* the pill, without the gap after it */
                  .h = inkcell_fb_line_adv(state, scale)},
         .icon = icon,
         .label = label,
@@ -197,39 +212,42 @@ int inkcell_fb_draw_chip(const struct inkcell_backend_fb_state *state, int x, in
 /* ---- the chip strip ------------------------------------------------------------------------ */
 
 /* Whether this chip keeps its words at this setting. See enum inkcell_fb_chip_labels. */
-static const char *inkcell_fb_chip_strip_label(const struct inkcell_fb_chip *chip, size_t index, size_t active,
-                                       enum inkcell_fb_chip_labels labels) {
-    if (labels == INKCELL_FB_CHIP_LABELS_ALL || (labels == INKCELL_FB_CHIP_LABELS_SELECTED && index == active)) {
+static const char *inkcell_fb_chip_strip_label(const struct inkcell_fb_chip *chip, size_t index,
+                                               size_t active, enum inkcell_fb_chip_labels labels) {
+    if (labels == INKCELL_FB_CHIP_LABELS_ALL ||
+        (labels == INKCELL_FB_CHIP_LABELS_SELECTED && index == active)) {
         return chip->label;
     }
     return "";
 }
 
 /*
- * What a chip's badge takes, at this label setting - see struct inkcell_fb_chip for why the setting is
- * what decides its shape. Zero when there is nothing waiting, so an unbadged strip measures and
+ * What a chip's badge takes, at this label setting - see struct inkcell_fb_chip for why the setting
+ * is what decides its shape. Zero when there is nothing waiting, so an unbadged strip measures and
  * draws exactly as it did before badges existed.
  */
-static int inkcell_fb_chip_badge_width(const struct inkcell_backend_fb_state *state, const char *badge,
-                               enum inkcell_fb_chip_labels labels, int scale) {
+static int inkcell_fb_chip_badge_width(const struct inkcell_backend_fb_state *state,
+                                       const char *badge, enum inkcell_fb_chip_labels labels,
+                                       int scale) {
     if (badge == NULL || badge[0] == '\0') {
         return 0;
     }
     return labels == INKCELL_FB_CHIP_LABELS_NONE ? inkcell_fb_char_adv(state, scale)
-                                         : inkcell_fb_badge_width(state, badge, scale);
+                                                 : inkcell_fb_badge_width(state, badge, scale);
 }
 
 /*
  * Draws it against the chip's trailing edge, in the space inkcell_fb_chip_badge_width() reserved.
  *
  * Beside the pill rather than inside it, which is both what Material's navigation bar does and
- * the only placement that stays honest here: inkcell_fb_draw_button() centres its content in the box it
- * is given, so a pill widened to swallow a badge would slide its own icon and label sideways by
- * half the badge - and on the active tab, the one wearing a fill, the words would run under the
+ * the only placement that stays honest here: inkcell_fb_draw_button() centres its content in the
+ * box it is given, so a pill widened to swallow a badge would slide its own icon and label sideways
+ * by half the badge - and on the active tab, the one wearing a fill, the words would run under the
  * capsule at the wider glyph scales.
  */
 static void inkcell_fb_draw_chip_badge(const struct inkcell_backend_fb_state *state, int x, int y,
-                               const char *badge, enum inkcell_fb_chip_labels labels, int scale) {
+                                       const char *badge, enum inkcell_fb_chip_labels labels,
+                                       int scale) {
     const int width = inkcell_fb_chip_badge_width(state, badge, labels, scale);
     if (width <= 0) {
         return;
@@ -242,30 +260,33 @@ static void inkcell_fb_draw_chip_badge(const struct inkcell_backend_fb_state *st
         const int size = width / 2 > 0 ? width / 2 : 1;
         const struct inkcell_paint paint =
             inkcell_fb_paint(state, INKCELL_FAMILY_PRIMARY, INKCELL_SLOT_BASE, INKCELL_STATE_REST);
-        inkcell_fb_fill_round_rect(state, x + (width - size) / 2, top + (height - size) / 2, size, size,
-                           inkcell_fb_radius(state, INKCELL_SHAPE_FULL), paint.fill);
+        inkcell_fb_fill_round_rect(state, x + (width - size) / 2, top + (height - size) / 2, size,
+                                   size, inkcell_fb_radius(state, INKCELL_SHAPE_FULL), paint.fill);
         return;
     }
 
     const struct inkcell_fb_rect box = {.x = x, .y = top, .w = width, .h = height};
     const int text_h = (int)inkcell_fb_font(state)->height * scale;
-    inkcell_fb_draw_badge(state, &box, top + (height - text_h) / 2, badge, INKCELL_FAMILY_PRIMARY, scale);
+    inkcell_fb_draw_badge(state, &box, top + (height - text_h) / 2, badge, INKCELL_FAMILY_PRIMARY,
+                          scale);
 }
 
-int inkcell_fb_chip_strip_width(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_chip *chips,
-                        size_t count, size_t active, enum inkcell_fb_chip_labels labels, int scale) {
+int inkcell_fb_chip_strip_width(const struct inkcell_backend_fb_state *state,
+                                const struct inkcell_fb_chip *chips, size_t count, size_t active,
+                                enum inkcell_fb_chip_labels labels, int scale) {
     int width = 0;
     for (size_t i = 0; i < count; ++i) {
-        width += inkcell_fb_chip_width(state, chips[i].icon,
-                               inkcell_fb_chip_strip_label(&chips[i], i, active, labels), scale);
+        width += inkcell_fb_chip_width(
+            state, chips[i].icon, inkcell_fb_chip_strip_label(&chips[i], i, active, labels), scale);
         width += inkcell_fb_chip_badge_width(state, chips[i].badge, labels, scale);
     }
     return width;
 }
 
 enum inkcell_fb_chip_labels inkcell_fb_chip_strip_fit(const struct inkcell_backend_fb_state *state,
-                                      const struct inkcell_fb_chip *chips, size_t count, size_t active,
-                                      int room, int scale) {
+                                                      const struct inkcell_fb_chip *chips,
+                                                      size_t count, size_t active, int room,
+                                                      int scale) {
     enum inkcell_fb_chip_labels labels = INKCELL_FB_CHIP_LABELS_ALL;
     while (labels < INKCELL_FB_CHIP_LABELS_NONE &&
            inkcell_fb_chip_strip_width(state, chips, count, active, labels, scale) > room) {
@@ -275,23 +296,24 @@ enum inkcell_fb_chip_labels inkcell_fb_chip_strip_fit(const struct inkcell_backe
 }
 
 int inkcell_fb_draw_chip_strip(const struct inkcell_backend_fb_state *state, int x, int y,
-                       const struct inkcell_fb_chip *chips, size_t count, size_t active, int room,
-                       enum inkcell_color ground, int scale) {
-    const enum inkcell_fb_chip_labels labels = inkcell_fb_chip_strip_fit(state, chips, count, active, room, scale);
+                               const struct inkcell_fb_chip *chips, size_t count, size_t active,
+                               int room, enum inkcell_color ground, int scale) {
+    const enum inkcell_fb_chip_labels labels =
+        inkcell_fb_chip_strip_fit(state, chips, count, active, room, scale);
     for (size_t i = 0; i < count; ++i) {
         /*
-         * The badge goes in the gap inkcell_fb_draw_chip() already leaves after the pill, and the chip
-         * that carries one is that much wider. Measured and drawn by the same two calls in the
+         * The badge goes in the gap inkcell_fb_draw_chip() already leaves after the pill, and the
+         * chip that carries one is that much wider. Measured and drawn by the same two calls in the
          * same order as the width above, because a strip that measures itself differently from
          * the way it draws is a strip whose last tab falls off the panel.
          */
-        const int after = inkcell_fb_draw_chip(state, x, y, chips[i].icon,
-                                       inkcell_fb_chip_strip_label(&chips[i], i, active, labels),
-                                       i == active, ground, scale);
+        const int after = inkcell_fb_draw_chip(
+            state, x, y, chips[i].icon, inkcell_fb_chip_strip_label(&chips[i], i, active, labels),
+            i == active, ground, scale);
         const int badge = inkcell_fb_chip_badge_width(state, chips[i].badge, labels, scale);
         if (badge > 0) {
-            inkcell_fb_draw_chip_badge(state, after - inkcell_fb_char_adv(state, scale), y, chips[i].badge, labels,
-                               scale);
+            inkcell_fb_draw_chip_badge(state, after - inkcell_fb_char_adv(state, scale), y,
+                                       chips[i].badge, labels, scale);
         }
         x = after + badge;
     }
@@ -309,7 +331,8 @@ int inkcell_fb_draw_chip_strip(const struct inkcell_backend_fb_state *state, int
  * drew separately is a capsule that would end up two different shapes.
  */
 
-int inkcell_fb_badge_width(const struct inkcell_backend_fb_state *state, const char *text, int scale) {
+int inkcell_fb_badge_width(const struct inkcell_backend_fb_state *state, const char *text,
+                           int scale) {
     const size_t cells = text != NULL ? inkcell_text_cells(text) : 0U;
     /* Half a cell either side of the words: enough to clear the capsule's own curve at every
        glyph scale a theme may pick, and it is what the row's badge has always taken. */
@@ -320,43 +343,46 @@ int inkcell_fb_badge_width(const struct inkcell_backend_fb_state *state, const c
    below are this with a different pair, which is the whole of what tells a badge from a chip -
    so the shape, the radius and the half-cell inset are stated once. */
 static void inkcell_fb_fill_capsule_text(const struct inkcell_backend_fb_state *state,
-                                 const struct inkcell_fb_rect *box, int text_y, const char *text,
-                                 struct inkcell_paint paint, int scale) {
+                                         const struct inkcell_fb_rect *box, int text_y,
+                                         const char *text, struct inkcell_paint paint, int scale) {
     if (text == NULL || text[0] == '\0' || box->w <= 0) {
         return;
     }
-    inkcell_fb_fill_round_rect(state, box->x, box->y, box->w, box->h, inkcell_fb_radius(state, INKCELL_SHAPE_FULL),
-                       paint.fill);
-    inkcell_fb_draw_text(state, box->x + inkcell_fb_char_adv(state, scale) / 2, text_y, text, scale, paint.ink,
-                 paint.fill);
+    inkcell_fb_fill_round_rect(state, box->x, box->y, box->w, box->h,
+                               inkcell_fb_radius(state, INKCELL_SHAPE_FULL), paint.fill);
+    inkcell_fb_draw_text(state, box->x + inkcell_fb_char_adv(state, scale) / 2, text_y, text, scale,
+                         paint.ink, paint.fill);
 }
 
-void inkcell_fb_draw_badge(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_rect *box,
-                   int text_y, const char *text, enum inkcell_family family, int scale) {
+void inkcell_fb_draw_badge(const struct inkcell_backend_fb_state *state,
+                           const struct inkcell_fb_rect *box, int text_y, const char *text,
+                           enum inkcell_family family, int scale) {
     /* One call for both halves: whatever the theme says reads on that family's own fill - on
        the dark palette that is the ground colour, because white on its yellow is unreadable at
        this glyph size. */
-    inkcell_fb_fill_capsule_text(state, box, text_y, text,
-                         inkcell_fb_paint(state, family, INKCELL_SLOT_BASE, INKCELL_STATE_REST), scale);
+    inkcell_fb_fill_capsule_text(
+        state, box, text_y, text,
+        inkcell_fb_paint(state, family, INKCELL_SLOT_BASE, INKCELL_STATE_REST), scale);
 }
 
-void inkcell_fb_draw_state_chip(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_rect *box,
-                        int text_y, const char *text, enum inkcell_tone tone,
-                        enum inkcell_color ground, struct inkcell_rgb ink, int scale) {
+void inkcell_fb_draw_state_chip(const struct inkcell_backend_fb_state *state,
+                                const struct inkcell_fb_rect *box, int text_y, const char *text,
+                                enum inkcell_tone tone, enum inkcell_color ground,
+                                struct inkcell_rgb ink, int scale) {
     const enum inkcell_family family = inkcell_tone_family(tone);
     if (family != INKCELL_FAMILY_COUNT) {
         /* The container at rest and the family's full strength on the cursor's own fill, which
-           is the leading disc's rule one screen up and inkcell_fb_button_paint()'s for a tonal control.
-           `ground` is what says which: a container and the cursor fill are both quiet fills on
-           the body ground and therefore near each other, so a chip that kept its container
+           is the leading disc's rule one screen up and inkcell_fb_button_paint()'s for a tonal
+           control. `ground` is what says which: a container and the cursor fill are both quiet
+           fills on the body ground and therefore near each other, so a chip that kept its container
            there would be a state that disappears on the row being pointed at. */
         const bool on_cursor =
             ground == INKCELL_COLOR_SURFACE_SEL || ground == INKCELL_COLOR_SURFACE_ACTIVE;
-        inkcell_fb_fill_capsule_text(state, box, text_y, text,
-                             inkcell_fb_paint(state, family,
-                                      on_cursor ? INKCELL_SLOT_BASE : INKCELL_SLOT_CONTAINER,
-                                      INKCELL_STATE_REST),
-                             scale);
+        inkcell_fb_fill_capsule_text(
+            state, box, text_y, text,
+            inkcell_fb_paint(state, family, on_cursor ? INKCELL_SLOT_BASE : INKCELL_SLOT_CONTAINER,
+                             INKCELL_STATE_REST),
+            scale);
         return;
     }
     if (text == NULL || text[0] == '\0' || box->w <= 0) {
@@ -374,18 +400,19 @@ void inkcell_fb_draw_state_chip(const struct inkcell_backend_fb_state *state, co
      * worth *checking*, which is Material's own distinction between the two and the difference
      * between "verified" and "not verified" being two pills of equal weight.
      *
-     * Two fills rather than a stroke, on inkcell_fb_draw_card()'s terms: the ring, then the row's own
-     * ground inset by one hairline. The words keep the row's ink, because the inside of the
+     * Two fills rather than a stroke, on inkcell_fb_draw_card()'s terms: the ring, then the row's
+     * own ground inset by one hairline. The words keep the row's ink, because the inside of the
      * capsule is the same colour they were already legible on.
      */
     const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_FULL);
     const int edge = inkcell_fb_edge(state);
     const struct inkcell_rgb fill = inkcell_fb_color(state, ground);
     inkcell_fb_fill_round_rect(state, box->x, box->y, box->w, box->h, radius,
-                       inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
+                               inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
     if (box->w > 2 * edge && box->h > 2 * edge) {
         inkcell_fb_fill_round_rect(state, box->x + edge, box->y + edge, box->w - 2 * edge,
-                           box->h - 2 * edge, radius, fill);
+                                   box->h - 2 * edge, radius, fill);
     }
-    inkcell_fb_draw_text(state, box->x + inkcell_fb_char_adv(state, scale) / 2, text_y, text, scale, ink, fill);
+    inkcell_fb_draw_text(state, box->x + inkcell_fb_char_adv(state, scale) / 2, text_y, text, scale,
+                         ink, fill);
 }

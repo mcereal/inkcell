@@ -5,8 +5,8 @@
  * the body - which is why neither advances a `y` the way a component inside a screen does.
  */
 
-#include "inkcell/ui/widgets/overlay.h"
 #include "inkcell/ui/widgets/button.h"
+#include "inkcell/ui/widgets/overlay.h"
 
 #include "inkcell/i18n/strings.h"
 #include "inkcell/ui/anim.h"
@@ -43,8 +43,9 @@
    Anything longer is clipped rather than allowed to grow into the body. */
 #define INKCELL_FB_SNACKBAR_LINES_MAX 2U
 
-void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state, const struct inkcell_fb_layout *layout,
-                      const struct inkcell_fb_snackbar *bar) {
+void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state,
+                              const struct inkcell_fb_layout *layout,
+                              const struct inkcell_fb_snackbar *bar) {
     if (state == NULL || layout == NULL) {
         return;
     }
@@ -75,7 +76,8 @@ void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state, const stru
 
     const int32_t position = inkcell_anim_track(
         &state->anim, INKCELL_FB_ANIM_ID_SNACKBAR, state->now_ms, showing ? INKCELL_ANIM_ONE : 0,
-        inkcell_fb_motion(state, showing ? INKCELL_FB_SNACKBAR_IN_MOTION : INKCELL_FB_SNACKBAR_OUT_MOTION),
+        inkcell_fb_motion(state,
+                          showing ? INKCELL_FB_SNACKBAR_IN_MOTION : INKCELL_FB_SNACKBAR_OUT_MOTION),
         INKCELL_EASE_OUT);
     if (!showing && position == 0) {
         /* All the way out. The store forgot the words several frames ago; now so does this,
@@ -143,8 +145,9 @@ void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state, const stru
      * the ground the theme has - so the fill is the whole cue, and an outline over it would be
      * drawing a border around the most obvious thing on the panel.
      */
-    inkcell_fb_fill_round_rect(state, box_x, y, box_w, box_h, inkcell_fb_radius(state, INKCELL_SHAPE_SM),
-                       inkcell_fb_color(state, INKCELL_COLOR_SURFACE_INVERSE));
+    inkcell_fb_fill_round_rect(state, box_x, y, box_w, box_h,
+                               inkcell_fb_radius(state, INKCELL_SHAPE_SM),
+                               inkcell_fb_color(state, INKCELL_COLOR_SURFACE_INVERSE));
 
     const struct inkcell_rgb ink = inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_INVERSE);
     struct inkcell_wrap wrap;
@@ -152,7 +155,7 @@ void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state, const stru
     int text_y = y + pad_y;
     for (uint32_t drawn = 0U; drawn < lines && inkcell_wrap_next(&wrap); ++drawn) {
         inkcell_fb_draw_text(state, box_x + pad_x, text_y, wrap.line, scale, ink,
-                     inkcell_fb_color(state, INKCELL_COLOR_SURFACE_INVERSE));
+                             inkcell_fb_color(state, INKCELL_COLOR_SURFACE_INVERSE));
         text_y += line;
     }
 }
@@ -176,8 +179,8 @@ void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state, const stru
  * its first cell: something is drawn, and the button still marks where the press lands.
  */
 static void inkcell_fb_fit_button_label(const struct inkcell_backend_fb_state *state,
-                                enum inkcell_icon icon, const char *src, int scale, int max_w,
-                                char *out, size_t out_len) {
+                                        enum inkcell_icon icon, const char *src, int scale,
+                                        int max_w, char *out, size_t out_len) {
     inkcell_str_copy(out, out_len, src != NULL ? src : "");
     while (inkcell_fb_button_width(state, icon, out, scale) > max_w) {
         const size_t cells = inkcell_text_cells(out);
@@ -188,8 +191,9 @@ static void inkcell_fb_fit_button_label(const struct inkcell_backend_fb_state *s
     }
 }
 
-void inkcell_fb_draw_dialog(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_layout *layout,
-                    const struct inkcell_fb_dialog *dialog) {
+void inkcell_fb_draw_dialog(const struct inkcell_backend_fb_state *state,
+                            const struct inkcell_fb_layout *layout,
+                            const struct inkcell_fb_dialog *dialog) {
     if (dialog == NULL) {
         return;
     }
@@ -237,10 +241,10 @@ void inkcell_fb_draw_dialog(const struct inkcell_backend_fb_state *state, const 
     const int gap = scale * 2;
     char accept_label[INKCELL_LINE_MAX];
     char cancel_label[INKCELL_LINE_MAX];
-    inkcell_fb_fit_button_label(state, INKCELL_ICON_CHECK, dialog->accept, scale, text_w, accept_label,
-                        sizeof accept_label);
-    inkcell_fb_fit_button_label(state, INKCELL_ICON_CLOSE, dialog->cancel, scale, text_w, cancel_label,
-                        sizeof cancel_label);
+    inkcell_fb_fit_button_label(state, INKCELL_ICON_CHECK, dialog->accept, scale, text_w,
+                                accept_label, sizeof accept_label);
+    inkcell_fb_fit_button_label(state, INKCELL_ICON_CLOSE, dialog->cancel, scale, text_w,
+                                cancel_label, sizeof cancel_label);
     const int cancel_w = inkcell_fb_button_width(state, INKCELL_ICON_CLOSE, cancel_label, scale);
     const int accept_w = inkcell_fb_button_width(state, INKCELL_ICON_CHECK, accept_label, scale);
     /* Stacked puts the answer that acts on top, the way a stacked dialog orders them - the
@@ -277,17 +281,18 @@ void inkcell_fb_draw_dialog(const struct inkcell_backend_fb_state *state, const 
 
     const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_LG);
     inkcell_fb_fill_round_rect(state, panel_x, panel_y, panel_w, panel_h, radius + edge,
-                       inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
+                               inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
     inkcell_fb_fill_round_rect(state, panel_x + edge, panel_y + edge, panel_w - 2 * edge,
-                       panel_h - 2 * edge, radius, inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
+                               panel_h - 2 * edge, radius,
+                               inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
 
     const int content_x = panel_x + pad;
     int y = panel_y + pad;
 
     if (has_icon) {
         inkcell_fb_draw_icon(state, content_x, y, dialog->icon, icon_scale,
-                     inkcell_fb_tone_color(state, accent_tone),
-                     inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
+                             inkcell_fb_tone_color(state, accent_tone),
+                             inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
         y += icon_h;
     }
 
@@ -297,15 +302,15 @@ void inkcell_fb_draw_dialog(const struct inkcell_backend_fb_state *state, const 
         inkcell_line_printf(&headline, "%s", dialog->headline);
         inkcell_line_fit(&headline, text_cols);
         inkcell_fb_draw_text(state, content_x, y, inkcell_line_text(&headline), scale,
-                     inkcell_fb_tone_color(state, accent_tone),
-                     inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
+                             inkcell_fb_tone_color(state, accent_tone),
+                             inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
         y += head_h;
     }
 
     if (text_lines > 0U) {
         inkcell_fb_draw_wrapped_at(state, content_x, y, dialog->text, text_cols, (int)text_lines,
-                           inkcell_fb_tone_color(state, INKCELL_TONE_NORMAL),
-                           inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
+                                   inkcell_fb_tone_color(state, INKCELL_TONE_NORMAL),
+                                   inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
     }
 
     /*
@@ -391,7 +396,8 @@ int inkcell_fb_qr_side(const struct inkcell_fb_qr *qr) {
     return px > 0 ? px * ((int)qr->code->size + 8) : 0;
 }
 
-void inkcell_fb_draw_qr(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_qr *qr) {
+void inkcell_fb_draw_qr(const struct inkcell_backend_fb_state *state,
+                        const struct inkcell_fb_qr *qr) {
     const int px = inkcell_fb_qr_module_px(qr);
     if (px <= 0) {
         return;
@@ -403,7 +409,8 @@ void inkcell_fb_draw_qr(const struct inkcell_backend_fb_state *state, const stru
 
     /* The margin is drawn rather than left to the screen behind it: the quiet zone is part of
        the code, and a reader that cannot find it does not lock on. */
-    inkcell_fb_fill_rect(state, x0, y0, side, side, inkcell_fb_color(state, INKCELL_COLOR_CODE_GROUND));
+    inkcell_fb_fill_rect(state, x0, y0, side, side,
+                         inkcell_fb_color(state, INKCELL_COLOR_CODE_GROUND));
     const struct inkcell_rgb ink = inkcell_fb_color(state, INKCELL_COLOR_CODE);
     for (int y = 0; y < size; ++y) {
         /* A run of dark modules is one fill rather than one per module: a code at the version
@@ -417,7 +424,8 @@ void inkcell_fb_draw_qr(const struct inkcell_backend_fb_state *state, const stru
                 continue;
             }
             if (run > 0) {
-                inkcell_fb_fill_rect(state, x0 + (x - run + 4) * px, y0 + (y + 4) * px, run * px, px, ink);
+                inkcell_fb_fill_rect(state, x0 + (x - run + 4) * px, y0 + (y + 4) * px, run * px,
+                                     px, ink);
                 run = 0;
             }
         }

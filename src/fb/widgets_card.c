@@ -4,8 +4,8 @@
  * The card: its geometry, the rows a screen puts in it, and the one pass that draws them.
  */
 
-#include "inkcell/ui/widgets/card.h"
 #include "inkcell/ui/widgets/button.h"
+#include "inkcell/ui/widgets/card.h"
 #include "inkcell/ui/widgets/meter.h"
 
 #include "inkcell/i18n/strings.h"
@@ -21,10 +21,10 @@
 /*
  * A card's geometry, all of it derived from the theme's scale and its two card metrics.
  *
- * Computed once and shared by the measure and the draw, for the reason struct inkcell_fb_bubble_metrics
- * exists: a card that measured one height and painted another would either leave a gap under
- * itself or paint over the rows below, and the screen places the next card from the height this
- * one reported.
+ * Computed once and shared by the measure and the draw, for the reason struct
+ * inkcell_fb_bubble_metrics exists: a card that measured one height and painted another would
+ * either leave a gap under itself or paint over the rows below, and the screen places the next card
+ * from the height this one reported.
  */
 struct inkcell_fb_card_metrics {
     int x, width; /* the panel, edge included */
@@ -51,9 +51,10 @@ struct inkcell_fb_card_metrics {
     struct inkcell_rgb edge_ink; /* the hairline, or the focus ring when a verb is selected */
 };
 
-static struct inkcell_fb_card_metrics inkcell_fb_card_measure(const struct inkcell_backend_fb_state *state,
-                                              const struct inkcell_fb_layout *layout,
-                                              const struct inkcell_fb_card *card) {
+static struct inkcell_fb_card_metrics
+inkcell_fb_card_measure(const struct inkcell_backend_fb_state *state,
+                        const struct inkcell_fb_layout *layout,
+                        const struct inkcell_fb_card *card) {
     const struct inkcell_metrics *metrics = inkcell_fb_metrics(state);
     const int scale = state->scale;
     struct inkcell_fb_card_metrics m;
@@ -232,8 +233,10 @@ struct inkcell_fb_card_fit {
 /* The painted box for that much of the card - the gap to the next card is not part of it,
    because the last card on a screen does not spend one and a fit test that charged it anyway
    lost a row to a card that had room for it. */
-static int inkcell_fb_card_box_height(const struct inkcell_fb_card_metrics *m, const struct inkcell_fb_layout *layout,
-                              const struct inkcell_fb_card *card, struct inkcell_fb_card_fit fit) {
+static int inkcell_fb_card_box_height(const struct inkcell_fb_card_metrics *m,
+                                      const struct inkcell_fb_layout *layout,
+                                      const struct inkcell_fb_card *card,
+                                      struct inkcell_fb_card_fit fit) {
     int height = 2 * (m->pad_y + m->edge) + m->heading_h;
     for (uint32_t i = 0U; i < fit.rows && i < card->count; ++i) {
         height += (int)inkcell_fb_card_row_lines(&card->rows[i], m->cols) * layout->line;
@@ -250,8 +253,9 @@ static int inkcell_fb_card_box_height(const struct inkcell_fb_card_metrics *m, c
  * a truncated paragraph with rows under it reads as a complete one.
  */
 static struct inkcell_fb_card_fit inkcell_fb_card_clip(const struct inkcell_fb_card_metrics *m,
-                                       const struct inkcell_fb_layout *layout, const struct inkcell_fb_card *card,
-                                       int top, int bottom) {
+                                                       const struct inkcell_fb_layout *layout,
+                                                       const struct inkcell_fb_card *card, int top,
+                                                       int bottom) {
     struct inkcell_fb_card_fit fit = {.rows = card->count, .tail_lines = 0U};
     while (fit.rows > 0U && top + inkcell_fb_card_box_height(m, layout, card, fit) > bottom) {
         fit.rows -= 1U;
@@ -269,8 +273,9 @@ static struct inkcell_fb_card_fit inkcell_fb_card_clip(const struct inkcell_fb_c
     return fit;
 }
 
-void inkcell_fb_card_begin(struct inkcell_fb_card *card, enum inkcell_fb_card_variant variant, enum inkcell_icon icon,
-                   enum inkcell_str_id heading, enum inkcell_tone tone) {
+void inkcell_fb_card_begin(struct inkcell_fb_card *card, enum inkcell_fb_card_variant variant,
+                           enum inkcell_icon icon, enum inkcell_str_id heading,
+                           enum inkcell_tone tone) {
     if (card == NULL) {
         return;
     }
@@ -284,8 +289,9 @@ void inkcell_fb_card_begin(struct inkcell_fb_card *card, enum inkcell_fb_card_va
 }
 
 /* The next free row, or NULL once the card is full. */
-static struct inkcell_fb_card_row *inkcell_fb_card_next_row(struct inkcell_fb_card *card, enum inkcell_fb_card_row_kind kind,
-                                            enum inkcell_tone tone) {
+static struct inkcell_fb_card_row *inkcell_fb_card_next_row(struct inkcell_fb_card *card,
+                                                            enum inkcell_fb_card_row_kind kind,
+                                                            enum inkcell_tone tone) {
     if (card == NULL || card->count >= INKCELL_FB_CARD_ROWS_MAX) {
         return NULL;
     }
@@ -296,9 +302,10 @@ static struct inkcell_fb_card_row *inkcell_fb_card_next_row(struct inkcell_fb_ca
     return row;
 }
 
-void inkcell_fb_card_row_text(struct inkcell_fb_card *card, enum inkcell_tone tone, enum inkcell_str_id label,
-                      const char *value) {
-    struct inkcell_fb_card_row *row = inkcell_fb_card_next_row(card, INKCELL_FB_CARD_ROW_FIELD, tone);
+void inkcell_fb_card_row_text(struct inkcell_fb_card *card, enum inkcell_tone tone,
+                              enum inkcell_str_id label, const char *value) {
+    struct inkcell_fb_card_row *row =
+        inkcell_fb_card_next_row(card, INKCELL_FB_CARD_ROW_FIELD, tone);
     if (row == NULL) {
         return;
     }
@@ -313,8 +320,8 @@ void inkcell_fb_card_row_text(struct inkcell_fb_card *card, enum inkcell_tone to
     inkcell_text_sanitise_str(value, row->value, sizeof row->value);
 }
 
-void inkcell_fb_card_row(struct inkcell_fb_card *card, enum inkcell_tone tone, enum inkcell_str_id label,
-                 enum inkcell_str_id value, ...) {
+void inkcell_fb_card_row(struct inkcell_fb_card *card, enum inkcell_tone tone,
+                         enum inkcell_str_id label, enum inkcell_str_id value, ...) {
     char text[INKCELL_LINE_MAX];
     va_list args;
     va_start(args, value);
@@ -323,10 +330,11 @@ void inkcell_fb_card_row(struct inkcell_fb_card *card, enum inkcell_tone tone, e
     inkcell_fb_card_row_text(card, tone, label, text);
 }
 
-void inkcell_fb_card_meter(struct inkcell_fb_card *card, enum inkcell_tone tone, enum inkcell_str_id label,
-                   int32_t value, struct inkcell_scale scale, const struct inkcell_band *band,
-                   uint32_t id) {
-    struct inkcell_fb_card_row *row = inkcell_fb_card_next_row(card, INKCELL_FB_CARD_ROW_METER, tone);
+void inkcell_fb_card_meter(struct inkcell_fb_card *card, enum inkcell_tone tone,
+                           enum inkcell_str_id label, int32_t value, struct inkcell_scale scale,
+                           const struct inkcell_band *band, uint32_t id) {
+    struct inkcell_fb_card_row *row =
+        inkcell_fb_card_next_row(card, INKCELL_FB_CARD_ROW_METER, tone);
     if (row == NULL) {
         return;
     }
@@ -342,8 +350,8 @@ void inkcell_fb_card_meter(struct inkcell_fb_card *card, enum inkcell_tone tone,
     row->meter_id = id;
 }
 
-void inkcell_fb_card_proportion(struct inkcell_fb_card *card, enum inkcell_tone tone, enum inkcell_str_id label,
-                        const uint32_t *values, uint32_t count) {
+void inkcell_fb_card_proportion(struct inkcell_fb_card *card, enum inkcell_tone tone,
+                                enum inkcell_str_id label, const uint32_t *values, uint32_t count) {
     if (values == NULL || count < 2U || count > INKCELL_PROPORTION_PARTS) {
         return;
     }
@@ -356,7 +364,8 @@ void inkcell_fb_card_proportion(struct inkcell_fb_card *card, enum inkcell_tone 
     if (total == 0U) {
         return;
     }
-    struct inkcell_fb_card_row *row = inkcell_fb_card_next_row(card, INKCELL_FB_CARD_ROW_PROPORTION, tone);
+    struct inkcell_fb_card_row *row =
+        inkcell_fb_card_next_row(card, INKCELL_FB_CARD_ROW_PROPORTION, tone);
     if (row == NULL) {
         return;
     }
@@ -373,15 +382,18 @@ void inkcell_fb_card_note(struct inkcell_fb_card *card, enum inkcell_tone tone, 
     if (text == NULL || text[0] == '\0') {
         return;
     }
-    struct inkcell_fb_card_row *row = inkcell_fb_card_next_row(card, INKCELL_FB_CARD_ROW_NOTE, tone);
+    struct inkcell_fb_card_row *row =
+        inkcell_fb_card_next_row(card, INKCELL_FB_CARD_ROW_NOTE, tone);
     if (row == NULL) {
         return;
     }
     inkcell_text_sanitise_str(text, row->value, sizeof row->value);
 }
 
-void inkcell_fb_card_action(struct inkcell_fb_card *card, enum inkcell_str_id label, bool selected) {
-    if (card == NULL || card->action_count >= INKCELL_FB_CARD_ACTIONS_MAX || label == INKCELL_STR_NONE) {
+void inkcell_fb_card_action(struct inkcell_fb_card *card, enum inkcell_str_id label,
+                            bool selected) {
+    if (card == NULL || card->action_count >= INKCELL_FB_CARD_ACTIONS_MAX ||
+        label == INKCELL_STR_NONE) {
         return;
     }
     struct inkcell_fb_card_action *action = &card->actions[card->action_count++];
@@ -390,10 +402,13 @@ void inkcell_fb_card_action(struct inkcell_fb_card *card, enum inkcell_str_id la
     action->selected = selected;
 }
 
-bool inkcell_fb_card_is_empty(const struct inkcell_fb_card *card) { return card == NULL || card->count == 0U; }
+bool inkcell_fb_card_is_empty(const struct inkcell_fb_card *card) {
+    return card == NULL || card->count == 0U;
+}
 
-int inkcell_fb_card_height(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_layout *layout,
-                   const struct inkcell_fb_card *card) {
+int inkcell_fb_card_height(const struct inkcell_backend_fb_state *state,
+                           const struct inkcell_fb_layout *layout,
+                           const struct inkcell_fb_card *card) {
     if (inkcell_fb_card_is_empty(card)) {
         return 0;
     }
@@ -413,9 +428,9 @@ int inkcell_fb_card_height(const struct inkcell_backend_fb_state *state, const s
  * the two were typographically identical, which is what made a card of them read as a block of
  * text with no way into it: the node detail's complaint, one component over, fixed its way.
  *
- * Stated here rather than asked of the caller because a card is not a list. inkcell_fb_list_item() takes
- * `label_quiet` per row because a settings section mixes readings with controls; nothing a card
- * draws is a control - the verbs a card offers are buttons beside its heading, not rows - so a
+ * Stated here rather than asked of the caller because a card is not a list. inkcell_fb_list_item()
+ * takes `label_quiet` per row because a settings section mixes readings with controls; nothing a
+ * card draws is a control - the verbs a card offers are buttons beside its heading, not rows - so a
  * flag here would be a question with one answer.
  *
  * One cell between the column and what follows it, which is the space the composed line carried,
@@ -423,8 +438,9 @@ int inkcell_fb_card_height(const struct inkcell_backend_fb_state *state, const s
  * saying the bar is the row; see inkcell_fb_card_meter().
  */
 static int inkcell_fb_card_row_label(struct inkcell_backend_fb_state *state,
-                             const struct inkcell_fb_card_metrics *m, int y, const struct inkcell_fb_card_row *row,
-                             struct inkcell_rgb ground) {
+                                     const struct inkcell_fb_card_metrics *m, int y,
+                                     const struct inkcell_fb_card_row *row,
+                                     struct inkcell_rgb ground) {
     if (row->label[0] == '\0') {
         return m->content_x;
     }
@@ -433,30 +449,32 @@ static int inkcell_fb_card_row_label(struct inkcell_backend_fb_state *state,
     inkcell_line_column(&line, row->label, m->label_cols);
     inkcell_line_fit(&line, m->cols);
     inkcell_fb_draw_text(state, m->content_x, y, inkcell_line_text(&line), state->scale,
-                 inkcell_fb_tone_color(state, INKCELL_TONE_DIM), ground);
+                         inkcell_fb_tone_color(state, INKCELL_TONE_DIM), ground);
     return m->content_x + (int)(m->label_cols + 1U) * inkcell_fb_char_adv(state, state->scale);
 }
 
 /* One row of content, drawn at `y` and returning the rows it used. `max_lines` of 0 means the
    row's own count; anything else is the budget a clipped note has been given. */
 static uint32_t inkcell_fb_draw_card_row(struct inkcell_backend_fb_state *state,
-                                 const struct inkcell_fb_card_metrics *m, const struct inkcell_fb_layout *layout,
-                                 int y, const struct inkcell_fb_card_row *row, uint32_t max_lines) {
+                                         const struct inkcell_fb_card_metrics *m,
+                                         const struct inkcell_fb_layout *layout, int y,
+                                         const struct inkcell_fb_card_row *row,
+                                         uint32_t max_lines) {
     const struct inkcell_rgb color = inkcell_fb_tone_color(state, row->tone);
-    /* Every row here is inside the panel inkcell_fb_draw_card() filled, not on the ground it sits on -
-       and which fill that is depends on the card's variant, so it comes from the metrics rather
-       than from the surface role a card used to be. */
+    /* Every row here is inside the panel inkcell_fb_draw_card() filled, not on the ground it sits
+       on - and which fill that is depends on the card's variant, so it comes from the metrics
+       rather than from the surface role a card used to be. */
     const struct inkcell_rgb ground = inkcell_fb_color(state, m->fill);
     if (row->kind == INKCELL_FB_CARD_ROW_NOTE) {
-        /* inkcell_fb_draw_wrapped() lays out from the left margin, and a card's content starts inside
-           it, so the note is wrapped here against the card's own column. */
+        /* inkcell_fb_draw_wrapped() lays out from the left margin, and a card's content starts
+           inside it, so the note is wrapped here against the card's own column. */
         const uint32_t budget = max_lines > 0U ? max_lines : INKCELL_FB_CARD_NOTE_LINES;
         struct inkcell_wrap wrap;
         inkcell_wrap_begin(&wrap, row->value, m->cols);
         uint32_t drawn = 0U;
         while (drawn < budget && inkcell_wrap_next(&wrap)) {
             inkcell_fb_draw_text(state, m->content_x, y + (int)drawn * layout->line, wrap.line,
-                         state->scale, color, ground);
+                                 state->scale, color, ground);
             drawn += 1U;
         }
         return drawn > 0U ? drawn : 1U;
@@ -522,38 +540,42 @@ static uint32_t inkcell_fb_draw_card_row(struct inkcell_backend_fb_state *state,
     const int value_x = inkcell_fb_card_row_label(state, m, y, row, ground);
     /* A card whose label column has eaten the whole width has no room left to answer in, and
        says nothing rather than spilling past the panel. */
-    const size_t taken = (size_t)((value_x - m->content_x) / inkcell_fb_char_adv(state, state->scale));
+    const size_t taken =
+        (size_t)((value_x - m->content_x) / inkcell_fb_char_adv(state, state->scale));
     if (taken < m->cols) {
         struct inkcell_line line;
         inkcell_line_reset(&line);
         inkcell_line_printf(&line, "%s", row->value);
         inkcell_line_fit(&line, m->cols - taken);
-        inkcell_fb_draw_text(state, value_x, y, inkcell_line_text(&line), state->scale, color, ground);
+        inkcell_fb_draw_text(state, value_x, y, inkcell_line_text(&line), state->scale, color,
+                             ground);
     }
     return 1U;
 }
 
-int inkcell_fb_card_min_height(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_layout *layout,
-                       const struct inkcell_fb_card *card) {
+int inkcell_fb_card_min_height(const struct inkcell_backend_fb_state *state,
+                               const struct inkcell_fb_layout *layout,
+                               const struct inkcell_fb_card *card) {
     if (inkcell_fb_card_is_empty(card)) {
         return 0;
     }
     const struct inkcell_fb_card_metrics m = inkcell_fb_card_measure(state, layout, card);
-    /* One row, which is the same point inkcell_fb_draw_card() refuses a card at: a heading with nothing
-       under it is not a card. What the row costs is the row's own - a note that wraps to three
-       lines is three - because the minimum has to be a card that can actually be drawn. */
+    /* One row, which is the same point inkcell_fb_draw_card() refuses a card at: a heading with
+       nothing under it is not a card. What the row costs is the row's own - a note that wraps to
+       three lines is three - because the minimum has to be a card that can actually be drawn. */
     const struct inkcell_fb_card_fit least = {.rows = 1U, .tail_lines = 0U};
-    /* The box and no gap, exactly as inkcell_fb_card_height() answers now. The gap *between* the two
-       cards is real and still has to be paid for - it is just not this card's to state, because
+    /* The box and no gap, exactly as inkcell_fb_card_height() answers now. The gap *between* the
+       two cards is real and still has to be paid for - it is just not this card's to state, because
        it belongs to whichever card is reserving the room and is added by
-       inkcell_fb_draw_card_reserving(). Counting it here as well would spend a row of content on air,
-       and counting it in one of the pair and not the other is a reservation that is a row too
+       inkcell_fb_draw_card_reserving(). Counting it here as well would spend a row of content on
+       air, and counting it in one of the pair and not the other is a reservation that is a row too
        generous depending on which of them a screen asked. */
     return inkcell_fb_card_box_height(&m, layout, card, least);
 }
 
-bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state, const struct inkcell_fb_layout *layout,
-                            int *y, const struct inkcell_fb_card *card, int reserve) {
+bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state,
+                                    const struct inkcell_fb_layout *layout, int *y,
+                                    const struct inkcell_fb_card *card, int reserve) {
     if (y == NULL || inkcell_fb_card_is_empty(card)) {
         return false;
     }
@@ -566,8 +588,8 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state, cons
      * a card, so that is the point at which it is refused outright rather than drawn as an empty
      * box; a single clipped line of a note is content, so it is not that point.
      *
-     * The bound is the body's bottom, not the footer's first baseline: inkcell_fb_render_snapshot() keeps
-     * half a margin between the two when it counts the body rows, and a card that ran to the
+     * The bound is the body's bottom, not the footer's first baseline: inkcell_fb_render_snapshot()
+     * keeps half a margin between the two when it counts the body rows, and a card that ran to the
      * baseline itself would put its edge against the footer text on the one screen dense enough
      * to reach it.
      */
@@ -614,10 +636,10 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state, cons
 
     const int height = inkcell_fb_card_box_height(&m, layout, card, fit);
     /*
-     * The edge first, then the fill inside it: inkcell_fb_fill_round_rect() fills rather than strokes,
-     * so an outline is the larger shape with the smaller one laid over it. Two fills rather than
-     * four rectangles because the corners have to follow the radius, and a stroked round rect is
-     * a primitive nothing else here would use.
+     * The edge first, then the fill inside it: inkcell_fb_fill_round_rect() fills rather than
+     * strokes, so an outline is the larger shape with the smaller one laid over it. Two fills
+     * rather than four rectangles because the corners have to follow the radius, and a stroked
+     * round rect is a primitive nothing else here would use.
      *
      * The edge is not decoration. On a theme whose surface is a step off the ground - which is
      * every one that ships, because a surface far from the ground is a surface body text is no
@@ -636,8 +658,8 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state, cons
     const int top = *y;
     const int inner_radius = m.radius + m.edge - m.ring > 0 ? m.radius + m.edge - m.ring : 0;
     inkcell_fb_fill_round_rect(state, m.x, top, m.width, height, m.radius + m.edge, m.edge_ink);
-    inkcell_fb_fill_round_rect(state, m.x + m.ring, top + m.ring, m.width - 2 * m.ring, height - 2 * m.ring,
-                       inner_radius, inkcell_fb_color(state, m.fill));
+    inkcell_fb_fill_round_rect(state, m.x + m.ring, top + m.ring, m.width - 2 * m.ring,
+                               height - 2 * m.ring, inner_radius, inkcell_fb_color(state, m.fill));
 
     int row_y = top + m.pad_y + m.edge;
     /*
@@ -664,7 +686,7 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state, cons
             int total = 0;
             for (uint32_t i = 0U; i < drawn; ++i) {
                 total += inkcell_fb_button_width(state, INKCELL_ICON_NONE, card->actions[i].label,
-                                         layout->small);
+                                                 layout->small);
                 if (i > 0U) {
                     total += gap;
                 }
@@ -675,8 +697,8 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state, cons
             drawn -= 1U;
         }
         for (uint32_t i = drawn; i-- > 0U;) {
-            const int width =
-                inkcell_fb_button_width(state, INKCELL_ICON_NONE, card->actions[i].label, layout->small);
+            const int width = inkcell_fb_button_width(state, INKCELL_ICON_NONE,
+                                                      card->actions[i].label, layout->small);
             actions_x -= width;
             const struct inkcell_fb_button button = {
                 .rect = {.x = actions_x, .y = row_y, .w = width, .h = m.button_h},
@@ -706,9 +728,10 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state, cons
             /* On the card's own surface, which is what it was just filled with - the icon is
                inside the panel, not on the ground the panel sits on. */
             inkcell_fb_draw_icon(state, heading_x, row_y, card->icon, layout->small, ink,
-                         inkcell_fb_color(state, m.fill));
+                                 inkcell_fb_color(state, m.fill));
             /* The same half-cell a button leaves between its symbol and its word. */
-            heading_x += inkcell_fb_icon_box(state, layout->small) + inkcell_fb_char_adv(state, layout->small) / 2;
+            heading_x += inkcell_fb_icon_box(state, layout->small) +
+                         inkcell_fb_char_adv(state, layout->small) / 2;
         }
         /* Fitted to what the verbs left rather than to the card, so a long heading is cut on a
            cell boundary instead of running under the first button. */
@@ -716,24 +739,27 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state, cons
         const int heading_w = actions_x - heading_x;
         inkcell_line_fit(&line, heading_w >= heading_adv ? (size_t)(heading_w / heading_adv) : 1U);
         inkcell_fb_draw_text(state, heading_x, row_y, inkcell_line_text(&line), layout->small, ink,
-                     inkcell_fb_color(state, m.fill));
+                             inkcell_fb_color(state, m.fill));
     }
     if (m.heading_h > 0) {
         row_y += m.heading_h;
     }
 
     for (uint32_t i = 0U; i < fit.rows; ++i) {
-        row_y += (int)inkcell_fb_draw_card_row(state, &m, layout, row_y, &card->rows[i], 0U) * layout->line;
+        row_y += (int)inkcell_fb_draw_card_row(state, &m, layout, row_y, &card->rows[i], 0U) *
+                 layout->line;
     }
     if (fit.tail_lines > 0U) {
-        (void)inkcell_fb_draw_card_row(state, &m, layout, row_y, &card->rows[fit.rows], fit.tail_lines);
+        (void)inkcell_fb_draw_card_row(state, &m, layout, row_y, &card->rows[fit.rows],
+                                       fit.tail_lines);
     }
 
     *y = top + height + m.gap;
     return true;
 }
 
-bool inkcell_fb_draw_card(struct inkcell_backend_fb_state *state, const struct inkcell_fb_layout *layout, int *y,
-                  const struct inkcell_fb_card *card) {
+bool inkcell_fb_draw_card(struct inkcell_backend_fb_state *state,
+                          const struct inkcell_fb_layout *layout, int *y,
+                          const struct inkcell_fb_card *card) {
     return inkcell_fb_draw_card_reserving(state, layout, y, card, 0);
 }

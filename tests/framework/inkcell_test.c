@@ -14,7 +14,7 @@ static int g_failures = 0;
 static size_t g_successes = 0U;
 
 void inkcell_test_register(struct inkcell_test_case *node, const char *name, const char *category,
-                        const char *file, int line, void (*fn)(void)) {
+                           const char *file, int line, void (*fn)(void)) {
     node->name = name;
     node->category = category;
     node->file = file;
@@ -110,7 +110,8 @@ static bool string_matches_filter(const char *value, const char *filter) {
     return strstr(value, filter) != NULL;
 }
 
-static bool test_selected(const struct inkcell_test_case *test, const struct test_options *options) {
+static bool test_selected(const struct inkcell_test_case *test,
+                          const struct test_options *options) {
     if (options->category != NULL && options->category[0] != '\0' &&
         strcmp(options->category, test->category) != 0) {
         return false;

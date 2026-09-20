@@ -130,11 +130,13 @@ struct inkcell_fb_bubble {
 
 /* Body rows the bubble occupies, separator included. Ask before placing it. */
 uint32_t inkcell_fb_bubble_rows(const struct inkcell_backend_fb_state *state,
-                        const struct inkcell_fb_layout *layout, const struct inkcell_fb_bubble *bubble);
+                                const struct inkcell_fb_layout *layout,
+                                const struct inkcell_fb_bubble *bubble);
 
 /* Draws it with its top row at `y`. Occupies exactly inkcell_fb_bubble_rows() rows. */
-void inkcell_fb_draw_bubble(const struct inkcell_backend_fb_state *state, const struct inkcell_fb_layout *layout,
-                    int y, const struct inkcell_fb_bubble *bubble);
+void inkcell_fb_draw_bubble(const struct inkcell_backend_fb_state *state,
+                            const struct inkcell_fb_layout *layout, int y,
+                            const struct inkcell_fb_bubble *bubble);
 
 /*
  * A centred label with a hairline either side, filling one body row. What separates one day - or
@@ -145,7 +147,7 @@ void inkcell_fb_draw_bubble(const struct inkcell_backend_fb_state *state, const 
  * the eye slides off - which is the whole of why the parameter exists rather than the component
  * picking DIM for everything.
  */
-void inkcell_fb_draw_separator(const struct inkcell_backend_fb_state *state, int y, const char *label,
-                       enum inkcell_tone tone);
+void inkcell_fb_draw_separator(const struct inkcell_backend_fb_state *state, int y,
+                               const char *label, enum inkcell_tone tone);
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_BUBBLE_H */
