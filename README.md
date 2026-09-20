@@ -12,7 +12,7 @@ backend and its component set, and the evdev layer that turns a handheld's butto
 | | |
 |---|---|
 | **Themes** | Colours by *role*, not by name. Four themes ship; a new one is a table. |
-| **Fonts** | A 5x7 pixel face and a rasterised UI face, both as coverage rather than 1-bit masks, resampled into whatever cell the theme asks for. |
+| **Fonts** | A 5x7 pixel face and a proportional UI face in two weights, all as coverage rather than 1-bit masks, resampled into whatever cell the theme asks for. |
 | **Glyphs** | Emoji, icons and font tables, generated (`scripts/gen-*.py`) and committed. |
 | **Layout** | Lines measured in *cells*, scroll windows, text wrapping done once for both the measure and the draw pass. |
 | **Widgets** | Buttons, chips, app bars, list rows, chat bubbles, cards, switches, segmented buttons, meters, charts, dialogs, snackbars, QR codes. |
@@ -29,9 +29,12 @@ These are authoring rules — breaking one compiles and looks fine.
   `scripts/check-strings.py` fails the build on prose in a component.
 - **A widget takes a *tone*, never a colour** — the same reason a stylesheet has a token called
   "danger" instead of the hex for red: it is what lets a theme change the answer.
-- **Layout is measured in cells, not bytes.** A name written with one emoji is four bytes and one
-  column, so a `strlen` or a `%-12s` in a component is a bug. There is no byte-counting entry
-  point to reach for.
+- **Text is measured, never counted.** A name written with one emoji is four bytes and one cell,
+  and on the proportional face that cell is not the same width as the one beside it - so a
+  `strlen`, a `%-12s`, or a cell count multiplied by the advance are all the same bug. Measure
+  with `inkcell_fb_text_width()`, wrap and fit against pixels, and use `inkcell_fb_text_cols()`
+  where a layout genuinely reserves whole columns. `inkcell_fb_char_adv()` is the *nominal*
+  advance: an estimate, and exact only while the face is monospace.
 - **Button hints are (button, string id) pairs**, never a sentence. A keycap is untranslated — it
   is what is printed on the case.
 
