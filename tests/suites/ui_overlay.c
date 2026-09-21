@@ -165,8 +165,7 @@ INKCELL_TEST_CASE(overlay_outlives_the_app_letting_go, unit) {
     struct inkcell_overlay_frame leaving;
     INKCELL_TEST_FAIL_IF_CLEANUP(!overlay_show(&h, &down, &leaving), overlay_close(&h),
                                  "a layer let go of is still on the panel");
-    INKCELL_TEST_FAIL_IF_CLEANUP(leaving.arriving, overlay_close(&h),
-                                 "and it knows it is leaving");
+    INKCELL_TEST_FAIL_IF_CLEANUP(leaving.arriving, overlay_close(&h), "and it knows it is leaving");
     INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_overlay_showing(h.state, OVERLAY_ID_A),
                                  overlay_close(&h), "showing() should say so too");
 
@@ -202,7 +201,8 @@ INKCELL_TEST_CASE(overlay_that_was_never_up_is_never_shown, unit) {
     record_success(test_name);
 }
 
-/* ---- where the box lands ---------------------------------------------------------------------- */
+/* ---- where the box lands ----------------------------------------------------------------------
+ */
 
 /* A layer against the bottom of its region sits flush on it: that edge is where it came from,
    and a sheet standing a gutter clear of it is a card that happens to be low down. */
@@ -335,8 +335,7 @@ INKCELL_TEST_CASE(overlay_modal_is_the_last_one_drawn, unit) {
     (void)overlay_show(&h, &menu, NULL);
     (void)overlay_show(&h, &toast, NULL);
     INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_overlay_modal(h.state) != OVERLAY_ID_B,
-                                 overlay_close(&h),
-                                 "the last modal drawn should own the press");
+                                 overlay_close(&h), "the last modal drawn should own the press");
 
     /* The menu is dismissed. It is still on the panel for the length of its exit, and it no
        longer owns anything: a reader pressing B as a menu closes means the screen behind it. */

@@ -105,21 +105,18 @@ void gallery_scene_layers(struct inkcell_backend_fb_state *state) {
         };
         int y = content.y;
         for (size_t i = 0U; i < sizeof k_filters / sizeof k_filters[0]; ++i) {
-            const struct inkcell_rgb ground =
-                inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH);
+            const struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH);
             const int icon = inkcell_fb_icon_box(state, state->scale);
             const int gap = inkcell_fb_space(state, INKCELL_SPACE_SM);
-            const struct inkcell_rgb ink =
-                inkcell_fb_color(state, k_filters[i].on ? INKCELL_COLOR_TEXT_STRONG
-                                                        : INKCELL_COLOR_TEXT);
-            inkcell_fb_draw_icon(state, content.x, y, k_filters[i].icon, state->scale, ink,
-                                 ground);
-            inkcell_fb_draw_text(state, content.x + icon + gap, y,
-                                 gallery_text(k_filters[i].label), state->scale, ink, ground);
+            const struct inkcell_rgb ink = inkcell_fb_color(
+                state, k_filters[i].on ? INKCELL_COLOR_TEXT_STRONG : INKCELL_COLOR_TEXT);
+            inkcell_fb_draw_icon(state, content.x, y, k_filters[i].icon, state->scale, ink, ground);
+            inkcell_fb_draw_text(state, content.x + icon + gap, y, gallery_text(k_filters[i].label),
+                                 state->scale, ink, ground);
             if (k_filters[i].on) {
                 inkcell_fb_draw_icon(state, content.x + content.w - icon, y, INKCELL_ICON_CHECK,
-                                     state->scale, inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY),
-                                     ground);
+                                     state->scale,
+                                     inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY), ground);
             }
             y += line;
         }
@@ -132,8 +129,8 @@ void gallery_scene_layers(struct inkcell_backend_fb_state *state) {
          * the decision this page exists to show, and the one a caller would otherwise have
          * had to make by measuring the screen.
          */
-        const struct inkcell_fb_rect anchor = {content.x + content.w / 2, y - line,
-                                               content.w / 2, line};
+        const struct inkcell_fb_rect anchor = {content.x + content.w / 2, y - line, content.w / 2,
+                                               line};
         static const struct inkcell_fb_menu_item k_items[] = {
             {.label = NULL, .icon = INKCELL_ICON_PINNED},
             {.label = NULL, .icon = INKCELL_ICON_MUTED},
@@ -209,24 +206,23 @@ void gallery_scene_layers(struct inkcell_backend_fb_state *state) {
     const char *tip = gallery_text(GALLERY_STR_TOOLTIP_RANGE);
 
     struct inkcell_overlay_frame tip_frame;
-    if (inkcell_fb_overlay_begin(state,
-                                 &(struct inkcell_overlay){
-                                     .id = GALLERY_OVERLAY_TOOLTIP,
-                                     .up = true,
-                                     .placement = INKCELL_OVERLAY_ANCHOR,
-                                     .travel = INKCELL_OVERLAY_TRAVEL_NONE,
-                                     .anchor = tip_anchor,
-                                     .w = inkcell_fb_text_width(state, tip, tip_scale) +
-                                          2 * tip_pad,
-                                     .h = inkcell_fb_line_adv(state, tip_scale) + tip_pad,
-                                     .bounds = body,
-                                 },
-                                 &tip_frame)) {
+    if (inkcell_fb_overlay_begin(
+            state,
+            &(struct inkcell_overlay){
+                .id = GALLERY_OVERLAY_TOOLTIP,
+                .up = true,
+                .placement = INKCELL_OVERLAY_ANCHOR,
+                .travel = INKCELL_OVERLAY_TRAVEL_NONE,
+                .anchor = tip_anchor,
+                .w = inkcell_fb_text_width(state, tip, tip_scale) + 2 * tip_pad,
+                .h = inkcell_fb_line_adv(state, tip_scale) + tip_pad,
+                .bounds = body,
+            },
+            &tip_frame)) {
         /* The inverted surface the snackbar takes, for the snackbar's reason: a thing that is
            over the UI rather than in it cannot say so with a tier, because every tier belongs
            to the screen. */
-        const struct inkcell_rgb fill =
-            inkcell_fb_color(state, INKCELL_COLOR_SURFACE_INVERSE);
+        const struct inkcell_rgb fill = inkcell_fb_color(state, INKCELL_COLOR_SURFACE_INVERSE);
         inkcell_fb_fill_round_rect(state, tip_frame.box.x, tip_frame.box.y, tip_frame.box.w,
                                    tip_frame.box.h, inkcell_fb_radius(state, INKCELL_SHAPE_SM),
                                    fill);

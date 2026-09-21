@@ -461,11 +461,11 @@ static void inkcell_fb_list_rail(const struct inkcell_backend_fb_state *state,
         width = strip_w - 2;
     }
 
-    /* The proportion is inkcell_list_scroll()'s - no pixels in it, and unit tested there. A
+    /* The proportion is inkcell_list_thumb()'s - no pixels in it, and unit tested there. A
        length of 0 is a list that fits, which draws nothing at all rather than a full track. */
-    const struct inkcell_scroll scroll =
-        inkcell_list_scroll(&list->model, list->track_h, 4 * width);
-    if (scroll.length <= 0) {
+    const struct inkcell_scroll_thumb thumb =
+        inkcell_list_thumb(&list->model, list->track_h, 4 * width);
+    if (thumb.length <= 0) {
         return;
     }
 
@@ -479,8 +479,8 @@ static void inkcell_fb_list_rail(const struct inkcell_backend_fb_state *state,
        not. */
     inkcell_fb_fill_round_rect(state, x, list->track_y, width, list->track_h, radius,
                                inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK));
-    inkcell_fb_fill_round_rect(state, x, list->track_y + scroll.offset, width, scroll.length,
-                               radius, inkcell_fb_tone_color(state, INKCELL_TONE_DIM));
+    inkcell_fb_fill_round_rect(state, x, list->track_y + thumb.offset, width, thumb.length, radius,
+                               inkcell_fb_tone_color(state, INKCELL_TONE_DIM));
 }
 
 /*

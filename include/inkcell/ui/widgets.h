@@ -31,6 +31,7 @@
  *   inkcell_fb_widgets_control.h   the switch, the checkbox and radio, the segmented button, the
  * field inkcell_fb_widgets_meter.h     a quantity as a length, and a reading over time
  *   inkcell_fb_widgets_overlay.h   the dialog, the menu, the bottom sheet, the snackbar, the QR
+ *   inkcell_fb_widgets_scroll.h    a viewport over content in pixels, its rail, the large title
  *   inkcell_fb_widgets_keyboard.h  the on-screen keyboard's grid, over the model in ui/keyboard.h
  *   inkcell_fb_widgets_focus.h     the focus ring, travelling between the boxes a frame drew
  *
@@ -66,5 +67,6 @@
 #include "inkcell/ui/widgets/list.h"
 #include "inkcell/ui/widgets/meter.h"
 #include "inkcell/ui/widgets/overlay.h"
+#include "inkcell/ui/widgets/scroll.h"
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_H */

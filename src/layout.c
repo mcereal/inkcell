@@ -308,7 +308,7 @@ static void list_settle(struct inkcell_list *list, uint32_t cursor, uint32_t cap
     list->next = list->first;
     /* Where the scroll rail's thumb runs out of travel: the steps above the window that ends on
        the last item. It is derived here, with the rest of the window, rather than inside
-       inkcell_list_scroll() - a rail asks for it once per list and this is the walk that is
+       inkcell_list_thumb() - a rail asks for it once per list and this is the walk that is
        already bounded by the window rather than by the list. */
     if (list->total > capacity) {
         list->last_first_step =
@@ -618,8 +618,9 @@ struct inkcell_transcript inkcell_transcript_window(const uint8_t *heights, uint
     return window;
 }
 
-struct inkcell_scroll inkcell_list_scroll(const struct inkcell_list *list, int track, int minimum) {
-    struct inkcell_scroll scroll = {0, 0};
+struct inkcell_scroll_thumb inkcell_list_thumb(const struct inkcell_list *list, int track,
+                                               int minimum) {
+    struct inkcell_scroll_thumb scroll = {0, 0};
     if (list == NULL || track <= 0) {
         return scroll;
     }

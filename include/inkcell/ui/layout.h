@@ -289,6 +289,12 @@ uint32_t inkcell_list_first_visible(uint32_t cursor, uint32_t count, uint32_t vi
 /*
  * Where a scroll indicator's thumb sits, and how long it is.
  *
+ * A thumb, and named one - it was `struct inkcell_scroll` and `inkcell_list_scroll()`, which
+ * is what the *position* of a scroll is called in every other toolkit and is not what this
+ * answers. It answers where the mark beside a list goes, which is a rendering of a position
+ * rather than the position itself. include/inkcell/ui/scroll.h holds the other thing now, and
+ * the two would have been indistinguishable in a call site under the old name.
+ *
  * Here rather than in the framebuffer backend for the reason the rest of this header is: it is
  * proportion arithmetic over `count`, `first` and `visible`, it touches no pixels, and a second
  * backend that grew a scroll indicator would want the same answer rather than a second
@@ -302,19 +308,20 @@ uint32_t inkcell_list_first_visible(uint32_t cursor, uint32_t count, uint32_t vi
  * the track, which is the difference between a thumb that reaches the end exactly when the last
  * item is on screen and one that stops short and reports that there is more below.
  */
-struct inkcell_scroll {
+struct inkcell_scroll_thumb {
     int offset; /* from the start of the track */
     int length;
 };
 
-struct inkcell_scroll inkcell_list_scroll(const struct inkcell_list *list, int track, int minimum);
+struct inkcell_scroll_thumb inkcell_list_thumb(const struct inkcell_list *list, int track,
+                                               int minimum);
 
 /* ---- readings ------------------------------------------------------------------------------
  *
  * Turning a number into a length, which is the one piece of arithmetic every quantitative
  * widget needs and none of them should own.
  *
- * It is here for the reason inkcell_list_scroll() is: it is proportion arithmetic with no
+ * It is here for the reason inkcell_list_thumb() is: it is proportion arithmetic with no
  * pixels in it, it is unit tested directly (tests/suites/ui_layout.c), and a second backend
  * that grew a bar would want the same answer rather than a second derivation of it.
  */

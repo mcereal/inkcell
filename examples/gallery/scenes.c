@@ -35,6 +35,15 @@ static const struct gallery_scene k_scenes[] = {
        and a menu both arrive from somewhere, so the frame that introduces them is a picture of
        them on their way rather than of what they look like. */
     {"layers", gallery_scene_layers, 400U},
+    /*
+     * A body at three positions a row-index window cannot hold: between two rows, past the
+     * end, and with the heading collapsed into the bar. No settle - each of these is a
+     * *position* rather than a travel, and the scene puts the scroll at it and reads the
+     * clock well past every duration in src/scroll.c.
+     */
+    {"scroll", gallery_scene_scroll, 0U},
+    {"scroll_overscroll", gallery_scene_scroll_overscroll, 0U},
+    {"scroll_title", gallery_scene_scroll_title, 0U},
     {"typography", gallery_scene_typography, 0U},
     {"palette", gallery_scene_palette, 0U},
     {"shapes", gallery_scene_shapes, 0U},

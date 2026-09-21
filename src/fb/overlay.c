@@ -56,8 +56,8 @@ static struct inkcell_fb_rect inkcell_overlay_bounds(const struct inkcell_backen
 }
 
 /* The slot holding `id`, or NULL. */
-static struct inkcell_fb_overlay_slot *
-inkcell_overlay_find(struct inkcell_backend_fb_state *state, uint32_t id) {
+static struct inkcell_fb_overlay_slot *inkcell_overlay_find(struct inkcell_backend_fb_state *state,
+                                                            uint32_t id) {
     for (uint32_t i = 0U; i < INKCELL_OVERLAY_SLOTS; ++i) {
         if (state->overlays[i].id == id) {
             return &state->overlays[i];
@@ -201,8 +201,7 @@ static struct inkcell_fb_rect inkcell_overlay_from(const struct inkcell_backend_
     if (overlay->travel == INKCELL_OVERLAY_TRAVEL_NONE) {
         return rest;
     }
-    const int near =
-        (int)state->var.yres * INKCELL_OVERLAY_NEAR_NUM / INKCELL_OVERLAY_NEAR_DEN;
+    const int near = (int)state->var.yres * INKCELL_OVERLAY_NEAR_NUM / INKCELL_OVERLAY_NEAR_DEN;
     /* Which way is "back where it came from": down for anything sitting at or rising towards
        the bottom, up for anything hanging from the top. */
     int sign = 1;
@@ -316,10 +315,10 @@ bool inkcell_fb_overlay_begin(struct inkcell_backend_fb_state *state,
      * already heading where it is told to, so this may be called every frame with the state it
      * sees and only an actual change starts anything.
      */
-    inkcell_anim_to(&slot->travel, state->now_ms, up ? INKCELL_ANIM_ONE : 0,
-                    inkcell_fb_motion(state, up ? INKCELL_OVERLAY_IN_MOTION
-                                                : INKCELL_OVERLAY_OUT_MOTION),
-                    INKCELL_EASE_OUT);
+    inkcell_anim_to(
+        &slot->travel, state->now_ms, up ? INKCELL_ANIM_ONE : 0,
+        inkcell_fb_motion(state, up ? INKCELL_OVERLAY_IN_MOTION : INKCELL_OVERLAY_OUT_MOTION),
+        INKCELL_EASE_OUT);
     const int32_t progress = inkcell_anim_value(&slot->travel, state->now_ms);
     if (!up && progress == 0) {
         /*
@@ -358,8 +357,7 @@ bool inkcell_fb_overlay_begin(struct inkcell_backend_fb_state *state,
     if (overlay->scrim) {
         span = inkcell_overlay_span(bounds, span);
     }
-    inkcell_fb_animation_damage(state, span.x, span.y, span.right - span.x,
-                                span.bottom - span.y);
+    inkcell_fb_animation_damage(state, span.x, span.y, span.right - span.x, span.bottom - span.y);
     slot->drawn = (struct inkcell_fb_damage_rect){
         .x = box.x, .y = box.y, .right = box.x + box.w, .bottom = box.y + box.h, .valid = true};
 

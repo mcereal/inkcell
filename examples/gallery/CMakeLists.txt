@@ -15,6 +15,7 @@ add_executable(inkcell_gallery
     scenes_transcript.c
     scenes_overlays.c
     scenes_layers.c
+    scenes_scroll.c
     scenes_keyboard.c
     scenes_focus.c
     scenes_glide.c
