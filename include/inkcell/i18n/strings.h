@@ -20,7 +20,7 @@
  *
  * What is deliberately *not* here:
  *
- *   - Log lines. inkcell_log_info() and its siblings write output that is for whoever is reading
+ *   - Log lines. inkwell_log_info() and its siblings write output that is for whoever is reading
  * `deploy-logs`, and a bug report in a language the maintainer cannot read is worse than no bug
  * report.
  *   - Names shared with the rest of Meshtastic: region codes ("EU 868"), hardware models

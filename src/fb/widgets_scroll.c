@@ -16,7 +16,7 @@
 #include "inkcell/ui/widgets/chrome.h"
 
 #include "inkcell/ui/layout.h"
-#include "inkcell/utils/text.h"
+#include "inkwell/base/text.h"
 
 #include <string.h>
 
@@ -300,7 +300,7 @@ void inkcell_fb_draw_large_title(const struct inkcell_backend_fb_state *state,
             inkcell_fb_fade(inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY), ground,
                             INKCELL_ANIM_ONE - progress);
         char fitted[INKCELL_LINE_MAX];
-        inkcell_str_copy(fitted, sizeof fitted, bar->title);
+        inkwell_str_copy(fitted, sizeof fitted, bar->title);
         while (inkcell_fb_text_width(state, fitted, title_scale) > right - text_x) {
             const size_t cells = inkcell_text_cells(fitted);
             if (cells <= 1U) {
@@ -335,7 +335,7 @@ void inkcell_fb_draw_large_title(const struct inkcell_backend_fb_state *state,
             large_right -= w + inkcell_fb_space(state, INKCELL_SPACE_SM);
         }
         char fitted[INKCELL_LINE_MAX];
-        inkcell_str_copy(fitted, sizeof fitted, bar->title);
+        inkwell_str_copy(fitted, sizeof fitted, bar->title);
         while (inkcell_fb_text_width(state, fitted, large_scale) > large_right - margin) {
             const size_t cells = inkcell_text_cells(fitted);
             if (cells <= 1U) {

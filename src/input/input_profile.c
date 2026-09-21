@@ -3,10 +3,10 @@
 #include "inkcell/ui/input_profile.h"
 
 #include "inkcell/ui/input.h"
-#include "inkcell/utils/env.h"
+#include "inkwell/base/env.h"
 
-#include "inkcell/utils/array.h"
-#include "inkcell/utils/log.h"
+#include "inkwell/base/array.h"
+#include "inkwell/base/log.h"
 
 #include <linux/input.h>
 #include <stdio.h>
@@ -101,13 +101,13 @@ static const struct inkcell_input_profile k_profiles[] = {
     {
         .name = "brick",
         .bindings = k_bindings_brick,
-        .binding_count = INKCELL_ARRAY_LEN(k_bindings_brick),
+        .binding_count = INKWELL_ARRAY_LEN(k_bindings_brick),
         .caps = k_caps_abxy,
     },
     {
         .name = "xbox",
         .bindings = k_bindings_xbox,
-        .binding_count = INKCELL_ARRAY_LEN(k_bindings_xbox),
+        .binding_count = INKWELL_ARRAY_LEN(k_bindings_xbox),
         .caps = k_caps_abxy,
     },
 };
@@ -116,11 +116,11 @@ static const struct inkcell_input_profile *s_profile;
 static bool s_profile_loaded;
 
 size_t inkcell_input_profile_count(void) {
-    return INKCELL_ARRAY_LEN(k_profiles);
+    return INKWELL_ARRAY_LEN(k_profiles);
 }
 
 const struct inkcell_input_profile *inkcell_input_profile_at(size_t index) {
-    return index < INKCELL_ARRAY_LEN(k_profiles) ? &k_profiles[index] : NULL;
+    return index < INKWELL_ARRAY_LEN(k_profiles) ? &k_profiles[index] : NULL;
 }
 
 const struct inkcell_input_profile *inkcell_input_profile_default(void) {
@@ -131,7 +131,7 @@ const struct inkcell_input_profile *inkcell_input_profile_by_name(const char *na
     if (name == NULL || name[0] == '\0') {
         return NULL;
     }
-    for (size_t i = 0; i < INKCELL_ARRAY_LEN(k_profiles); ++i) {
+    for (size_t i = 0; i < INKWELL_ARRAY_LEN(k_profiles); ++i) {
         if (strcasecmp(k_profiles[i].name, name) == 0) {
             return &k_profiles[i];
         }
@@ -145,16 +145,16 @@ const struct inkcell_input_profile *inkcell_input_profile_from_env(void) {
     }
     s_profile_loaded = true;
 
-    const char *const name = inkcell_env_get("INPUT_PROFILE");
+    const char *const name = inkwell_env_get("INPUT_PROFILE");
     const struct inkcell_input_profile *profile = inkcell_input_profile_by_name(name);
     if (profile == NULL) {
         if (name != NULL && name[0] != '\0') {
-            inkcell_log_warn("input", "Unknown <PREFIX>_INPUT_PROFILE='%s'; using %s", name,
+            inkwell_log_warn("input", "Unknown <PREFIX>_INPUT_PROFILE='%s'; using %s", name,
                              inkcell_input_profile_default()->name);
         }
         profile = inkcell_input_profile_default();
     } else {
-        inkcell_log_info("input", "Input profile %s", profile->name);
+        inkwell_log_info("input", "Input profile %s", profile->name);
     }
 
     s_profile = profile;
@@ -237,7 +237,7 @@ bool inkcell_input_profile_validate(const struct inkcell_input_profile *profile,
 
     /* Each face button exactly once: a missing one is a press that does nothing, and a repeated
        one is two buttons doing the same job while a third does nothing. */
-    for (size_t i = 0; i < INKCELL_ARRAY_LEN(k_required_keys); ++i) {
+    for (size_t i = 0; i < INKWELL_ARRAY_LEN(k_required_keys); ++i) {
         size_t bound = 0U;
         for (size_t j = 0; j < profile->binding_count; ++j) {
             if (profile->bindings[j].key == k_required_keys[i]) {

@@ -7,6 +7,11 @@ It is the part of [mesh-client](https://github.com/mcereal/mesh-client) that was
 Meshtastic: the theme, the fonts and glyph tables, the layout arithmetic, the framebuffer
 backend and its component set, and the evdev layer that turns a handheld's buttons into presses.
 
+It stands on [inkwell](https://github.com/mcereal/inkwell), which is the part that was never
+about *drawing* either: the epoll loop, the clock, the log, the environment knobs and the
+codecs. Those lived here for a while because this library was extracted first, and a toolkit
+that a platform layer has to depend on to write a log line has its arrows the wrong way round.
+
 ## What you get
 
 | | |
@@ -83,6 +88,7 @@ Add it as a submodule and `add_subdirectory` it:
 
 ```bash
 git submodule add https://github.com/mcereal/inkcell third_party/inkcell
+git submodule update --init --recursive    # inkcell carries inkwell
 ```
 
 ```cmake
@@ -90,7 +96,15 @@ add_subdirectory(third_party/inkcell)
 target_link_libraries(myapp PRIVATE inkcell::inkcell)
 ```
 
-Headers are `inkcell/ui/...`, `inkcell/utils/...`, `inkcell/i18n/...`. The drawing toolkit
+inkcell stands on [inkwell](https://github.com/mcereal/inkwell), the systems layer under it -
+the loop, the clock, the log, the environment knobs, the codecs - and carries it as a submodule
+of its own. An application that uses inkwell directly (most do: the loop is down there) should
+`add_subdirectory()` its own copy *before* inkcell and link `inkwell::inkwell` itself; inkcell
+only brings one in when nothing else has, so the whole tree builds one inkwell rather than two
+targets of the same name.
+
+Headers are `inkcell/ui/...`, `inkcell/i18n/...` and, for what moved down, `inkwell/base/...`.
+The drawing toolkit
 (`inkcell/ui/fb_draw.h`) and the components (`inkcell/ui/widgets.h`) are public: an application
 built on inkcell writes the screens and nothing else, so what they are written against is the
 library's surface.
@@ -100,8 +114,9 @@ library's surface.
 inkcell never reaches into an application. Four things are pushed in rather than read out:
 
 ```c
-/* 1. Your knobs and inkcell's share one namespace. Do this first. */
-inkcell_env_set_prefix("MYAPP");          /* MYAPP_THEME, MYAPP_FB_SCALE, ... */
+/* 1. Your knobs and inkcell's share one namespace. Do this first. The prefix is inkwell's,
+      because the environment is - inkcell reads `THEME` through it like everything else. */
+inkwell_env_set_prefix("MYAPP");          /* MYAPP_THEME, MYAPP_FB_SCALE, ... */
 
 /* 2. Your words continue inkcell's. Both halves, one table - see inkcell/i18n/strings.h. */
 inkcell_i18n_set_catalog(&my_catalog);

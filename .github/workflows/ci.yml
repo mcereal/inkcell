@@ -27,7 +27,11 @@ jobs:
             cc: clang
             args: "-DINKCELL_ENABLE_ASAN=ON -DINKCELL_ENABLE_UBSAN=ON"
     steps:
+      # inkwell is a submodule and inkcell does not build without it; the default checkout
+      # leaves a gitlink and an empty directory, which fails at the add_subdirectory().
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       # libclang-rt-18-dev is the one that is easy to miss: Ubuntu's clang package does not pull
       # the sanitizer runtimes in, and without them the link fails looking for
