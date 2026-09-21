@@ -126,7 +126,7 @@ static void gallery_scroll_page(struct inkcell_backend_fb_state *state,
     const struct inkcell_fb_rect window = {
         .x = 0,
         .y = layout.body_y,
-        .w = (int)state->var.xres,
+        .w = inkcell_fb_panel_width(state),
         .h = layout.footer_y - inkcell_fb_gutter(state) - layout.body_y,
     };
 

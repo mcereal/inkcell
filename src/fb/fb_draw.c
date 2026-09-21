@@ -689,8 +689,8 @@ struct inkcell_fb_row_box inkcell_fb_row_box(const struct inkcell_backend_fb_sta
     return box;
 }
 
-/* Scale an 8-bit channel into a framebuffer bitfield and shift it into place. */
-static inline uint32_t inkcell_fb_pack_channel(uint8_t value, const struct fb_bitfield *field) {
+/* Scale an 8-bit channel into the surface's own field width and shift it into place. */
+static inline uint32_t inkcell_fb_pack_channel(uint8_t value, const struct inkcell_channel *field) {
     if (field->length == 0U) {
         return 0U;
     }
@@ -708,20 +708,19 @@ static inline uint32_t inkcell_fb_pack_channel(uint8_t value, const struct fb_bi
  */
 static inline uint32_t compose_color(const struct inkcell_backend_fb_state *state, uint8_t r,
                                      uint8_t g, uint8_t b) {
-    const struct fb_var_screeninfo *var = &state->var;
-    const bool has_fields =
-        var->red.length != 0U || var->green.length != 0U || var->blue.length != 0U;
+    const struct inkcell_pixel_format *fmt = &state->surface.format;
+    const bool has_fields = fmt->r.length != 0U || fmt->g.length != 0U || fmt->b.length != 0U;
 
     uint32_t color;
     uint32_t color_mask;
     if (has_fields) {
-        color = inkcell_fb_pack_channel(r, &var->red) | inkcell_fb_pack_channel(g, &var->green) |
-                inkcell_fb_pack_channel(b, &var->blue);
-        color_mask = inkcell_fb_pack_channel(0xFFU, &var->red) |
-                     inkcell_fb_pack_channel(0xFFU, &var->green) |
-                     inkcell_fb_pack_channel(0xFFU, &var->blue);
+        color = inkcell_fb_pack_channel(r, &fmt->r) | inkcell_fb_pack_channel(g, &fmt->g) |
+                inkcell_fb_pack_channel(b, &fmt->b);
+        color_mask = inkcell_fb_pack_channel(0xFFU, &fmt->r) |
+                     inkcell_fb_pack_channel(0xFFU, &fmt->g) |
+                     inkcell_fb_pack_channel(0xFFU, &fmt->b);
     } else {
-        switch (var->bits_per_pixel) {
+        switch (fmt->bits_per_pixel) {
         case 32:
         case 24:
             color = ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
@@ -736,9 +735,9 @@ static inline uint32_t compose_color(const struct inkcell_backend_fb_state *stat
         }
     }
 
-    if (var->transp.length != 0U) {
-        color |= inkcell_fb_pack_channel(0xFFU, &var->transp);
-    } else if (var->bits_per_pixel == 32U) {
+    if (fmt->a.length != 0U) {
+        color |= inkcell_fb_pack_channel(0xFFU, &fmt->a);
+    } else if (fmt->bits_per_pixel == 32U) {
         color |= ~color_mask; /* opaque in whatever byte the colour channels leave free */
     }
     return color;
@@ -968,12 +967,12 @@ static void inkcell_fb_fill_packed(const struct inkcell_backend_fb_state *state,
         return;
     }
 
-    const size_t bpp = state->bytes_per_pixel;
-    const size_t stride = state->fix.line_length;
-    uint8_t *row = state->inkcell_fb_ptr + (size_t)box.y * stride + (size_t)box.x * bpp;
+    const size_t bpp = state->surface.bytes_per_pixel;
+    const size_t stride = state->surface.stride;
+    uint8_t *row = state->surface.pixels + (size_t)box.y * stride + (size_t)box.x * bpp;
 
     for (int r = 0; r < box.h; ++r, row += stride) {
-        if ((size_t)(row - state->inkcell_fb_ptr) + (size_t)box.w * bpp > state->inkcell_fb_size) {
+        if ((size_t)(row - state->surface.pixels) + (size_t)box.w * bpp > state->surface.size) {
             return;
         }
         inkcell_fb_store_span(row, box.w, packed, bpp);
@@ -990,7 +989,7 @@ static void inkcell_fb_fill_packed(const struct inkcell_backend_fb_state *state,
  * What made that hard was the ground. inkcell_fb_blend_table() needs to know what a glyph is
  * being drawn *over*, and a caller could tell it; a rounded rectangle crosses a row fill
  * halfway down and could not. The way out is that this backend does not draw onto the panel at
- * all - inkcell_backend_fb_present() points inkcell_fb_ptr at draw_buffer, ordinary RAM, for
+ * all - inkcell_backend_fb_present() points the surface at a draw buffer in ordinary RAM, for
  * the whole render and copies the result afterwards. So the ground is readable: it is the pixel
  * about to be written over, and decompose_color() is what reads it back.
  *
@@ -1029,7 +1028,8 @@ static inline uint8_t inkcell_fb_widen_channel(uint32_t value, uint32_t length) 
     return (uint8_t)(out >> (have - 8U));
 }
 
-static inline uint8_t inkcell_fb_unpack_channel(uint32_t packed, const struct fb_bitfield *field) {
+static inline uint8_t inkcell_fb_unpack_channel(uint32_t packed,
+                                                const struct inkcell_channel *field) {
     if (field->length == 0U) {
         return 0U;
     }
@@ -1041,17 +1041,16 @@ static inline uint8_t inkcell_fb_unpack_channel(uint32_t packed, const struct fb
    refuses comes back black, which is what it writes. */
 static inline struct inkcell_rgb decompose_color(const struct inkcell_backend_fb_state *state,
                                                  uint32_t packed) {
-    const struct fb_var_screeninfo *var = &state->var;
-    const bool has_fields =
-        var->red.length != 0U || var->green.length != 0U || var->blue.length != 0U;
+    const struct inkcell_pixel_format *fmt = &state->surface.format;
+    const bool has_fields = fmt->r.length != 0U || fmt->g.length != 0U || fmt->b.length != 0U;
     struct inkcell_rgb rgb = {0U, 0U, 0U};
     if (has_fields) {
-        rgb.r = inkcell_fb_unpack_channel(packed, &var->red);
-        rgb.g = inkcell_fb_unpack_channel(packed, &var->green);
-        rgb.b = inkcell_fb_unpack_channel(packed, &var->blue);
+        rgb.r = inkcell_fb_unpack_channel(packed, &fmt->r);
+        rgb.g = inkcell_fb_unpack_channel(packed, &fmt->g);
+        rgb.b = inkcell_fb_unpack_channel(packed, &fmt->b);
         return rgb;
     }
-    switch (var->bits_per_pixel) {
+    switch (fmt->bits_per_pixel) {
     case 32:
     case 24:
         rgb.r = (uint8_t)((packed >> 16) & 0xFFU);
@@ -1118,10 +1117,10 @@ static void inkcell_fb_blend_pixel(const struct inkcell_backend_fb_state *state,
         return;
     }
 
-    const size_t bpp = state->bytes_per_pixel;
-    const size_t stride = state->fix.line_length;
-    uint8_t *px = state->inkcell_fb_ptr + (size_t)box.y * stride + (size_t)box.x * bpp;
-    if ((size_t)(px - state->inkcell_fb_ptr) + bpp > state->inkcell_fb_size) {
+    const size_t bpp = state->surface.bytes_per_pixel;
+    const size_t stride = state->surface.stride;
+    uint8_t *px = state->surface.pixels + (size_t)box.y * stride + (size_t)box.x * bpp;
+    if ((size_t)(px - state->surface.pixels) + bpp > state->surface.size) {
         return;
     }
 
@@ -1224,7 +1223,7 @@ static int inkcell_fb_rrect_coverage(int px, int py, int x, int y, int w, int h,
  * fb0 is read out of the kernel at runtime like anybody else's.
  */
 static bool inkcell_fb_blit_is_direct(const struct inkcell_backend_fb_state *state) {
-    return state->bytes_per_pixel == 4U &&
+    return state->surface.bytes_per_pixel == 4U &&
            compose_color(state, 0x12U, 0x34U, 0x56U) == 0xFF123456U &&
            compose_color(state, 0xA0U, 0xB0U, 0xC0U) == 0xFFA0B0C0U;
 }
@@ -1257,14 +1256,14 @@ void inkcell_fb_blit_bgra(const struct inkcell_backend_fb_state *state, int x, i
         return;
     }
 
-    const size_t bpp = state->bytes_per_pixel;
-    const size_t dst_stride = state->fix.line_length;
+    const size_t bpp = state->surface.bytes_per_pixel;
+    const size_t dst_stride = state->surface.stride;
     const bool direct = inkcell_fb_blit_is_direct(state);
-    uint8_t *dst = state->inkcell_fb_ptr + (size_t)box.y * dst_stride + (size_t)box.x * bpp;
+    uint8_t *dst = state->surface.pixels + (size_t)box.y * dst_stride + (size_t)box.x * bpp;
     const uint8_t *src = pixels + (size_t)box.dy * stride + (size_t)box.dx * INKCELL_FB_BGRA_BYTES;
 
     for (int row = 0; row < box.h; ++row, dst += dst_stride, src += stride) {
-        if ((size_t)(dst - state->inkcell_fb_ptr) + (size_t)box.w * bpp > state->inkcell_fb_size) {
+        if ((size_t)(dst - state->surface.pixels) + (size_t)box.w * bpp > state->surface.size) {
             return;
         }
         if (direct) {
@@ -1632,16 +1631,16 @@ void inkcell_fb_draw_glyph(const struct inkcell_backend_fb_state *state, int x, 
 }
 
 /*
- * The emoji palette, packed into framebuffer pixels once.
+ * The emoji palette, packed into the surface's pixels once.
  *
- * compose_color() depends only on the mapping's pixel format, which never changes while fb0 is
- * open, so the 255 palette entries are packed on first use and reused. The signature guards the
- * case of a second open with a different format - the tests do exactly that.
+ * compose_color() depends only on the surface's pixel format, which never changes while a
+ * surface is open, so the 255 palette entries are packed on first use and reused. The signature
+ * guards the case of a second open with a different format - the tests do exactly that.
  */
 static uint64_t inkcell_fb_format_signature(const struct inkcell_backend_fb_state *state) {
-    const struct fb_var_screeninfo *var = &state->var;
-    uint64_t sig = var->bits_per_pixel;
-    const struct fb_bitfield *fields[4] = {&var->red, &var->green, &var->blue, &var->transp};
+    const struct inkcell_pixel_format *fmt = &state->surface.format;
+    uint64_t sig = fmt->bits_per_pixel;
+    const struct inkcell_channel *fields[4] = {&fmt->r, &fmt->g, &fmt->b, &fmt->a};
     for (size_t i = 0; i < 4U; ++i) {
         sig = sig * 131U + fields[i]->offset;
         sig = sig * 131U + fields[i]->length;
@@ -2411,8 +2410,8 @@ void inkcell_fb_scrim_rect(const struct inkcell_backend_fb_state *state, struct 
         return;
     }
 
-    const size_t bpp = state->bytes_per_pixel;
-    const size_t stride = state->fix.line_length;
+    const size_t bpp = state->surface.bytes_per_pixel;
+    const size_t stride = state->surface.stride;
     /* The mix is stated in AA steps rather than in percent so it runs through the same
        inkcell_fb_mix_channel() every anti-aliased edge does - one rounding rule for the whole
        backend, rather than a second one that disagrees at the halves. */
@@ -2421,10 +2420,9 @@ void inkcell_fb_scrim_rect(const struct inkcell_backend_fb_state *state, struct 
     uint32_t memo_in = 0U;
     uint32_t memo_out = 0U;
 
-    uint8_t *row = state->inkcell_fb_ptr + (size_t)clipped.y * stride + (size_t)clipped.x * bpp;
+    uint8_t *row = state->surface.pixels + (size_t)clipped.y * stride + (size_t)clipped.x * bpp;
     for (int r = 0; r < clipped.h; ++r, row += stride) {
-        if ((size_t)(row - state->inkcell_fb_ptr) + (size_t)clipped.w * bpp >
-            state->inkcell_fb_size) {
+        if ((size_t)(row - state->surface.pixels) + (size_t)clipped.w * bpp > state->surface.size) {
             return;
         }
         uint8_t *px = row;

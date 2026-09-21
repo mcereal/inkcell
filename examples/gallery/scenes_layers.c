@@ -58,7 +58,7 @@ void gallery_scene_layers(struct inkcell_backend_fb_state *state) {
     const struct inkcell_fb_rect body = {
         .x = 0,
         .y = layout.nav_y,
-        .w = (int)state->var.xres,
+        .w = inkcell_fb_panel_width(state),
         .h = layout.footer_y - layout.nav_y,
     };
 
@@ -199,8 +199,8 @@ void gallery_scene_layers(struct inkcell_backend_fb_state *state) {
      */
     /* Against a row well down the list and to the right of the words it is about, which is
        where a tooltip goes: beside the thing, not on top of it. */
-    const struct inkcell_fb_rect tip_anchor = {(int)state->var.xres / 2, layout.body_y + 2 * line,
-                                               line * 4, line};
+    const struct inkcell_fb_rect tip_anchor = {inkcell_fb_panel_width(state) / 2,
+                                               layout.body_y + 2 * line, line * 4, line};
     const int tip_pad = inkcell_fb_space(state, INKCELL_SPACE_SM);
     const int tip_scale = inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL);
     const char *tip = gallery_text(GALLERY_STR_TOOLTIP_RANGE);

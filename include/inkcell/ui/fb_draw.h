@@ -10,6 +10,7 @@
  *   widgets_*     the components screens are assembled from (inkcell/ui/widgets.h is the umbrella)
  *   <app>         one renderer per screen, drawn out of whatever the app calls a snapshot
  *   fb.c          opening /dev/fb0, the page flip, the backend vtable
+
  *
  * Calls only ever go downward, so this header is what the layers above draw with and
  * inkcell/ui/widgets.h is the component set above it. Both are public: an application built on
@@ -37,7 +38,6 @@
 #include "inkcell/ui/layout.h"
 #include "inkcell/ui/theme.h"
 
-#include <linux/fb.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -46,6 +46,62 @@ struct inkcell_fb_glyph_cache;
 struct inkcell_fb_thread_cache;
 struct inkcell_fb_render_cache;
 struct inkcell_backend_fb_state;
+
+/*
+ * ---- the surface ----
+ *
+ * How a channel sits inside a pixel: where its least significant bit is, and how many bits it
+ * gets. `length` of 0 is a channel the format does not carry, which is how a surface says it
+ * has no alpha.
+ *
+ * This is `struct fb_bitfield` with the framebuffer taken out of it. Naming the kernel's
+ * structure here is what used to drag <linux/fb.h> into this header - and so into every screen
+ * an application writes against it, on every platform, whether or not that platform has a
+ * framebuffer at all. What a channel *is* has nothing to do with Linux, so it is spelled here
+ * and fb.c converts on the way in. (`msb_right` is not carried: the kernel's own drivers leave
+ * it zero and nothing here has ever read it.)
+ */
+struct inkcell_channel {
+    uint8_t offset;
+    uint8_t length;
+};
+
+/*
+ * How a pixel is laid out in a surface's memory.
+ *
+ * An all-zero `r`, `g` and `b` means the format does not describe its channels, and the packing
+ * falls back to whatever `bits_per_pixel` implies - which is the case an off-screen page and
+ * the Brick's own fb0 are both in, and is why compose_color() has that branch at all.
+ */
+struct inkcell_pixel_format {
+    struct inkcell_channel r, g, b, a;
+    uint8_t bits_per_pixel;
+};
+
+/*
+ * The pixels a frame is drawn into, and the shape of them.
+ *
+ * Everything this drawing layer needs to put a pixel somewhere, and nothing about where those
+ * pixels then go. A device backend points it at an mmap of /dev/fb0, the capture harness points
+ * it at a malloc'd page, and something presenting through a window would point it at a locked
+ * texture: the renderer above cannot tell the three apart, which is the whole of what makes it
+ * a renderer rather than a framebuffer driver.
+ *
+ * `stride` is bytes from one row to the next and is not always `width * bytes_per_pixel` - a
+ * panel may pad its rows, and the arithmetic below goes through `stride` for exactly that
+ * reason. `size` is what `pixels` actually spans, and every write is bounds-checked against it
+ * rather than against the geometry, because a short mapping is a thing that happens and a
+ * geometry that disagrees with it is how you get a segfault instead of a clipped frame.
+ */
+struct inkcell_surface {
+    uint8_t *pixels;
+    size_t size;
+    uint32_t width;
+    uint32_t height;
+    uint32_t stride;
+    uint32_t bytes_per_pixel;
+    struct inkcell_pixel_format format;
+};
 
 /* How much of a notice fits. A snackbar is one line the reader is not expected to study. */
 #define INKCELL_FB_SNACKBAR_MAX 64U
@@ -264,6 +320,26 @@ void inkcell_fb_overlay_reset(struct inkcell_backend_fb_state *state);
  */
 void inkcell_fb_overlay_drop(struct inkcell_backend_fb_state *state, uint32_t id);
 
+/*
+ * Everything one frame is drawn with.
+ *
+ * Four kinds of thing, and the split is worth naming because only the first is a backend's:
+ *
+ *   the surface   where the pixels go and how one is spelled
+ *   the look      the theme and the scale this run chose
+ *   the frame     the clock, what is still travelling, the view stack, the layers
+ *   the app       what renders, what it has memoised, and where a press lands
+ *
+ * The last three are the same whether the frame ends up on a panel, in a window or in a PNG, so
+ * they live here rather than in whichever backend happens to be open. What used to live here as
+ * well - a file descriptor, two `screeninfo` structures, the page buffers, the pan - was only
+ * ever the first kind in disguise, and is now `struct inkcell_fb_panel` in src/fb/fb.c, where a
+ * second backend's swapchain would sit beside it rather than on top of every screen.
+ *
+ * It is one flat structure rather than four nested ones on purpose: a renderer is handed one
+ * pointer and reaches for a margin, the clock and the focus map within a few lines of each
+ * other, and grouping them would buy a tidier declaration at the cost of every call site.
+ */
 struct inkcell_backend_fb_state {
     /* The body rows the last paged list was laid out in - what the app pages its content by,
        read back through the backend's page_rows() vtable entry. */
@@ -293,17 +369,15 @@ struct inkcell_backend_fb_state {
     struct inkcell_fb_damage_rect clip;
     struct inkcell_fb_damage_rect animation_damage;
     bool thread_cache_disabled;
-    uint8_t *draw_buffer;
-    uint8_t *previous_frame;
-    bool frame_valid;
-    int inkcell_fb_fd;
-    uint8_t *inkcell_fb_ptr;
-    size_t inkcell_fb_size;
-    struct fb_fix_screeninfo fix;
-    struct fb_var_screeninfo var;
-    uint32_t line_bytes;
-    uint32_t bytes_per_pixel;
-    bool pan_failed_logged;
+    /*
+     * Where this frame's pixels go, and how one is spelled.
+     *
+     * The only part of this structure a backend owns, and the only part of it that changes when
+     * the frame is presented somewhere other than a panel. The file descriptor, the pages, the
+     * pan and the previous frame a damage comparison needs are *not* here: they are the device's
+     * business, they differ for every backend, and fb.c keeps its own next to this one.
+     */
+    struct inkcell_surface surface;
     /* What this frame is drawn with: the palette, the metrics and the font. Never NULL once
        inkcell_fb_state_set_theme() has run, and every accessor below falls back to the default
        anyway, so no drawing function guards it. */
@@ -429,11 +503,11 @@ struct inkcell_backend_fb_state {
  * this backend happens to be, not what a width *is*.
  */
 static inline int inkcell_fb_panel_width(const struct inkcell_backend_fb_state *state) {
-    return state == NULL ? 0 : (int)state->var.xres;
+    return state == NULL ? 0 : (int)state->surface.width;
 }
 
 static inline int inkcell_fb_panel_height(const struct inkcell_backend_fb_state *state) {
-    return state == NULL ? 0 : (int)state->var.yres;
+    return state == NULL ? 0 : (int)state->surface.height;
 }
 
 /*
@@ -761,10 +835,29 @@ struct inkcell_fb_layout {
     bool back;
 };
 
-/* Copies changed row spans from ordinary RAM into page 0 and its display mirror.
-   Returns bytes written across both pages; force initializes pages owned by the launcher. */
+/*
+ * Copies the rows that changed from a frame drawn in ordinary RAM into the surface, and returns
+ * how many bytes that took.
+ *
+ * The other half of drawing into a buffer rather than onto the panel. `frame` is the page just
+ * rendered and `previous` is the one before it, which this updates as it goes; a row that
+ * matches is skipped, and a row that does not is narrowed to the span that actually differs,
+ * rounded out to whole pixels because a stride may have padding in it.
+ *
+ * `force` writes everything, for the first frame of a run - where `previous` describes a page
+ * this process has never owned - and after anything that invalidates the comparison.
+ *
+ * `mirror` also writes the copy one page further on. That is the Brick's two-page workaround
+ * (see inkcell_backend_fb_present()) rather than a general idea, and it is a parameter instead
+ * of something read off the state because how many pages a surface has is a fact about whatever
+ * is presenting it. It is refused when the surface is not big enough for two.
+ *
+ * Public because the span arithmetic is not the framebuffer's: anything presenting a
+ * software-rendered frame - a texture upload, a remote panel - wants the same answer to the
+ * same question, and a private copy of it is a second copy to keep correct.
+ */
 size_t inkcell_fb_copy_damage(struct inkcell_backend_fb_state *state, const uint8_t *frame,
-                              uint8_t *previous, bool force);
+                              uint8_t *previous, bool force, bool mirror);
 
 void inkcell_fb_animation_damage(struct inkcell_backend_fb_state *state, int x, int y, int w,
                                  int h);
