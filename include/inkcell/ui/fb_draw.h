@@ -1233,6 +1233,14 @@ void inkcell_fb_focus_register(const struct inkcell_draw_state *state, uint32_t 
 void inkcell_fb_focus_register_shaped(const struct inkcell_draw_state *state, uint32_t id,
                                       const struct inkcell_fb_rect *rect, enum inkcell_shape shape);
 
+/*
+ * Registers `rect` as a pointer target under `id`: something a click can press and the d-pad
+ * walks past. See inkcell_focus_add_target(). Clipped by the view like any other box, for the
+ * same reason - a click on something the view cut away is a click on whatever is really there.
+ */
+void inkcell_fb_target_register(const struct inkcell_draw_state *state, uint32_t id,
+                                const struct inkcell_fb_rect *rect);
+
 /* Whether the app says it is owed another frame - what inkcell_fb_state_animating() adds to the
    animations when it decides whether one is due. */
 bool inkcell_fb_app_pending(const struct inkcell_draw_state *state);

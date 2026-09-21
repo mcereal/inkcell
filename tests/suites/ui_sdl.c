@@ -24,6 +24,7 @@
 #include "inkcell/ui/input.h"
 #include "inkcell/ui/latency.h"
 #include "inkcell/ui/sdl.h"
+#include "inkcell/ui/widgets.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -79,13 +80,17 @@ struct sdl_test_host {
     int removed_fd;
     unsigned adds;
     unsigned stops;
+    /* Kept so a case can turn the pump by hand: the timer read in it does not block, so calling
+       it is one drain of the queue, which is what the loop would have done on a tick. */
+    int (*callback)(int, uint32_t, void *);
+    void *userdata;
 };
 
 static int sdl_test_add_fd(void *ctx, int fd, int (*callback)(int, uint32_t, void *),
                            void *userdata) {
     struct sdl_test_host *const host = (struct sdl_test_host *)ctx;
-    (void)callback;
-    (void)userdata;
+    host->callback = callback;
+    host->userdata = userdata;
     host->added_fd = fd;
     host->adds += 1U;
     return 0;
@@ -246,6 +251,165 @@ INKCELL_TEST_CASE(sdl_keys_go_through_the_one_convention, unit) {
 
     INKCELL_TEST_FAIL_IF(inkcell_sdl_evdev_code(SDL_SCANCODE_F12) != 0U,
                          "a key this client has no use for must map to nothing");
+    record_success(test_name);
+}
+
+/*
+ * The mouse, end to end: an SDL event in, a key or a click out.
+ *
+ * The frame is a real action bar and one row the "application" registered itself, so what is
+ * held here is that a window with no pointer code of its own is clickable through its hints,
+ * that anything else it registered reaches `on_click`, and that the wheel and the thumb button
+ * arrive as the keys they stand for.
+ */
+#define SDL_POINTER_W 640U
+#define SDL_POINTER_H 480U
+#define SDL_POINTER_ROW 7U
+
+struct sdl_pointer_app {
+    struct inkcell_focus_item storage[16];
+    struct inkcell_focus_map map;
+    struct inkcell_fb_rect row;
+    struct inkcell_focus_rect hint;
+};
+
+static void sdl_pointer_render(struct inkcell_draw_state *state, const void *snapshot, void *ctx) {
+    struct sdl_pointer_app *const app = (struct sdl_pointer_app *)ctx;
+    (void)snapshot;
+    inkcell_focus_begin(&app->map, app->storage, 16U);
+    inkcell_fb_set_focus_map(state, &app->map);
+    inkcell_fb_clear(state, inkcell_fb_color(state, INKCELL_COLOR_BG));
+    const struct inkcell_fb_layout layout = inkcell_fb_layout_begin(state, true, false);
+    app->row = (struct inkcell_fb_rect){.x = 0, .y = layout.body_y, .w = 200, .h = 40};
+    inkcell_fb_focus_register(state, SDL_POINTER_ROW, &app->row);
+    const struct inkcell_button_action items[] = {
+        {.button = INKCELL_BUTTON_B, .label = INKCELL_STR_KEY_CANCEL},
+    };
+    const struct inkcell_fb_action_bar bar = {.items = items, .count = 1U};
+    inkcell_fb_draw_action_bar(state, &layout, &bar);
+    (void)inkcell_focus_rect_of(&app->map, INKCELL_FOCUS_KEY(INKCELL_KEY_B), &app->hint);
+}
+
+struct sdl_pointer_heard {
+    enum inkcell_key keys[16];
+    unsigned key_count;
+    uint32_t clicked;
+    unsigned clicks;
+};
+
+static void sdl_pointer_on_key(void *userdata, enum inkcell_key key) {
+    struct sdl_pointer_heard *const heard = (struct sdl_pointer_heard *)userdata;
+    if (heard->key_count < 16U) {
+        heard->keys[heard->key_count++] = key;
+    }
+}
+
+static void sdl_pointer_on_click(void *userdata, uint32_t target, int x, int y) {
+    struct sdl_pointer_heard *const heard = (struct sdl_pointer_heard *)userdata;
+    (void)x;
+    (void)y;
+    heard->clicked = target;
+    heard->clicks += 1U;
+}
+
+static void sdl_push_button(Uint32 type, Uint8 button, int x, int y) {
+    SDL_Event event;
+    memset(&event, 0, sizeof event);
+    event.type = type;
+    event.button.type = type;
+    event.button.button = button;
+    event.button.state = type == SDL_MOUSEBUTTONDOWN ? SDL_PRESSED : SDL_RELEASED;
+    event.button.x = x;
+    event.button.y = y;
+    SDL_PushEvent(&event);
+}
+
+static void sdl_click(int x, int y) {
+    sdl_push_button(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_LEFT, x, y);
+    sdl_push_button(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT, x, y);
+}
+
+static void sdl_pump(struct sdl_test_host *host) {
+    (void)host->callback(host->added_fd, 0U, host->userdata);
+}
+
+INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
+    setenv("SDL_VIDEODRIVER", "dummy", 0);
+    INKCELL_TEST_FAIL_IF(!inkcell_backend_sdl_is_available(), "the dummy driver must start");
+
+    struct sdl_pointer_app app;
+    memset(&app, 0, sizeof app);
+    struct inkcell_fb_app vtable = {.ctx = &app, .render = sdl_pointer_render};
+    struct sdl_test_host host = {.added_fd = -1, .removed_fd = -1};
+    struct sdl_pointer_heard heard;
+    memset(&heard, 0, sizeof heard);
+    struct inkcell_backend_sdl_context context = {
+        .app = &vtable,
+        .host = {.ctx = &host,
+                 .add_fd = sdl_test_add_fd,
+                 .remove_fd = sdl_test_remove_fd,
+                 .request_stop = sdl_test_request_stop},
+        .on_key = sdl_pointer_on_key,
+        .key_userdata = &heard,
+        .on_click = sdl_pointer_on_click,
+        .click_userdata = &heard,
+        .title = "inkcell tests",
+        .width = SDL_POINTER_W,
+        .height = SDL_POINTER_H,
+    };
+    const struct inkcell_backend *const backend = inkcell_backend_sdl();
+    void *state = NULL;
+    INKCELL_TEST_FAIL_IF(backend->init(&state, &context) != 0, "the dummy driver must open");
+    INKCELL_TEST_FAIL_IF_CLEANUP(host.callback == NULL, backend->shutdown(state, &context),
+                                 "the pump must be on the host's loop");
+    const int snapshot = 0;
+    backend->present(state, &snapshot, &context);
+    SDL_PumpEvents();
+    SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+
+    INKCELL_TEST_FAIL_IF_CLEANUP(app.hint.w <= 0, backend->shutdown(state, &context),
+                                 "the frame should have registered its hint");
+    /* The renderer's map goes away once the frame is drawn - as a map on its stack would. The
+       click has to be answered from what the backend kept, not from the renderer's memory. */
+    inkcell_focus_begin(&app.map, NULL, 0U);
+    sdl_click(app.hint.x + app.hint.w / 2, app.hint.y + app.hint.h / 2);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.key_count != 1U || heard.keys[0] != INKCELL_KEY_B,
+                                 backend->shutdown(state, &context),
+                                 "clicking the B hint must be a press of B");
+
+    sdl_click(app.row.x + 10, app.row.y + 10);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.clicks != 1U || heard.clicked != SDL_POINTER_ROW ||
+                                     heard.key_count != 1U,
+                                 backend->shutdown(state, &context),
+                                 "a click on a row the app registered must reach on_click only");
+
+    sdl_push_button(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_LEFT, app.row.x + 10, app.row.y + 10);
+    sdl_push_button(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT, app.hint.x + 1, app.hint.y + 1);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.clicks != 1U || heard.key_count != 1U,
+                                 backend->shutdown(state, &context),
+                                 "dragging off before letting go must do nothing");
+
+    SDL_Event wheel;
+    memset(&wheel, 0, sizeof wheel);
+    wheel.type = SDL_MOUSEWHEEL;
+    wheel.wheel.type = SDL_MOUSEWHEEL;
+    wheel.wheel.y = -2;
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+    wheel.wheel.preciseY = -2.0f;
+#endif
+    SDL_PushEvent(&wheel);
+    sdl_push_button(SDL_MOUSEBUTTONUP, SDL_BUTTON_X1, 0, 0);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.key_count != 4U || heard.keys[1] != INKCELL_KEY_DOWN ||
+                                     heard.keys[2] != INKCELL_KEY_DOWN ||
+                                     heard.keys[3] != INKCELL_KEY_B,
+                                 backend->shutdown(state, &context),
+                                 "two notches down are two downs, and the thumb button is B");
+
+    backend->shutdown(state, &context);
     record_success(test_name);
 }
 

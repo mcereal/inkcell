@@ -40,6 +40,7 @@
 #include "inkcell/ui/backend.h"
 #include "inkcell/ui/input.h"
 #include "inkcell/ui/key.h"
+#include "inkcell/ui/pointer.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -87,6 +88,11 @@ extern "C" {
  * painted the strip's colour. Either way the frame is the panel's size and a capture of it is
  * unchanged - what moves is the first tab, on a Mac, in a window.
  *
+ * The mouse needs nothing here to work. A click on a hint in the action bar is a press of that
+ * hint's key and arrives through `on_key`; so does the wheel, as up and down, and the thumb
+ * button, as B. `on_click` is for everything else the frame registered - a row, a tab - and
+ * hears the id under the pointer; NULL drops those clicks. See inkcell/ui/pointer.h.
+ *
  * `request_frame` is how the window asks for a frame it cannot draw itself: a resize that
  * moves the buttons moves the tabs, and a frame needs the application's snapshot. Called with
  * `frame_userdata`, and expected to end in a present() soon after - it may be NULL, and then
@@ -97,6 +103,8 @@ struct inkcell_backend_sdl_context {
     struct inkcell_input_host host;
     inkcell_key_handler on_key;
     void *key_userdata;
+    inkcell_click_handler on_click;
+    void *click_userdata;
     const char *title;
     uint32_t width;
     uint32_t height;

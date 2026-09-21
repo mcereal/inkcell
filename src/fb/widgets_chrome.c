@@ -300,6 +300,27 @@ int inkcell_fb_action_bar_height(const struct inkcell_draw_state *state,
            inkcell_fb_margin(state);
 }
 
+/*
+ * The hint, cap and verb together, as the key it names: clicking "A Open" is pressing A.
+ *
+ * Targets rather than focusable boxes, so a pointer can press them and the d-pad never walks
+ * off a list into the footer. A pair - "L/R", the arrows - is split down the middle of the
+ * whole hint, left half the first key and right half the second, which is how the cap reads.
+ * Registered only for what was drawn: a hint the bar dropped for want of room is not clickable,
+ * for the same reason it is not shown.
+ */
+static void inkcell_fb_action_targets(const struct inkcell_draw_state *state,
+                                      enum inkcell_button button, int x, int y, int w, int h) {
+    enum inkcell_key keys[2];
+    const size_t count = inkcell_button_keys(button, keys);
+    for (size_t k = 0U; k < count; ++k) {
+        const int left = x + (int)((int64_t)w * (int64_t)k / (int64_t)count);
+        const int right = x + (int)((int64_t)w * (int64_t)(k + 1U) / (int64_t)count);
+        const struct inkcell_fb_rect rect = {.x = left, .y = y, .w = right - left, .h = h};
+        inkcell_fb_target_register(state, INKCELL_FOCUS_KEY(keys[k]), &rect);
+    }
+}
+
 void inkcell_fb_draw_action_bar(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_layout *layout,
                                 const struct inkcell_fb_action_bar *bar) {
@@ -342,12 +363,15 @@ void inkcell_fb_draw_action_bar(const struct inkcell_draw_state *state,
             .scale = small,
         };
         inkcell_fb_draw_button(state, &key);
+        const int start = x;
 
         x += cap_w + inkcell_fb_char_adv(state, small) / 2;
         inkcell_fb_draw_text(state, x, keys_y, inkcell_str(action->label), small,
                              inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
                              inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
-        x += inkcell_fb_text_width(state, inkcell_str(action->label), small) + gap;
+        x += inkcell_fb_text_width(state, inkcell_str(action->label), small);
+        inkcell_fb_action_targets(state, action->button, start, key.rect.y, x - start, key.rect.h);
+        x += gap;
     }
 
     if (bar->status == NULL || bar->status[0] == '\0') {

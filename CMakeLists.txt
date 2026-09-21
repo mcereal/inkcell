@@ -87,6 +87,7 @@ add_library(inkcell STATIC
     # direction. A model for the keyboard's reason - no panel in it, and a second backend
     # resolving a press wants the same answer.
     src/focus.c
+    src/pointer.c
     # evdev to a key, and the button profile of the device under it
     src/input/input.c
     src/input/key.c
