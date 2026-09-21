@@ -235,6 +235,29 @@ void inkcell_fb_grid_focus(struct inkcell_fb_grid *grid, uint32_t base) {
     grid->focus_base = base;
 }
 
+/*
+ * The box the walk is on, registered under the grid's base.
+ *
+ * The surface, and the shape it was actually filled with - so the ring that lands here next
+ * frame takes this tile's corners rather than a guess at them. The caption below a tile is not
+ * part of this box: it stands on the panel, and a ring drawn round it would claim an edge
+ * nothing painted.
+ *
+ * Called by inkcell_fb_grid_tile() for the tiles it draws, and by a screen for the ones it drew
+ * itself. A screen has no other way to say it: the ids are the grid's base plus an index, and a
+ * face drawn through inkcell_fb_grid_tile_box() would otherwise be a tile on the panel that the
+ * cursor cannot reach.
+ */
+void inkcell_fb_grid_focus_tile(const struct inkcell_backend_fb_state *state,
+                                const struct inkcell_fb_grid *grid, uint32_t index) {
+    if (state == NULL || grid == NULL || grid->focus_base == INKCELL_FOCUS_NONE) {
+        return;
+    }
+    const struct inkcell_fb_rect rect = {
+        .x = grid->x, .y = grid->y, .w = grid->tile_w, .h = grid->tile_h};
+    inkcell_fb_focus_register_shaped(state, grid->focus_base + index, &rect, INKCELL_SHAPE_MD);
+}
+
 struct inkcell_focus_run inkcell_fb_grid_run(const struct inkcell_fb_grid *grid) {
     struct inkcell_focus_run run;
     memset(&run, 0, sizeof run);
@@ -470,13 +493,5 @@ void inkcell_fb_grid_tile(const struct inkcell_backend_fb_state *state,
     inkcell_fb_tile_label(state, grid, tile, paint);
     inkcell_fb_tile_badge(state, grid, tile);
 
-    /* The surface, and the shape it was actually filled with - so the ring that lands here next
-       frame takes this tile's corners rather than a guess at them. The caption below a tile is
-       not part of this box: it stands on the panel, and a ring drawn round it would claim an
-       edge nothing painted. */
-    if (grid->focus_base != INKCELL_FOCUS_NONE) {
-        const struct inkcell_fb_rect rect = {
-            .x = grid->x, .y = grid->y, .w = grid->tile_w, .h = grid->tile_h};
-        inkcell_fb_focus_register_shaped(state, grid->focus_base + index, &rect, INKCELL_SHAPE_MD);
-    }
+    inkcell_fb_grid_focus_tile(state, grid, index);
 }

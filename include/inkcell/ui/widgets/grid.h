@@ -275,6 +275,19 @@ void inkcell_fb_grid_focus(struct inkcell_fb_grid *grid, uint32_t base);
  *
  * INKCELL_FOCUS_NONE for a base on a grid that was never given one, which is a run that matches
  * nothing and therefore steps nothing.
+ *
+ * **It says every tile is a place to stand**, because from here every one of them is: the grid
+ * draws what it is handed, and which slots a screen chose to skip is the screen's own fact and
+ * not something the window can see. A grid that skips one - draws nothing for a slot it has no
+ * data for yet - must therefore fill in `focusable` on the run it keeps, exactly as a list with
+ * subheaders in it must (see `focusable` on struct inkcell_focus_run). Leaving it NULL there
+ * steps the cursor onto a tile that is not on the panel, and the ring vanishes for a frame.
+ *
+ * The array is the screen's and the run outlives the frame, so it has to be storage that
+ * outlives the frame too - a field on the screen's own state, not a local in the render. A
+ * screen that draws a *face* of its own for a slot rather than skipping it has nothing to
+ * declare: it calls inkcell_fb_grid_focus_tile() as it draws, the tile is registered like any
+ * other, and the run's default is the truth again.
  */
 struct inkcell_focus_run inkcell_fb_grid_run(const struct inkcell_fb_grid *grid);
 
@@ -291,9 +304,21 @@ struct inkcell_fb_rect inkcell_fb_grid_tile_box(const struct inkcell_fb_grid *gr
    fill, and the one the ring is over. */
 bool inkcell_fb_grid_is_cursor(const struct inkcell_fb_grid *grid, uint32_t index);
 
+/*
+ * Registers the box the walk is on under the grid's base, and nothing else.
+ *
+ * inkcell_fb_grid_tile() ends with this, so a grid drawing its own tiles never needs it. What
+ * needs it is the other half of inkcell_fb_grid_tile_box(): a screen that drew a face of its
+ * own into that box has put a tile on the panel the grid knows nothing about, and *what is
+ * drawn is what can be reached* is a promise the screen then has to keep for it.
+ */
+void inkcell_fb_grid_focus_tile(const struct inkcell_backend_fb_state *state,
+                                const struct inkcell_fb_grid *grid, uint32_t index);
+
 /* Draws the tile at the position the walk is on. The position came from the index rather than
    from an accumulated cursor, so a tile the screen chose not to draw costs the grid nothing -
-   see inkcell_fb_grid_next(). */
+   see inkcell_fb_grid_next(), and inkcell_fb_grid_run() for what a skipped slot owes the
+   press. */
 void inkcell_fb_grid_tile(const struct inkcell_backend_fb_state *state,
                           struct inkcell_fb_grid *grid, uint32_t index,
                           const struct inkcell_fb_tile *tile);

@@ -174,6 +174,30 @@ INKCELL_TEST_CASE(grid_press_walks_past_the_tiles_it_cannot_stand_on, unit) {
     record_success(test_name);
 }
 
+INKCELL_TEST_CASE(grid_press_down_walks_back_along_a_short_row, unit) {
+    /* The clamp into a short last row has to land on a tile the cursor can *stand* on, not
+       merely on the last one. Item 10 is the end of the row and is not a place to stand, so a
+       press down from item 7 means item 9 - and giving up there would leave the grid while the
+       row it was aiming at still had something in it. */
+    static const uint8_t k_stands[GRID_COUNT] = {1U, 1U, 1U, 1U, 1U, 1U, 1U, 1U, 1U, 1U, 0U};
+    const struct inkcell_focus_run run = {
+        .base = GRID_BASE, .count = GRID_COUNT, .stride = GRID_COLS, .focusable = k_stands};
+    INKCELL_TEST_FAIL_IF(inkcell_focus_step(NULL, GRID_BASE + 7U, INKCELL_FOCUS_DOWN, &run, 1U) !=
+                             GRID_BASE + 9U,
+                         "the clamp should walk back to the last tile that can be stood on");
+
+    /* And when nothing in that row can be: the press is the bottom of the grid after all, and
+       the walk must stop at the row's own first column rather than climbing into the row
+       above. */
+    static const uint8_t k_empty_row[GRID_COUNT] = {1U, 1U, 1U, 1U, 1U, 1U, 1U, 1U, 0U, 0U, 0U};
+    const struct inkcell_focus_run bare = {
+        .base = GRID_BASE, .count = GRID_COUNT, .stride = GRID_COLS, .focusable = k_empty_row};
+    INKCELL_TEST_FAIL_IF(inkcell_focus_step(NULL, GRID_BASE + 7U, INKCELL_FOCUS_DOWN, &bare, 1U) !=
+                             INKCELL_FOCUS_NONE,
+                         "a short row with nothing to stand on is the bottom of the grid");
+    record_success(test_name);
+}
+
 INKCELL_TEST_CASE(grid_run_without_a_stride_is_still_a_column, unit) {
     /* Every list in the tree declares a run with no stride at all, and those runs must answer
        exactly as they did: down and up by one, and nothing to say about sideways. */

@@ -446,22 +446,37 @@ static uint32_t focus_run_step_grid(const struct inkcell_focus_run *run, uint32_
         return INKCELL_FOCUS_NONE;
     case INKCELL_FOCUS_DOWN:
     default:
-        for (;;) {
-            /* `count - step` rather than `step + stride`, because the sum is the one form of
-               this that can wrap - and a run is handed counts a caller owns. */
-            if (run->count - step > stride) {
-                step += stride;
-            } else if (step / stride < last_row) {
-                /* A row below, and no tile directly under this one: the short last row, whose
-                   last tile is where the press means. */
-                step = run->count - 1U;
-            } else {
-                return INKCELL_FOCUS_NONE;
-            }
+        /* `count - step` rather than `step + stride`, because the sum is the one form of this
+           that can wrap - and a run is handed counts a caller owns. */
+        while (run->count - step > stride) {
+            step += stride;
             if (focus_run_stands(run, step)) {
                 return run->base + step;
             }
         }
+        if (step / stride < last_row) {
+            /*
+             * A row below, and no tile directly under this one: the short last row, where the
+             * press means its last tile.
+             *
+             * Walked back along that row rather than taken as `count - 1`, because the last
+             * tile of a row is not always a place to stand - and stopping there because of a
+             * tile the reader cannot reach anyway would leave the grid while the row still has
+             * something in it. The walk is the row's own, so it stops at the column it starts
+             * in and never steps up into the row above.
+             */
+            uint32_t tail = run->count - 1U;
+            for (;;) {
+                if (focus_run_stands(run, tail)) {
+                    return run->base + tail;
+                }
+                if (tail % stride == 0U) {
+                    break;
+                }
+                tail -= 1U;
+            }
+        }
+        return INKCELL_FOCUS_NONE;
     }
 }
 
