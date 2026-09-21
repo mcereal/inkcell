@@ -349,9 +349,14 @@ static void inkcell_fb_tile_art(const struct inkcell_backend_fb_state *state,
             return;
         }
         int scale = INKCELL_SCALE_MAX;
-        while (scale > 1 && (inkcell_fb_text_width(state, tile->text, scale) > room_w ||
-                             inkcell_scale_px(glyph_h, scale) > room_h)) {
-            --scale;
+        /* A whole step at a time, and never past one - the same floor the icon above stops at.
+           Walking raw units instead would let a cramped tile take its initials down to a quarter
+           step, which is below anything the type scale can name and is not a smaller label but
+           an unreadable one. */
+        while (scale > INKCELL_SCALE(1) &&
+               (inkcell_fb_text_width(state, tile->text, scale) > room_w ||
+                inkcell_scale_px(glyph_h, scale) > room_h)) {
+            scale -= INKCELL_SCALE(1);
         }
         inkcell_fb_draw_text(state, x + (w - inkcell_fb_text_width(state, tile->text, scale)) / 2,
                              y + (h - inkcell_scale_px(glyph_h, scale)) / 2, tile->text, scale,
