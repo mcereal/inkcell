@@ -25,7 +25,7 @@ static void swatch(const struct inkcell_backend_fb_state *state, int x, int y, i
                    struct inkcell_rgb fill, struct inkcell_rgb ink, int scale) {
     inkcell_fb_fill_round_rect(state, x, y, w, h, inkcell_fb_radius(state, INKCELL_SHAPE_SM), fill);
     const int text_w = inkcell_fb_text_width(state, GALLERY_SPECIMEN, scale);
-    const int text_h = (int)inkcell_fb_font(state)->height * scale;
+    const int text_h = inkcell_scale_px((int)inkcell_fb_font(state)->height, scale);
     inkcell_fb_draw_text(state, x + (w - text_w) / 2, y + (h - text_h) / 2, GALLERY_SPECIMEN, scale,
                          ink, fill);
 }

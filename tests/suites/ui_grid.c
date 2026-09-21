@@ -15,14 +15,24 @@
  * nothing under it is the short last row rather than nothing at all, and sideways is the tile
  * beside this one rather than whatever the numbering puts next to it.
  *
- * No pixels anywhere. What a tile *looks* like is the golden sheet's, and what it registers is
- * tests/suites/ui_focus_widgets.c.
+ * Almost no pixels. What a tile *looks* like is the golden sheet's, and what it registers is
+ * tests/suites/ui_focus_widgets.c - the one exception is the last case, which is here because
+ * the sheet turned out not to cover it: a tile only shrinks its art when it is too cramped to
+ * hold it, and none of the gallery's grids is that cramped, so the floor that shrinking stops
+ * at had no picture watching it.
  */
 
 #include "framework/inkcell_test.h"
 
+#include "inkcell/ui/fb_capture.h"
+#include "inkcell/ui/fb_draw.h"
 #include "inkcell/ui/focus.h"
 #include "inkcell/ui/layout.h"
+#include "inkcell/ui/widgets/chrome.h"
+#include "inkcell/ui/widgets/grid.h"
+
+#include <stdlib.h>
+#include <string.h>
 
 /* The base a screen would give its tiles, and the shape of the grid most cases below use: eleven
    items four across, which is two full rows and a row of three. */
@@ -226,5 +236,115 @@ INKCELL_TEST_CASE(grid_press_outside_the_run_is_the_geometrys, unit) {
                          "an id below the base is not in this run");
     INKCELL_TEST_FAIL_IF(grid_press(GRID_BASE + GRID_COUNT, INKCELL_FOCUS_UP) != INKCELL_FOCUS_NONE,
                          "and neither is one past its end");
+    record_success(test_name);
+}
+
+/* ---- what a cramped tile will not do -------------------------------------------------------- */
+
+/*
+ * A tile too small for its initials shrinks them, and stops at one whole step.
+ *
+ * Both kinds of art step *down* until they fit, and the floor is the point: below a whole step
+ * is a size the type scale cannot name, and initials drawn there are not a smaller label but an
+ * unreadable one. The two loops are separate - an icon is measured by its drawn box and
+ * initials by their text width - so the floor is stated twice and can be got wrong once, which
+ * is exactly what happened when the scale learned to count quarters and one of the two kept
+ * walking raw units down to 1.
+ *
+ * Measured as a difference rather than as an extent: a tile draws a container under its art, so
+ * the ink of the tile as a whole says nothing about the size of the letters on it. The same
+ * grid is drawn twice - once with no art, once with initials - and what the second put on the
+ * panel that the first did not is the initials and nothing else.
+ */
+INKCELL_TEST_CASE(grid_cramped_initials_stop_at_a_whole_step, unit) {
+    struct inkcell_capture *capture = NULL;
+    if (inkcell_capture_open(&capture, 1024U, 768U, INKCELL_SCALE(4)) < 0) {
+        record_failure(test_name, "the capture should open");
+        return;
+    }
+    struct inkcell_backend_fb_state *state = inkcell_capture_state(capture);
+
+    uint32_t width = 0U, height = 0U;
+    size_t stride = 0U;
+    const uint8_t *pixels = inkcell_capture_pixels(capture, &width, &height, &stride);
+    uint8_t *without = NULL;
+    const char *failure = NULL;
+    struct inkcell_fb_rect box = {0, 0, 0, 0};
+
+    /* Twelve across and twelve down on a panel this size is a tile of about two cells square:
+       far too small for two letters at the body scale, and small enough that the loop walks all
+       the way to its floor rather than stopping part way. Smaller than this and the tile has no
+       room for the letters even at the floor, which is a tile that draws nothing and would make
+       the measurement below vacuous. */
+    const struct inkcell_fb_grid_style style = {.cols = 12U, .rows = 12U};
+
+    for (int pass = 0; pass < 2 && failure == NULL; ++pass) {
+        inkcell_fb_clear(state, inkcell_fb_color(state, INKCELL_COLOR_BG));
+        struct inkcell_fb_layout layout = inkcell_fb_layout_begin(state, false, false);
+        struct inkcell_fb_grid grid = inkcell_fb_grid_begin(state, &layout, 144U, 0U, &style);
+
+        uint32_t index = 0U;
+        while (inkcell_fb_grid_next(&grid, &index)) {
+            if (index == 0U) {
+                box = inkcell_fb_grid_tile_box(&grid);
+            }
+            const struct inkcell_fb_tile tile = {
+                .art = pass == 0 ? INKCELL_FB_TILE_ART_NONE : INKCELL_FB_TILE_ART_INITIALS,
+                .text = "WW",
+                .tone = INKCELL_TONE_PRIMARY,
+            };
+            inkcell_fb_grid_tile(state, &grid, index, &tile);
+        }
+
+        if (pass == 0) {
+            without = malloc((size_t)height * stride);
+            if (without == NULL) {
+                failure = "frame allocation failed";
+            } else {
+                memcpy(without, pixels, (size_t)height * stride);
+            }
+        }
+    }
+
+    if (failure == NULL && (box.w <= 0 || box.h <= 0)) {
+        failure = "the grid drew no tile to measure";
+    }
+
+    if (failure == NULL) {
+        /* The rows of the first tile that the initials changed. */
+        int top = -1;
+        int bottom = -1;
+        /* Clamped to the panel at both ends: a grid's origin sits a hairline above the body, so
+           the first row's box starts a couple of pixels off the top of the frame. */
+        const int y0 = box.y > 0 ? box.y : 0;
+        const int x0 = box.x > 0 ? box.x : 0;
+        for (int y = y0; y < box.y + box.h && y < (int)height; ++y) {
+            const size_t row = (size_t)y * stride;
+            for (int x = x0; x < box.x + box.w && x < (int)width; ++x) {
+                const size_t at = row + (size_t)x * 4U;
+                if (memcmp(without + at, pixels + at, 3U) != 0) {
+                    if (top < 0) {
+                        top = y;
+                    }
+                    bottom = y;
+                    break;
+                }
+            }
+        }
+        if (top < 0) {
+            failure = "a cramped tile drew no initials at all";
+        } else {
+            /* The floor, in pixels: what a capital stands at one whole step. Against the cap
+               rather than the cell because that is the ink a letter actually puts down. */
+            const int floor_px = inkcell_font_cap(inkcell_fb_font(state), INKCELL_SCALE(1));
+            if (bottom - top + 1 < floor_px) {
+                failure = "a cramped tile shrank its initials below one whole step";
+            }
+        }
+    }
+
+    free(without);
+    inkcell_capture_close(capture);
+    INKCELL_TEST_FAIL_IF(failure != NULL, failure);
     record_success(test_name);
 }

@@ -1451,7 +1451,8 @@ int inkcell_fb_line_adv(const struct inkcell_backend_fb_state *state, int scale)
  * as wide as `INKCELL_GLYPH_MAX_WIDTH`, so it stays well inside this. inkcell_fb_draw_glyph_ramp()
  * bails on a box that exceeds it rather than overrunning the scratch row.
  */
-#define INKCELL_FB_GLYPH_BOX_MAX (INKCELL_GLYPH_MASTER_MAX_WIDTH * INKCELL_SCALE_MAX / 2)
+#define INKCELL_FB_GLYPH_BOX_MAX                                                                   \
+    (INKCELL_GLYPH_MASTER_MAX_WIDTH * INKCELL_SCALE_MAX / (2 * INKCELL_SCALE_UNIT))
 
 /*
  * One axis of the resample: the two master samples a destination pixel sits between, and how
@@ -1541,8 +1542,8 @@ static void inkcell_fb_draw_glyph_ramp(const struct inkcell_backend_fb_state *st
      * two neighbouring masters overlap and only their ink is painted.
      */
     const int master_px = font->master_scale > 0U ? (int)font->master_scale : 1;
-    const int box_w = (int)font->master_w * scale / master_px;
-    const int box_h = (int)font->height * scale;
+    const int box_w = (int)font->master_w * scale / (master_px * INKCELL_SCALE_UNIT);
+    const int box_h = inkcell_scale_px((int)font->height, scale);
     if (scale <= 0 || box_w <= 0 || box_h <= 0 || box_w > INKCELL_FB_GLYPH_BOX_MAX ||
         font->master_w == 0U || cell_rows <= 0) {
         return;
@@ -1593,7 +1594,7 @@ static void inkcell_fb_draw_glyph_ramp(const struct inkcell_backend_fb_state *st
 
     /* The pen sits `master_left` columns into the master, so the box is drawn that much before
        it - the horizontal mirror of the overhang above. */
-    const int left = x - (int)font->master_left * scale / master_px;
+    const int left = x - (int)font->master_left * scale / (master_px * INKCELL_SCALE_UNIT);
     const int top = y - top_off;
     for (int dy = 0; dy < full_h; ++dy) {
         uint8_t scratch[INKCELL_FB_GLYPH_BOX_MAX];
@@ -1808,8 +1809,9 @@ void inkcell_fb_draw_emoji_box(const struct inkcell_backend_fb_state *state, int
 static void inkcell_fb_draw_emoji(const struct inkcell_backend_fb_state *state, int x, int y,
                                   uint16_t sprite, int scale) {
     const int box = inkcell_fb_char_adv(state, scale);
-    inkcell_fb_draw_emoji_box(state, x, y + ((int)inkcell_fb_font(state)->height * scale - box) / 2,
-                              box, sprite);
+    inkcell_fb_draw_emoji_box(
+        state, x, y + (inkcell_scale_px((int)inkcell_fb_font(state)->height, scale) - box) / 2, box,
+        sprite);
 }
 
 /*
@@ -1914,7 +1916,7 @@ void inkcell_fb_draw_icon(const struct inkcell_backend_fb_state *state, int x, i
     /* Centred on the cell in both directions, so it sits on the same optical line as the
        capitals beside it and in the same column the layout above counted. */
     const int left = x - (box - inkcell_fb_icon_box(state, scale)) / 2;
-    const int top = y + ((int)inkcell_fb_font(state)->height * scale - box) / 2;
+    const int top = y + (inkcell_scale_px((int)inkcell_fb_font(state)->height, scale) - box) / 2;
 
     /* Source column per destination column, as a 8.8 fixed-point position: identical for every
        row, so the division runs once per column instead of once per pixel. Sized for the
@@ -2498,7 +2500,7 @@ struct inkcell_rgb inkcell_fb_draw_row_fill_on(const struct inkcell_backend_fb_s
     const struct inkcell_rgb fill = inkcell_fb_color(state, INKCELL_COLOR_SURFACE_SEL);
     const int line = inkcell_fb_line_adv(state, state->scale);
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
-    inkcell_fb_fill_round_rect(state, box.x, y - state->scale, box.w,
+    inkcell_fb_fill_round_rect(state, box.x, y - inkcell_step_px(state->scale), box.w,
                                (int)(rows > 0U ? rows : 1U) * line,
                                inkcell_fb_radius(state, INKCELL_SHAPE_SM), fill);
     return fill;

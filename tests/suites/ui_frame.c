@@ -21,7 +21,8 @@
    surface an application does. */
 static struct inkcell_capture *frame_open(struct inkcell_backend_fb_state **state) {
     struct inkcell_capture *capture = NULL;
-    if (inkcell_capture_open(&capture, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT, 4) < 0) {
+    if (inkcell_capture_open(&capture, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT,
+                             INKCELL_SCALE(4)) < 0) {
         return NULL;
     }
     *state = inkcell_capture_state(capture);

@@ -48,7 +48,7 @@ struct overlay_harness {
 
 static bool overlay_open(struct overlay_harness *h) {
     h->capture = NULL;
-    if (inkcell_capture_open(&h->capture, OVERLAY_W, OVERLAY_H, 1) < 0) {
+    if (inkcell_capture_open(&h->capture, OVERLAY_W, OVERLAY_H, INKCELL_SCALE(1)) < 0) {
         return false;
     }
     h->state = inkcell_capture_state(h->capture);

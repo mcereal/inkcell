@@ -346,8 +346,8 @@ INKCELL_STATIC_ASSERT((int)INKCELL_TONE_COUNT - (int)INKCELL_TONE_PRIMARY ==
 
 /* The glyph multipliers the UI will accept, whatever a theme asks for. The lower bound is
    legibility on the Brick's 3.2" panel; the upper is the buffers sized off it. */
-#define INKCELL_SCALE_MIN 2
-#define INKCELL_SCALE_MAX 6
+#define INKCELL_SCALE_MIN INKCELL_SCALE(2)
+#define INKCELL_SCALE_MAX INKCELL_SCALE(6)
 
 /*
  * Avatar tints: the fills behind a conversation's initials.
@@ -495,14 +495,22 @@ enum inkcell_space {
  * runtime, and a table of absolutes would silently stop being a scale the moment somebody asked
  * for larger text. An offset keeps the *relationship*, which is what a type scale is.
  *
- * Three roles, not Material's fifteen. The glyph scale is an integer multiplier over a 5x7 cell
- * with INKCELL_SCALE_MAX at six, so the whole usable range is a handful of steps; a scale with
- * more roles than the range can express is a vocabulary whose words are synonyms. At the top of
- * the range the roles collapse towards each other, which is correct and is what
- * inkcell_theme_type_scale() clamping guarantees.
+ * Three roles for now, where Material names fifteen and iOS eleven - and the reason is no
+ * longer arithmetic. It was: a scale was a whole multiplier over the font's cell, so the range
+ * [2, 6] held five sizes and a vocabulary with more roles than that would have been a set of
+ * synonyms. A scale counts quarter steps now (see INKCELL_SCALE_UNIT), which puts seventeen
+ * sizes in the same range and about a pixel of cap height between neighbours - enough to place
+ * a display, a headline, a title, a body and a label without two of them landing together.
+ *
+ * What is left before this can carry Material's grid is the vocabulary itself: the roles, their
+ * offsets, and a weight for each. The offsets below are stated in units, so a role may now sit
+ * half a step above the body rather than a whole one, and a theme can say so.
+ *
+ * At the top of the range the roles still collapse towards each other, which is correct and is
+ * what inkcell_theme_type_scale() clamping guarantees.
  */
 enum inkcell_type {
-    /* A screen's own heading. One step up, so a title is a title before it is read. */
+    /* A screen's own heading. A whole step up, so a title is a title before it is read. */
     INKCELL_TYPE_TITLE = 0,
     /* The default: list rows, card values, chat bubbles, anything read rather than glanced at. */
     INKCELL_TYPE_BODY,
@@ -523,9 +531,10 @@ enum inkcell_type {
 struct inkcell_metrics {
     uint8_t margin; /* pixels between the panel edge and the body */
     uint8_t scale;  /* glyph multiplier for body text */
-    /* The type scale, as offsets from the body scale, indexed by enum inkcell_type. Signed:
-       a title is above the body and a label below it. Read through
-       inkcell_theme_type_scale(), which does the addition and the clamp. */
+    /* The type scale, as offsets from the body scale in *scale units*, indexed by enum
+       inkcell_type. Signed: a title is above the body and a label below it. INKCELL_SCALE(1) is
+       a whole step, so a half-step role is INKCELL_SCALE(1) / 2 and not a rounding accident.
+       Read through inkcell_theme_type_scale(), which does the addition and the clamp. */
     int8_t type_offset[INKCELL_TYPE_COUNT];
     /*
      * How heavily each role is set, indexed by enum inkcell_type. Read through

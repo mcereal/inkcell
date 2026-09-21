@@ -38,8 +38,18 @@ static void inkcell_fb_apply_theme_from_env(struct inkcell_backend_fb_state *sta
     /* A scale named in the environment outlives a theme switch: it is an explicit choice about
        this panel, where a theme's own scale is only that theme's default. */
     state->scale_pinned = inkcell_env_get("INKCELL_FB_SCALE") != NULL;
-    const int scale = (int)inkcell_env_int("INKCELL_FB_SCALE", INKCELL_SCALE_MIN, INKCELL_SCALE_MAX,
-                                           inkcell_theme_scale(theme));
+    /*
+     * The knob stays in *whole* steps, where the scale it sets is in units.
+     *
+     * Everything inside counts quarters now, but this is the number somebody types on a device
+     * over ssh, and <PREFIX>_FB_SCALE=4 has meant "the body size" for as long as there has been
+     * one. Reading it in units would quietly halve every existing invocation, so the conversion
+     * happens here - the one place the outside world states a scale.
+     */
+    const int steps =
+        (int)inkcell_env_int("INKCELL_FB_SCALE", INKCELL_SCALE_MIN / INKCELL_SCALE_UNIT,
+                             INKCELL_SCALE_MAX / INKCELL_SCALE_UNIT, 0);
+    const int scale = steps > 0 ? INKCELL_SCALE(steps) : inkcell_theme_scale(theme);
     inkcell_fb_state_set_theme(state, theme, scale);
 }
 

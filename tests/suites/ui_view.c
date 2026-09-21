@@ -40,7 +40,7 @@ struct view_harness {
 
 static bool view_harness_open(struct view_harness *h) {
     h->capture = NULL;
-    if (inkcell_capture_open(&h->capture, VIEW_W, VIEW_H, 1) < 0) {
+    if (inkcell_capture_open(&h->capture, VIEW_W, VIEW_H, INKCELL_SCALE(1)) < 0) {
         return false;
     }
     h->state = inkcell_capture_state(h->capture);

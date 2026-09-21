@@ -36,7 +36,8 @@ struct glide_harness {
 
 static bool glide_open(struct glide_harness *h) {
     h->capture = NULL;
-    if (inkcell_capture_open(&h->capture, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT, 4) < 0) {
+    if (inkcell_capture_open(&h->capture, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT,
+                             INKCELL_SCALE(4)) < 0) {
         return false;
     }
     h->state = inkcell_capture_state(h->capture);

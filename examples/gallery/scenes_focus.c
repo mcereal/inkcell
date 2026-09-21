@@ -167,7 +167,7 @@ focus_screen(struct inkcell_backend_fb_state *state, enum gallery_str_id title, 
     };
     /* The strip takes the baseline its pills hang from rather than their top edge, which is
        what `+ scale` is: see inkcell_fb_chip_box(). */
-    (void)inkcell_fb_draw_chip_strip(state, box.text_x, y + scale, chips,
+    (void)inkcell_fb_draw_chip_strip(state, box.text_x, y + inkcell_step_px(scale), chips,
                                      sizeof chips / sizeof chips[0], 1U,
                                      box.text_right - box.text_x, INKCELL_COLOR_BG, scale);
     y += inkcell_fb_line_adv(state, scale) + corridor;

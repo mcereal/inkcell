@@ -136,7 +136,7 @@ void inkcell_fb_draw_button(const struct inkcell_backend_fb_state *state,
        inkcell_fb_button_content_w() is the same sum, so a caller sizing a box around this gets the
        box this fills. */
     const int text_w = inkcell_fb_button_content_w(state, button);
-    const int text_h = (int)inkcell_fb_font(state)->height * button->scale;
+    const int text_h = inkcell_scale_px((int)inkcell_fb_font(state)->height, button->scale);
     int x = button->rect.x + (button->rect.w - text_w) / 2;
     const int y = button->rect.y + (button->rect.h - text_h) / 2;
     /* Any fill at all means the label is drawn in the colour the theme validates against that
@@ -182,7 +182,8 @@ void inkcell_fb_draw_button(const struct inkcell_backend_fb_state *state,
 int inkcell_fb_button_width(const struct inkcell_backend_fb_state *state, enum inkcell_icon icon,
                             const char *label, int scale) {
     const struct inkcell_fb_button button = {.icon = icon, .label = label, .scale = scale};
-    return inkcell_fb_button_content_w(state, &button) + INKCELL_FB_CHIP_PAD_STEPS * scale;
+    return inkcell_fb_button_content_w(state, &button) +
+           inkcell_scale_px(INKCELL_FB_CHIP_PAD_STEPS, scale);
 }
 
 int inkcell_fb_chip_width(const struct inkcell_backend_fb_state *state, enum inkcell_icon icon,
@@ -197,7 +198,7 @@ struct inkcell_fb_rect inkcell_fb_chip_box(const struct inkcell_backend_fb_state
     const int width = inkcell_fb_chip_width(state, icon, label, scale);
     return (struct inkcell_fb_rect){
         .x = x,
-        .y = y - scale,
+        .y = y - inkcell_step_px(scale),
         .w = width - inkcell_fb_char_adv(state, scale), /* the pill, without the gap after it */
         .h = inkcell_fb_line_adv(state, scale)};
 }
@@ -265,7 +266,7 @@ static void inkcell_fb_draw_chip_badge(const struct inkcell_backend_fb_state *st
         return;
     }
     /* The chip's own box, as inkcell_fb_draw_chip() derives it. */
-    const int top = y - scale;
+    const int top = y - inkcell_step_px(scale);
     const int height = inkcell_fb_line_adv(state, scale);
 
     if (labels == INKCELL_FB_CHIP_LABELS_NONE) {
@@ -278,7 +279,7 @@ static void inkcell_fb_draw_chip_badge(const struct inkcell_backend_fb_state *st
     }
 
     const struct inkcell_fb_rect box = {.x = x, .y = top, .w = width, .h = height};
-    const int text_h = (int)inkcell_fb_font(state)->height * scale;
+    const int text_h = inkcell_scale_px((int)inkcell_fb_font(state)->height, scale);
     inkcell_fb_draw_badge(state, &box, top + (height - text_h) / 2, badge, INKCELL_FAMILY_PRIMARY,
                           scale);
 }

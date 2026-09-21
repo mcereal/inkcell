@@ -36,6 +36,14 @@ These are authoring rules — breaking one compiles and looks fine.
   `scripts/check-strings.py` fails the build on prose in a component.
 - **A widget takes a *tone*, never a colour** — the same reason a stylesheet has a token called
   "danger" instead of the hex for red: it is what lets a theme change the answer.
+- **A scale is not a pixel count.** It is counted in quarters of a glyph step
+  (`INKCELL_SCALE_UNIT`), so that a type role can sit half a step above the body rather than a
+  whole one - which is the difference between three type roles and Material's fifteen. Anything
+  turning a scale into pixels goes through `inkcell_scale_px(steps, scale)`, and the very common
+  "one step" case through `inkcell_step_px(scale)`. A bare scale in a pixel expression compiles,
+  looks plausible and draws everything four times too large: it was the right arithmetic back
+  when a scale was a whole multiplier, and every one of those sites is a bug now.
+
 - **Text is measured, never counted.** A name written with one emoji is four bytes and one cell,
   and on the proportional face that cell is not the same width as the one beside it - so a
   `strlen`, a `%-12s`, or a cell count multiplied by the advance are all the same bug. Measure
