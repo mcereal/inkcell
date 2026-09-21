@@ -64,12 +64,13 @@ const struct inkcell_backend *inkcell_backend_sdl(void) {
 #include "inkwell/base/env.h"
 #include "inkwell/base/log.h"
 #include "inkwell/base/time.h"
+#include "inkwell/runtime/timer.h"
+
+#include "inkcell/ui/input_codes.h"
 
 #include <SDL.h>
-#include <linux/input-event-codes.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/timerfd.h>
 #include <unistd.h>
 
 /*
@@ -86,7 +87,7 @@ const struct inkcell_backend *inkcell_backend_sdl(void) {
 #define INKCELL_SDL_MAX_RECTS 8U
 
 /* How often the event queue is drained, in milliseconds. See the header: SDL has no descriptor
-   to wait on, so this is a timerfd and a poll, said out loud. */
+   to wait on, so this is a timer on the loop and a poll, said out loud. */
 #define INKCELL_SDL_POLL_MS 8
 
 struct inkcell_sdl_panel {
@@ -308,12 +309,10 @@ static int inkcell_sdl_pump(int fd, uint32_t events, void *userdata) {
     if (panel == NULL) {
         return 0;
     }
-    /* The timerfd is level-triggered and counts what it owes us; not reading it is a loop that
+    /* The timer is level-triggered and counts what it owes us; not reading it is a loop that
        never sleeps again. The count itself is of no interest - several ticks that arrived while
        something else was running are still one drain of the queue. */
-    uint64_t ticks;
-    while (read(fd, &ticks, sizeof ticks) < 0 && errno == EINTR) {
-    }
+    (void)inkwell_timer_read(fd);
 
     SDL_Event event;
     while (SDL_PollEvent(&event) != 0) {
@@ -367,19 +366,17 @@ static void inkcell_sdl_pump_start(struct inkcell_sdl_panel *panel) {
         return;
     }
     const long interval_ms = inkwell_env_int("SDL_POLL_MS", 1, 200, INKCELL_SDL_POLL_MS);
-    const int fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+    const int fd = inkwell_timer_open();
     if (fd < 0) {
-        inkwell_log_warn("ui", "timerfd for the SDL event pump failed: %s", strerror(errno));
+        inkwell_log_warn("ui", "the timer for the SDL event pump failed: %s", strerror(-fd));
         return;
     }
-    const struct itimerspec every = {
-        .it_interval = {.tv_sec = interval_ms / 1000L, .tv_nsec = (interval_ms % 1000L) * 1000000L},
-        .it_value = {.tv_sec = interval_ms / 1000L, .tv_nsec = (interval_ms % 1000L) * 1000000L},
-    };
-    if (timerfd_settime(fd, 0, &every, NULL) < 0 ||
-        panel->host.add_fd(panel->host.ctx, fd, inkcell_sdl_pump, panel) < 0) {
+    const int armed = inkwell_timer_arm_every(fd, (uint32_t)interval_ms);
+    const int added =
+        armed < 0 ? armed : panel->host.add_fd(panel->host.ctx, fd, inkcell_sdl_pump, panel);
+    if (added < 0) {
         inkwell_log_warn("ui", "the SDL event pump could not be put on the loop: %s",
-                         strerror(errno));
+                         strerror(-added));
         close(fd);
         return;
     }

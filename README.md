@@ -178,7 +178,14 @@ handed.
 
 ## Building
 
-**Linux only** — `epoll`, `timerfd`, `linux/fb.h`, `linux/input.h`.
+**Linux is the target** — `linux/fb.h`, `linux/input.h`, and inkwell's `epoll` loop under them.
+
+**macOS builds and passes the same suite as a development host**, so a UI can be worked on in a
+window with no device: inkwell's loop is `kqueue` there, the fb backend and evdev compile to
+refusals (`inkcell_backend_fb_is_available()` is false, `inkcell_input_init()` watches nothing),
+and the SDL window is how anything is seen. The key codes the window sends are the evdev numbers
+all the same, from `inkcell/ui/input_codes.h`, so a keycap means one thing on both. Nothing ships
+for macOS; CI builds it so it does not rot. `brew install sdl2 ninja` is the setup.
 
 SDL2 is the one optional dependency, and optional by *presence*: with it you get the window
 backend, without it `inkcell/ui/sdl.h` still exists and reports itself unavailable. A plain
@@ -216,7 +223,7 @@ them to it. What differs is the last step, and `inkcell_fb_damage_rects()` and
 **The SDL backend is a presenter, not a GPU renderer.** The glyphs, the rounded rectangles and
 the anti-aliasing are still the CPU's work; what moves to the GPU is the blit and the scale. Two
 things about SDL do not fit one epoll loop and neither is hidden: it has no descriptor to wait
-on, so its queue is drained from a timerfd registered through `struct inkcell_input_host`, and
+on, so its queue is drained from an inkwell timer registered through `struct inkcell_input_host`, and
 `SDL_RenderPresent()` blocks under vsync, so vsync is off unless `<PREFIX>_SDL_VSYNC` asks for
 it. See the header.
 

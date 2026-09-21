@@ -3,12 +3,12 @@
 #include "inkcell/ui/input_profile.h"
 
 #include "inkcell/ui/input.h"
+#include "inkcell/ui/input_codes.h"
 #include "inkwell/base/env.h"
 
 #include "inkwell/base/array.h"
 #include "inkwell/base/log.h"
 
-#include <linux/input.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
