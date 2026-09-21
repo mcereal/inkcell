@@ -153,6 +153,117 @@ struct inkcell_fb_focus_ring {
     struct inkcell_fb_damage_rect drawn;
 };
 
+/* A box in pixels. The geometry vocabulary every layer above shares: a component is handed
+   one, or measures one, and inkcell_fb_draw.c's primitives take it apart again. */
+struct inkcell_fb_rect {
+    int x, y, w, h;
+};
+
+/*
+ * ---- the view stack ----
+ *
+ * How deep the nesting goes.
+ *
+ * Four, because four is what the frame can actually stack: a scrolled body, a sheet over it
+ * that scrolls too, and a menu over that is three, and the fourth is the slack that keeps a
+ * component from having to know how many are already in force. A push past the end is refused
+ * rather than dropped silently - see inkcell_fb_view_push().
+ */
+#define INKCELL_FB_VIEW_DEPTH 4U
+
+/*
+ * One entry on the view stack: where content drawn inside it lands, and what cuts it.
+ *
+ * Both are *absolute* rather than relative to the entry below, so the clip every pixel goes
+ * through reads one slot and does no walking. Composing on the way in is the whole trick: a
+ * push inside a push adds its offset to the one already in force and intersects its box with
+ * the box already in force, so what a pixel is measured against is a single translate and a
+ * single rectangle however deep the frame got.
+ */
+struct inkcell_fb_view {
+    int dx, dy;              /* the accumulated translation, panel coordinates */
+    int x, y, right, bottom; /* the accumulated clip, panel coordinates */
+};
+
+/*
+ * No layer. What inkcell_fb_overlay_modal() answers on a frame with nothing modal on it, and
+ * the id a layer may not take - for the reason INKCELL_FOCUS_NONE is reserved in the focus map:
+ * an id space where "none" is a legal key is an id space where a caller that forgot to set one
+ * gets a working layer instead of a diagnostic.
+ */
+#define INKCELL_OVERLAY_NONE 0U
+
+/*
+ * How many layers a frame can hold.
+ *
+ * Four, and the number is the same one the view stack takes, for the same reason: a scrimmed
+ * sheet with a menu over it and a notice over that is three, and the fourth is the slack that
+ * keeps a screen from having to count. A fifth is refused rather than evicting one of the four
+ * - an overlay quietly dropped is a question nobody can answer - and a screen that wants five
+ * modals at once has a screen problem rather than a toolkit one.
+ */
+#define INKCELL_OVERLAY_SLOTS 4U
+
+/*
+ * ---- the overlay stack ----
+ *
+ * One layer's memory between frames. See include/inkcell/ui/overlay.h, which is where the
+ * whole of the reasoning is; what is here is only the shape of it, because the state struct is
+ * the one place every frame-lived fact in this backend is kept.
+ */
+struct inkcell_fb_overlay_slot {
+    uint32_t id; /* INKCELL_OVERLAY_NONE is free */
+    uint64_t touched_ms;
+    /* How far in it is: 0 gone, INKCELL_ANIM_ONE fully arrived. The whole of the lifetime -
+       a layer with anything left in here is a layer still on the panel, whatever the app
+       thinks. */
+    struct inkcell_anim travel;
+    /*
+     * Where in the frame's draw order it came, and whether it takes the press there. Together
+     * they are what inkcell_fb_overlay_modal() answers with: "drawn last is on top", read
+     * backwards, which is the one stacking rule an immediate-mode frame can state without a
+     * screen keeping a second list in agreement with the first.
+     */
+    uint32_t order;
+    bool modal;
+    bool up; /* what it was last aimed at, so an exit can be told from an entrance */
+    /*
+     * The box it painted last frame, padded by its travel.
+     *
+     * Carried for the reason the focus ring's is: erasing a layer is not the layer's own work,
+     * because what is under it belongs to whatever drew there and that drawing happens before
+     * the layer is asked to move. So it is declared as damage at the top of the next frame,
+     * where it is in place before anything paints.
+     */
+    struct inkcell_fb_damage_rect drawn;
+};
+
+/*
+ * Takes every layer off the frame at once, with no exit.
+ *
+ * For the change that is not a change of mind: a theme or a scale swap re-measures everything,
+ * so the boxes these layers are travelling between describe a geometry that no longer exists -
+ * which is inkcell_anim_table_reset()'s reason, one header over. A layer the app still wants is
+ * re-adopted on the next frame at its resting place, which is right: the panel it is on has
+ * just been redrawn at a different size, and a layer that animated into that would be
+ * announcing the theme change rather than itself.
+ */
+void inkcell_fb_overlay_reset(struct inkcell_backend_fb_state *state);
+
+/*
+ * Takes one layer off the frame at once, with no exit, so the next frame sees it arrive from
+ * nothing.
+ *
+ * For the case a re-aim cannot express: a layer whose *content* has been replaced while it was
+ * up. A second notice reading the same words as the first is a second arrival, not a text
+ * swap, and a layer told to go where it already is does nothing at all - deliberately, because
+ * that no-op is what stops every settled widget animating on every frame. The snackbar is the
+ * one caller, and it is the caller this exists for.
+ *
+ * A layer nothing is holding is unaffected, so this is safe to call on an id that is not up.
+ */
+void inkcell_fb_overlay_drop(struct inkcell_backend_fb_state *state, uint32_t id);
+
 struct inkcell_backend_fb_state {
     /* The body rows the last paged list was laid out in - what the app pages its content by,
        read back through the backend's page_rows() vtable entry. */
@@ -283,6 +394,24 @@ struct inkcell_backend_fb_state {
     int shift_top;
     int shift_bottom;
     bool shift_active;
+    /*
+     * The view stack: the nested translations and clips pushed by
+     * inkcell_fb_view_push(). `views` is how many are in force, and slot `views - 1` is the
+     * one every pixel is measured against.
+     */
+    struct inkcell_fb_view views_stack[INKCELL_FB_VIEW_DEPTH];
+    uint32_t views;
+    /*
+     * The layers over this frame, and the counter that orders them.
+     *
+     * Kept here rather than in the animation table for the reason `slide`, `focus_ring` and
+     * `list_glide` are: that table is for widgets with nowhere of their own to keep a
+     * position, and a layer is not a widget - it outlives the app's interest in it, which is
+     * the one thing a keyed scalar cannot express. `overlay_order` is reset at the top of
+     * each frame and handed out as layers open, so the last one drawn has the highest.
+     */
+    struct inkcell_fb_overlay_slot overlays[INKCELL_OVERLAY_SLOTS];
+    uint32_t overlay_order;
 };
 
 /*
@@ -342,6 +471,80 @@ void inkcell_fb_shift_begin(struct inkcell_backend_fb_state *state, int dx, int 
 void inkcell_fb_shift_end(struct inkcell_backend_fb_state *state);
 
 /*
+ * ---- the view stack ------------------------------------------------------------------------
+ *
+ * A box on the panel, and an offset the content inside it is drawn at.
+ *
+ * inkcell_fb_shift_begin() one comment up is the *frame's* transform and there is deliberately
+ * one of them. This is the other kind: a region of the frame that has content of its own, laid
+ * out in coordinates that are not the panel's, and cut where the region ends. Two things in this
+ * toolkit need one and neither could be built without it.
+ *
+ *   - **A scrolled body.** A list windowed by row index can only ever be at a row boundary,
+ *     which is why the glide had to be a displacement bolted onto a window rather than a
+ *     position. Push a view with `dy` of minus the scroll offset and the body is simply drawn
+ *     at its own coordinates - the whole content, from the first item to the last - and what
+ *     lands on the panel is the part the offset put there. A half-row at the top edge is then
+ *     not a special case; it is what a pixel offset that is not a multiple of a line looks
+ *     like.
+ *   - **An overlay.** A menu, a sheet or a dialog is a panel that arrives, and what stops it
+ *     painting over the chrome while it is half way in is a clip - not a check inside every
+ *     widget it happens to contain. See include/inkcell/ui/overlay.h.
+ *
+ * Three properties, and each of them is why this is a stack rather than a second `shift`:
+ *
+ *   - **It nests.** A sheet that scrolls is a view inside a view, and the offsets add while the
+ *     boxes intersect. A component inside one does not know how many are in force.
+ *   - **It is composed on the way in**, so the clip every pixel goes through reads one entry.
+ *     See struct inkcell_fb_view.
+ *   - **The focus map goes through it too**, which the frame's own transform deliberately does
+ *     not. That is not an inconsistency: a slide moves the whole frame by one dx and so changes
+ *     no answer the map is asked for, while a view can move part of it *out of sight*. A row
+ *     scrolled past the top of its viewport is not a place to stand, and a map that held it
+ *     would let the cursor walk onto something nobody can see. So a box registered inside a
+ *     view is registered where the view put it, and one the view cut away entirely is not
+ *     registered at all. That is the same rule the list has always followed by only registering
+ *     the rows it drew - stated once, for everything.
+ *
+ * Returns false when the box has nothing on the panel in it, or when the stack is full, and
+ * *nothing is pushed* in either case - so the pop is conditional on the push, exactly as it
+ * reads:
+ *
+ *     if (inkcell_fb_view_push(state, box, 0, -offset)) {
+ *         ... draw the content at its own coordinates ...
+ *         inkcell_fb_view_pop(state);
+ *     }
+ *
+ * A false is a region with nothing visible in it, so the draw inside it had nothing to
+ * contribute anyway. The one thing a caller must not do is pop a push that was refused, which
+ * is what the `if` is for.
+ */
+bool inkcell_fb_view_push(struct inkcell_backend_fb_state *state, struct inkcell_fb_rect box,
+                          int dx, int dy);
+void inkcell_fb_view_pop(struct inkcell_backend_fb_state *state);
+
+/*
+ * The box the innermost view is cutting to, in panel coordinates, or the whole panel when none
+ * is pushed.
+ *
+ * What a component inside a view asks when it has to know whether it is worth drawing something
+ * - a list skipping the rows above the viewport rather than clipping several hundred of them
+ * one pixel at a time. It is the clip, not the content: a view translated by an offset reports
+ * where its window is on the panel, not where its content thinks it is.
+ */
+struct inkcell_fb_rect inkcell_fb_view_box(const struct inkcell_backend_fb_state *state);
+
+/*
+ * The same box in the *content's* coordinates: what a caller inside a view has to draw to fill
+ * it, with the translation taken back off.
+ *
+ * A list walking its items needs this rather than the panel box. It places row four hundred at
+ * its own y, and what it wants to know is which of its rows land in the window - a question
+ * asked in the coordinates the rows are in.
+ */
+struct inkcell_fb_rect inkcell_fb_view_content_box(const struct inkcell_backend_fb_state *state);
+
+/*
  * Adopts the theme named by `id`, when it is one this build knows and is not already drawing.
  * Returns true when the frame's look changed. An empty or NULL id keeps the current theme, which
  * is what a harness with no app behind it wants.
@@ -382,6 +585,10 @@ struct inkcell_rgb inkcell_fb_state_layer(const struct inkcell_backend_fb_state 
                                           enum inkcell_state ui_state);
 /* Pixels between the panel edge and the body. */
 int inkcell_fb_margin(const struct inkcell_backend_fb_state *state);
+
+/* How far towards INKCELL_COLOR_SCRIM a modal takes the frame behind it, as a percentage: the
+   theme's metrics.scrim_pct. What inkcell_fb_scrim_rect() is handed by a layer easing one in. */
+int inkcell_fb_scrim_depth(const struct inkcell_backend_fb_state *state);
 /* The corner radius for a kind of container, at the frame's own glyph scale. The only way a
    radius enters the framebuffer layers, for the reason inkcell_fb_color() is the only way a colour
    does; see enum inkcell_shape. */
@@ -435,12 +642,6 @@ int inkcell_fb_edge(const struct inkcell_backend_fb_state *state);
  * edge, not room around text, so it tracks the body margin rather than the glyph scale.
  */
 int inkcell_fb_rail_gutter(const struct inkcell_backend_fb_state *state);
-
-/* A box in pixels. The geometry vocabulary every layer above shares: a component is handed
-   one, or measures one, and inkcell_fb_draw.c's primitives take it apart again. */
-struct inkcell_fb_rect {
-    int x, y, w, h;
-};
 
 /*
  * Where a list's rows stand, horizontally. The one answer, asked by everything that draws one.
@@ -574,6 +775,31 @@ struct inkcell_wrap_metric inkcell_fb_wrap_metric(struct inkcell_fb_wrap_ctx *ct
                                                   int scale);
 int inkcell_fb_line_adv(const struct inkcell_backend_fb_state *state, int scale);
 void inkcell_fb_clear(const struct inkcell_backend_fb_state *state, struct inkcell_rgb color);
+
+/*
+ * Mixes everything already drawn inside `box` `percent` of the way towards `color`.
+ *
+ * The scrim, and the one drawing call here that *reads* the panel over a whole region rather
+ * than writing to it. Every other primitive composes a colour and puts it down; this one takes
+ * what is there and moves it, which is the only way to dim a frame on a panel with no alpha
+ * layer to lay over it. See INKCELL_COLOR_SCRIM.
+ *
+ * What it buys is what a scrim is for: the body under a modal stays *itself*, dimmed - the
+ * columns and the shapes are still there and the reader can still see what the question is
+ * about. A flat fill over the same region would be a second screen, and a modal that replaced
+ * the screen it was asked about is a modal answering a different question by the time it is
+ * read. That is the compromise the dialog has been making since it was written, and it is why
+ * it fills the body rather than floating over it.
+ *
+ * `percent` of 0 draws nothing at all, so a scrim easing in from nothing costs nothing on the
+ * frame before it starts. 100 is a flat fill and is reached by arithmetic rather than by a
+ * special case.
+ *
+ * It goes through the view stack and the clip like everything else, so a scrim inside a view
+ * dims that view's window and nothing outside it.
+ */
+void inkcell_fb_scrim_rect(const struct inkcell_backend_fb_state *state, struct inkcell_fb_rect box,
+                           struct inkcell_rgb color, int percent);
 size_t inkcell_fb_cols(const struct inkcell_backend_fb_state *state, int scale);
 /*
  * Text and one glyph of it, in `ink` over `ground`.

@@ -69,6 +69,8 @@ add_library(inkcell STATIC
     # measuring in cells, easing curves, chart arithmetic, press-to-panel timing
     src/layout.c
     src/anim.c
+    # where a body has got to, in pixels rather than in rows - and the rubber band at its ends
+    src/scroll.c
     src/trend.c
     src/latency.c
     # the on-screen keyboard's model: the grid, the panel ring, the edits. No drawing, which is
@@ -85,6 +87,8 @@ add_library(inkcell STATIC
     src/fb/fb.c
     src/fb/fb_draw.c
     src/fb/fb_capture.c
+    # what is drawn over a frame rather than in it: the box, the travel, the scrim, the stack
+    src/fb/overlay.c
     src/fb/widgets_bubble.c
     src/fb/widgets_button.c
     src/fb/widgets_card.c
@@ -95,6 +99,7 @@ add_library(inkcell STATIC
     src/fb/widgets_keyboard.c
     src/fb/widgets_list.c
     src/fb/widgets_meter.c
+    src/fb/widgets_scroll.c
     src/fb/widgets_overlay.c
     # the catalog mechanism and inkcell's own twenty-three strings
     src/i18n/strings.c

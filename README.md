@@ -17,7 +17,9 @@ backend and its component set, and the evdev layer that turns a handheld's butto
 | **Layout** | Lines measured in *cells*, scroll windows, text wrapping done once for both the measure and the draw pass. |
 | **Focus** | A d-pad answered against the rectangles the components drew - "right from here lands on *that*" - so a grid, a card with two verbs on it or a form with a chip row in it is a layout rather than an index somebody maintains. The cursor is one ring, and it travels. |
 | **Motion** | Durations and curves as *tokens*, so a set of controls moves as one system - and the two things that move without being a control: the focus ring travelling between boxes, and a list gliding between windows instead of flicking between them. |
-| **Widgets** | Buttons, chips, app bars, list rows, chat bubbles, cards, switches, segmented buttons, meters, charts, dialogs, snackbars, QR codes. |
+| **Widgets** | Buttons, chips, app bars, list rows, chat bubbles, cards, switches, segmented buttons, meters, charts, dialogs, menus, bottom sheets, snackbars, QR codes. |
+| **Layers** | One z-stack for everything drawn *over* a screen: a box from a placement, an entrance and a shorter exit, a scrim over what is behind, and an answer to which overlay owns the press. A new overlay is its content and nothing else. |
+| **Scrolling** | A body positioned in pixels rather than windowed by row index - so it can rest between two rows, give at its ends the way every touch platform does, and drive a large title that collapses into the app bar as it moves. |
 | **Shapes** | Anti-aliased rounded rectangles, rings and arcs, in integers - so a curve is the same curve on every host that draws it. |
 | **Framebuffer** | `/dev/fb0`, the page flip, damage tracking, a glyph cache, and an off-screen renderer for screenshots. |
 | **Input** | evdev to a logical key, hat axes, analogue triggers, key repeat, per-device button profiles. |
@@ -39,6 +41,15 @@ These are authoring rules — breaking one compiles and looks fine.
   with `inkcell_fb_text_width()`, wrap and fit against pixels, and use `inkcell_fb_text_cols()`
   where a layout genuinely reserves whole columns. `inkcell_fb_char_adv()` is the *nominal*
   advance: an estimate, and exact only while the face is monospace.
+- **A region of the frame has coordinates of its own.** The drawing layer has one transform
+  for the *frame* - a screen sliding in - and a stack of them for regions inside it
+  (`inkcell_fb_view_push()`). A scrolled body is content drawn at its own coordinates and cut
+  where its window ends; an overlay is a panel that must not paint on the chrome while it is
+  half way in. Both nest. The focus map goes through a view and deliberately not through the
+  frame transform, and the difference is the whole reason there are two: a slide moves every
+  box by one dx and changes no answer the map is asked for, while a view can move part of the
+  frame *out of sight* - and a row scrolled past the top of its viewport is not a place to
+  stand.
 - **What is drawn is what can be reached.** A frame collects the box of everything focusable as
   it draws it, and a press is resolved against those boxes (`inkcell_focus_find()`). The
   components do the collecting - a card registers the verbs it had room for, a strip the pills
@@ -112,7 +123,7 @@ catalog, and writes screens - and it draws every component the library ships, in
 two scales.
 
 ```bash
-make gallery     # 113 pages into build/gallery/, plus build/gallery/contact.png
+make gallery     # 161 pages into build/gallery/, plus build/gallery/contact.png
 ```
 
 It renders through `inkcell_capture`, which is the fb backend with the device taken out of it,

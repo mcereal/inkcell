@@ -84,6 +84,19 @@ static inline const char *gallery_text(enum gallery_str_id id) {
  */
 #define GALLERY_CLOCK_MS 1000U
 
+/*
+ * The layers this gallery opens, as the ids a screen would keep in an enum of its own.
+ *
+ * They start high enough to be obviously not a focus id: the two spaces are unrelated, and a
+ * reader looking at `.id = 3` in a scene has no way to tell which of them it is in.
+ */
+enum gallery_overlay_id {
+    GALLERY_OVERLAY_DIALOG = 9000,
+    GALLERY_OVERLAY_MENU,
+    GALLERY_OVERLAY_SHEET,
+    GALLERY_OVERLAY_TOOLTIP,
+};
+
 struct gallery_scene {
     /* What the picture is of, and the stem its file takes: lower case, no spaces. */
     const char *name;
@@ -129,6 +142,10 @@ void gallery_scene_keyboard_emoji(struct inkcell_backend_fb_state *state);
 void gallery_scene_focus(struct inkcell_backend_fb_state *state);
 void gallery_scene_focus_ring(struct inkcell_backend_fb_state *state);
 void gallery_scene_glide(struct inkcell_backend_fb_state *state);
+void gallery_scene_layers(struct inkcell_backend_fb_state *state);
+void gallery_scene_scroll(struct inkcell_backend_fb_state *state);
+void gallery_scene_scroll_overscroll(struct inkcell_backend_fb_state *state);
+void gallery_scene_scroll_title(struct inkcell_backend_fb_state *state);
 
 /* ---- shared scene furniture --------------------------------------------------------------------
  *

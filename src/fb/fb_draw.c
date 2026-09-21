@@ -66,6 +66,9 @@ void inkcell_fb_state_set_theme(struct inkcell_backend_fb_state *state,
     /* Every position remembered in there is in pixels, measured against metrics this call has
        just replaced. Keeping them would slide a knob from where it sat under the old scale. */
     inkcell_anim_table_reset(&state->anim);
+    /* And the layers, for the same reason: the boxes they are travelling between describe a
+       geometry this state no longer has. See inkcell_fb_overlay_reset(). */
+    inkcell_fb_overlay_reset(state);
     /* And the frame's own transition, for the same reason and one more: a theme switch is not a
        move between screens, so a screen that slid in because the palette changed would be
        animating an event that did not happen. */
@@ -89,6 +92,16 @@ bool inkcell_fb_state_animating(const struct inkcell_backend_fb_state *state) {
        while either has somewhere to be. An app still filling owes one for a reason that is not an
        animation at all: the next piece is read on the next frame, so without this the fill would
        stop wherever the last press left it. */
+    for (uint32_t i = 0U; i < INKCELL_OVERLAY_SLOTS; ++i) {
+        /* A layer arriving or leaving is owed the next frame, and a layer that has *finished*
+           leaving is owed one more than that: its slot is released by the draw, so without a
+           frame in which that draw happens the panel keeps the last position it was in. */
+        if (state->overlays[i].id != INKCELL_OVERLAY_NONE &&
+            (inkcell_anim_active(&state->overlays[i].travel, state->now_ms) ||
+             !state->overlays[i].up)) {
+            return true;
+        }
+    }
     return inkcell_anim_active(&state->slide, state->now_ms) ||
            inkcell_anim_active(&state->focus_ring.travel, state->now_ms) ||
            inkcell_anim_active(&state->list_glide.travel, state->now_ms) ||
@@ -183,6 +196,88 @@ void inkcell_fb_shift_end(struct inkcell_backend_fb_state *state) {
     }
 }
 
+/* ---- the view stack --------------------------------------------------------------------------
+ *
+ * See include/inkcell/ui/fb_draw.h. Everything here is composition: a push adds its offset to
+ * the one already in force and intersects its box with the box already in force, so the clip
+ * that every pixel goes through - inkcell_fb_clip_box() - reads one entry and does no walking.
+ */
+
+/* The whole panel, as an entry: what the bottom of the stack is measured against. */
+static struct inkcell_fb_view inkcell_fb_view_panel(const struct inkcell_backend_fb_state *state) {
+    return (struct inkcell_fb_view){
+        .dx = 0,
+        .dy = 0,
+        .x = 0,
+        .y = 0,
+        .right = (int)state->var.xres,
+        .bottom = (int)state->var.yres,
+    };
+}
+
+/* The entry in force, or the panel when nothing is pushed. */
+static struct inkcell_fb_view inkcell_fb_view_top(const struct inkcell_backend_fb_state *state) {
+    if (state->views == 0U) {
+        return inkcell_fb_view_panel(state);
+    }
+    return state->views_stack[state->views - 1U];
+}
+
+bool inkcell_fb_view_push(struct inkcell_backend_fb_state *state, struct inkcell_fb_rect box,
+                          int dx, int dy) {
+    if (state == NULL || state->views >= INKCELL_FB_VIEW_DEPTH) {
+        return false;
+    }
+    const struct inkcell_fb_view under = inkcell_fb_view_top(state);
+    /* The box arrives in the *enclosing* view's coordinates, which is what a caller has in
+       hand: a sheet's content asks for a region of the sheet, not a region of the panel. So it
+       is translated by what is already in force before it is intersected with it. */
+    const int left = box.x + under.dx;
+    const int top = box.y + under.dy;
+    struct inkcell_fb_view view = {
+        .dx = under.dx + dx,
+        .dy = under.dy + dy,
+        .x = left > under.x ? left : under.x,
+        .y = top > under.y ? top : under.y,
+        .right = (left + box.w) < under.right ? (left + box.w) : under.right,
+        .bottom = (top + box.h) < under.bottom ? (top + box.h) : under.bottom,
+    };
+    if (view.right <= view.x || view.bottom <= view.y) {
+        /* Nothing of it is on the panel. Refused rather than pushed empty, so a caller cannot
+           spend a frame drawing into a window that is not there - and so the `if` around the
+           push is the whole of the test. */
+        return false;
+    }
+    state->views_stack[state->views++] = view;
+    return true;
+}
+
+void inkcell_fb_view_pop(struct inkcell_backend_fb_state *state) {
+    if (state != NULL && state->views > 0U) {
+        state->views--;
+    }
+}
+
+struct inkcell_fb_rect inkcell_fb_view_box(const struct inkcell_backend_fb_state *state) {
+    if (state == NULL) {
+        return (struct inkcell_fb_rect){0, 0, 0, 0};
+    }
+    const struct inkcell_fb_view view = inkcell_fb_view_top(state);
+    return (struct inkcell_fb_rect){
+        .x = view.x, .y = view.y, .w = view.right - view.x, .h = view.bottom - view.y};
+}
+
+struct inkcell_fb_rect inkcell_fb_view_content_box(const struct inkcell_backend_fb_state *state) {
+    if (state == NULL) {
+        return (struct inkcell_fb_rect){0, 0, 0, 0};
+    }
+    const struct inkcell_fb_view view = inkcell_fb_view_top(state);
+    return (struct inkcell_fb_rect){.x = view.x - view.dx,
+                                    .y = view.y - view.dy,
+                                    .w = view.right - view.x,
+                                    .h = view.bottom - view.y};
+}
+
 bool inkcell_fb_state_set_theme_by_id(struct inkcell_backend_fb_state *state, const char *id) {
     if (state == NULL || id == NULL || id[0] == '\0') {
         /* Nothing named one - the capture harness has no app behind it - so keep drawing with
@@ -263,14 +358,50 @@ static void inkcell_fb_focus_put(const struct inkcell_backend_fb_state *state, u
      *     navigable only in the parts that had landed. The boxes here are where the layout put
      *     things, which is where they will be when the slide ends and where a press is resolved
      *     against in the meantime.
+     *
+     * The *view* stack is the one transform that does apply, and the difference is the whole
+     * reason it is a different mechanism. A view can move part of the frame out of sight: a row
+     * scrolled past the top of its viewport, a menu item below the bottom of the menu. Those
+     * are not places to stand, and a map that held them would let the cursor walk onto
+     * something nobody can see and then press it. So a box is registered where the view put it,
+     * and one the view cut away entirely is not registered at all - which is the rule the list
+     * has always followed by registering only the rows it drew, stated once for everything.
+     *
+     * And a box the view cut *in half* is registered as the half that is on the panel. That is
+     * the same rule rather than a second one, and both of the things it fixes are real. The
+     * focus ring is drawn after the view has been popped, from the rectangle in this map - so
+     * a row half above its viewport would have its ring painted up across the chrome above it,
+     * which is the exact lie the ring exists to prevent. And a direction is answered by
+     * comparing boxes, so a box that reaches somewhere the reader cannot see is a box that
+     * wins presses it should lose.
+     *
+     * The radius is kept as it was, and that is deliberate: it is the curve the *component*
+     * drew, and a ring that squared its corners at a cut would be reporting a shape nothing on
+     * the panel has. A ring around a half-row follows the half-row.
      */
-    const int panel_w = (int)state->var.xres;
-    const int panel_h = (int)state->var.yres;
-    if (rect->x >= panel_w || rect->y >= panel_h || rect->x + rect->w <= 0 ||
-        rect->y + rect->h <= 0) {
+    const struct inkcell_fb_view view = inkcell_fb_view_top(state);
+    int x = rect->x + view.dx;
+    int y = rect->y + view.dy;
+    int w = rect->w;
+    int h = rect->h;
+    if (x < view.x) {
+        w -= view.x - x;
+        x = view.x;
+    }
+    if (y < view.y) {
+        h -= view.y - y;
+        y = view.y;
+    }
+    if (x + w > view.right) {
+        w = view.right - x;
+    }
+    if (y + h > view.bottom) {
+        h = view.bottom - y;
+    }
+    if (w <= 0 || h <= 0) {
         return;
     }
-    (void)inkcell_focus_add_round(state->focus, id, rect->x, rect->y, rect->w, rect->h, radius);
+    (void)inkcell_focus_add_round(state->focus, id, x, y, w, h, radius);
 }
 
 void inkcell_fb_focus_register(const struct inkcell_backend_fb_state *state, uint32_t id,
@@ -378,6 +509,36 @@ void inkcell_fb_app_frame_begin(struct inkcell_backend_fb_state *state) {
         inkcell_fb_animation_damage(state, painted.x, painted.y, painted.right - painted.x,
                                     painted.bottom - painted.y);
     }
+    /*
+     * And every layer's, for the ring's reason exactly - which is worth spelling out, because
+     * the layers first declared their own damage from inkcell_fb_overlay_begin() and that is
+     * a frame too late in precisely the way the paragraph above describes.
+     *
+     * A layer is drawn over the body, so the body under it is drawn *first*. By the time
+     * begin() runs, everything that could have repainted the rows the layer is vacating has
+     * already been told those rows did not change - so under a clip band the old position is
+     * never repainted and the layer leaves a trail behind it.
+     *
+     * The scrim makes the same mistake worse rather than merely visible. It is a
+     * read-modify-write over what is already on the panel, so a region that was dimmed last
+     * frame and not repainted this one gets dimmed *again*: the body behind a modal would
+     * darken a step per frame for as long as the modal was up. That is why the span a layer
+     * records covers its scrim's whole region and not just its own box.
+     */
+    for (uint32_t i = 0U; i < INKCELL_OVERLAY_SLOTS; ++i) {
+        const struct inkcell_fb_damage_rect was = state->overlays[i].drawn;
+        state->overlays[i].drawn = (struct inkcell_fb_damage_rect){0};
+        if (was.valid) {
+            inkcell_fb_animation_damage(state, was.x, was.y, was.right - was.x, was.bottom - was.y);
+        }
+    }
+    /*
+     * And the layer order, which is a fact about one frame's draw sequence rather than
+     * something carried between frames. The layers themselves are not cleared - a layer
+     * outlives the app's interest in it, which is the whole of include/inkcell/ui/overlay.h -
+     * but which of them was drawn last is answered afresh every frame.
+     */
+    state->overlay_order = 0U;
     if (state->app.frame_begin != NULL) {
         state->app.frame_begin(state->app.ctx);
     }
@@ -469,6 +630,10 @@ int inkcell_fb_edge(const struct inkcell_backend_fb_state *state) {
 
 int inkcell_fb_margin(const struct inkcell_backend_fb_state *state) {
     return (int)inkcell_fb_metrics(state)->margin;
+}
+
+int inkcell_fb_scrim_depth(const struct inkcell_backend_fb_state *state) {
+    return (int)inkcell_fb_metrics(state)->scrim_pct;
 }
 
 int inkcell_fb_rail_gutter(const struct inkcell_backend_fb_state *state) {
@@ -586,12 +751,53 @@ static bool inkcell_fb_clip_box(const struct inkcell_backend_fb_state *state, in
     int dx = 0;
     int dy = 0;
     /*
-     * The frame's transform, before anything is measured against the panel: a screen arriving
-     * from off the right-hand edge is drawn at coordinates that are not on the panel at all,
-     * and the clamp below is what turns that into the part of it that has arrived. The band is
-     * applied here rather than left to the caller for the same reason - a row whose glyphs
-     * overhang the top of the body must be cut off at the body, not drawn over the navigation
-     * bar it is sliding underneath. See inkcell_fb_shift_begin().
+     * The view stack first, because it is the *innermost* transform: a box arrives here in
+     * whatever coordinates the region it was drawn in uses, and the entry in force is what
+     * turns those into the frame's. The offset moves it and the box cuts it, and both are
+     * already composed down to one of each - see inkcell_fb_view_push().
+     *
+     * `dx`/`dy` are how far into the source the clipped box starts, which is what a glyph or a
+     * sprite has to skip to line up with where it landed. A row half above the top of a
+     * scrolled viewport is exactly that case, and it is why the trim is accumulated rather than
+     * the coordinate simply clamped.
+     */
+    if (state->views > 0U) {
+        const struct inkcell_fb_view *const view = &state->views_stack[state->views - 1U];
+        x += view->dx;
+        y += view->dy;
+        if (x < view->x) {
+            const int trimmed = view->x - x;
+            w -= trimmed;
+            dx += trimmed;
+            x = view->x;
+        }
+        if (y < view->y) {
+            const int trimmed = view->y - y;
+            h -= trimmed;
+            dy += trimmed;
+            y = view->y;
+        }
+        if (x + w > view->right) {
+            w = view->right - x;
+        }
+        if (y + h > view->bottom) {
+            h = view->bottom - y;
+        }
+        if (w <= 0 || h <= 0) {
+            return false;
+        }
+    }
+    /*
+     * Then the frame's transform, which is the outermost one: a screen arriving from off the
+     * right-hand edge is drawn at coordinates that are not on the panel at all, and the clamp
+     * below is what turns that into the part of it that has arrived. After the view rather than
+     * before it, so a region of a screen that is sliding slides with the screen - the window
+     * and what is in it travel together, which is what makes a view inside a transition a
+     * region of the frame rather than a hole cut in the panel.
+     *
+     * The band is applied here rather than left to the caller for the same reason - a row whose
+     * glyphs overhang the top of the body must be cut off at the body, not drawn over the
+     * navigation bar it is sliding underneath. See inkcell_fb_shift_begin().
      */
     if (state->shift_active) {
         x += state->shift_x;
@@ -2139,6 +2345,77 @@ void inkcell_fb_stroke_arc(const struct inkcell_backend_fb_state *state, int cx,
 
 void inkcell_fb_clear(const struct inkcell_backend_fb_state *state, struct inkcell_rgb color) {
     inkcell_fb_fill_rect(state, 0, 0, (int)state->var.xres, (int)state->var.yres, color);
+}
+
+/*
+ * ---- the scrim --------------------------------------------------------------------------------
+ *
+ * What is already on the panel, moved a fraction of the way towards one colour. See
+ * inkcell_fb_scrim_rect() in the header for what it is for.
+ *
+ * Two things about the implementation are worth stating, because both are the difference
+ * between a scrim that is free and one that costs a frame.
+ *
+ * **It clips itself, once, rather than per pixel.** inkcell_fb_blend_pixel() above deliberately
+ * clips each pixel because the shapes that reach it touch a few dozen; this touches every pixel
+ * of a region the size of the body, and clipping each of those separately is the whole of the
+ * cost. So the box goes through inkcell_fb_clip_box() once and the loop runs inside the answer.
+ *
+ * **It remembers the last pixel it converted.** A round trip through decompose_color() and
+ * compose_color() is a dozen shifts and multiplies, and the region under a dialog is mostly
+ * flat: a body is a ground with rows of the same fill on it, so the same packed value arrives
+ * thousands of times in a row. One slot of memo turns almost all of them into a compare. It is
+ * one slot rather than a table because the runs are *contiguous* - what makes a body cheap is
+ * not that it has few colours but that it changes colour rarely - and a table would be a cache
+ * that has to be sized and invalidated for no further gain.
+ */
+void inkcell_fb_scrim_rect(const struct inkcell_backend_fb_state *state, struct inkcell_fb_rect box,
+                           struct inkcell_rgb color, int percent) {
+    if (state == NULL || percent <= 0 || box.w <= 0 || box.h <= 0) {
+        return;
+    }
+    if (percent > 100) {
+        percent = 100;
+    }
+    struct inkcell_fb_clipped_box clipped;
+    if (!inkcell_fb_clip_box(state, box.x, box.y, box.w, box.h, &clipped)) {
+        return;
+    }
+
+    const size_t bpp = state->bytes_per_pixel;
+    const size_t stride = state->fix.line_length;
+    /* The mix is stated in AA steps rather than in percent so it runs through the same
+       inkcell_fb_mix_channel() every anti-aliased edge does - one rounding rule for the whole
+       backend, rather than a second one that disagrees at the halves. */
+    const int coverage = (percent * INKCELL_FB_AA_STEPS + 50) / 100;
+    bool memo_valid = false;
+    uint32_t memo_in = 0U;
+    uint32_t memo_out = 0U;
+
+    uint8_t *row = state->inkcell_fb_ptr + (size_t)clipped.y * stride + (size_t)clipped.x * bpp;
+    for (int r = 0; r < clipped.h; ++r, row += stride) {
+        if ((size_t)(row - state->inkcell_fb_ptr) + (size_t)clipped.w * bpp >
+            state->inkcell_fb_size) {
+            return;
+        }
+        uint8_t *px = row;
+        for (int c = 0; c < clipped.w; ++c, px += bpp) {
+            const uint32_t packed = inkcell_fb_load_pixel(px, bpp);
+            if (memo_valid && packed == memo_in) {
+                inkcell_fb_store_span(px, 1, memo_out, bpp);
+                continue;
+            }
+            const struct inkcell_rgb ground = decompose_color(state, packed);
+            const uint32_t mixed =
+                compose_color(state, inkcell_fb_mix_channel(ground.r, color.r, coverage),
+                              inkcell_fb_mix_channel(ground.g, color.g, coverage),
+                              inkcell_fb_mix_channel(ground.b, color.b, coverage));
+            inkcell_fb_store_span(px, 1, mixed, bpp);
+            memo_in = packed;
+            memo_out = mixed;
+            memo_valid = true;
+        }
+    }
 }
 
 /* Columns of text that fit between the margins at this scale. */

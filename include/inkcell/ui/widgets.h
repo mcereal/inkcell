@@ -30,9 +30,16 @@
  *   inkcell_fb_widgets_card.h      a card, built row by row and then drawn
  *   inkcell_fb_widgets_control.h   the switch, the checkbox and radio, the segmented button, the
  * field inkcell_fb_widgets_meter.h     a quantity as a length, and a reading over time
- *   inkcell_fb_widgets_overlay.h   the dialog, the snackbar, the QR code
+ *   inkcell_fb_widgets_overlay.h   the dialog, the menu, the bottom sheet, the snackbar, the QR
+ *   inkcell_fb_widgets_scroll.h    a viewport over content in pixels, its rail, the large title
  *   inkcell_fb_widgets_keyboard.h  the on-screen keyboard's grid, over the model in ui/keyboard.h
  *   inkcell_fb_widgets_focus.h     the focus ring, travelling between the boxes a frame drew
+ *
+ * The first four of those overlays are *content for a layer* rather than components that
+ * place themselves: include/inkcell/ui/overlay.h is the box, the way in and out, the scrim and
+ * the stack, and it is public API rather than one of these. That split is why the menu and the
+ * sheet exist at all - each of them is a measure and a loop now that none of them has to bring
+ * its own answer to "where does this go and how does it get there".
  *
  * Tones - what a thing *is*, rather than which colour to draw it - live in
  * include/inkcell/ui/theme.h as `enum inkcell_tone`, because they are the UI's vocabulary rather
@@ -60,5 +67,6 @@
 #include "inkcell/ui/widgets/list.h"
 #include "inkcell/ui/widgets/meter.h"
 #include "inkcell/ui/widgets/overlay.h"
+#include "inkcell/ui/widgets/scroll.h"
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_H */

@@ -39,8 +39,16 @@ gallery-update: debug
 	@echo "recorded $$(grep -vc '^#' tests/golden/manifest.txt) page(s); review the diff"
 
 # The generated glyph tables are excluded deliberately - see the note in .github/workflows/ci.yml.
+#
+# Untracked files are included, and that is the whole of why this is two commands rather than
+# one. `git ls-files` lists what git is *tracking*, so a file written and not yet added was
+# silently skipped - which means the one moment a formatter is most needed, on a file nobody
+# has ever run it over, is the one moment it did nothing. The CI check runs after the add and
+# caught it there instead, which is a round trip for something the author could have been told
+# locally. --others --exclude-standard is the untracked half, minus whatever .gitignore says.
 format:
-	git ls-files '*.c' '*.h' | grep -v '^src/generated/' | xargs clang-format -i
+	git ls-files --cached --others --exclude-standard '*.c' '*.h' \
+	  | grep -v '^src/generated/' | xargs clang-format -i
 
 clean:
 	rm -rf $(BUILD)

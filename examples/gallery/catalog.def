@@ -38,6 +38,7 @@ INKCELL_STR_ENTRY(HEAD_TRANSCRIPT,    "Transcript")
 INKCELL_STR_ENTRY(HEAD_CONTROLS,      "Controls")
 INKCELL_STR_ENTRY(HEAD_CHROME,        "Chrome")
 INKCELL_STR_ENTRY(HEAD_OVERLAYS,      "Overlays")
+INKCELL_STR_ENTRY(HEAD_LAYERS,        "Layers")
 INKCELL_STR_ENTRY(HEAD_KEYBOARD,      "Keyboard")
 INKCELL_STR_ENTRY(HEAD_FOCUS,        "Focus")
 INKCELL_STR_ENTRY(HEAD_FOCUS_RING,   "Focus ring")
@@ -108,6 +109,27 @@ INKCELL_STR_ENTRY(DIALOG_BODY,        "The messages in it are on this device onl
 INKCELL_STR_ENTRY(SNACK_SENT,         "Message sent")
 INKCELL_STR_ENTRY(FIELD_LABEL,        "Message")
 INKCELL_STR_ENTRY(FIELD_VALUE,        "Heading out now, back before dark")
+
+/* ---- the layers -----------------------------------------------------------------------------
+ *
+ * The words a menu and a sheet put on a panel. A verb per row, one of them destructive and one
+ * of them unavailable, because a menu where every row reads the same is a menu that cannot show
+ * what a tone or a disabled row does to it. */
+
+INKCELL_STR_ENTRY(MENU_HEADING,       "This conversation")
+INKCELL_STR_ENTRY(MENU_PIN,           "Pin to the top")
+INKCELL_STR_ENTRY(MENU_MUTE,          "Mute notifications")
+INKCELL_STR_ENTRY(MENU_EXPORT,        "Export transcript")
+INKCELL_STR_ENTRY(MENU_DELETE,        "Delete conversation")
+INKCELL_STR_ENTRY(SHEET_TITLE,        "Filter by")
+INKCELL_STR_ENTRY(SHEET_DETAIL,       "3 of 8")
+INKCELL_STR_ENTRY(TOOLTIP_RANGE,      "Signal below -110 dBm")
+
+/* ---- scrolling ------------------------------------------------------------------------------- */
+
+INKCELL_STR_ENTRY(HEAD_SCROLL,        "Scrolling")
+INKCELL_STR_ENTRY(SCROLL_COUNT,       "40 rows")
+INKCELL_STR_ENTRY(BADGE_UNSAVED,      "Unsaved")
 
 /* ---- the transcript ---------------------------------------------------------------------------- */
 
