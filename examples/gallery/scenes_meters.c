@@ -235,7 +235,7 @@ void gallery_scene_meters(struct inkcell_draw_state *state) {
         const struct inkcell_fb_chart chart = {
             .rect = {.x = box.text_x, .y = y, .w = box.text_right - box.text_x, .h = chart_h},
             .lines = {{.points = &points,
-                       .label = (enum inkcell_str_id)GALLERY_STR_READ_UTILISATION,
+                       .label = (inkcell_str_id)GALLERY_STR_READ_UTILISATION,
                        .value = "69%"}},
             .count = 1U,
             .top = "100%",

@@ -127,7 +127,7 @@ struct inkcell_keyboard_layout {
      * difference is about what the application is *for*. A toolkit that picked one would be
      * telling a music player it is sending something.
      */
-    enum inkcell_str_id submit_label;
+    inkcell_str_id submit_label;
     /*
      * The most bytes of text this keyboard will accept, not counting the NUL. 0 means "whatever
      * the buffer holds".

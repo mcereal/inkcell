@@ -407,8 +407,8 @@ struct inkcell_fb_conversation {
      * conversation with no traffic yet. INKCELL_STR_NONE leaves the line blank, which is the
      * right answer for a list whose rows are never empty.
      */
-    enum inkcell_str_id armed_label;
-    enum inkcell_str_id empty_label;
+    inkcell_str_id armed_label;
+    inkcell_str_id empty_label;
     const char *badge; /* unread count as it should read ("3", "99+"); "" for none */
     bool unread;
     /*

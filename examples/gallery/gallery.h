@@ -62,8 +62,8 @@ void gallery_i18n_install(void);
  * It is a function rather than a cast at every call site because -Wconversion is right to want
  * to be told, and being told once is better than being told sixty times.
  */
-static inline enum inkcell_str_id gallery_id(enum gallery_str_id id) {
-    return (enum inkcell_str_id)id;
+static inline inkcell_str_id gallery_id(enum gallery_str_id id) {
+    return (inkcell_str_id)id;
 }
 
 /* The text for a gallery id in the locale in force. Never NULL. */

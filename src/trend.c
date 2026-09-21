@@ -21,7 +21,7 @@
  */
 static const struct {
     uint32_t ms; /* 0: however long the readings are */
-    enum inkcell_str_id label;
+    inkcell_str_id label;
 } k_spans[INKCELL_TREND_SPAN_COUNT] = {
     [INKCELL_TREND_SPAN_15M] = {15U * 60U * 1000U, INKCELL_STR_TREND_SPAN_15M},
     [INKCELL_TREND_SPAN_1H] = {60U * 60U * 1000U, INKCELL_STR_TREND_SPAN_1H},
@@ -40,7 +40,7 @@ uint32_t inkcell_trend_span_ms(uint8_t span) {
     return k_spans[span_or_all(span)].ms;
 }
 
-enum inkcell_str_id inkcell_trend_span_label(uint8_t span) {
+inkcell_str_id inkcell_trend_span_label(uint8_t span) {
     return k_spans[span_or_all(span)].label;
 }
 

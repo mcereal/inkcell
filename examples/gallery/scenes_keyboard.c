@@ -70,7 +70,7 @@ static const char *const k_emoji[] = {
 static const struct inkcell_keyboard_layout k_layout = {
     .emoji = k_emoji,
     .pages = 2U,
-    .submit_label = (enum inkcell_str_id)GALLERY_STR_ACT_SEND,
+    .submit_label = (inkcell_str_id)GALLERY_STR_ACT_SEND,
     .cap = 160U,
 };
 

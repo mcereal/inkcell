@@ -84,7 +84,7 @@ void inkcell_line_printf(struct inkcell_line *line, const char *fmt, ...) {
 
 /* The i18n counterpart. inkcell_str_vformat() is where the non-literal format is answered for;
    see include/inkcell/i18n/strings.h. */
-void inkcell_line_str(struct inkcell_line *line, enum inkcell_str_id id, ...) {
+void inkcell_line_str(struct inkcell_line *line, inkcell_str_id id, ...) {
     const size_t room = inkcell_line_room(line);
     if (room == 0U) {
         return;

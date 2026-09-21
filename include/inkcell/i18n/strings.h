@@ -45,13 +45,33 @@ extern "C" {
 #endif
 
 /*
+ * What carries a string id.
+ *
+ * An index and not an enumeration type, because the catalog is *two* lists joined end to end -
+ * inkcell's own ids below, and the application's continuing from INKCELL_STR_COUNT (see
+ * "extending the catalog" at the foot of this header). An id that names one of those halves is
+ * therefore an index into the whole, and no single enumeration type can spell both: a signature
+ * that named inkcell's own would be a claim that every id passed to it is one of inkcell's,
+ * which is false at every call site an application makes - and which gcc says so about, one
+ * -Wenum-conversion at a time, a couple of thousand of them across an application the size of a
+ * client. The index is the honest type, so it is the one at the boundary.
+ *
+ * Neither half is any less checked for it. The ids below are still named constants generated
+ * from one list, still contiguous, and inkcell_str() still bounds-checks what it is handed
+ * against the catalog in force - which is the check that matters, because it is the one an
+ * enumeration type could never make: the catalog's length is a runtime fact about what was
+ * registered.
+ */
+typedef int inkcell_str_id;
+
+/*
  * The ids, generated from the catalog.
  *
  * A plural entry occupies two consecutive ids - _ONE and _OTHER - because the id *is* the
  * table index, and inkcell_str_plural() picks between them by the locale's rule rather than by
  * `n == 1`, which is an English rule and not even that in every sentence.
  */
-enum inkcell_str_id {
+enum {
 #define INKCELL_STR_ENTRY(id, text) INKCELL_STR_##id,
 #define INKCELL_STR_PLURAL_ENTRY(id, one, other) INKCELL_STR_##id##_ONE, INKCELL_STR_##id##_OTHER,
 #include "inkcell/i18n/catalog.def"
@@ -86,14 +106,14 @@ struct inkcell_i18n_locale {
 /* The text for `id` in the current locale, never NULL: an untranslated entry falls back to
    English and an out-of-range id to the empty string. The pointer is to static storage and
    stays valid until the locale changes. */
-const char *inkcell_str(enum inkcell_str_id id);
+const char *inkcell_str(inkcell_str_id id);
 
 /* The text for `id` in `locale` specifically, with the same guarantees. */
-const char *inkcell_str_in(const struct inkcell_i18n_locale *locale, enum inkcell_str_id id);
+const char *inkcell_str_in(const struct inkcell_i18n_locale *locale, inkcell_str_id id);
 
 /* The form of a plural entry that `count` takes. `one_form` is the _ONE id; the locale's rule
    picks the offset from it. */
-const char *inkcell_str_plural(enum inkcell_str_id one_form, uint32_t count);
+const char *inkcell_str_plural(inkcell_str_id one_form, uint32_t count);
 
 /*
  * snprintf() with a catalog entry as the format.
@@ -107,13 +127,13 @@ const char *inkcell_str_plural(enum inkcell_str_id one_form, uint32_t count);
  *
  * Returns what snprintf() would, and always NUL-terminates when out_len > 0.
  */
-int inkcell_str_format(char *out, size_t out_len, enum inkcell_str_id id, ...);
-int inkcell_str_vformat(char *out, size_t out_len, enum inkcell_str_id id, va_list args);
+int inkcell_str_format(char *out, size_t out_len, inkcell_str_id id, ...);
+int inkcell_str_vformat(char *out, size_t out_len, inkcell_str_id id, va_list args);
 
 /* The same, choosing the plural form for `count` first. `count` is not passed on to the
    format; pass it again in the arguments if the sentence shows the number. */
-int inkcell_str_format_plural(char *out, size_t out_len, enum inkcell_str_id one_form,
-                              uint32_t count, ...);
+int inkcell_str_format_plural(char *out, size_t out_len, inkcell_str_id one_form, uint32_t count,
+                              ...);
 
 /* ---- locales ------------------------------------------------------------------------------ */
 
@@ -153,7 +173,7 @@ bool inkcell_i18n_validate(const struct inkcell_i18n_locale *locale, char *reaso
 
 /* The catalog id's spelling, for the translation template and for test failures:
    "TAB_NODES", not the text. NULL when `id` is out of range. */
-const char *inkcell_str_id_name(enum inkcell_str_id id);
+const char *inkcell_str_id_name(inkcell_str_id id);
 
 /* ---- extending the catalog -----------------------------------------------------------------
  *
@@ -175,13 +195,18 @@ const char *inkcell_str_id_name(enum inkcell_str_id id);
  *     #undef INKCELL_STR_PLURAL_ENTRY
  *     };
  *
- * and declaring the application's own enum so that it starts where inkcell's left off:
+ * and declaring the application's own ids so that they start where inkcell's left off:
  *
- *     enum myapp_str_id {
+ *     enum {
  *         MYAPP_STR__BASE = INKCELL_STR_COUNT - 1,
  *     #define INKCELL_STR_ENTRY(id, text) MYAPP_STR_##id,
  *     ...
  *     };
+ *
+ * Anonymous, like inkcell's own above and for the same reason: the ids of both halves are
+ * indices into the one registered table, and inkcell_str_id is the type that says so. An
+ * application that gives its half an enumeration type of its own has named a type that no
+ * inkcell signature can take, and will hear about it from the compiler at every call.
  *
  * A _Static_assert that the table's length equals the app's own count is worth writing: the two
  * .def files drifting apart is one way this goes wrong, and it is a compile-time question.

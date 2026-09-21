@@ -115,7 +115,7 @@ const char *inkcell_button_cap(enum inkcell_button button);
  */
 struct inkcell_button_action {
     enum inkcell_button button;
-    enum inkcell_str_id label;
+    inkcell_str_id label;
 };
 
 /*

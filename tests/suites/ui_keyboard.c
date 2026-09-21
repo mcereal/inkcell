@@ -176,7 +176,7 @@ INKCELL_TEST_CASE(keyboard_layer_key_names_where_it_goes, unit) {
     struct {
         uint8_t layer;
         uint8_t page;
-        enum inkcell_str_id expect;
+        inkcell_str_id expect;
         enum inkcell_kb_layer_dest dest;
     } const cases[] = {
         {INKCELL_KB_LOWER, 0U, INKCELL_STR_KEY_LAYER_UPPER, INKCELL_KB_DEST_LAYER},
