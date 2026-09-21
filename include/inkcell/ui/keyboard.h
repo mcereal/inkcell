@@ -225,10 +225,39 @@ const char *inkcell_keyboard_cell(const struct inkcell_keyboard *kb,
  * The layer key names where it *goes* rather than where it is, which is the only thing about a
  * layer key worth drawing - and with the emoji pages in the same ring, the pages have to name
  * themselves apart or three presses in a row land on a key that says the same thing.
+ *
+ * Three of the four panels are their own keycap: "abc", "ABC", "#+=". The emoji layer is not a
+ * word in any language, and a renderer with symbols to hand should draw one rather than this
+ * word - see inkcell_keyboard_layer_dest() below, which is the question it asks first.
  */
 const char *inkcell_keyboard_action_label(const struct inkcell_keyboard *kb,
                                           const struct inkcell_keyboard_layout *layout,
                                           enum inkcell_kb_action action);
+
+/*
+ * Where the layer key goes, as a renderer that draws symbols needs it.
+ *
+ * The label above answers this in words, which is all a text-only backend can do. A backend
+ * with sprites wants the answer as a fact rather than a string to compare: the emoji
+ * destinations are a picture of a face, and the way to draw one is not to recognise ":)" coming
+ * back out of the catalog.
+ *
+ * Which destination it is depends on the layout as well as the cursor - a keyboard with no
+ * emoji pages never offers one, and the last page goes back to the letters rather than on to a
+ * page that is not there.
+ */
+enum inkcell_kb_layer_dest {
+    /* A layer that names itself, and the label is that name. */
+    INKCELL_KB_DEST_LAYER = 0,
+    /* The first page of emoji, which is where the symbols layer leads when there are any. */
+    INKCELL_KB_DEST_EMOJI,
+    /* Another page of them, from a page that is not the last. */
+    INKCELL_KB_DEST_EMOJI_MORE,
+};
+
+enum inkcell_kb_layer_dest
+inkcell_keyboard_layer_dest(const struct inkcell_keyboard *kb,
+                            const struct inkcell_keyboard_layout *layout);
 
 /*
  * Step the panel ring by `delta`, wrapping: the three ASCII layers are panels 0..2 and each

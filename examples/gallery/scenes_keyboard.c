@@ -119,8 +119,8 @@ void gallery_scene_keyboard_emoji(struct inkcell_backend_fb_state *state) {
     int y = gallery_keyboard_frame(state, &layout, "31/160");
 
     /* The first of two pages, with the cursor on the layer key - so the picture carries both
-       the sprites at keycap size and the word that says where the next press goes, which on a
-       page with another behind it is not the word the last page shows. */
+       the sprites at keycap size and the face that says where the next press goes, which on a
+       page with another behind it is not the one the last page shows. */
     const struct inkcell_keyboard keyboard = {
         .row = (uint8_t)INKCELL_KB_CHAR_ROWS,
         .col = (uint8_t)INKCELL_KB_ACTION_LAYER,

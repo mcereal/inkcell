@@ -99,12 +99,19 @@ INKCELL_STR_ENTRY(HINT_QUIT_KEY_CODE,      "Quit: key code %u")
  * where the grid is: that is the only thing about a layer key worth drawing. EMOJI_MORE is the
  * one that stops three presses in a row landing on a key that says the same thing - it means
  * "another page of these", where EMOJI means "the first page" and LOWER means "back to
- * letters". */
+ * letters".
+ *
+ * The first three are the layer itself and are the same in every language, which is why they
+ * are not translated anywhere. The emoji two are words, and only because a word is what this
+ * file can hold: the destination is a face, the fb backend draws INKCELL_ICON_EMOJI over them
+ * the way it draws a rune over "space" and "del", and these are what a backend with no sprites
+ * has left. They used to read ":)" and ":)>" - punctuation posing as a picture, which is
+ * neither drawable nor translatable, and is the mistake the bubble's "ok" and ".." were. */
 INKCELL_STR_ENTRY(KEY_LAYER_UPPER,         "ABC")
 INKCELL_STR_ENTRY(KEY_LAYER_SYMBOLS,       "#+=")
 INKCELL_STR_ENTRY(KEY_LAYER_LOWER,         "abc")
-INKCELL_STR_ENTRY(KEY_LAYER_EMOJI,         ":)")
-INKCELL_STR_ENTRY(KEY_LAYER_EMOJI_MORE,    ":)>")
+INKCELL_STR_ENTRY(KEY_LAYER_EMOJI,         "emoji")
+INKCELL_STR_ENTRY(KEY_LAYER_EMOJI_MORE,    "more")
 INKCELL_STR_ENTRY(KEY_SPACE,               "space")
 INKCELL_STR_ENTRY(KEY_DELETE,              "del")
 INKCELL_STR_ENTRY(KEY_CANCEL,              "cancel")
