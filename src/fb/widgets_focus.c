@@ -116,26 +116,25 @@ static void focus_ring_aim(struct inkcell_backend_fb_state *state, uint32_t id,
 }
 
 /*
- * The rows a travelling ring is responsible for.
+ * The rows the stroke about to be drawn lands on, declared so that a frame drawn under a
+ * partial-redraw band paints it and presents it.
  *
- * The whole corridor rather than where it is this instant: a partial redraw repaints the band
- * that changed, and the band that changed includes everywhere the ring *was* a frame ago. A
- * damage rectangle covering only the current position leaves a trail of outline behind it on
- * exactly the screens that redraw partially.
+ * Only where the ring is *going*. Where it has been is not this frame's to say: those rows are
+ * erased by whatever is under them being drawn again, which happened before this call - so the
+ * box just painted is carried to the next frame instead and declared at
+ * inkcell_fb_app_frame_begin(), where it is early enough to matter.
  */
-static void focus_ring_damage(struct inkcell_backend_fb_state *state) {
-    const struct inkcell_fb_focus_ring *ring = &state->focus_ring;
+static void focus_ring_painted(struct inkcell_backend_fb_state *state,
+                               struct inkcell_focus_rect box) {
     const int pad = focus_ring_inset(state) + focus_ring_thickness(state);
-    const int x = (ring->from.x < ring->to.x) ? ring->from.x : ring->to.x;
-    const int y = (ring->from.y < ring->to.y) ? ring->from.y : ring->to.y;
-    const int right = (ring->from.x + ring->from.w > ring->to.x + ring->to.w)
-                          ? ring->from.x + ring->from.w
-                          : ring->to.x + ring->to.w;
-    const int bottom = (ring->from.y + ring->from.h > ring->to.y + ring->to.h)
-                           ? ring->from.y + ring->from.h
-                           : ring->to.y + ring->to.h;
-    inkcell_fb_animation_damage(state, x - pad, y - pad, (right - x) + 2 * pad,
-                                (bottom - y) + 2 * pad);
+    const int x = box.x - pad;
+    const int y = box.y - pad;
+    const int w = box.w + 2 * pad;
+    const int h = box.h + 2 * pad;
+
+    inkcell_fb_animation_damage(state, x, y, w, h);
+    state->focus_ring.drawn = (struct inkcell_fb_damage_rect){
+        .x = x, .y = y, .right = x + w, .bottom = y + h, .valid = true};
 }
 
 void inkcell_fb_focus_ring_place(struct inkcell_backend_fb_state *state,
@@ -146,7 +145,9 @@ void inkcell_fb_focus_ring_place(struct inkcell_backend_fb_state *state,
     struct inkcell_focus_rect target = {0, 0, 0, 0};
     int radius = 0;
     if (!focus_ring_target(map, id, &target, &radius)) {
+        const struct inkcell_fb_damage_rect painted = state->focus_ring.drawn;
         state->focus_ring = (struct inkcell_fb_focus_ring){0};
+        state->focus_ring.drawn = painted;
         return;
     }
     focus_ring_aim(state, id, target, radius, false);
@@ -160,18 +161,22 @@ void inkcell_fb_draw_focus_ring(struct inkcell_backend_fb_state *state,
     struct inkcell_focus_rect target = {0, 0, 0, 0};
     int radius = 0;
     if (!focus_ring_target(map, id, &target, &radius)) {
-        /* Nothing to be on. Forgetting rather than keeping the last box is what stops the next
-           id being travelled to from a rectangle that is no longer anywhere. */
+        /* Nothing to be on. Forgetting the journey rather than keeping the last box is what
+           stops the next id being travelled to from a rectangle that is no longer anywhere -
+           but what was *painted* survives the clearing, because those pixels are still on the
+           panel and the next frame is where they get cleaned up. */
+        const struct inkcell_fb_damage_rect painted = state->focus_ring.drawn;
         state->focus_ring = (struct inkcell_fb_focus_ring){0};
+        state->focus_ring.drawn = painted;
         return;
     }
 
     focus_ring_aim(state, id, target, radius, true);
-    focus_ring_damage(state);
 
     int at_radius = 0;
     const struct inkcell_focus_rect at =
         focus_ring_now(&state->focus_ring, state->now_ms, &at_radius);
+    focus_ring_painted(state, at);
     const int inset = focus_ring_inset(state);
     /* Outside the box rather than over it: the ring says where the cursor is, and a ring drawn
        on top of a label would be saying it at the label's expense. The radius grows with the

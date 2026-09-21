@@ -71,6 +71,16 @@
  *
  * Mutable state, unlike most of what draws: the ring's position is the one thing on the frame
  * that the frame itself remembers.
+ *
+ * A note for a screen that repaints part of a frame rather than all of it. Erasing a ring is
+ * not the ring's own work - what is under it belongs to whatever drew there - so the box it
+ * painted is carried into the next frame and declared as damage before anything paints (see
+ * inkcell_fb_app_frame_begin()). That is enough on a frame drawn whole, which is every frame
+ * inkcell itself produces. It is *not* enough under a clip band that excludes where the ring
+ * has been: the rows are let through to the panel, but nothing in them is redrawn, so the band
+ * a screen declares has to take in the ring's path. A screen that cannot promise that should
+ * place the ring rather than move it - a cursor that jumps is a worse cue than one that
+ * travels, and both are better than a trail of outline left on the panel.
  */
 void inkcell_fb_draw_focus_ring(struct inkcell_backend_fb_state *state,
                                 const struct inkcell_focus_map *map, uint32_t id);

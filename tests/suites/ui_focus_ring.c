@@ -279,3 +279,53 @@ INKCELL_TEST_CASE(focus_ring_takes_the_shape_the_component_drew, unit) {
     ring_close(&h);
     record_success(test_name);
 }
+
+/*
+ * Erasing a ring is somebody else's drawing, and that drawing has already happened by the time
+ * the ring is asked to move - so the box it painted is carried into the next frame and declared
+ * there, before the first fill. Without it a screen that repaints part of a frame keeps a trail
+ * of outline behind a travelling ring, and keeps a whole ring after the cursor has gone.
+ *
+ * The two cases are one test because they are one mechanism seen from either end: a ring that
+ * moved, and a ring that is no longer there at all.
+ */
+INKCELL_TEST_CASE(focus_ring_leaves_the_next_frame_the_rows_it_painted, unit) {
+    struct ring_harness h;
+    INKCELL_TEST_FAIL_IF(!ring_open(&h), "the capture should open");
+
+    inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_LEFT);
+    INKCELL_TEST_FAIL_IF_CLEANUP(!h.state->focus_ring.drawn.valid, ring_close(&h),
+                                 "a ring that painted should have said where");
+
+    /* The next frame begins: what the ring painted is this frame's to repaint, and it is said
+       before anything draws rather than when the ring is reached at the end. */
+    inkcell_fb_app_frame_begin(h.state);
+    INKCELL_TEST_FAIL_IF_CLEANUP(!h.state->animation_damage.valid, ring_close(&h),
+                                 "the frame should open owing the ring's old rows");
+    INKCELL_TEST_FAIL_IF_CLEANUP(h.state->animation_damage.x > 100 ||
+                                     h.state->animation_damage.right < 180,
+                                 ring_close(&h), "and the rows owed should be the ones it painted");
+    INKCELL_TEST_FAIL_IF_CLEANUP(h.state->focus_ring.drawn.valid, ring_close(&h),
+                                 "once said, it is not owed twice");
+
+    /*
+     * And the cursor goes away entirely, which is the case with no draw call left to speak.
+     *
+     * The frame that opens owing those rows is the same frame on which the ring turns out not
+     * to be there - which is what makes this work without a draw call: the rows were declared
+     * before anything painted, so whatever is under them is redrawn over the ring during this
+     * frame rather than after it. Nothing is owed afterwards, and that is the assertion: a box
+     * still outstanding here would be one nobody is ever going to paint.
+     */
+    inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_LEFT);
+    inkcell_fb_app_frame_begin(h.state);
+    INKCELL_TEST_FAIL_IF_CLEANUP(!h.state->animation_damage.valid, ring_close(&h),
+                                 "the frame the ring vanishes on is the one that repaints it");
+    inkcell_fb_draw_focus_ring(h.state, &h.map, INKCELL_FOCUS_NONE);
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_focus_ring_rect(h.state, NULL, NULL), ring_close(&h),
+                                 "the ring is gone");
+    INKCELL_TEST_FAIL_IF_CLEANUP(h.state->focus_ring.drawn.valid, ring_close(&h),
+                                 "and it leaves nothing behind for a frame that will not come");
+    ring_close(&h);
+    record_success(test_name);
+}

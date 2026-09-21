@@ -125,6 +125,18 @@ struct inkcell_fb_focus_ring {
     int from_radius;
     int to_radius;
     struct inkcell_anim travel;
+    /*
+     * The box the ring actually painted last frame, padded by what it painted outside it.
+     *
+     * Kept because erasing a ring is not the ring's own work: what is under it belongs to
+     * whatever drew there, and that drawing happens *before* the ring is asked to move. So the
+     * box is carried to the next frame and declared as damage at inkcell_fb_app_frame_begin(),
+     * where it is in place before anything paints - which is the only point in a frame where
+     * saying "these rows changed" can still change what gets painted.
+     *
+     * `valid` false is a frame with no ring on it to erase.
+     */
+    struct inkcell_fb_damage_rect drawn;
 };
 
 struct inkcell_backend_fb_state {

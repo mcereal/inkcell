@@ -359,6 +359,23 @@ void inkcell_fb_app_frame_begin(struct inkcell_backend_fb_state *state) {
        that a caller which renders without presenting - the capture harness - does not carry a
        rectangle from one page into the next. */
     state->animation_damage = (struct inkcell_fb_damage_rect){0};
+    /*
+     * With one exception, and it is the one thing a frame inherits from the last: wherever the
+     * focus ring painted.
+     *
+     * A ring is erased by whatever is under it being drawn again, and that happens before the
+     * ring is asked where it is going - so a ring that declared its old position at the point
+     * it moved would be declaring it a whole frame too late, after everything that could have
+     * repainted those rows had already been told they had not changed. Said here it is in
+     * place before the first fill. It is also the only way a ring that has *gone* is cleared
+     * up at all: there is no draw call left to say anything on that frame.
+     */
+    const struct inkcell_fb_damage_rect painted = state->focus_ring.drawn;
+    state->focus_ring.drawn = (struct inkcell_fb_damage_rect){0};
+    if (painted.valid) {
+        inkcell_fb_animation_damage(state, painted.x, painted.y, painted.right - painted.x,
+                                    painted.bottom - painted.y);
+    }
     if (state->app.frame_begin != NULL) {
         state->app.frame_begin(state->app.ctx);
     }
