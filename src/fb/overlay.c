@@ -52,7 +52,8 @@ static struct inkcell_fb_rect inkcell_overlay_bounds(const struct inkcell_backen
     if (overlay->bounds.w > 0 && overlay->bounds.h > 0) {
         return overlay->bounds;
     }
-    return (struct inkcell_fb_rect){0, 0, (int)state->var.xres, (int)state->var.yres};
+    return (struct inkcell_fb_rect){0, 0, inkcell_fb_panel_width(state),
+                                    inkcell_fb_panel_height(state)};
 }
 
 /* The slot holding `id`, or NULL. */
@@ -201,7 +202,8 @@ static struct inkcell_fb_rect inkcell_overlay_from(const struct inkcell_backend_
     if (overlay->travel == INKCELL_OVERLAY_TRAVEL_NONE) {
         return rest;
     }
-    const int near = (int)state->var.yres * INKCELL_OVERLAY_NEAR_NUM / INKCELL_OVERLAY_NEAR_DEN;
+    const int near =
+        inkcell_fb_panel_height(state) * INKCELL_OVERLAY_NEAR_NUM / INKCELL_OVERLAY_NEAR_DEN;
     /* Which way is "back where it came from": down for anything sitting at or rising towards
        the bottom, up for anything hanging from the top. */
     int sign = 1;

@@ -54,7 +54,7 @@ struct inkcell_fb_layout inkcell_fb_layout_begin(const struct inkcell_backend_fb
      * to be missing from the body's count from the start. Reserving it here and drawing the bar
      * at `footer_y` is what keeps a full list's last row off the keycaps.
      */
-    layout.footer_y = (int)state->var.yres;
+    layout.footer_y = inkcell_fb_panel_height(state);
     if (footer) {
         layout.footer_y -= inkcell_fb_action_bar_height(state, &layout);
         if (layout.footer_y < layout.body_y) {
@@ -66,7 +66,7 @@ struct inkcell_fb_layout inkcell_fb_layout_begin(const struct inkcell_backend_fb
     /* A character count at the body scale, and the pixel width that count is an estimate of.
        Both, because a proportional face makes them different questions - see `body_w`. */
     layout.cols = inkcell_fb_cols(state, state->scale);
-    layout.body_w = (int)state->var.xres - 2 * inkcell_fb_margin(state);
+    layout.body_w = inkcell_fb_panel_width(state) - 2 * inkcell_fb_margin(state);
     if (layout.body_w < 1) {
         layout.body_w = 1;
     }
@@ -84,7 +84,7 @@ void inkcell_fb_draw_nav_bar(const struct inkcell_backend_fb_state *state,
        to a pixel gutter was the same arithmetic by accident. */
     const int y = inkcell_fb_gutter(state) + inkcell_scale_px(1, small);
     const int bar_h = y + inkcell_fb_line_adv(state, small);
-    const int width = (int)state->var.xres;
+    const int width = inkcell_fb_panel_width(state);
 
     inkcell_fb_fill_rect(state, 0, 0, width, bar_h,
                          inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
@@ -143,7 +143,7 @@ void inkcell_fb_draw_progress(struct inkcell_backend_fb_state *state,
      * mistake the tab strip made before it was given a surface of its own.
      */
     struct inkcell_fb_meter meter = {
-        .rect = {.x = 0, .y = layout->nav_y, .w = (int)state->var.xres, .h = height},
+        .rect = {.x = 0, .y = layout->nav_y, .w = inkcell_fb_panel_width(state), .h = height},
         .kind = INKCELL_FB_METER_INDETERMINATE,
         .tone = INKCELL_TONE_PRIMARY,
         .id = INKCELL_FB_ANIM_ID_PROGRESS,
@@ -169,7 +169,7 @@ void inkcell_fb_draw_banner(const struct inkcell_backend_fb_state *state,
     const int pad_x = inkcell_fb_space(state, INKCELL_SPACE_MD);
     const int pad_y = inkcell_fb_space(state, INKCELL_SPACE_SM);
     const int top = layout->body_y;
-    const int width = (int)state->var.xres - 2 * margin;
+    const int width = inkcell_fb_panel_width(state) - 2 * margin;
     if (width <= 2 * pad_x || adv <= 0 || layout->line <= 0) {
         return;
     }
@@ -294,13 +294,13 @@ void inkcell_fb_draw_action_bar(const struct inkcell_backend_fb_state *state,
                                 const struct inkcell_fb_layout *layout,
                                 const struct inkcell_fb_action_bar *bar) {
     const int small = layout->small;
-    const int width = (int)state->var.xres;
+    const int width = inkcell_fb_panel_width(state);
     const int top = layout->footer_y;
 
     /* The mirror of the navigation bar: the same recessed tier, the same rule, on the other
        edge. Chrome that is a surface at the top and bare ground at the bottom reads as a frame
        with one side missing. */
-    inkcell_fb_fill_rect(state, 0, top, width, (int)state->var.yres - top,
+    inkcell_fb_fill_rect(state, 0, top, width, inkcell_fb_panel_height(state) - top,
                          inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
     inkcell_fb_draw_rule(state, 0, top, width, small, INKCELL_COLOR_RULE_STRONG);
 
@@ -457,7 +457,8 @@ void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state,
      * panel to itself.
      */
     if (bar->trail_count > 0U) {
-        inkcell_fb_draw_app_bar_trail(state, bar, text_x, y, (int)state->var.xres - margin, small);
+        inkcell_fb_draw_app_bar_trail(state, bar, text_x, y, inkcell_fb_panel_width(state) - margin,
+                                      small);
         /* The glyph body and a hair, not the label scale's whole line advance. The advance
            carries the gap between two lines of running text, and the trail is not running text
            - it is a caption sitting on the title. Spending the advance here cost a body row on
@@ -482,7 +483,7 @@ void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state,
      * where it was neither countable nor a badge - a capsule cannot be spelled inside a
      * sentence.
      */
-    int right = (int)state->var.xres - margin;
+    int right = inkcell_fb_panel_width(state) - margin;
     const int badge_w = inkcell_fb_badge_width(state, bar->badge, small);
     if (badge_w > 0) {
         /* Centred on the title's glyph body rather than on its line advance: the advance
@@ -553,7 +554,7 @@ void inkcell_fb_draw_empty(const struct inkcell_backend_fb_state *state,
     const uint32_t cost = 4U; /* three rows for the symbol, one of air under it */
     if (inkcell_icon_is_valid(icon) && big <= INKCELL_FB_ICON_SCALE_MAX && rows > cost + 1U) {
         const int box = inkcell_fb_icon_box(state, big);
-        inkcell_fb_draw_icon(state, ((int)state->var.xres - box) / 2, y, icon, big,
+        inkcell_fb_draw_icon(state, (inkcell_fb_panel_width(state) - box) / 2, y, icon, big,
                              inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
                              inkcell_fb_color(state, INKCELL_COLOR_BG));
         y += (int)cost * layout->line;
@@ -683,7 +684,7 @@ inkcell_fb_fab_measure(const struct inkcell_backend_fb_state *state,
     const int wanted = has_label ? m.diameter + m.gap + m.label_w : m.diameter;
 
     const int margin = inkcell_fb_margin(state);
-    m.right = (int)state->var.xres - margin;
+    m.right = inkcell_fb_panel_width(state) - margin;
     /*
      * A full margin clear of the footer rather than the half a card stops at, which is the
      * snackbar's rule and for its reason: a card is *in* the body and belongs against the body's

@@ -124,7 +124,7 @@ void inkcell_fb_draw_keyboard(const struct inkcell_backend_fb_state *state,
     const struct inkcell_keyboard *const kb = keyboard->keyboard;
     const int scale = state->scale;
     const int margin = inkcell_fb_margin(state);
-    const int grid_w = (int)state->var.xres - 2 * margin;
+    const int grid_w = inkcell_fb_panel_width(state) - 2 * margin;
     const int cell_w = grid_w / (int)INKCELL_KB_COLS;
     const int cell_h = inkcell_fb_keyboard_cell_h(state, layout, *y, cell_w);
     const int key_scale = inkcell_fb_keyboard_key_scale(state, cell_h);

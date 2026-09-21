@@ -415,6 +415,28 @@ struct inkcell_backend_fb_state {
 };
 
 /*
+ * How wide and how tall the surface this frame is being drawn into is, in pixels.
+ *
+ * Every layer above this one places its content against these two, and every one of them wants
+ * a signed number: a margin subtracted from a width is arithmetic that goes negative on a panel
+ * narrower than the margin, and an unsigned width would wrap it into an enormous positive
+ * instead of the negative a clip then throws away. So the cast happens once, here, rather than
+ * at the ~70 call sites that used to spell it out.
+ *
+ * They are accessors rather than fields a caller reads because the panel's geometry is the last
+ * thing a component should have to know the provenance of. A widget asking how wide the surface
+ * is has no business seeing that the answer arrived in an FBIOGET_VSCREENINFO - that is what
+ * this backend happens to be, not what a width *is*.
+ */
+static inline int inkcell_fb_panel_width(const struct inkcell_backend_fb_state *state) {
+    return state == NULL ? 0 : (int)state->var.xres;
+}
+
+static inline int inkcell_fb_panel_height(const struct inkcell_backend_fb_state *state) {
+    return state == NULL ? 0 : (int)state->var.yres;
+}
+
+/*
  * The clock for the next frame. Call before drawing it.
  *
  * Time never goes backwards here: a caller that hands over an earlier reading than the last is

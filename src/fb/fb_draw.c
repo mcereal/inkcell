@@ -174,8 +174,8 @@ int inkcell_fb_transition_offset(struct inkcell_backend_fb_state *state) {
         state->slide_dir = 0;
         return 0;
     }
-    const int travel =
-        (int)state->var.xres * INKCELL_FB_TRANSITION_TRAVEL_NUM / INKCELL_FB_TRANSITION_TRAVEL_DEN;
+    const int travel = inkcell_fb_panel_width(state) * INKCELL_FB_TRANSITION_TRAVEL_NUM /
+                       INKCELL_FB_TRANSITION_TRAVEL_DEN;
     return state->slide_dir * (int)(((int64_t)remaining * travel) / INKCELL_ANIM_ONE);
 }
 
@@ -210,8 +210,8 @@ static struct inkcell_fb_view inkcell_fb_view_panel(const struct inkcell_backend
         .dy = 0,
         .x = 0,
         .y = 0,
-        .right = (int)state->var.xres,
-        .bottom = (int)state->var.yres,
+        .right = inkcell_fb_panel_width(state),
+        .bottom = inkcell_fb_panel_height(state),
     };
 }
 
@@ -451,11 +451,11 @@ void inkcell_fb_animation_damage(struct inkcell_backend_fb_state *state, int x, 
     if (y < 0) {
         y = 0;
     }
-    if (right > (int)state->var.xres) {
-        right = (int)state->var.xres;
+    if (right > inkcell_fb_panel_width(state)) {
+        right = inkcell_fb_panel_width(state);
     }
-    if (bottom > (int)state->var.yres) {
-        bottom = (int)state->var.yres;
+    if (bottom > inkcell_fb_panel_height(state)) {
+        bottom = inkcell_fb_panel_height(state);
     }
     if (right <= x || bottom <= y) {
         return;
@@ -673,7 +673,7 @@ struct inkcell_fb_row_box inkcell_fb_row_box(const struct inkcell_backend_fb_sta
     const int pad = inkcell_fb_margin(state) - gutter;
     struct inkcell_fb_row_box box;
     box.x = gutter;
-    box.w = (int)state->var.xres - 2 * gutter - inkcell_fb_rail_gutter(state);
+    box.w = inkcell_fb_panel_width(state) - 2 * gutter - inkcell_fb_rail_gutter(state);
     /* A panel too narrow to hold a padded row still has to hand back a box the fills and the
        measurements agree about: one pixel wide, with the text span collapsed onto it. Every
        caller that divides by a column width already guards its own division. */
@@ -846,11 +846,11 @@ static bool inkcell_fb_clip_box(const struct inkcell_backend_fb_state *state, in
         dy -= y;
         y = 0;
     }
-    if (x + w > (int)state->var.xres) {
-        w = (int)state->var.xres - x;
+    if (x + w > inkcell_fb_panel_width(state)) {
+        w = inkcell_fb_panel_width(state) - x;
     }
-    if (y + h > (int)state->var.yres) {
-        h = (int)state->var.yres - y;
+    if (y + h > inkcell_fb_panel_height(state)) {
+        h = inkcell_fb_panel_height(state) - y;
     }
     if (w <= 0 || h <= 0) {
         return false;
@@ -2054,8 +2054,8 @@ void inkcell_fb_fill_round_rect_ends(const struct inkcell_backend_fb_state *stat
      * own radius, and deciding against every pixel of it one sub-sample at a time is work with
      * no picture at the end. Two comparisons per row and column is what that costs instead.
      */
-    const int panel_w = (int)state->var.xres;
-    const int panel_h = (int)state->var.yres;
+    const int panel_w = inkcell_fb_panel_width(state);
+    const int panel_h = inkcell_fb_panel_height(state);
     const int middle = w - 2 * radius;
     for (int i = 0; i < radius; ++i) {
         const int top_row = y + i;
@@ -2158,8 +2158,8 @@ void inkcell_fb_stroke_round_rect(const struct inkcell_backend_fb_state *state, 
 
     /* Bounded to the panel for the reason the fill's corner bands are: the blend clips, but a
        ring larger than the panel would still be walked in full. */
-    const int panel_w = (int)state->var.xres;
-    const int panel_h = (int)state->var.yres;
+    const int panel_w = inkcell_fb_panel_width(state);
+    const int panel_h = inkcell_fb_panel_height(state);
     const int row_from = y > 0 ? y : 0;
     const int row_to = (y + h) < panel_h ? (y + h) : panel_h;
     for (int py = row_from; py < row_to; ++py) {
@@ -2316,9 +2316,13 @@ void inkcell_fb_stroke_arc(const struct inkcell_backend_fb_state *state, int cx,
     const int64_t top = (int64_t)cy - radius;
     const int64_t bottom = (int64_t)cy + radius;
     const int x0 = (int)(left > 0 ? left : 0);
-    const int x1 = (int)(right < (int64_t)state->var.xres ? right : (int64_t)state->var.xres);
+    const int x1 = (int)(right < (int64_t)inkcell_fb_panel_width(state)
+                             ? right
+                             : (int64_t)inkcell_fb_panel_width(state));
     const int y0 = (int)(top > 0 ? top : 0);
-    const int y1 = (int)(bottom < (int64_t)state->var.yres ? bottom : (int64_t)state->var.yres);
+    const int y1 = (int)(bottom < (int64_t)inkcell_fb_panel_height(state)
+                             ? bottom
+                             : (int64_t)inkcell_fb_panel_height(state));
 
     for (int py = y0; py < y1; ++py) {
         for (int px = x0; px < x1; ++px) {
@@ -2368,7 +2372,8 @@ void inkcell_fb_stroke_arc(const struct inkcell_backend_fb_state *state, int cx,
 }
 
 void inkcell_fb_clear(const struct inkcell_backend_fb_state *state, struct inkcell_rgb color) {
-    inkcell_fb_fill_rect(state, 0, 0, (int)state->var.xres, (int)state->var.yres, color);
+    inkcell_fb_fill_rect(state, 0, 0, inkcell_fb_panel_width(state), inkcell_fb_panel_height(state),
+                         color);
 }
 
 /*
@@ -2444,7 +2449,7 @@ void inkcell_fb_scrim_rect(const struct inkcell_backend_fb_state *state, struct 
 
 /* Columns of text that fit between the margins at this scale. */
 size_t inkcell_fb_cols(const struct inkcell_backend_fb_state *state, int scale) {
-    const int usable = (int)state->var.xres - 2 * inkcell_fb_margin(state);
+    const int usable = inkcell_fb_panel_width(state) - 2 * inkcell_fb_margin(state);
     if (usable <= 0) {
         return 1U;
     }

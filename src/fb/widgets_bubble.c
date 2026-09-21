@@ -330,7 +330,7 @@ void inkcell_fb_draw_separator(const struct inkcell_backend_fb_state *state, int
     const int adv = inkcell_fb_char_adv(state, state->scale);
     const int rule_y = y + inkcell_scale_px((int)inkcell_fb_font(state)->height, state->scale) / 2;
     const int left = inkcell_fb_margin(state);
-    const int right = (int)state->var.xres - left;
+    const int right = inkcell_fb_panel_width(state) - left;
 
     if (!inkcell_fb_bubble_has(label)) {
         inkcell_fb_draw_rule(state, left, rule_y, right - left, state->scale, INKCELL_COLOR_RULE);
@@ -383,8 +383,9 @@ void inkcell_fb_draw_bubble(const struct inkcell_backend_fb_state *state,
        separate messages rather than as one block. */
     const int pad = adv / 2 > 0 ? adv / 2 : 1;
     const int box_w = (int)metrics.width + 2 * pad;
-    const int box_x = bubble->outbound ? (int)state->var.xres - inkcell_fb_margin(state) - box_w
-                                       : inkcell_fb_margin(state);
+    const int box_x = bubble->outbound
+                          ? inkcell_fb_panel_width(state) - inkcell_fb_margin(state) - box_w
+                          : inkcell_fb_margin(state);
     const uint32_t box_rows = metrics.rows - (inkcell_fb_bubble_has(bubble->separator) ? 1U : 0U);
     const int box_h = (int)box_rows * layout->line - inkcell_step_px(scale);
 

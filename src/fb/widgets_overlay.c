@@ -70,7 +70,7 @@ void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state,
     const int pad_x = adv;
     const int pad_y = inkcell_scale_px(2, scale);
 
-    const int room = (int)state->var.xres - 2 * margin - 2 * pad_x;
+    const int room = inkcell_fb_panel_width(state) - 2 * margin - 2 * pad_x;
     if (room < adv || line <= 0) {
         return; /* a geometry too small to hold one cell of it; nothing to say here */
     }
@@ -107,7 +107,7 @@ void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state,
     const struct inkcell_fb_rect bounds = {
         .x = 0,
         .y = layout->nav_y,
-        .w = (int)state->var.xres,
+        .w = inkcell_fb_panel_width(state),
         .h = layout->footer_y - margin - layout->nav_y,
     };
 
@@ -457,10 +457,10 @@ bool inkcell_fb_draw_dialog(struct inkcell_backend_fb_state *state,
     const struct inkcell_fb_rect bounds = {
         .x = 0,
         .y = layout->nav_y,
-        .w = (int)state->var.xres,
+        .w = inkcell_fb_panel_width(state),
         .h = layout->footer_y - layout->nav_y,
     };
-    const int width = (int)state->var.xres - 2 * inkcell_fb_gutter(state);
+    const int width = inkcell_fb_panel_width(state) - 2 * inkcell_fb_gutter(state);
     const int room = bounds.h - 2 * inkcell_fb_gutter(state);
 
     struct inkcell_overlay_frame frame;

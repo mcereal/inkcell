@@ -258,9 +258,9 @@ void inkcell_fb_draw_large_title(const struct inkcell_backend_fb_state *state,
 
     /* The bar's own ground, so the two titles have something honest to fade against - a fade
        towards a colour that is not what is actually behind the glyph is a glyph with a halo. */
-    inkcell_fb_fill_rect(state, 0, layout->body_y, (int)state->var.xres, height, ground);
+    inkcell_fb_fill_rect(state, 0, layout->body_y, inkcell_fb_panel_width(state), height, ground);
 
-    int right = (int)state->var.xres - margin;
+    int right = inkcell_fb_panel_width(state) - margin;
     /*
      * The badge sits on both sizes of the bar and never fades.
      *
@@ -324,7 +324,7 @@ void inkcell_fb_draw_large_title(const struct inkcell_backend_fb_state *state,
         const int y = layout->body_y + collapsed_h + extra - large_line;
         const struct inkcell_rgb ink =
             inkcell_fb_fade(inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY), ground, progress);
-        int large_right = (int)state->var.xres - margin;
+        int large_right = inkcell_fb_panel_width(state) - margin;
         if (bar->detail != NULL && bar->detail[0] != '\0') {
             const struct inkcell_rgb dim =
                 inkcell_fb_fade(inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM), ground, progress);
@@ -361,7 +361,7 @@ void inkcell_fb_draw_large_title(const struct inkcell_backend_fb_state *state,
         const struct inkcell_rgb rule = inkcell_fb_fade(inkcell_fb_color(state, INKCELL_COLOR_RULE),
                                                         ground, INKCELL_ANIM_ONE - progress);
         inkcell_fb_fill_rect(state, 0, layout->body_y + height - inkcell_fb_rule_height(state, 1),
-                             (int)state->var.xres, inkcell_fb_rule_height(state, 1), rule);
+                             inkcell_fb_panel_width(state), inkcell_fb_rule_height(state, 1), rule);
     }
 
     /*

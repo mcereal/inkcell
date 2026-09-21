@@ -449,7 +449,7 @@ void inkcell_fb_draw_text_field(const struct inkcell_backend_fb_state *state,
     const int scale = state->scale;
     const int margin = inkcell_fb_margin(state);
     const int box_x = inkcell_fb_gutter(state);
-    const int box_w = (int)state->var.xres - margin;
+    const int box_w = inkcell_fb_panel_width(state) - margin;
     const int box_h = inkcell_fb_text_field_box_h(state, layout, field);
     const uint32_t lines = field->lines > 0U ? field->lines : 1U;
     int top = *y;
