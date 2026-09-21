@@ -417,3 +417,160 @@ INKCELL_TEST_CASE(focus_does_not_overflow_on_an_absurd_layout, unit) {
                          "with nothing under it");
     record_success(test_name);
 }
+
+/* ---- the half of a screen that is not on the panel ------------------------------------------ */
+
+/*
+ * A screen with a list on it, as the press sees it: ten rows drawn out of four hundred, a chip
+ * above them and a verb below.
+ *
+ * Every case below uses this one layout because the interesting question is always the same -
+ * which of the two halves answers - and the trap is always the same too: the verb under the
+ * list is drawn, so the geometry always has *an* answer at the bottom of the window, and it is
+ * the wrong one until the list has run out.
+ */
+#define STEP_ROWS 1000U
+#define STEP_ITEMS 400U
+#define STEP_VISIBLE 10U
+
+static void focus_step_screen(struct inkcell_focus_map *map, struct inkcell_focus_item *storage,
+                              uint32_t capacity, uint32_t first) {
+    inkcell_focus_begin(map, storage, capacity);
+    (void)inkcell_focus_add(map, ID_A, 16, 0, 90, 40); /* a chip over the list */
+    for (uint32_t i = 0U; i < STEP_VISIBLE; ++i) {
+        (void)inkcell_focus_add(map, STEP_ROWS + first + i, 16, 60 + (int)i * 44, 600, 44);
+    }
+    (void)inkcell_focus_add(map, ID_B, 16, 60 + (int)STEP_VISIBLE * 44, 120, 40); /* and a verb */
+}
+
+INKCELL_TEST_CASE(focus_step_scrolls_rather_than_leaving_the_list, unit) {
+    struct inkcell_focus_item storage[FOCUS_STORAGE];
+    struct inkcell_focus_map map;
+    const struct inkcell_focus_run runs[] = {{STEP_ROWS, STEP_ITEMS}};
+    focus_step_screen(&map, storage, FOCUS_STORAGE, 0U);
+
+    /* Inside the window the two halves agree, and the run answers because it is asked first. */
+    INKCELL_TEST_FAIL_IF(inkcell_focus_step(&map, STEP_ROWS, INKCELL_FOCUS_DOWN, runs, 1U) !=
+                             STEP_ROWS + 1U,
+                         "inside the window, down is the next item");
+
+    /*
+     * The case the whole thing is for. The last visible row has a verb drawn under it, so
+     * inkcell_focus_find() has an answer - and taking it would walk the cursor out of a
+     * four-hundred-item list at item nine.
+     */
+    const uint32_t last_visible = STEP_ROWS + STEP_VISIBLE - 1U;
+    INKCELL_TEST_FAIL_IF(inkcell_focus_find(&map, last_visible, INKCELL_FOCUS_DOWN) != ID_B,
+                         "the geometry alone leaves the list at the bottom of the window");
+    INKCELL_TEST_FAIL_IF(inkcell_focus_step(&map, last_visible, INKCELL_FOCUS_DOWN, runs, 1U) !=
+                             STEP_ROWS + STEP_VISIBLE,
+                         "the press at the bottom of the window is a scroll, not an exit");
+    record_success(test_name);
+}
+
+/* And at the true end of the list, leaving is exactly what the press means. The window here is
+   the last ten items, so the run has nowhere to go and the geometry answers. */
+INKCELL_TEST_CASE(focus_step_leaves_the_list_at_its_ends, unit) {
+    struct inkcell_focus_item storage[FOCUS_STORAGE];
+    struct inkcell_focus_map map;
+    const struct inkcell_focus_run runs[] = {{STEP_ROWS, STEP_ITEMS}};
+    focus_step_screen(&map, storage, FOCUS_STORAGE, STEP_ITEMS - STEP_VISIBLE);
+
+    const uint32_t last = STEP_ROWS + STEP_ITEMS - 1U;
+    INKCELL_TEST_FAIL_IF(inkcell_focus_step(&map, last, INKCELL_FOCUS_DOWN, runs, 1U) != ID_B,
+                         "the last item of the list is where the verb below it is reachable");
+
+    /* The top end is the same statement upwards, on a window showing the first items. */
+    focus_step_screen(&map, storage, FOCUS_STORAGE, 0U);
+    INKCELL_TEST_FAIL_IF(inkcell_focus_step(&map, STEP_ROWS, INKCELL_FOCUS_UP, runs, 1U) != ID_A,
+                         "and item 0 is where the chip above is reachable");
+    record_success(test_name);
+}
+
+/* A run runs down a column and says nothing about across it: left and right from a row are the
+   geometry's, which is what makes a row with a control beside it navigable. */
+INKCELL_TEST_CASE(focus_step_leaves_sideways_presses_to_the_geometry, unit) {
+    struct inkcell_focus_item storage[FOCUS_STORAGE];
+    struct inkcell_focus_map map;
+    const struct inkcell_focus_run runs[] = {{STEP_ROWS, STEP_ITEMS}};
+
+    inkcell_focus_begin(&map, storage, FOCUS_STORAGE);
+    (void)inkcell_focus_add(&map, STEP_ROWS, 16, 60, 400, 44);
+    (void)inkcell_focus_add(&map, ID_A, 460, 60, 80, 44); /* something beside the row */
+
+    INKCELL_TEST_FAIL_IF(inkcell_focus_step(&map, STEP_ROWS, INKCELL_FOCUS_RIGHT, runs, 1U) != ID_A,
+                         "right from a row is a question about what is drawn beside it");
+    INKCELL_TEST_FAIL_IF(inkcell_focus_step(&map, STEP_ROWS, INKCELL_FOCUS_DOWN, runs, 1U) !=
+                             STEP_ROWS + 1U,
+                         "and down is still the run's");
+    record_success(test_name);
+}
+
+/*
+ * The cursor's own row has scrolled out of the window - a list the reader left and came back
+ * to, or one that moved under them. The finder has nothing to say about an id it never saw;
+ * the run does, and it is the same press as any other.
+ */
+INKCELL_TEST_CASE(focus_step_moves_a_cursor_that_is_not_on_the_panel, unit) {
+    struct inkcell_focus_item storage[FOCUS_STORAGE];
+    struct inkcell_focus_map map;
+    const struct inkcell_focus_run runs[] = {{STEP_ROWS, STEP_ITEMS}};
+    focus_step_screen(&map, storage, FOCUS_STORAGE, 0U);
+
+    const uint32_t far_down = STEP_ROWS + 200U;
+    INKCELL_TEST_FAIL_IF(inkcell_focus_has(&map, far_down), "item 200 is not on this frame");
+    INKCELL_TEST_FAIL_IF(inkcell_focus_find(&map, far_down, INKCELL_FOCUS_DOWN) !=
+                             INKCELL_FOCUS_NONE,
+                         "and the finder rightly has nothing to say about it");
+    INKCELL_TEST_FAIL_IF(inkcell_focus_step(&map, far_down, INKCELL_FOCUS_DOWN, runs, 1U) !=
+                             far_down + 1U,
+                         "a cursor off the panel is still a cursor in the list");
+    record_success(test_name);
+}
+
+/* Ids outside every run, and a call with no runs at all, are the finder with more words. */
+INKCELL_TEST_CASE(focus_step_without_a_run_is_the_finder, unit) {
+    struct inkcell_focus_item storage[FOCUS_STORAGE];
+    struct inkcell_focus_map map;
+    const struct inkcell_focus_run runs[] = {{STEP_ROWS, STEP_ITEMS}};
+    focus_step_screen(&map, storage, FOCUS_STORAGE, 0U);
+
+    /* ID_A is the chip above the list and belongs to no run: down is geometry, and geometry
+       says the first row. */
+    INKCELL_TEST_FAIL_IF(inkcell_focus_step(&map, ID_A, INKCELL_FOCUS_DOWN, runs, 1U) != STEP_ROWS,
+                         "an id outside every run is answered by what is drawn");
+    INKCELL_TEST_FAIL_IF(inkcell_focus_step(&map, STEP_ROWS, INKCELL_FOCUS_DOWN, NULL, 0U) !=
+                             STEP_ROWS + 1U,
+                         "no runs at all is the finder, which agrees inside a window");
+
+    /* A run with nothing in it holds no id, so it cannot answer for one. */
+    const struct inkcell_focus_run empty[] = {{STEP_ROWS, 0U}};
+    const uint32_t last_visible = STEP_ROWS + STEP_VISIBLE - 1U;
+    INKCELL_TEST_FAIL_IF(inkcell_focus_step(&map, last_visible, INKCELL_FOCUS_DOWN, empty, 1U) !=
+                             ID_B,
+                         "an empty run is not a list the cursor is in");
+    record_success(test_name);
+}
+
+/* Two lists on one screen, which is a screen that exists - a column of groups beside a column
+   of readings - and each answers only for its own ids. */
+INKCELL_TEST_CASE(focus_step_reads_the_run_the_cursor_is_in, unit) {
+    struct inkcell_focus_item storage[FOCUS_STORAGE];
+    struct inkcell_focus_map map;
+    const struct inkcell_focus_run runs[] = {{STEP_ROWS, 3U}, {STEP_ROWS + 100U, STEP_ITEMS}};
+
+    inkcell_focus_begin(&map, storage, FOCUS_STORAGE);
+    (void)inkcell_focus_add(&map, STEP_ROWS + 2U, 16, 60, 200, 44);
+    (void)inkcell_focus_add(&map, STEP_ROWS + 100U, 300, 60, 200, 44);
+
+    /* The first run has three items and the cursor is on its last: down leaves it, and nothing
+       is drawn below, so the press goes spare. */
+    INKCELL_TEST_FAIL_IF(inkcell_focus_step(&map, STEP_ROWS + 2U, INKCELL_FOCUS_DOWN, runs, 2U) !=
+                             INKCELL_FOCUS_NONE,
+                         "the short run is over and nothing is drawn under it");
+    /* The second run is four hundred long and the cursor is on its first. */
+    INKCELL_TEST_FAIL_IF(inkcell_focus_step(&map, STEP_ROWS + 100U, INKCELL_FOCUS_DOWN, runs, 2U) !=
+                             STEP_ROWS + 101U,
+                         "the long run keeps going");
+    record_success(test_name);
+}

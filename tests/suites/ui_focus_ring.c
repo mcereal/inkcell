@@ -329,3 +329,40 @@ INKCELL_TEST_CASE(focus_ring_leaves_the_next_frame_the_rows_it_painted, unit) {
     ring_close(&h);
     record_success(test_name);
 }
+
+/*
+ * A list that scrolled is a new id in the old box, and that is not a journey.
+ *
+ * Pressing down at the bottom of a window moves the cursor to the next item and the window with
+ * it, so the row under the cursor comes out exactly where the last one was. The id changed and
+ * the rectangle did not. A ring that started a transition here would interpolate between two
+ * identical boxes for a motion's worth of frames and ask to be redrawn for every one of them,
+ * which is a scroll pretending to be a move.
+ */
+INKCELL_TEST_CASE(focus_ring_does_not_travel_where_there_is_no_distance, unit) {
+    struct ring_harness h;
+    INKCELL_TEST_FAIL_IF(!ring_open(&h), "the capture should open");
+
+    inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_LEFT);
+
+    /* The next frame: a different item, drawn in the box the last one had. */
+    inkcell_focus_begin(&h.map, h.storage, RING_STORAGE);
+    (void)inkcell_focus_add_round(&h.map, RING_ID_RIGHT, 100, 100, 80, 40, 8);
+    inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_RIGHT);
+
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_state_animating(h.state), ring_close(&h),
+                                 "a ring with nowhere to go should not claim to be moving");
+    struct inkcell_focus_rect at = {0, 0, 0, 0};
+    (void)inkcell_fb_focus_ring_rect(h.state, &at, NULL);
+    INKCELL_TEST_FAIL_IF_CLEANUP(at.x != 100 || at.y != 100, ring_close(&h),
+                                 "and it should be where both boxes are");
+
+    /* A real move from there still travels: the rule is about distance, not about the id. */
+    inkcell_focus_begin(&h.map, h.storage, RING_STORAGE);
+    (void)inkcell_focus_add_round(&h.map, RING_ID_BELOW, 100, 300, 80, 40, 8);
+    inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_BELOW);
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_state_animating(h.state), ring_close(&h),
+                                 "a box somewhere else is still a journey");
+    ring_close(&h);
+    record_success(test_name);
+}
