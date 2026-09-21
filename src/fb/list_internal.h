@@ -4,8 +4,8 @@
 /*
  * The handful of answers the list window and the row it draws both need.
  *
- * inkcell_fb_widgets_list.c owns the window - where a row lands, whether it stands on a card, what
- * the cursor is on - and inkcell_fb_widgets_item.c draws into it. Everything here would still be
+ * src/fb/widgets_list.c owns the window - where a row lands, whether it stands on a card, what
+ * the cursor is on - and src/fb/widgets_item.c draws into it. Everything here would still be
  * `static` if the two were one file; it is declared only because splitting them is what keeps the
  * window's arithmetic and the row's slots readable apart.
  *
@@ -13,7 +13,7 @@
  * too, and a second derivation of the same mark in the same gutter is how two scrollbars on one
  * toolkit come to sit a pixel apart.
  *
- * Not public API, and not part of inkcell_fb_widgets.h: nothing outside src/fb/ should include
+ * Not public API, and not part of inkcell/ui/widgets.h: nothing outside src/fb/ should include
  * it.
  */
 
@@ -26,14 +26,14 @@
  * The disc and what is in it: a node's initials, or an icon for the rows that are not a person.
  *
  * Shared by two components and therefore neither's: a list row's leading slot draws one, and so
- * does a card heading over rows that carry them. See inkcell_fb_widgets_list.c for what it measures
+ * does a card heading over rows that carry them. See src/fb/widgets_list.c for what it measures
  * and why the fit is measured rather than assumed.
  */
 void inkcell_fb_draw_avatar(const struct inkcell_backend_fb_state *state, int x, int y, int size,
                             const char *label, enum inkcell_icon icon, struct inkcell_paint paint);
 
 /* Whether item `index` draws the cursor's highlight. Never on a list whose card is focused
-   instead, which is what INKCELL_FB_LIST_FOCUS_CARD means. */
+   instead, which is what the list's `focus_card` means. */
 bool inkcell_fb_list_is_cursor(const struct inkcell_fb_list *list, uint32_t index);
 
 /* Whether item `index` stands on a card at all. */

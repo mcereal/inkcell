@@ -241,7 +241,7 @@ struct inkcell_font {
  * The *nominal* advance, and the line height, in pixels.
  *
  * For a proportional font this is an estimate - see `width`. Anything laying out real text
- * measures it with inkcell_font_advance_cp() or, above this layer, inkcell_text_width().
+ * measures it with inkcell_font_advance_cp() or, above this layer, inkcell_fb_text_width().
  */
 int inkcell_font_advance(const struct inkcell_font *font, int scale);
 int inkcell_font_line(const struct inkcell_font *font, int scale);

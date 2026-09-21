@@ -31,8 +31,7 @@
  * rather than from the constant it asked for, because a grid too narrow for the columns it was
  * asked for draws fewer of them.
  *
- * Not public API. include/inkcell/ui/fb.h is; inkcell/ui/widgets.h is the umbrella over this
- * file and its siblings.
+ * inkcell/ui/widgets.h is the umbrella over this file and its siblings; include either.
  */
 
 #include "inkcell/ui/fb_draw.h"

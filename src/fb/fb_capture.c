@@ -5,9 +5,9 @@
  *
  * This is the fb backend with the device taken out of it: same inkcell_fb_render(), same
  * palette, same cell measurement, drawing into a malloc'd page instead of an mmap of
- * /dev/fb0. It belongs in this directory rather than in a tool because it is the only other
- * caller of inkcell_fb_internal.h, and reaching that header from outside the group would widen the
- * seam the split exists to keep narrow.
+ * /dev/fb0. It belongs in this directory rather than in a tool because it is the other half of
+ * the fb backend: it shares fb.c's state, its palette and its page geometry, and a tool that
+ * rebuilt those would be a second renderer to keep in step with this one.
  *
  * The theme comes from <PREFIX>_THEME like the device backend's does, and
  * inkcell_capture_set_theme() overrides it - which is how one scene script renders the same

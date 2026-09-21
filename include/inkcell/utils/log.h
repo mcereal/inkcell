@@ -97,7 +97,7 @@ static inline void inkcell_log_error(const char *component, const char *fmt, ...
  * that gives the stream somewhere to land, by piping the client through `tee -a` into
  * `/.userdata/$PLATFORM/logs/<pak>.txt` - an append, every run, with nothing ever cutting it
  * back. The three other files this client writes to the card all compact themselves
- * (INKCELL_ARCHIVE_FILE_MAX_BYTES, INKCELL_TRENDS_FILE_MAX_BYTES, and the bounded ring a crash
+ * (an application's own file caps, and the bounded ring a crash
  * report carries); the log was the one that grew without a limit, because it is owned by a shell
  * script rather than by any of this.
  *
@@ -123,7 +123,7 @@ static inline void inkcell_log_error(const char *component, const char *fmt, ...
 
 /* When the log is cut back, and how much of the tail survives it.
  *
- * The threshold sits well above what is kept for the reason INKCELL_ARCHIVE_FILE_MAX_BYTES does:
+ * The threshold sits well above what is kept, for the reason any such cap does:
  * a file that came back from a compaction already close to tripping it would be rewritten again
  * on the next launch, and a launch is not a rare event. 128 KB of ordinary log lines is on the
  * order of fifteen hundred of them - far more than the 32 a crash report carries, and enough to

@@ -531,7 +531,7 @@ void inkcell_input_handle_device_event(struct inkcell_input *input, int source_f
      * whatever screen that button drives by how long somebody leant on it. Our own timer's
      * repeat is refused by the probe instead, having no kernel stamp behind it at all.
      *
-     * Whether this press cost anything is not knowable here; inkcell_controller_handle_key()
+     * Whether this press cost anything is not knowable here; the application's key handler
      * has the store's answer and confirms it.
      */
     if (type != EV_KEY || value == 1) {

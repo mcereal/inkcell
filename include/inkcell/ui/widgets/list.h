@@ -5,14 +5,13 @@
  * The list: the window onto the items, the card surfaces under them, the scroll rail beside
  * them, and the two rows that are not items - a subheader and a note.
  *
- * This is the window and its furniture; what one row *says* is inkcell_fb_widgets_item.h. The two
+ * This is the window and its furniture; what one row *says* is inkcell/ui/widgets/item.h. The two
  * split where a screen's own reach does: every screen opens a list and walks it, and only some of
  * them fill it with the full slotted row.
  */
 
 /*
- * Not public API. include/inkcell/ui/fb.h is; inkcell_fb_widgets.h is the umbrella over this file
- * and its siblings, and nothing outside src/ui/backends/ should include either.
+ * inkcell/ui/widgets.h is the umbrella over this file and its siblings; include either.
  */
 
 #include "inkcell/ui/fb_draw.h"
@@ -56,7 +55,7 @@ struct inkcell_fb_list {
     const uint8_t *cards;
     /* Whether the chrome - the card surfaces, then the scroll rail - has been drawn for this
        list. It is drawn by the first row that draws, not by the screen: see
-       inkcell_fb_list_chrome() in inkcell_fb_widgets_list.c. */
+       inkcell_fb_list_chrome() in src/fb/widgets_list.c. */
     bool chrome_drawn;
     /* The cursor stands on its card rather than on its row: no row takes the highlight and the
        card draws the focus ring instead. See inkcell_fb_list_begin_focus(). */

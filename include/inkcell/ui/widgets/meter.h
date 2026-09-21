@@ -10,8 +10,7 @@
  */
 
 /*
- * Not public API. include/inkcell/ui/fb.h is; inkcell_fb_widgets.h is the umbrella over this file
- * and its siblings, and nothing outside src/ui/backends/ should include either.
+ * inkcell/ui/widgets.h is the umbrella over this file and its siblings; include either.
  */
 
 #include "inkcell/ui/fb_draw.h"
@@ -97,7 +96,7 @@ struct inkcell_fb_meter {
      *
      * A banded meter takes its fill's tone from where the reading falls and draws the
      * boundaries on its track, so the colour and the marks are two readings of one statement
-     * rather than two statements. `tone` is then what it rests in - see inkcell_fb_band_tone().
+     * rather than two statements. `tone` is then what it rests in - see inkcell_band_tone().
      */
     const struct inkcell_band *band;
     /* The fill. ACCENT, GOOD or BAD - the three inkcell_theme_validate() holds against
@@ -241,7 +240,8 @@ void inkcell_fb_draw_dial(struct inkcell_backend_fb_state *state,
  * durations could not answer without the reader already carrying the list around.
  *
  * The stops are evenly spaced and the reading between them is interpolated - see
- * inkcell_settings_number_track(), which is where that arithmetic lives so a test can reach it. Two
+ * the caller's own track helper, which is where that arithmetic lives so a test can reach it.
+ * Two
  * consequences the drawing depends on: a preset list that climbs geometrically still gives an
  * aimable track, and a value the list does not contain lands between two stops rather than being
  * refused. The segmented button had to fall back to words for an unknown value because a set of
@@ -544,7 +544,7 @@ struct inkcell_fb_chart_line {
      */
     const struct inkcell_polyline *points;
     /*
-     * Or the readings binned across the plot (inkcell_trend_airtime()), in the chart's `scale`
+     * Or the readings binned across the plot by the caller, in the chart's `scale`
      * units, which takes the place of `points` when set. Bins divide the plot into equal slots,
      * oldest on the left.
      *

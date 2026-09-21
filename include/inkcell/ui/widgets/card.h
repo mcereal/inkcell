@@ -10,8 +10,7 @@
  */
 
 /*
- * Not public API. include/inkcell/ui/fb.h is; inkcell_fb_widgets.h is the umbrella over this file
- * and its siblings, and nothing outside src/ui/backends/ should include either.
+ * inkcell/ui/widgets.h is the umbrella over this file and its siblings; include either.
  */
 
 #include "inkcell/ui/fb_draw.h"
@@ -93,7 +92,7 @@ enum inkcell_fb_card_variant {
 #define INKCELL_FB_CARD_ROWS_MAX 12U
 #define INKCELL_FB_CARD_LABEL_MAX 24U
 /* Wide enough for the longest thing a row carries whole, which is a radio notice
-   (INKCELL_RADIO_NOTICE_TEXT_MAX). A value longer than this is clipped on a cell boundary. */
+   caller's own cap. A value longer than this is clipped on a cell boundary. */
 #define INKCELL_FB_CARD_VALUE_MAX 132U
 /* A note is a sentence the radio wrote, not a value, and three lines is where it stops being
    worth the rows it costs on a 3.2" panel. */
@@ -221,7 +220,8 @@ void inkcell_fb_card_row(struct inkcell_fb_card *card, enum inkcell_tone tone,
 
 /* The same row for a value that is already text - a device name, an age, a percentage a caller
    has formatted. It exists so no "%s" pass-through ends up in the catalog, where it would be a
-   line for a translator to wonder about. Same split as inkcell_fb_draw_status_row/_text. */
+   line for a translator to wonder about - the same split a caller makes between a catalog
+   row and one it has already formatted. */
 void inkcell_fb_card_row_text(struct inkcell_fb_card *card, enum inkcell_tone tone,
                               enum inkcell_str_id label, const char *value);
 
@@ -301,7 +301,7 @@ bool inkcell_fb_card_is_empty(const struct inkcell_fb_card *card);
  * rather than a constant. The Status tab is the worked example: its Radio card is a heading over
  * a battery figure while the radio is well and five rows of explanation when it is not, so the
  * card above it promises the minimum in the first case and the whole in the second. See
- * inkcell_fb_render_status().
+ * the application's own status renderer.
  */
 int inkcell_fb_card_height(const struct inkcell_backend_fb_state *state,
                            const struct inkcell_fb_layout *layout,

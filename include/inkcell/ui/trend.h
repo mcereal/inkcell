@@ -66,7 +66,7 @@ enum inkcell_trend_span {
 uint32_t inkcell_trend_span_ms(uint8_t span);
 
 /* What the strip calls it. A word rather than a formatted duration: these four are fixed, and
-   inkcell_format_duration() answers about a measurement rather than about a choice. */
+   the application's duration formatter answers about a measurement rather than about a choice. */
 enum inkcell_str_id inkcell_trend_span_label(uint8_t span);
 
 /*
@@ -153,7 +153,8 @@ bool inkcell_trend_frame(const struct inkcell_series *const *series, uint32_t co
  *
  * **Only a node's chart has one.** The radio's airtime is six hours at a reading a minute, which
  * is 360 rows nobody is going to scroll - and it is already binned into columns
- * (inkcell_trend_airtime()) precisely because reading by reading is the wrong grain for it. A
+ * (the application's own binner) precisely because reading by reading is the wrong grain for
+ * it. A
  * node's telemetry is two dozen samples half an hour apart, which is few enough that reading them
  * exactly is a real thing to want. The difference is in the readings rather than in the screens,
  * which is why it is stated here and not as a flag on a renderer.

@@ -17,8 +17,7 @@
  */
 
 /*
- * Not public API. include/inkcell/ui/fb.h is; inkcell_fb_widgets.h is the umbrella over this
- * file and its siblings, and nothing outside src/ui/backends/ should include either.
+ * inkcell/ui/widgets.h is the umbrella over this file and its siblings; include either.
  */
 
 #include "inkcell/ui/fb_draw.h"
@@ -108,7 +107,7 @@ void inkcell_fb_viewport_end(struct inkcell_backend_fb_state *state,
  * the fraction of the content in view.
  *
  * The list draws its own from `struct inkcell_list` and does not ask a screen to (see
- * inkcell_fb_widgets_list.h). This one is for a viewport, whose content is not a list of items
+ * inkcell/ui/widgets/list.h). This one is for a viewport, whose content is not a list of items
  * and has no window of items to measure - and it *is* asked for, because a viewport does not
  * know whether the thing inside it already drew one.
  *

@@ -5,7 +5,7 @@
  *
  * Copy changed spans into page 0 and its page 1 mirror, then request FBIOPAN_DISPLAY. The Brick's
  * display engine composites fb0 with per-pixel alpha, so every pixel is written opaque; see
- * compose_color() in inkcell_fb_draw.c.
+ * compose_color() in src/fb/fb_draw.c.
  */
 
 #include "inkcell/ui/fb_draw.h"

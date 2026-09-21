@@ -21,7 +21,7 @@ struct inkcell_backend {
      * The store publishes on change, which is all a screen made of text ever needs. A control
      * that animates needs the opposite: several frames from one change. Rather than have the
      * store invent updates nobody asked for, a backend that animates says so here and the
-     * controller keeps waking it until it stops - see inkcell_controller_init().
+     * controller keeps waking it until it stops - see the application's controller init().
      *
      * Optional. A backend that draws everything in one go leaves it NULL and nothing ticks.
      */

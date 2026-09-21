@@ -183,7 +183,7 @@ const struct inkcell_font *inkcell_font_ui(void) {
  * the ordinary answer, and the one an iOS or Material screen gives.
  *
  * Not in the font registry: the registry is the menu a theme picks a *typeface* from, and a
- * weight is not a typeface. It is reached through inkcell_font_bold().
+ * weight is not a typeface. It is reached through inkcell_font_ui_bold().
  */
 const struct inkcell_font *inkcell_font_ui_bold(void) {
     static struct inkcell_font font = {

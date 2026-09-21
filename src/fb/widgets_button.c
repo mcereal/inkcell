@@ -1,7 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 /*
- * The button, the chip strip and the badge. Everything here is built from inkcell_fb_draw.c's
+ * The button, the chip strip and the badge. Everything here is built from src/fb/fb_draw.c's
  * primitives and knows nothing about the snapshot: a button takes what it draws, not where it
  * came from, which is what lets one component serve every screen that wants one.
  */
