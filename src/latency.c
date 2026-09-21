@@ -30,6 +30,8 @@ static struct inkcell_latency_histogram s_metrics[INKCELL_LATENCY_METRIC_COUNT];
  *   s_candidate_us  ...and it was a button going down on a key this client maps
  *   s_pending_us    ...and the store said it would change the frame, so a frame owes it an answer
  */
+static enum inkcell_latency_clock s_clock = INKCELL_LATENCY_CLOCK_KERNEL;
+
 static uint64_t s_event_us;
 static uint64_t s_candidate_us;
 static uint64_t s_pending_press_us;
@@ -137,6 +139,14 @@ static void inkcell_latency_record(enum inkcell_latency_metric which, uint64_t v
     histogram->count += 1U;
 }
 
+void inkcell_latency_set_clock(enum inkcell_latency_clock clock) {
+    s_clock = clock;
+}
+
+enum inkcell_latency_clock inkcell_latency_clock(void) {
+    return s_clock;
+}
+
 void inkcell_latency_event(uint64_t event_us) {
     if (!inkcell_latency_enabled()) {
         return;
@@ -157,8 +167,9 @@ void inkcell_latency_press(void) {
         return;
     }
     /* A stamp from the future is a device evdev would not put on CLOCK_MONOTONIC - a node
-       opened before the ioctl, or a host that refused it. */
-    if (event_us > inkcell_latency_now_us()) {
+       opened before the ioctl, or a host that refused it. A delivery clock cannot be in the
+       future: the source read this clock itself, moments ago. */
+    if (s_clock == INKCELL_LATENCY_CLOCK_KERNEL && event_us > inkcell_latency_now_us()) {
         return;
     }
     s_candidate_us = event_us;
@@ -338,8 +349,16 @@ void inkcell_latency_report(const char *why) {
         inkcell_latency_ms(max, sizeof max, histogram->max_us);
         inkcell_latency_ms(mean, sizeof mean,
                            (uint32_t)(histogram->total_us / (uint64_t)histogram->count));
-        inkwell_log_info("latency", "%-6s n=%u min=%s p50=%s p90=%s p99=%s max=%s mean=%s ms",
-                         k_metric_names[i], histogram->count, min, p50, p90, p99, max, mean);
+        /* The press row says which clock it started on, because "0.9 ms" from a kernel stamp
+           and "0.9 ms" from the moment we drained a queue are not the same claim - see enum
+           inkcell_latency_clock. Every other row is this process timing itself and has only
+           ever had one clock. */
+        const char *const note =
+            i == INKCELL_LATENCY_PRESS && s_clock == INKCELL_LATENCY_CLOCK_DELIVERY
+                ? " (from delivery, not a kernel stamp)"
+                : "";
+        inkwell_log_info("latency", "%-6s n=%u min=%s p50=%s p90=%s p99=%s max=%s mean=%s ms%s",
+                         k_metric_names[i], histogram->count, min, p50, p90, p99, max, mean, note);
     }
     inkwell_log_info("latency", "percentiles are bucket edges: %u us below %u ms, %u ms above",
                      INKCELL_LATENCY_FINE_US,
