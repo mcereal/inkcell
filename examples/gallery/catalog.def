@@ -54,6 +54,8 @@ INKCELL_STR_ENTRY(HEAD_DIALS,         "Dials")
 INKCELL_STR_ENTRY(HEAD_FAB,           "Action button")
 INKCELL_STR_ENTRY(HEAD_FAB_SIZES,     "Sizes")
 INKCELL_STR_ENTRY(HEAD_FAB_COLLAPSE,  "Collapsing")
+INKCELL_STR_ENTRY(HEAD_TILES,         "Tiles")
+INKCELL_STR_ENTRY(HEAD_COVERS,        "Covers")
 
 /* ---- verbs ------------------------------------------------------------------------------------
  *
@@ -92,6 +94,31 @@ INKCELL_STR_ENTRY(ROW_SECURITY,       "Security")
 INKCELL_STR_ENTRY(ROW_UPDATES,        "Software update")
 /* Deliberately longer than its column: this is the row that shows what clipping looks like. */
 INKCELL_STR_ENTRY(ROW_LONG,           "Automatic background synchronisation")
+
+/* ---- a home screen ----------------------------------------------------------------------------
+ *
+ * The names on a grid of tiles. Short, because a tile is recognised rather than read - with one
+ * that is not, because a grid whose every name fits on one line is a grid that cannot show what
+ * the second line is for. */
+
+INKCELL_STR_ENTRY(TILE_MESSAGES,      "Messages")
+INKCELL_STR_ENTRY(TILE_NODES,         "Nodes")
+INKCELL_STR_ENTRY(TILE_MAP,           "Map")
+INKCELL_STR_ENTRY(TILE_CHANNELS,      "Channels")
+INKCELL_STR_ENTRY(TILE_POSITION,      "Position")
+INKCELL_STR_ENTRY(TILE_TELEMETRY,     "Telemetry and sensors")
+INKCELL_STR_ENTRY(TILE_ABOUT,         "About")
+
+/* The covers page: a name and the line under it, which is what a tile carrying its own label
+   inside has room to say. */
+
+INKCELL_STR_ENTRY(COVER_FIELD,        "Field notes")
+INKCELL_STR_ENTRY(COVER_ROUTES,       "Ridge routes")
+INKCELL_STR_ENTRY(COVER_WEATHER,      "Weather log")
+INKCELL_STR_ENTRY(COVER_SPARES,       "Spares")
+INKCELL_STR_ENTRY(COVER_AGO_TODAY,    "Today")
+INKCELL_STR_ENTRY(COVER_AGO_WEEK,     "Last week")
+INKCELL_STR_ENTRY(COVER_PAGES,        "12 pages")
 
 /* ---- values ------------------------------------------------------------------------------------ */
 

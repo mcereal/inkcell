@@ -9,9 +9,18 @@
  * `static` if the two were one file; it is declared only because splitting them is what keeps the
  * window's arithmetic and the row's slots readable apart.
  *
- * Not public API, and not part of inkcell_fb_widgets.h: nothing outside these two files should
- * include it.
+ * The rail at the end is the one entry here a third file reads: a grid scrolls a window of items
+ * too, and a second derivation of the same mark in the same gutter is how two scrollbars on one
+ * toolkit come to sit a pixel apart.
+ *
+ * Not public API, and not part of inkcell_fb_widgets.h: nothing outside src/fb/ should include
+ * it.
  */
+
+/* Self-contained rather than leaning on the includer having got there first: the rail below is
+   read by a file that draws no list rows at all, and a header whose types only resolve in the
+   two files it grew up in is a header the third one includes in the wrong order. */
+#include "inkcell/ui/widgets/list.h"
 
 /*
  * The disc and what is in it: a node's initials, or an icon for the rows that are not a person.
@@ -60,6 +69,18 @@ void inkcell_fb_list_focus_row(const struct inkcell_backend_fb_state *state,
  */
 bool inkcell_fb_list_band_begin(const struct inkcell_fb_list *list);
 void inkcell_fb_list_band_end(const struct inkcell_fb_list *list, bool began);
+
+/*
+ * The scroll rail beside a window of items: a track `track_h` tall at `track_y`, with a thumb
+ * whose length is the fraction of `window` on screen.
+ *
+ * Drawn by the component rather than asked for by a screen - a rail is derived entirely from the
+ * window, so a screen has nothing to say about it and one that had to remember the call would
+ * forget on one list out of nine. Shared by the list and the grid; see the note above its
+ * definition in widgets_list.c for why the window and the track are two arguments.
+ */
+void inkcell_fb_draw_list_rail(const struct inkcell_backend_fb_state *state,
+                               const struct inkcell_list *window, int track_y, int track_h);
 
 /* The ink a row's text takes: its tone, or the cursor's, or the quiet pairing for the slots
    that are deliberately secondary. */

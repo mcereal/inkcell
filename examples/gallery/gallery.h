@@ -131,6 +131,8 @@ void gallery_scene_chrome(struct inkcell_backend_fb_state *state);
 void gallery_scene_fab(struct inkcell_backend_fb_state *state);
 void gallery_scene_controls(struct inkcell_backend_fb_state *state);
 void gallery_scene_list(struct inkcell_backend_fb_state *state);
+void gallery_scene_grid(struct inkcell_backend_fb_state *state);
+void gallery_scene_grid_covers(struct inkcell_backend_fb_state *state);
 void gallery_scene_cards(struct inkcell_backend_fb_state *state);
 void gallery_scene_meters(struct inkcell_backend_fb_state *state);
 void gallery_scene_transcript(struct inkcell_backend_fb_state *state);

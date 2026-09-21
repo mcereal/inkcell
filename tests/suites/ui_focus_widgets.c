@@ -31,6 +31,7 @@ enum {
     W_ID_CARD = 100,
     W_ID_CHIP = 200,
     W_ID_ROW = 1000,
+    W_ID_TILE = 2000,
     W_ID_DIALOG = 300,
     W_ID_BUTTON = 400,
     W_ID_FAB = 500,
@@ -299,6 +300,137 @@ INKCELL_TEST_CASE(focus_widgets_the_backend_hands_back_the_map_the_frame_built, 
                                  inkcell_capture_close(bare),
                                  "a backend nobody handed a map to should answer NULL");
     inkcell_capture_close(bare);
+    record_success(test_name);
+}
+
+/* ---- the grid --------------------------------------------------------------------------- */
+
+INKCELL_TEST_CASE(focus_widgets_grid_registers_the_window_and_not_the_grid, unit) {
+    struct focus_harness h;
+    INKCELL_TEST_FAIL_IF(!focus_harness_open(&h, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT),
+                         "the capture should open");
+
+    const uint32_t count = 200U;
+    struct inkcell_fb_layout layout = inkcell_fb_layout_begin(h.state, false, false);
+    const struct inkcell_fb_grid_style style = {.cols = 4U};
+    struct inkcell_fb_grid grid = inkcell_fb_grid_begin(h.state, &layout, count, 0U, &style);
+    inkcell_fb_grid_focus(&grid, W_ID_TILE);
+
+    uint32_t index = 0U;
+    uint32_t drawn = 0U;
+    while (inkcell_fb_grid_next(&grid, &index)) {
+        const struct inkcell_fb_tile tile = {.label = "tile", .tone = INKCELL_TONE_NORMAL};
+        inkcell_fb_grid_tile(h.state, &grid, index, &tile);
+        drawn += 1U;
+    }
+
+    INKCELL_TEST_FAIL_IF_CLEANUP(drawn == 0U || drawn >= count, focus_harness_close(&h),
+                                 "the window should be some of the grid and not all of it");
+    INKCELL_TEST_FAIL_IF_CLEANUP(h.map.count != drawn, focus_harness_close(&h),
+                                 "a tile drawn is a tile registered, and no others");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_focus_has(&h.map, W_ID_TILE + count - 1U),
+                                 focus_harness_close(&h),
+                                 "a tile fifty rows down is not on the panel");
+    /* The window ends on a row boundary, which is the one thing that is sharper here than on a
+       list: the tiles a grid draws are always a whole number of rows. */
+    INKCELL_TEST_FAIL_IF_CLEANUP(drawn % inkcell_fb_grid_cols(&grid) != 0U, focus_harness_close(&h),
+                                 "a window into a long grid should end on a full row");
+
+    /* And the two axes, against the boxes the tiles actually drew - this is the geometry
+       answering, not the run. */
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        inkcell_focus_find(&h.map, W_ID_TILE, INKCELL_FOCUS_RIGHT) != W_ID_TILE + 1U,
+        focus_harness_close(&h), "right from the first tile is the tile beside it");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_focus_find(&h.map, W_ID_TILE, INKCELL_FOCUS_DOWN) !=
+                                     W_ID_TILE + inkcell_fb_grid_cols(&grid),
+                                 focus_harness_close(&h),
+                                 "down from the first tile is the tile under it");
+
+    const struct inkcell_focus_run run = inkcell_fb_grid_run(&grid);
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        run.base != W_ID_TILE || run.count != count || run.stride != inkcell_fb_grid_cols(&grid),
+        focus_harness_close(&h), "the run should describe the grid that was drawn");
+    focus_harness_close(&h);
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(focus_widgets_grid_reaches_a_face_the_screen_drew_itself, unit) {
+    /* A screen may take a tile's box and draw its own face into it. That tile is on the panel
+       like any other, so it has to be reachable like any other - which is what
+       inkcell_fb_grid_focus_tile() is for, and what a screen that only called
+       inkcell_fb_grid_tile_box() would have left as a tile the cursor cannot land on. */
+    struct focus_harness h;
+    INKCELL_TEST_FAIL_IF(!focus_harness_open(&h, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT),
+                         "the capture should open");
+
+    struct inkcell_fb_layout layout = inkcell_fb_layout_begin(h.state, false, false);
+    const struct inkcell_fb_grid_style style = {.cols = 3U};
+    struct inkcell_fb_grid grid = inkcell_fb_grid_begin(h.state, &layout, 6U, 0U, &style);
+    inkcell_fb_grid_focus(&grid, W_ID_TILE);
+
+    /* A tile in the second row: the first one starts a hairline above the body's first line -
+       where a list's row fill starts, deliberately - and on a layout with no chrome at all that
+       hairline is off the panel, so the box registered is the part of it that is on. Which is
+       the registration rule working, and not what this case is about. */
+    const uint32_t mine = 4U;
+    struct inkcell_fb_rect own = {0, 0, 0, 0};
+    uint32_t index = 0U;
+    while (inkcell_fb_grid_next(&grid, &index)) {
+        if (index == mine) {
+            /* What a screen drawing its own face does: take the box, draw into it, say so. */
+            own = inkcell_fb_grid_tile_box(&grid);
+            inkcell_fb_grid_focus_tile(h.state, &grid, index);
+            continue;
+        }
+        const struct inkcell_fb_tile tile = {.label = "tile", .tone = INKCELL_TONE_NORMAL};
+        inkcell_fb_grid_tile(h.state, &grid, index, &tile);
+    }
+
+    INKCELL_TEST_FAIL_IF_CLEANUP(own.w <= 0 || own.h <= 0, focus_harness_close(&h),
+                                 "the box handed to the screen should be a real rectangle");
+    struct inkcell_focus_rect got = {0, 0, 0, 0};
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_focus_rect_of(&h.map, W_ID_TILE + mine, &got),
+                                 focus_harness_close(&h),
+                                 "the tile the screen drew itself should be registered");
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        got.x != own.x || got.y != own.y || got.w != own.w || got.h != own.h,
+        focus_harness_close(&h), "and registered at exactly the box it was handed");
+    /* And it is still in the row it belongs to, rather than a hole the press steps over. */
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        inkcell_focus_find(&h.map, W_ID_TILE + mine - 1U, INKCELL_FOCUS_RIGHT) != W_ID_TILE + mine,
+        focus_harness_close(&h), "right from the tile before it should land on it");
+    focus_harness_close(&h);
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(focus_widgets_grid_narrows_to_what_the_panel_can_hold, unit) {
+    /* A panel too narrow for the columns asked for: the grid draws fewer of them rather than a
+       row of slivers, and the run says so - which is the whole reason a screen asks the grid for
+       its stride instead of remembering the number it requested. */
+    struct focus_harness h;
+    INKCELL_TEST_FAIL_IF(!focus_harness_open(&h, 240U, 320U), "the narrow capture should open");
+
+    struct inkcell_fb_layout layout = inkcell_fb_layout_begin(h.state, false, false);
+    const struct inkcell_fb_grid_style style = {.cols = 12U};
+    struct inkcell_fb_grid grid = inkcell_fb_grid_begin(h.state, &layout, 24U, 0U, &style);
+    inkcell_fb_grid_focus(&grid, W_ID_TILE);
+
+    const uint32_t cols = inkcell_fb_grid_cols(&grid);
+    INKCELL_TEST_FAIL_IF_CLEANUP(cols == 0U || cols >= 12U, focus_harness_close(&h),
+                                 "twelve columns should not fit on a panel this narrow");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_grid_run(&grid).stride != cols, focus_harness_close(&h),
+                                 "the run's stride is what was drawn, not what was asked for");
+
+    uint32_t index = 0U;
+    uint32_t drawn = 0U;
+    while (inkcell_fb_grid_next(&grid, &index)) {
+        const struct inkcell_fb_tile tile = {.label = "t", .tone = INKCELL_TONE_NORMAL};
+        inkcell_fb_grid_tile(h.state, &grid, index, &tile);
+        drawn += 1U;
+    }
+    INKCELL_TEST_FAIL_IF_CLEANUP(h.map.count != drawn, focus_harness_close(&h),
+                                 "a narrowed grid still registers exactly what it drew");
+    focus_harness_close(&h);
     record_success(test_name);
 }
 

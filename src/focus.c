@@ -371,43 +371,151 @@ static bool focus_run_stands(const struct inkcell_focus_run *run, uint32_t index
     return run->focusable == NULL || run->focusable[index] != 0U;
 }
 
+/* Items per row, with the two values that mean a column folded into one. */
+static uint32_t focus_run_stride(const struct inkcell_focus_run *run) {
+    return run->stride > 1U ? run->stride : 1U;
+}
+
+/*
+ * The next place to stand in a column, or INKCELL_FOCUS_NONE at its end.
+ *
+ * The walk is past the labels rather than one step, which is what makes this one press rather
+ * than two: a list's subheaders take an item index and are not places to stand, so the next
+ * *item* and the next thing a cursor can be on are not always the same number.
+ */
+static uint32_t focus_run_step_column(const struct inkcell_focus_run *run, uint32_t index,
+                                      enum inkcell_focus_dir dir) {
+    uint32_t step = index;
+    while (dir == INKCELL_FOCUS_DOWN && step + 1U < run->count) {
+        step += 1U;
+        if (focus_run_stands(run, step)) {
+            return run->base + step;
+        }
+    }
+    while (dir == INKCELL_FOCUS_UP && step > 0U) {
+        step -= 1U;
+        if (focus_run_stands(run, step)) {
+            return run->base + step;
+        }
+    }
+    return INKCELL_FOCUS_NONE;
+}
+
+/*
+ * The same in a grid, where the press decides which of the two axes the run is answering on.
+ *
+ * Sideways stops at the end of its row rather than wrapping into the next one, and downward
+ * lands on the last tile of a short last row rather than on nothing - both for the reasons set
+ * out beside `stride` in include/inkcell/ui/focus.h. The label walk of a column is kept on both
+ * axes: a grid with gaps in it is the same problem as a list with headings in it, and the run
+ * is told about either the same way.
+ */
+static uint32_t focus_run_step_grid(const struct inkcell_focus_run *run, uint32_t index,
+                                    enum inkcell_focus_dir dir) {
+    const uint32_t stride = focus_run_stride(run);
+    const uint32_t last_row = (run->count - 1U) / stride;
+    uint32_t step = index;
+    uint32_t col = index % stride;
+
+    switch (dir) {
+    case INKCELL_FOCUS_LEFT:
+        while (col > 0U) {
+            col -= 1U;
+            step -= 1U;
+            if (focus_run_stands(run, step)) {
+                return run->base + step;
+            }
+        }
+        return INKCELL_FOCUS_NONE;
+    case INKCELL_FOCUS_RIGHT:
+        while (col + 1U < stride && step + 1U < run->count) {
+            col += 1U;
+            step += 1U;
+            if (focus_run_stands(run, step)) {
+                return run->base + step;
+            }
+        }
+        return INKCELL_FOCUS_NONE;
+    case INKCELL_FOCUS_UP:
+        while (step >= stride) {
+            step -= stride;
+            if (focus_run_stands(run, step)) {
+                return run->base + step;
+            }
+        }
+        return INKCELL_FOCUS_NONE;
+    case INKCELL_FOCUS_DOWN:
+    default:
+        /* `count - step` rather than `step + stride`, because the sum is the one form of this
+           that can wrap - and a run is handed counts a caller owns. */
+        while (run->count - step > stride) {
+            step += stride;
+            if (focus_run_stands(run, step)) {
+                return run->base + step;
+            }
+        }
+        if (step / stride < last_row) {
+            /*
+             * A row below, and no tile directly under this one: the short last row, where the
+             * press means its last tile.
+             *
+             * Walked back along that row rather than taken as `count - 1`, because the last
+             * tile of a row is not always a place to stand - and stopping there because of a
+             * tile the reader cannot reach anyway would leave the grid while the row still has
+             * something in it. The walk is the row's own, so it stops at the column it starts
+             * in and never steps up into the row above.
+             */
+            uint32_t tail = run->count - 1U;
+            for (;;) {
+                if (focus_run_stands(run, tail)) {
+                    return run->base + tail;
+                }
+                if (tail % stride == 0U) {
+                    break;
+                }
+                tail -= 1U;
+            }
+        }
+        return INKCELL_FOCUS_NONE;
+    }
+}
+
 uint32_t inkcell_focus_step(const struct inkcell_focus_map *map, uint32_t id,
                             enum inkcell_focus_dir dir, const struct inkcell_focus_run *runs,
                             size_t run_count) {
     /*
-     * A run that can still move wins, and only for the direction it runs in.
+     * A run that can still move wins, and only along the axes it runs on: a column answers up
+     * and down, and a grid answers all four.
      *
      * Before the geometry rather than after it, which is the whole of what this function adds:
      * at the last *visible* row of a long list the geometry has an answer - whatever is drawn
      * below the list - and taking it would walk the cursor out at item ten of four hundred.
      * The run knows the list goes on; the map cannot.
+     *
+     * A grid's window always holds whole rows, so sideways the map usually has the answer too -
+     * and the run gives it anyway, because "right is the next tile and never the next row's
+     * first" is then true by construction rather than true because the finder's beam happened
+     * to agree with the layout that frame.
      */
-    if (runs != NULL && (dir == INKCELL_FOCUS_UP || dir == INKCELL_FOCUS_DOWN)) {
+    if (runs != NULL) {
         for (size_t i = 0U; i < run_count; ++i) {
             uint32_t index = 0U;
             if (!focus_run_index(&runs[i], id, &index)) {
                 continue;
             }
-            uint32_t step = index;
-            /* Past the labels, which is what makes this one press rather than two: a list's
-               subheaders take an item index and are not places to stand, so the next *item* and
-               the next thing a cursor can be on are not always the same number. */
-            while (dir == INKCELL_FOCUS_DOWN && step + 1U < runs[i].count) {
-                step += 1U;
-                if (focus_run_stands(&runs[i], step)) {
-                    return runs[i].base + step;
-                }
+            uint32_t next = INKCELL_FOCUS_NONE;
+            if (focus_run_stride(&runs[i]) > 1U) {
+                next = focus_run_step_grid(&runs[i], index, dir);
+            } else if (dir == INKCELL_FOCUS_UP || dir == INKCELL_FOCUS_DOWN) {
+                next = focus_run_step_column(&runs[i], index, dir);
             }
-            while (dir == INKCELL_FOCUS_UP && step > 0U) {
-                step -= 1U;
-                if (focus_run_stands(&runs[i], step)) {
-                    return runs[i].base + step;
-                }
+            if (next != INKCELL_FOCUS_NONE) {
+                return next;
             }
-            /* Nothing left in the run that way - the end of it, or nothing but labels between
-               here and the end. The press means leaving, which is a question about what is
-               drawn and therefore the finder's. Stop looking through the runs: an id is in one
-               of them at most. */
+            /* Nothing left in the run that way - the end of it, the edge of a grid's row, or
+               nothing but labels between here and the end. The press means leaving, which is a
+               question about what is drawn and therefore the finder's. Stop looking through the
+               runs: an id is in one of them at most. */
             break;
         }
     }

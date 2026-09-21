@@ -72,7 +72,8 @@
  *
  * `struct inkcell_list` keeps the window arithmetic and is still what decides which rows a
  * frame draws; a run is the same list seen from the press rather than from the draw, and it is
- * two numbers because two numbers is all that is knowable between frames.
+ * three numbers because three numbers is all that is knowable between frames - where its ids
+ * start, how many there are, and how many of them are side by side.
  */
 
 #include "inkcell/ui/key.h"
@@ -279,14 +280,40 @@ uint32_t inkcell_focus_find_wrapping(const struct inkcell_focus_map *map, uint32
  * registers its rows as. `count` is every item, drawn or not - the number the screen has and
  * the map does not.
  *
- * Vertical, because that is what a window in this toolkit scrolls: `struct inkcell_list` is a
- * column, so a run steps on up and down and says nothing about left and right. A row of chips
- * too wide for the panel would want the same idea sideways, and does not exist here; when it
- * does, this grows an axis rather than a second function.
+ * Vertical by default, because that is what a window in this toolkit scrolls: a `struct
+ * inkcell_list` is a column, so a run with no `stride` steps on up and down and says nothing
+ * about left and right. A grid is the case that needed the other axis, and it got it here
+ * rather than in a second function - see `stride` below.
  */
 struct inkcell_focus_run {
     uint32_t base;
     uint32_t count;
+    /*
+     * Items per row: the sequence is a grid `stride` wide rather than a column.
+     *
+     * 0 and 1 both mean a column, which is every list and is what a run declared before this
+     * field existed has. Past that, the run steps by `stride` on up and down and by one on
+     * left and right - and the difference between those two is the whole reason a grid cannot
+     * be expressed as a run of one column: item 7 of a three-wide grid is below item 4 and
+     * beside item 8, and an index alone cannot tell those apart.
+     *
+     * Two rules follow, and both are what a reader of a tile grid expects:
+     *
+     *   - **Sideways stays in its row.** A press right at the end of a row is not the start of
+     *     the next one; it is the edge of the grid, and the geometry answers it - which on a
+     *     home screen means nothing, and on a screen with a rail beside the tiles means the
+     *     rail. Wrapping is an editorial decision this file leaves to the screen, exactly as
+     *     `inkcell_focus_find_wrapping()` does.
+     *   - **Down from a short last row lands on its last tile.** Seven tiles three across leave
+     *     a row of one, and a press down from the tile above the gap has somewhere to go: the
+     *     grid goes on, and stopping there would be the cursor refusing to move for want of a
+     *     tile directly underneath. Down from the last row itself is still the edge.
+     *
+     * Which way `count` runs is unchanged: it is every item, drawn or not, and the grid's own
+     * column count is `stride` - inkcell_fb_grid_run() hands back both, because a grid that
+     * narrowed itself to fit the panel is the only thing that knows what it drew.
+     */
+    uint32_t stride;
     /*
      * One byte per item, non-zero where the item is a place to stand. NULL is a run whose every
      * item is one, which is what a plain list of rows passes.
@@ -328,6 +355,12 @@ struct inkcell_focus_run {
  * why a run has to say where its *labels* are - see `focusable` above: not being registered is
  * what a row off the panel and a subheader have in common, and only one of them is somewhere to
  * put a cursor.
+ *
+ * A run that is a grid answers sideways as well. Not because the tiles across are off the
+ * panel - a grid's window holds whole rows, so they are exactly the ones that are on it - but
+ * because the two rules beside `stride` above are then the run's statement rather than
+ * something the finder's beam agrees with while the layout happens to suit it. See
+ * inkcell_fb_grid_run() for where the number comes from.
  *
  * `runs` may be NULL with `run_count` 0, which makes this `inkcell_focus_find()` with more
  * words. A screen with one list passes one run:
