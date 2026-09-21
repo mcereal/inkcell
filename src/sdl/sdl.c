@@ -97,6 +97,11 @@ const struct inkcell_backend *inkcell_backend_sdl(void) {
    to wait on, so this is a timer on the loop and a poll, said out loud. */
 #define INKCELL_SDL_POLL_MS 8
 
+/* How many of the last frame's boxes the backend keeps for the mouse. A panel's worth of rows
+   and chrome is a few dozen; past this the boxes drawn *first* are the ones let go, because a
+   click takes the box drawn last and those are the ones on top. */
+#define INKCELL_SDL_POINTER_BOXES 512U
+
 struct inkcell_sdl_panel {
     struct inkcell_draw_state state;
     SDL_Window *window;
@@ -117,6 +122,17 @@ struct inkcell_sdl_panel {
        See include/inkcell/ui/pointer.h. The cursors are NULL where the video driver has none -
        the dummy one a test runs under - and then the pointer simply never changes shape. */
     struct inkcell_pointer pointer;
+    /*
+     * The last frame's boxes, copied out when it was presented.
+     *
+     * A mouse event arrives between frames, and the map the frame filled belongs to the
+     * renderer - which may have kept it on its own stack, since nothing in
+     * inkcell_fb_set_focus_map() says it may not. Reading it after the render returned would
+     * be reading whatever the stack holds now. So the backend owns what it answers clicks
+     * against, and it is exactly the frame the reader is looking at.
+     */
+    struct inkcell_focus_item pointer_items[INKCELL_SDL_POINTER_BOXES];
+    struct inkcell_focus_map pointer_map;
     inkcell_click_handler on_click;
     void *click_userdata;
     SDL_Cursor *arrow;
@@ -279,6 +295,22 @@ static size_t inkcell_sdl_upload_damage(struct inkcell_sdl_panel *panel, bool fo
     return written;
 }
 
+/* The frame's boxes, into the backend's own map: see `pointer_map`. The last ones when there
+   are too many, keeping their order, so what is on top is still found first. */
+static void inkcell_sdl_keep_boxes(struct inkcell_sdl_panel *panel) {
+    const struct inkcell_focus_map *const drawn = panel->state.focus;
+    const uint32_t count = drawn != NULL && drawn->items != NULL ? drawn->count : 0U;
+    const uint32_t kept = count < INKCELL_SDL_POINTER_BOXES ? count : INKCELL_SDL_POINTER_BOXES;
+    if (kept > 0U) {
+        memcpy(panel->pointer_items, drawn->items + (count - kept),
+               (size_t)kept * sizeof panel->pointer_items[0]);
+    }
+    panel->pointer_map.items = panel->pointer_items;
+    panel->pointer_map.capacity = INKCELL_SDL_POINTER_BOXES;
+    panel->pointer_map.count = kept;
+    panel->pointer_map.dropped = count - kept;
+}
+
 static void inkcell_backend_sdl_present(void *state_ptr, const void *snapshot, void *userdata) {
     struct inkcell_sdl_panel *const panel = inkcell_sdl_panel_of(state_ptr);
     (void)userdata;
@@ -300,6 +332,7 @@ static void inkcell_backend_sdl_present(void *state_ptr, const void *snapshot, v
 #endif
     inkcell_fb_render(state, snapshot);
     panel->presented = true;
+    inkcell_sdl_keep_boxes(panel);
 #if defined(__APPLE__)
     /* ...and after it, because a frame is where the application gets to change the theme. The
        bar turns with the strip under it rather than a frame later, and a strip that changed
@@ -429,8 +462,8 @@ static void inkcell_sdl_handle_key(struct inkcell_sdl_panel *panel, const SDL_Ke
  * the panel reports a click on a hint where the hint was drawn. A click in the letterbox comes
  * out past the frame's edge and hits nothing, which is what it is.
  *
- * The map is the one the last frame filled - the frame the reader was looking at when they
- * clicked, which is the same argument the controller makes for a key.
+ * The map is the backend's copy of the last frame's - the frame the reader was looking at when
+ * they clicked, which is the same argument the controller makes for a key.
  */
 static void inkcell_sdl_handle_button(struct inkcell_sdl_panel *panel,
                                       const SDL_MouseButtonEvent *button) {
@@ -446,11 +479,11 @@ static void inkcell_sdl_handle_button(struct inkcell_sdl_panel *panel,
         return;
     }
     if (button->type == SDL_MOUSEBUTTONDOWN) {
-        inkcell_pointer_down(&panel->pointer, panel->state.focus, button->x, button->y);
+        inkcell_pointer_down(&panel->pointer, &panel->pointer_map, button->x, button->y);
         return;
     }
     const struct inkcell_pointer_result result =
-        inkcell_pointer_up(&panel->pointer, panel->state.focus, button->x, button->y);
+        inkcell_pointer_up(&panel->pointer, &panel->pointer_map, button->x, button->y);
     if (result.kind == INKCELL_POINTER_KEY) {
         inkcell_sdl_deliver(panel, result.key, true);
     } else if (result.kind == INKCELL_POINTER_CLICK && panel->on_click != NULL) {
@@ -492,7 +525,7 @@ static void inkcell_sdl_handle_motion(struct inkcell_sdl_panel *panel,
     if (panel->arrow == NULL || panel->hand == NULL) {
         return;
     }
-    const bool pointing = inkcell_pointer_over_target(panel->state.focus, motion->x, motion->y,
+    const bool pointing = inkcell_pointer_over_target(&panel->pointer_map, motion->x, motion->y,
                                                       panel->on_click != NULL);
     if (pointing != panel->pointing) {
         panel->pointing = pointing;

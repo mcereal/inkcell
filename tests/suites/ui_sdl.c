@@ -369,6 +369,9 @@ INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
 
     INKCELL_TEST_FAIL_IF_CLEANUP(app.hint.w <= 0, backend->shutdown(state, &context),
                                  "the frame should have registered its hint");
+    /* The renderer's map goes away once the frame is drawn - as a map on its stack would. The
+       click has to be answered from what the backend kept, not from the renderer's memory. */
+    inkcell_focus_begin(&app.map, NULL, 0U);
     sdl_click(app.hint.x + app.hint.w / 2, app.hint.y + app.hint.h / 2);
     sdl_pump(&host);
     INKCELL_TEST_FAIL_IF_CLEANUP(heard.key_count != 1U || heard.keys[0] != INKCELL_KEY_B,
