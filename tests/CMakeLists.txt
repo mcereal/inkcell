@@ -9,6 +9,7 @@ set(INKCELL_TEST_SUITES
     suites/ui_anim.c
     suites/ui_damage.c
     suites/ui_focus.c
+    suites/ui_pointer.c
     suites/ui_focus_ring.c
     suites/ui_focus_widgets.c
     suites/ui_frame.c

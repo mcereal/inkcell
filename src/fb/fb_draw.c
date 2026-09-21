@@ -333,7 +333,8 @@ void inkcell_fb_set_focus_map(struct inkcell_draw_state *state, struct inkcell_f
  * exactly what this does not touch.
  */
 static void inkcell_fb_focus_put(const struct inkcell_draw_state *state, uint32_t id,
-                                 const struct inkcell_fb_rect *rect, int radius) {
+                                 const struct inkcell_fb_rect *rect, int radius,
+                                 bool pointer_only) {
     if (state == NULL || state->focus == NULL || id == INKCELL_FOCUS_NONE || rect == NULL) {
         return;
     }
@@ -400,12 +401,16 @@ static void inkcell_fb_focus_put(const struct inkcell_draw_state *state, uint32_
     if (w <= 0 || h <= 0) {
         return;
     }
-    (void)inkcell_focus_add_round(state->focus, id, x, y, w, h, radius);
+    if (pointer_only) {
+        (void)inkcell_focus_add_target(state->focus, id, x, y, w, h, radius);
+    } else {
+        (void)inkcell_focus_add_round(state->focus, id, x, y, w, h, radius);
+    }
 }
 
 void inkcell_fb_focus_register(const struct inkcell_draw_state *state, uint32_t id,
                                const struct inkcell_fb_rect *rect) {
-    inkcell_fb_focus_put(state, id, rect, 0);
+    inkcell_fb_focus_put(state, id, rect, 0, false);
 }
 
 void inkcell_fb_focus_register_shaped(const struct inkcell_draw_state *state, uint32_t id,
@@ -417,7 +422,12 @@ void inkcell_fb_focus_register_shaped(const struct inkcell_draw_state *state, ui
     /* INKCELL_SHAPE_FULL asks for more radius than any box has and the fill clamps it to half
        the shorter side; inkcell_focus_add_round() clamps the same way, so what lands in the map
        is the curve that was drawn. */
-    inkcell_fb_focus_put(state, id, rect, inkcell_fb_radius(state, shape));
+    inkcell_fb_focus_put(state, id, rect, inkcell_fb_radius(state, shape), false);
+}
+
+void inkcell_fb_target_register(const struct inkcell_draw_state *state, uint32_t id,
+                                const struct inkcell_fb_rect *rect) {
+    inkcell_fb_focus_put(state, id, rect, 0, true);
 }
 
 bool inkcell_fb_app_pending(const struct inkcell_draw_state *state) {

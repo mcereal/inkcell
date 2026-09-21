@@ -209,8 +209,8 @@ bool inkcell_focus_add(struct inkcell_focus_map *map, uint32_t id, int x, int y,
     return inkcell_focus_add_round(map, id, x, y, w, h, 0);
 }
 
-bool inkcell_focus_add_round(struct inkcell_focus_map *map, uint32_t id, int x, int y, int w, int h,
-                             int radius) {
+static bool focus_put(struct inkcell_focus_map *map, uint32_t id, int x, int y, int w, int h,
+                      int radius, bool pointer_only) {
     if (map == NULL || id == INKCELL_FOCUS_NONE || w <= 0 || h <= 0) {
         return false;
     }
@@ -234,8 +234,42 @@ bool inkcell_focus_add_round(struct inkcell_focus_map *map, uint32_t id, int x, 
     const int shorter = (w < h) ? w : h;
     map->items[map->count].radius =
         (radius < 0) ? 0 : ((radius > shorter / 2) ? shorter / 2 : radius);
+    map->items[map->count].pointer_only = pointer_only;
     map->count += 1U;
     return true;
+}
+
+bool inkcell_focus_add_round(struct inkcell_focus_map *map, uint32_t id, int x, int y, int w, int h,
+                             int radius) {
+    return focus_put(map, id, x, y, w, h, radius, false);
+}
+
+bool inkcell_focus_add_target(struct inkcell_focus_map *map, uint32_t id, int x, int y, int w,
+                              int h, int radius) {
+    return focus_put(map, id, x, y, w, h, radius, true);
+}
+
+uint32_t inkcell_focus_hit(const struct inkcell_focus_map *map, int x, int y) {
+    if (map == NULL || map->items == NULL) {
+        return INKCELL_FOCUS_NONE;
+    }
+    /* Backwards, so the first box found is the one drawn last - the one on top. */
+    for (uint32_t i = map->count; i-- > 0U;) {
+        const struct inkcell_focus_rect r = map->items[i].rect;
+        if ((int64_t)x >= r.x && (int64_t)x < (int64_t)r.x + r.w && (int64_t)y >= r.y &&
+            (int64_t)y < (int64_t)r.y + r.h) {
+            return map->items[i].id;
+        }
+    }
+    return INKCELL_FOCUS_NONE;
+}
+
+enum inkcell_key inkcell_focus_key_of(uint32_t id) {
+    if (id <= INKCELL_FOCUS_KEY_BASE) {
+        return INKCELL_KEY_NONE;
+    }
+    const uint32_t key = id - INKCELL_FOCUS_KEY_BASE;
+    return key <= (uint32_t)INKCELL_KEY_SELECT ? (enum inkcell_key)key : INKCELL_KEY_NONE;
 }
 
 int inkcell_focus_radius_of(const struct inkcell_focus_map *map, uint32_t id) {
@@ -273,7 +307,7 @@ uint32_t inkcell_focus_find(const struct inkcell_focus_map *map, uint32_t id,
     int64_t best_weight = 0;
 
     for (uint32_t i = 0U; i < map->count; ++i) {
-        if (map->items[i].id == id) {
+        if (map->items[i].id == id || map->items[i].pointer_only) {
             continue;
         }
         const struct focus_span cand = focus_project(map->items[i].rect, dir);
@@ -330,7 +364,7 @@ uint32_t inkcell_focus_find_wrapping(const struct inkcell_focus_map *map, uint32
     struct focus_span best = {0, 0, 0, 0, 0};
 
     for (uint32_t i = 0U; i < map->count; ++i) {
-        if (map->items[i].id == id) {
+        if (map->items[i].id == id || map->items[i].pointer_only) {
             continue;
         }
         const struct focus_span cand = focus_project(map->items[i].rect, dir);
@@ -530,6 +564,9 @@ uint32_t inkcell_focus_first(const struct inkcell_focus_map *map) {
     uint32_t best_id = INKCELL_FOCUS_NONE;
     struct inkcell_focus_rect best = {0, 0, 0, 0};
     for (uint32_t i = 0U; i < map->count; ++i) {
+        if (map->items[i].pointer_only) {
+            continue;
+        }
         const struct inkcell_focus_rect rect = map->items[i].rect;
         if (best_id == INKCELL_FOCUS_NONE || rect.y < best.y ||
             (rect.y == best.y && rect.x < best.x)) {
@@ -565,6 +602,9 @@ uint32_t inkcell_focus_nearest(const struct inkcell_focus_map *map,
     uint32_t best_id = INKCELL_FOCUS_NONE;
     int64_t best = 0;
     for (uint32_t i = 0U; i < map->count; ++i) {
+        if (map->items[i].pointer_only) {
+            continue;
+        }
         const struct inkcell_focus_rect other = map->items[i].rect;
         /* Box to box rather than centre to centre: a row that grew a second line is still the
            row the cursor was on, and a centre that moved half a line should not hand the cursor

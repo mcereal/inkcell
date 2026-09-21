@@ -144,6 +144,15 @@ struct inkcell_focus_item {
      * that says where it is.
      */
     int radius;
+    /*
+     * A target and not a place to stand: a pointer can press it, and the d-pad walks past it.
+     *
+     * A hint pill in the action bar is the case that needed this. Clicking "A Open" is pressing
+     * A, so the pill is worth a box - but a d-pad that could land on it would leave the last row
+     * of every list for the footer. The finder, the first and the nearest all skip these; only
+     * inkcell_focus_hit() sees them. Set by inkcell_focus_add_target().
+     */
+    bool pointer_only;
 };
 
 /*
@@ -196,6 +205,41 @@ bool inkcell_focus_add(struct inkcell_focus_map *map, uint32_t id, int x, int y,
  */
 bool inkcell_focus_add_round(struct inkcell_focus_map *map, uint32_t id, int x, int y, int w, int h,
                              int radius);
+
+/*
+ * The same, for a target a pointer may press and the d-pad may not reach - see `pointer_only`
+ * above. The rules for refusing are the same four, and it shares the id space, so a target and
+ * a focusable box cannot both be called the same thing.
+ */
+bool inkcell_focus_add_target(struct inkcell_focus_map *map, uint32_t id, int x, int y, int w,
+                              int h, int radius);
+
+/*
+ * What is under the point (x, y), or INKCELL_FOCUS_NONE.
+ *
+ * The pointer's question, and the reason the map is a map of boxes rather than of ids: a frame
+ * that recorded what it drew and where can answer a click with no second description of itself.
+ * Targets count, as does everything the d-pad can reach.
+ *
+ * Where two boxes overlap, the one registered *last* wins, because it is the one drawn last and
+ * therefore the one on top - an overlay's buttons over the rows beneath it.
+ */
+uint32_t inkcell_focus_hit(const struct inkcell_focus_map *map, int x, int y);
+
+/*
+ * A block of ids the toolkit reserves for "this box is a key": pressing it with a pointer is
+ * pressing that key, and nothing about the application has to be asked.
+ *
+ * The action bar registers its hint pills here, so a window can be driven by clicking the verbs
+ * it already lists. Anything else that is a key in all but name - a keycap drawn on a help
+ * screen, say - can register the same way. The block sits at the top of the id space so that no
+ * application enum counting up from 1 ever reaches it.
+ */
+#define INKCELL_FOCUS_KEY_BASE 0xFFFFFF00U
+#define INKCELL_FOCUS_KEY(key) (INKCELL_FOCUS_KEY_BASE + (uint32_t)(key))
+
+/* The key a reserved id stands for, or INKCELL_KEY_NONE for an id outside the block. */
+enum inkcell_key inkcell_focus_key_of(uint32_t id);
 
 /* The radius `id` was registered with, and 0 for a square one or for an id that is not here.
    What the focus ring asks, and the reason `radius` is on the item at all. */

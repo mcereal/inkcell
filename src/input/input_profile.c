@@ -212,6 +212,49 @@ const char *inkcell_button_cap(enum inkcell_button button) {
     return inkcell_input_profile_cap(inkcell_input_profile_from_env(), button);
 }
 
+size_t inkcell_button_keys(enum inkcell_button button, enum inkcell_key keys[2]) {
+    switch (button) {
+    case INKCELL_BUTTON_A:
+        keys[0] = INKCELL_KEY_A;
+        return 1U;
+    case INKCELL_BUTTON_B:
+        keys[0] = INKCELL_KEY_B;
+        return 1U;
+    case INKCELL_BUTTON_X:
+        keys[0] = INKCELL_KEY_X;
+        return 1U;
+    case INKCELL_BUTTON_Y:
+        keys[0] = INKCELL_KEY_Y;
+        return 1U;
+    case INKCELL_BUTTON_START:
+        keys[0] = INKCELL_KEY_START;
+        return 1U;
+    case INKCELL_BUTTON_SELECT:
+        keys[0] = INKCELL_KEY_SELECT;
+        return 1U;
+    case INKCELL_BUTTON_SHOULDERS:
+        keys[0] = INKCELL_KEY_L1;
+        keys[1] = INKCELL_KEY_R1;
+        return 2U;
+    case INKCELL_BUTTON_TRIGGERS:
+        keys[0] = INKCELL_KEY_L2;
+        keys[1] = INKCELL_KEY_R2;
+        return 2U;
+    case INKCELL_BUTTON_UP_DOWN:
+        keys[0] = INKCELL_KEY_UP;
+        keys[1] = INKCELL_KEY_DOWN;
+        return 2U;
+    case INKCELL_BUTTON_LEFT_RIGHT:
+        keys[0] = INKCELL_KEY_LEFT;
+        keys[1] = INKCELL_KEY_RIGHT;
+        return 2U;
+    case INKCELL_BUTTON_QUIT:
+    case INKCELL_BUTTON_COUNT:
+    default:
+        return 0U;
+    }
+}
+
 /* The four a profile is required to bind. The rest of the pad is a convention, so a profile
    that named the shoulders would be restating something no device has disagreed about. */
 static const enum inkcell_key k_required_keys[] = {INKCELL_KEY_A, INKCELL_KEY_B, INKCELL_KEY_X,

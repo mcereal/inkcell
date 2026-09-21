@@ -24,6 +24,7 @@
  */
 
 #include "inkcell/i18n/strings.h"
+#include "inkcell/ui/key.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -90,6 +91,16 @@ enum inkcell_button {
  * Never NULL, including for a button outside the enum.
  */
 const char *inkcell_button_cap(enum inkcell_button button);
+
+/*
+ * The keys a cap stands for, in the order it is printed: one for a face button, two for a pair -
+ * "L/R" is L1 then R1, the arrow pair is up then down - and none for QUIT, which is a way out
+ * rather than a press the application hears. Returns how many were written into `keys`.
+ *
+ * What a pointer needs to turn a click on a hint into a press. A pair's pill is split down the
+ * middle for it, which is where the eye already divides it: the half under "L" is L1.
+ */
+size_t inkcell_button_keys(enum inkcell_button button, enum inkcell_key keys[2]);
 
 /*
  * The most a screen offers at once.
