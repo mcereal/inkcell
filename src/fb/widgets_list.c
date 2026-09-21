@@ -280,12 +280,20 @@ static void inkcell_fb_list_cards(const struct inkcell_backend_fb_state *state,
      */
     const int pad = inkcell_fb_list_card_pad(state);
 
-    const uint32_t first = list->model.first;
-    const uint32_t last = first + list->model.visible; /* one past */
+    /* The window, widened by whatever the glide added: a card under the item sliding in has to
+       be painted or the row arrives on the panel's own ground and flickers as it lands. */
+    const uint32_t first = list->model.first - list->lead_count;
+    const uint32_t last = list->model.first + list->model.visible + list->tail_count;
     /* Where the first visible row's fill starts, which is a glyph scale above its baseline -
        inkcell_fb_draw_row_fill()'s own top edge. A card measured from the baseline would sit a few
        pixels low and clip the ascenders of the row it opens with. */
-    int top = list->track_y - state->scale;
+    /* Where the first run's fill starts, displaced with the rows: the surfaces move with what
+       stands on them, and the band is what keeps the moved edge inside the body. */
+    int top = list->track_y - state->scale + list->glide_dy;
+    for (uint32_t back = first; back < list->model.first; ++back) {
+        top -= (int)inkcell_list_item_height(&list->model, back) * list->line;
+    }
+    const bool band = inkcell_fb_list_band_begin(list);
     uint32_t i = first;
     while (i < last && i < list->model.count) {
         const uint8_t card = inkcell_fb_list_card_of(list, i);
@@ -396,6 +404,7 @@ static void inkcell_fb_list_cards(const struct inkcell_backend_fb_state *state,
         top += height;
         i = run;
     }
+    inkcell_fb_list_band_end(list, band);
 }
 
 /*
@@ -490,6 +499,166 @@ void inkcell_fb_list_chrome(const struct inkcell_backend_fb_state *state,
     inkcell_fb_list_rail(state, list);
 }
 
+/* ---- the glide ------------------------------------------------------------------------------
+ *
+ * What is remembered between frames is one window position. Everything else here is derived
+ * from it and from the model the current frame opened with.
+ */
+
+/*
+ * How far the content moved between two windows, in pixels: the heights of the items between
+ * them, signed so that a window moving forward comes out positive.
+ *
+ * Asked of the model rather than multiplied out, because a list of mixed heights moves by what
+ * is actually between the two tops - a two-line conversation cell and a one-line row are not
+ * the same step, and a glide computed from a row count would undershoot on one and overshoot
+ * on the other.
+ */
+static int inkcell_fb_list_span(const struct inkcell_fb_list *list, uint32_t from, uint32_t to) {
+    const uint32_t lo = (from < to) ? from : to;
+    const uint32_t hi = (from < to) ? to : from;
+    int span = 0;
+    for (uint32_t i = lo; i < hi && i < list->model.count; ++i) {
+        span += (int)inkcell_list_item_height(&list->model, i) * list->line;
+    }
+    return (from < to) ? span : -span;
+}
+
+/*
+ * Past this, a window did not step - it went somewhere.
+ *
+ * Half the window, because that is where the two views stop overlapping in any useful sense:
+ * a filter emptying a list, or a jump to its end, has no pixel in common with where it came
+ * from, and sliding between them is a smear rather than a movement. It is stated as a fraction
+ * of the window rather than a row count because a press does not move a window by a row - the
+ * model keeps a few rows of context ahead of the cursor (see list_lookahead() in src/layout.c),
+ * so crossing the edge moves it by several at once, and a cap in rows would have refused the
+ * ordinary case on the ordinary panel.
+ *
+ * A window only a few rows tall can take a step wider than this and will jump instead. That is
+ * the right way round: on a window that small the two views really do share almost nothing.
+ */
+static int inkcell_fb_list_glide_cap(const struct inkcell_fb_list *list) {
+    return list->track_h / 2;
+}
+
+/* The band a gliding list draws inside: the body, from the top edge of where its first row's
+   fill starts to the bottom of the window it was opened against. */
+bool inkcell_fb_list_band_begin(const struct inkcell_fb_list *list) {
+    if (list == NULL || list->glide_state == NULL) {
+        return false;
+    }
+    const int top = list->track_y - list->glide_state->scale;
+    inkcell_fb_shift_begin(list->glide_state, 0, top, top + list->track_h);
+    return true;
+}
+
+void inkcell_fb_list_band_end(const struct inkcell_fb_list *list, bool began) {
+    if (began) {
+        inkcell_fb_shift_end(list->glide_state);
+    }
+}
+
+void inkcell_fb_list_glide(struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
+                           uint32_t id) {
+    if (state == NULL || list == NULL || id == 0U) {
+        return;
+    }
+    struct inkcell_fb_list_glide *slot = &state->list_glide;
+    const uint32_t first = list->model.first;
+
+    /*
+     * A frame already travelling keeps its one transform. The window is still remembered, so
+     * the list glides again from the next frame rather than from wherever the transition left
+     * it.
+     */
+    if (state->shift_active) {
+        slot->id = id;
+        slot->first = first;
+        slot->from = 0;
+        inkcell_anim_set(&slot->travel, 0);
+        return;
+    }
+
+    if (slot->id != id) {
+        /* Another list's window, or the first sight of this one: adopt it. Nothing glides on a
+           frame that has nowhere to have come from. */
+        slot->id = id;
+        slot->first = first;
+        slot->from = 0;
+        inkcell_anim_set(&slot->travel, 0);
+    } else if (slot->first != first) {
+        /*
+         * The window moved. What is left of any glide still running is added to the new step
+         * rather than thrown away - a reader holding the d-pad down is one continuous movement,
+         * and restarting from the new step alone would stutter once per row.
+         */
+        const int32_t left = inkcell_anim_value(&slot->travel, state->now_ms);
+        const int carried = (int)(((int64_t)slot->from * left) / INKCELL_ANIM_ONE);
+        const int step = inkcell_fb_list_span(list, slot->first, first);
+        const int total = carried + step;
+        const int cap = inkcell_fb_list_glide_cap(list);
+        slot->first = first;
+        if (total > cap || total < -cap) {
+            slot->from = 0;
+            inkcell_anim_set(&slot->travel, 0);
+        } else {
+            slot->from = total;
+            inkcell_anim_set(&slot->travel, INKCELL_ANIM_ONE);
+            inkcell_anim_to(&slot->travel, state->now_ms, 0,
+                            inkcell_fb_motion(state, INKCELL_FB_LIST_GLIDE_MOTION),
+                            INKCELL_EASE_OUT);
+        }
+    }
+
+    const int32_t at = inkcell_anim_value(&slot->travel, state->now_ms);
+    const int dy = (int)(((int64_t)slot->from * at) / INKCELL_ANIM_ONE);
+    if (dy == 0) {
+        return;
+    }
+
+    list->glide_state = state;
+    list->glide_dy = dy;
+    list->y += dy;
+
+    /*
+     * The gap, and how many items it takes to fill it.
+     *
+     * Content pushed down leaves one above the window and content pulled up leaves one below -
+     * but not *one item*: a press moves the window by as many rows as the model's lookahead
+     * gives back, so the gap is as many items as fit in the displacement. Counting them here is
+     * what keeps a glide from showing a strip of bare panel where the rows it is leaving should
+     * be.
+     *
+     * Bounded by the list's own ends, so a window at the top glides against nothing above it,
+     * which is what the top of a list looks like.
+     */
+    if (dy > 0) {
+        int covered = 0;
+        while (covered < dy && list->lead_count < first) {
+            list->lead_count += 1U;
+            covered +=
+                (int)inkcell_list_item_height(&list->model, first - list->lead_count) * list->line;
+        }
+        list->y -= covered;
+        list->lead_pending = list->lead_count;
+    } else {
+        int covered = 0;
+        uint32_t after = first + list->model.visible;
+        while (covered < -dy && after + list->tail_count < list->model.count) {
+            covered +=
+                (int)inkcell_list_item_height(&list->model, after + list->tail_count) * list->line;
+            list->tail_count += 1U;
+        }
+        list->tail_pending = list->tail_count;
+    }
+
+    /* The whole body is moving, so the whole body is this frame's to repaint - a partial redraw
+       that took the window's word for what changed would leave the rows that slid. */
+    const int top = list->track_y - state->scale;
+    inkcell_fb_animation_damage(state, 0, top, (int)state->var.xres, list->track_h);
+}
+
 void inkcell_fb_list_focus(struct inkcell_fb_list *list, uint32_t base) {
     if (list == NULL) {
         return;
@@ -513,7 +682,22 @@ void inkcell_fb_list_focus_row(const struct inkcell_backend_fb_state *state,
 }
 
 bool inkcell_fb_list_next(struct inkcell_fb_list *list, uint32_t *index) {
-    return inkcell_list_next(&list->model, index);
+    /* The items above the window come first and the ones below it come last, each in the order
+       they are drawn - the walk is also the y cursor's path down the body. */
+    if (list->lead_pending > 0U) {
+        *index = list->model.first - list->lead_pending;
+        list->lead_pending -= 1U;
+        return true;
+    }
+    if (inkcell_list_next(&list->model, index)) {
+        return true;
+    }
+    if (list->tail_pending > 0U) {
+        *index = list->model.first + list->model.visible + (list->tail_count - list->tail_pending);
+        list->tail_pending -= 1U;
+        return true;
+    }
+    return false;
 }
 
 void inkcell_fb_list_row(const struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
@@ -522,6 +706,7 @@ void inkcell_fb_list_row(const struct inkcell_backend_fb_state *state, struct in
     /* Drawn out rather than through inkcell_fb_draw_row(), which lays its fill on the panel's own
        ground: a row in a list may be standing on a card, and the ink its glyph edges blend into
        has to be the colour actually under it. */
+    const bool band = inkcell_fb_list_band_begin(list);
     const bool selected = inkcell_fb_list_is_cursor(list, index);
     const struct inkcell_rgb ground =
         inkcell_fb_draw_row_fill_on(state, list->y, inkcell_fb_list_row_height(list, index),
@@ -530,6 +715,7 @@ void inkcell_fb_list_row(const struct inkcell_backend_fb_state *state, struct in
                          selected ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL)
                                   : inkcell_fb_tone_color(state, tone),
                          ground);
+    inkcell_fb_list_band_end(list, band);
     /* By what the model says this row is, not by one row: a plain row in a list of mixed
        heights is still whatever height that list gave it, and advancing by a row would put
        every row under it in the wrong place. */
@@ -574,6 +760,7 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state
                                     struct inkcell_fb_list *list, uint32_t index, const char *text,
                                     struct inkcell_fb_leading leading) {
     inkcell_fb_list_chrome(state, list);
+    const bool band = inkcell_fb_list_band_begin(list);
     const int scale = inkcell_theme_type_scale(state->theme, INKCELL_TYPE_LABEL, state->scale);
     const uint32_t rows = inkcell_fb_list_row_height(list, index);
     const bool selected = inkcell_fb_list_is_cursor(list, index);
@@ -732,6 +919,7 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state
        smaller rather than as a break. The weight is what makes it a heading. */
     inkcell_fb_draw_text_weight(state, x, baseline, inkcell_line_text(&line), scale,
                                 inkcell_fb_type_weight(state, INKCELL_TYPE_LABEL), ink, ground);
+    inkcell_fb_list_band_end(list, band);
     list->y += (int)rows * list->line;
 }
 
@@ -762,6 +950,7 @@ void inkcell_fb_list_note(const struct inkcell_backend_fb_state *state,
                           struct inkcell_fb_list *list, uint32_t index, const char *heading,
                           const char *body) {
     inkcell_fb_list_chrome(state, list);
+    const bool band = inkcell_fb_list_band_begin(list);
     const uint32_t rows = inkcell_fb_list_row_height(list, index);
     const bool selected = inkcell_fb_list_is_cursor(list, index);
     /* One fill for the whole note, the height the *model* gave it - not the height its words
@@ -818,6 +1007,7 @@ void inkcell_fb_list_note(const struct inkcell_backend_fb_state *state,
         drawn++;
     }
 
+    inkcell_fb_list_band_end(list, band);
     list->y += (int)rows * list->line;
 }
 

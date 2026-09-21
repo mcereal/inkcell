@@ -128,6 +128,7 @@ void gallery_scene_keyboard(struct inkcell_backend_fb_state *state);
 void gallery_scene_keyboard_emoji(struct inkcell_backend_fb_state *state);
 void gallery_scene_focus(struct inkcell_backend_fb_state *state);
 void gallery_scene_focus_ring(struct inkcell_backend_fb_state *state);
+void gallery_scene_glide(struct inkcell_backend_fb_state *state);
 
 /* ---- shared scene furniture --------------------------------------------------------------------
  *

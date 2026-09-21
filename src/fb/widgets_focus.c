@@ -97,8 +97,31 @@ static void focus_ring_aim(struct inkcell_backend_fb_state *state, uint32_t id,
         inkcell_anim_set(&ring->travel, INKCELL_ANIM_ONE);
         return;
     }
-    if (ring->id == id && focus_ring_same(ring->to, target) && ring->to_radius == radius) {
-        return; /* already there, or already on the way */
+    /*
+     * The same thing, somewhere else: follow it rather than travel to it.
+     *
+     * A journey is for a cursor that *moved*, and here it did not - the box under it did. A
+     * list gliding between two windows moves its rows a few pixels per frame, and a ring that
+     * started a transition at each of them would trail its own row by an easing curve for the
+     * length of the scroll. The same answer serves a reflow: a row that grew a line, or a card
+     * that shed a verb, moves the box without the reader having pressed anything.
+     *
+     * Unless the ring is still on its way somewhere. Then the destination is simply corrected -
+     * the journey keeps its start and its clock, and only its end moves - because a ring that
+     * adopted here would break off a real move that had not finished.
+     */
+    if (ring->id == id) {
+        if (inkcell_anim_active(&ring->travel, state->now_ms)) {
+            ring->to = target;
+            ring->to_radius = radius;
+        } else {
+            ring->from = target;
+            ring->to = target;
+            ring->from_radius = radius;
+            ring->to_radius = radius;
+            inkcell_anim_set(&ring->travel, INKCELL_ANIM_ONE);
+        }
+        return;
     }
 
     int from_radius = 0;

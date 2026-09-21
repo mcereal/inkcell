@@ -64,6 +64,28 @@ struct inkcell_fb_list {
     /* What the d-pad calls the rows: item `index` is `focus_base + index`. Set by
        inkcell_fb_list_focus(), zero otherwise. */
     uint32_t focus_base;
+    /*
+     * ---- the glide ----
+     *
+     * How far the content is displaced from where the window says it belongs, and the state
+     * that is allowed to say so. Both are zero and NULL on a list that jumps, which is every
+     * list that has not called inkcell_fb_list_glide().
+     *
+     * The state is held here for the one thing a row draw cannot otherwise do: take the clip
+     * band. A row entry point is handed the state immutably - that is its statement that a row
+     * does not animate - and a gliding row does, so the handle it animates through is the
+     * list's rather than the parameter's. It is borrowed for the frame, like `heights`.
+     */
+    struct inkcell_backend_fb_state *glide_state;
+    int glide_dy;
+    /* The items above the window and below it that the glide draws, so it has something to
+       slide in from: `*_count` is the frame's fact and `*_pending` is what the walk has left. A
+       press moves a window by as many rows as the model's lookahead gives back, so this is a
+       count rather than a flag. */
+    uint32_t lead_count;
+    uint32_t tail_count;
+    uint32_t lead_pending;
+    uint32_t tail_pending;
 };
 
 /* One row per item, filling the body. */
@@ -240,6 +262,46 @@ struct inkcell_fb_list inkcell_fb_list_begin_visible(const struct inkcell_fb_lay
  * them is somewhere to put a cursor.
  */
 void inkcell_fb_list_focus(struct inkcell_fb_list *list, uint32_t base);
+
+/* How long a glide takes: the token a control acknowledging a press takes, because that is what
+   a list moving a row is. The same one the focus ring travels on, so the two agree on a frame
+   where both are moving. */
+#define INKCELL_FB_LIST_GLIDE_MOTION INKCELL_MOTION_SHORT
+
+/*
+ * Glide this list between windows instead of jumping between them.
+ *
+ * A window that moves a row moves every row in it by a row's height at once, which on a panel
+ * is the whole body flicking. What a reader is doing is travelling *through* a list, and a list
+ * that jumps makes them find their place again at every step. So the content is drawn displaced
+ * from where the window says it belongs, and the displacement eases to nothing.
+ *
+ * Called after one of the inkcell_fb_list_begin*() calls and before the walk. `id` names the
+ * list, because what has to be remembered between frames is where its window was, and a second
+ * list on the same frame must not inherit the first one's. There is one slot: a list that finds
+ * another's window in it takes it over and does not glide on that frame, which is the right
+ * answer for the frame a screen changes what its body is.
+ *
+ * Three things follow, and they are the reason this is opt-in rather than what a list does:
+ *
+ *   - **The walk yields one extra item**, above or below the window depending on which way the
+ *     content is moving. There has to be something to slide in from, and a screen builds its
+ *     rows by index, so the index is handed to it like any other. An item outside the list is
+ *     never yielded, so the ends of a list glide against nothing, which is what the ends of a
+ *     list look like.
+ *   - **The rows are clipped to the body.** The extra one is half outside it by construction,
+ *     and so is whichever row is leaving. Rows drawn past the body would paint over the app bar
+ *     the frame is not redrawing.
+ *   - **A leap is not a glide.** A window that moved further than a few rows - a filter
+ *     emptying, a jump to the end - is a new place rather than a step, and gliding there would
+ *     be a blur nobody can read. Past the cap the content is simply where it belongs.
+ *
+ * A frame already travelling does not glide: a screen arriving from the side has a transform of
+ * its own, there is one per frame, and a body sliding two ways at once is not a thing to look
+ * at. The list jumps that frame and glides from the next.
+ */
+void inkcell_fb_list_glide(struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
+                           uint32_t id);
 
 bool inkcell_fb_list_next(struct inkcell_fb_list *list, uint32_t *index);
 

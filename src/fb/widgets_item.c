@@ -746,6 +746,7 @@ static void inkcell_fb_item_piece(struct inkcell_backend_fb_state *state, int x,
 void inkcell_fb_list_item(struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
                           uint32_t index, const struct inkcell_fb_list_item *item) {
     inkcell_fb_list_chrome(state, list);
+    const bool band = inkcell_fb_list_band_begin(list);
     const int scale = state->scale;
     const bool selected = inkcell_fb_list_is_cursor(list, index);
     const uint32_t rows = inkcell_fb_list_row_height(list, index);
@@ -999,6 +1000,7 @@ void inkcell_fb_list_item(struct inkcell_backend_fb_state *state, struct inkcell
                              g.text_right - g.text_x, scale, INKCELL_COLOR_RULE);
     }
 
+    inkcell_fb_list_band_end(list, band);
     inkcell_fb_list_focus_row(state, list, index, g.fill_top, g.fill_h);
     list->y += (int)g.rows * list->line;
 }

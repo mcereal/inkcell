@@ -58,10 +58,13 @@
  *   - **First sight adopts.** A screen opening puts the ring where the cursor already is
  *     rather than flying it in from nothing, which is `inkcell_anim_track()`'s rule and is
  *     right for the same reason: a frame that animates on arrival is a frame announcing itself.
- *   - **A changed box travels**, whether that is because the cursor moved to another thing or
- *     because the thing it is on moved - a list that scrolled a row is the ordinary case, and
- *     the ring following it is what says the row under the cursor is still the row under the
- *     cursor.
+ *   - **A different thing travels; the same thing is followed.** A journey is for a cursor that
+ *     moved, and a box that moves under a ring is not that: a list gliding between two windows
+ *     shifts its rows a few pixels per frame, and a ring that started a transition at each of
+ *     them would trail its own row for the length of the scroll. So the ring goes exactly where
+ *     its box went, which is also the right answer for a reflow - a row that grew a line moves
+ *     without the reader having pressed anything. A move still in flight only has its
+ *     destination corrected, so a real journey is never broken off half way.
  *   - **A box that is gone clears it.** An id no longer in the map is a thing no longer on the
  *     panel, and a ring left where it used to be is the exact lie this whole mechanism exists
  *     to prevent. Nothing is drawn, and the next id seen is adopted rather than travelled to,

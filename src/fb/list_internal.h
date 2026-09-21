@@ -49,6 +49,18 @@ void inkcell_fb_list_chrome(const struct inkcell_backend_fb_state *state,
 void inkcell_fb_list_focus_row(const struct inkcell_backend_fb_state *state,
                                const struct inkcell_fb_list *list, uint32_t index, int y, int h);
 
+/*
+ * The clip a gliding list draws its rows inside: the body it was opened against.
+ *
+ * Taken and released around each row rather than around the walk, so a screen that stops
+ * drawing early cannot leave the rest of its frame clipped - and so no list entry point needs a
+ * closing call that every existing screen would have to learn. Returns whether a band was taken;
+ * hand that back to the end. Both are no-ops on a list that is not gliding, which is every list
+ * that did not ask to.
+ */
+bool inkcell_fb_list_band_begin(const struct inkcell_fb_list *list);
+void inkcell_fb_list_band_end(const struct inkcell_fb_list *list, bool began);
+
 /* The ink a row's text takes: its tone, or the cursor's, or the quiet pairing for the slots
    that are deliberately secondary. */
 struct inkcell_rgb inkcell_fb_item_ink(const struct inkcell_backend_fb_state *state,

@@ -114,6 +114,20 @@ struct inkcell_fb_damage_rect {
 };
 
 /*
+ * A list gliding from one window to the next: which list, where its window was, how far the
+ * content is displaced from where it belongs, and how much of that displacement is left.
+ *
+ * `from` is in pixels and signed - positive is content pushed *down*, which is what scrolling
+ * forward looks like on the frame the window moves. See inkcell_fb_list_glide().
+ */
+struct inkcell_fb_list_glide {
+    uint32_t id;
+    uint32_t first;
+    int from;
+    struct inkcell_anim travel;
+};
+
+/*
  * The focus ring's journey: the box it left, the box it is arriving at, and how far along it
  * is. Drawn by inkcell_fb_draw_focus_ring(); see include/inkcell/ui/widgets/focus.h for what
  * travels and why the ring is one thing rather than a property of each widget.
@@ -249,6 +263,18 @@ struct inkcell_backend_fb_state {
      * include/inkcell/ui/widgets/focus.h.
      */
     struct inkcell_fb_focus_ring focus_ring;
+    /*
+     * Where the body list has got to between two windows, while it is gliding from one to the
+     * other.
+     *
+     * One slot rather than a table, for `slide`'s reason and for a second: a frame has one
+     * scrolling body - `page_rows` a few lines up has assumed so since before any of this - and
+     * what is remembered is a window position, which is a fact about a list rather than about a
+     * widget with nowhere to keep one. `id` is what a second list on the same frame would
+     * collide on, so it is compared rather than assumed: a list that finds another list's
+     * window in the slot takes it over and does not glide on that frame.
+     */
+    struct inkcell_fb_list_glide list_glide;
     /*
      * The frame's content transform: what inkcell_fb_shift_begin() has moved the body by, and the
      * band it is confined to while it is moved. See inkcell_fb_shift_begin().
