@@ -41,6 +41,17 @@ enum inkcell_key {
     INKCELL_KEY_SELECT,
 };
 
+/*
+ * A key by the name printed on its cap - "a", "l1", "select", "up" - and back.
+ *
+ * For whatever drives an application by name rather than by button: a scene script, a control
+ * socket, a test. One table, so a script written for one of them reads the same in the others.
+ * Case does not matter on the way in; INKCELL_KEY_NONE for a name that is not a key, and NULL
+ * for a key that has no name.
+ */
+enum inkcell_key inkcell_key_from_name(const char *name);
+const char *inkcell_key_name(enum inkcell_key key);
+
 #ifdef __cplusplus
 }
 #endif

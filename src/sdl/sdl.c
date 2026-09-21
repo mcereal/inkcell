@@ -130,6 +130,8 @@ struct inkcell_sdl_panel {
        asks it after every present - mesh-client's controller does - would otherwise hear "at
        rest" and cancel the very frame requested during that present. */
     bool frame_requested;
+    /* Whether the surface holds a frame yet, for frame(). */
+    bool presented;
 };
 
 static struct inkcell_sdl_panel *inkcell_sdl_panel_of(void *state_ptr) {
@@ -287,6 +289,7 @@ static void inkcell_backend_sdl_present(void *state_ptr, const void *snapshot, v
     (void)inkcell_sdl_titlebar_sync(panel, false);
 #endif
     inkcell_fb_render(state, snapshot);
+    panel->presented = true;
 #if defined(__APPLE__)
     /* ...and after it, because a frame is where the application gets to change the theme. The
        bar turns with the strip under it rather than a frame later, and a strip that changed
@@ -737,6 +740,19 @@ static const struct inkcell_focus_map *inkcell_backend_sdl_focus_map(void *state
     return panel != NULL ? panel->state.focus : NULL;
 }
 
+/* The surface is ordinary RAM holding the whole of the last frame - the texture is filled from
+   it - so it is the answer as it stands. */
+static bool inkcell_backend_sdl_frame(void *state_ptr, void *userdata,
+                                      struct inkcell_surface *out) {
+    (void)userdata;
+    struct inkcell_sdl_panel *const panel = inkcell_sdl_panel_of(state_ptr);
+    if (panel == NULL || out == NULL || !panel->presented) {
+        return false;
+    }
+    *out = panel->state.surface;
+    return true;
+}
+
 static const struct inkcell_backend k_sdl_backend = {
     .name = "sdl",
     .init = inkcell_backend_sdl_init,
@@ -745,6 +761,7 @@ static const struct inkcell_backend k_sdl_backend = {
     .animating = inkcell_backend_sdl_animating,
     .page_rows = inkcell_backend_sdl_page_rows,
     .focus_map = inkcell_backend_sdl_focus_map,
+    .frame = inkcell_backend_sdl_frame,
 };
 
 const struct inkcell_backend *inkcell_backend_sdl(void) {

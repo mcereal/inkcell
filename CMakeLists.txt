@@ -89,11 +89,13 @@ add_library(inkcell STATIC
     src/focus.c
     # evdev to a key, and the button profile of the device under it
     src/input/input.c
+    src/input/key.c
     src/input/input_profile.c
     # the framebuffer backend: the panel, the primitives, and the components above them
     src/fb/fb.c
     src/fb/fb_draw.c
     src/fb/fb_capture.c
+    src/fb/headless.c
     # what changed since the last frame. Not fb.c's, because a texture upload asks the same
     # question and must not have to link the file that includes <linux/fb.h> to ask it.
     src/fb/fb_damage.c
