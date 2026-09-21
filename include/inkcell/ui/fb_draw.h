@@ -493,6 +493,17 @@ struct inkcell_draw_state {
      */
     struct inkcell_fb_overlay_slot overlays[INKCELL_OVERLAY_SLOTS];
     uint32_t overlay_order;
+    /*
+     * How far in from the left the navigation bar's first tab must start, in panel pixels,
+     * because something the *host* draws sits over the frame's top-left corner.
+     *
+     * 0 on a panel, and in a capture, which is every frame that has been measured. It is the
+     * window backend's, on a Mac, where the frame runs up under a transparent title bar and the
+     * window's close, minimise and zoom buttons land on the tab strip - see src/sdl/sdl_cocoa.h.
+     * Only the tab strip reads it: it is the one piece of chrome at the top edge, and the rest
+     * of the frame is below it.
+     */
+    int top_leading_inset;
 };
 
 /*

@@ -75,6 +75,11 @@ struct inkcell_fb_layout inkcell_fb_layout_begin(const struct inkcell_draw_state
 
 /* ---- the navigation bar --------------------------------------------------------------------- */
 
+int inkcell_fb_nav_bar_height(const struct inkcell_draw_state *state, int small) {
+    return inkcell_fb_gutter(state) + inkcell_scale_px(1, small) +
+           inkcell_fb_line_adv(state, small);
+}
+
 void inkcell_fb_draw_nav_bar(const struct inkcell_draw_state *state,
                              struct inkcell_fb_layout *layout, const struct inkcell_fb_chip *tabs,
                              size_t count, size_t active) {
@@ -83,16 +88,21 @@ void inkcell_fb_draw_nav_bar(const struct inkcell_draw_state *state,
        two were the same number while a scale was a whole multiplier, and adding the scale itself
        to a pixel gutter was the same arithmetic by accident. */
     const int y = inkcell_fb_gutter(state) + inkcell_scale_px(1, small);
-    const int bar_h = y + inkcell_fb_line_adv(state, small);
+    const int bar_h = inkcell_fb_nav_bar_height(state, small);
     const int width = inkcell_fb_panel_width(state);
+    /* Whatever of the host's inset the gutter does not already cover, taken off the strip's
+       room as well as its start - so the strip fits its labels to what is actually left, and a
+       frame with no inset is the frame it always was. */
+    const int gutter = inkcell_fb_gutter(state);
+    const int shift = state->top_leading_inset > gutter ? state->top_leading_inset - gutter : 0;
 
     inkcell_fb_fill_rect(state, 0, 0, width, bar_h,
                          inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
     /* The bar under them, not the body ground: an unselected tab draws no fill of its own, and
        its icon has to blend into what the bar filled behind it. */
-    (void)inkcell_fb_draw_chip_strip(state, inkcell_fb_gutter(state), y, tabs, count, active,
-                                     width - inkcell_fb_margin(state), INKCELL_COLOR_SURFACE_LOW,
-                                     small);
+    (void)inkcell_fb_draw_chip_strip(state, gutter + shift, y, tabs, count, active,
+                                     width - inkcell_fb_margin(state) - shift,
+                                     INKCELL_COLOR_SURFACE_LOW, small);
     inkcell_fb_draw_rule(state, 0, bar_h, width, small, INKCELL_COLOR_RULE_STRONG);
 
     layout->nav_y = bar_h + inkcell_fb_rule_height(state, small);

@@ -162,6 +162,13 @@ endif()
 if(INKCELL_WITH_SDL AND SDL2_FOUND)
     target_compile_definitions(inkcell PUBLIC INKCELL_HAVE_SDL)
     target_link_libraries(inkcell PUBLIC SDL2::SDL2)
+    # On a Mac the window's title bar is painted to match the tab strip under it, which is
+    # AppKit's to do and so the one Objective-C file here. See src/sdl/sdl_cocoa.h.
+    if(APPLE)
+        enable_language(OBJC)
+        target_sources(inkcell PRIVATE src/sdl/sdl_cocoa.m)
+        target_link_libraries(inkcell PUBLIC "-framework Cocoa")
+    endif()
     message(STATUS "inkcell: SDL window backend enabled")
 else()
     message(STATUS

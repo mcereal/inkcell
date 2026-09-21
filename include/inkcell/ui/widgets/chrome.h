@@ -82,6 +82,14 @@ void inkcell_fb_draw_nav_bar(const struct inkcell_draw_state *state,
                              struct inkcell_fb_layout *layout, const struct inkcell_fb_chip *tabs,
                              size_t count, size_t active);
 
+/*
+ * How tall that bar is, down to its closing rule, at chrome scale `small` - the height
+ * inkcell_fb_draw_nav_bar() fills. For a backend that has to know where the strip is without
+ * drawing it: the window that puts its title-bar buttons on the strip, and makes it the handle
+ * the window is dragged by.
+ */
+int inkcell_fb_nav_bar_height(const struct inkcell_draw_state *state, int small);
+
 /* ---- the screen progress bar -----------------------------------------------------------------
  *
  * A hairline across the panel, under the navigation bar's rule: the client is waiting on
