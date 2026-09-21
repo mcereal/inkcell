@@ -15,6 +15,8 @@
 
 #include "gallery.h"
 
+#include "inkcell/ui/overlay.h"
+
 #include "inkcell/utils/qr.h"
 
 #include <string.h>
@@ -84,7 +86,12 @@ void gallery_scene_overlays(struct inkcell_backend_fb_state *state) {
 
     /* And the modal, last, because it is over everything. Destructive, so the accepting verb
        takes the error family rather than the accent - a key that deletes something should not
-       look like the key that saves it. */
+       look like the key that saves it.
+
+       It is a layer now rather than a panel filling the body, so what this picture is really
+       of is the *scrim*: the rows above are still there, dimmed, and the keycap row at the
+       bottom is not - because the question is this screen's and the keycaps are how it gets
+       answered. See include/inkcell/ui/overlay.h. */
     const struct inkcell_fb_dialog dialog = {
         .icon = INKCELL_ICON_DELETE,
         .headline = gallery_text(GALLERY_STR_DIALOG_HEADLINE),
@@ -94,7 +101,7 @@ void gallery_scene_overlays(struct inkcell_backend_fb_state *state) {
         .cursor = 1U,
         .destructive = true,
     };
-    inkcell_fb_draw_dialog(state, &layout, &dialog);
+    (void)inkcell_fb_draw_dialog(state, &layout, &dialog, GALLERY_OVERLAY_DIALOG, true);
 
     gallery_footer(state, &layout);
 }

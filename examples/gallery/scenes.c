@@ -31,6 +31,10 @@ static const struct gallery_scene k_scenes[] = {
        duration between: long enough for it to have arrived, and taken from the theme rather
        than guessed at, so a theme with slower motion still gets a settled picture. */
     {"overlays", gallery_scene_overlays, 400U},
+    /* Three layers at once, settled. Same reason the overlays page steps the clock: a sheet
+       and a menu both arrive from somewhere, so the frame that introduces them is a picture of
+       them on their way rather than of what they look like. */
+    {"layers", gallery_scene_layers, 400U},
     {"typography", gallery_scene_typography, 0U},
     {"palette", gallery_scene_palette, 0U},
     {"shapes", gallery_scene_shapes, 0U},

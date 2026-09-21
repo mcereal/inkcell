@@ -66,6 +66,9 @@ void inkcell_fb_state_set_theme(struct inkcell_backend_fb_state *state,
     /* Every position remembered in there is in pixels, measured against metrics this call has
        just replaced. Keeping them would slide a knob from where it sat under the old scale. */
     inkcell_anim_table_reset(&state->anim);
+    /* And the layers, for the same reason: the boxes they are travelling between describe a
+       geometry this state no longer has. See inkcell_fb_overlay_reset(). */
+    inkcell_fb_overlay_reset(state);
     /* And the frame's own transition, for the same reason and one more: a theme switch is not a
        move between screens, so a screen that slid in because the palette changed would be
        animating an event that did not happen. */
@@ -89,6 +92,16 @@ bool inkcell_fb_state_animating(const struct inkcell_backend_fb_state *state) {
        while either has somewhere to be. An app still filling owes one for a reason that is not an
        animation at all: the next piece is read on the next frame, so without this the fill would
        stop wherever the last press left it. */
+    for (uint32_t i = 0U; i < INKCELL_OVERLAY_SLOTS; ++i) {
+        /* A layer arriving or leaving is owed the next frame, and a layer that has *finished*
+           leaving is owed one more than that: its slot is released by the draw, so without a
+           frame in which that draw happens the panel keeps the last position it was in. */
+        if (state->overlays[i].id != INKCELL_OVERLAY_NONE &&
+            (inkcell_anim_active(&state->overlays[i].travel, state->now_ms) ||
+             !state->overlays[i].up)) {
+            return true;
+        }
+    }
     return inkcell_anim_active(&state->slide, state->now_ms) ||
            inkcell_anim_active(&state->focus_ring.travel, state->now_ms) ||
            inkcell_anim_active(&state->list_glide.travel, state->now_ms) ||
@@ -468,6 +481,13 @@ void inkcell_fb_app_frame_begin(struct inkcell_backend_fb_state *state) {
         inkcell_fb_animation_damage(state, painted.x, painted.y, painted.right - painted.x,
                                     painted.bottom - painted.y);
     }
+    /*
+     * And the layer order, which is a fact about one frame's draw sequence rather than
+     * something carried between frames. The layers themselves are not cleared - a layer
+     * outlives the app's interest in it, which is the whole of include/inkcell/ui/overlay.h -
+     * but which of them was drawn last is answered afresh every frame.
+     */
+    state->overlay_order = 0U;
     if (state->app.frame_begin != NULL) {
         state->app.frame_begin(state->app.ctx);
     }
@@ -559,6 +579,10 @@ int inkcell_fb_edge(const struct inkcell_backend_fb_state *state) {
 
 int inkcell_fb_margin(const struct inkcell_backend_fb_state *state) {
     return (int)inkcell_fb_metrics(state)->margin;
+}
+
+int inkcell_fb_scrim_depth(const struct inkcell_backend_fb_state *state) {
+    return (int)inkcell_fb_metrics(state)->scrim_pct;
 }
 
 int inkcell_fb_rail_gutter(const struct inkcell_backend_fb_state *state) {

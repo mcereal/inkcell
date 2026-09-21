@@ -19,25 +19,14 @@
 /* ---- the snackbar ------------------------------------------------------------------------ */
 
 /*
- * The snackbar's key in the animation table.
+ * The snackbar's layer id.
  *
- * Every other id in there is a control's identity handed in by a screen - a settings field, a
- * row index - and those are small enumerator values. There is exactly one snackbar and no
- * screen owns it, so it takes a constant from the far end of the range, where nothing a screen
- * can pass will ever land.
+ * Every other id in the overlay stack is a screen's own enumerator. There is exactly one
+ * snackbar and no screen owns it, so it takes a constant from the far end of the range, where
+ * nothing a screen can pass will ever land - which is where it took its animation-table key
+ * from, for the same reason.
  */
-#define INKCELL_FB_ANIM_ID_SNACKBAR 0xFFFFFF01U
-
-/*
- * How long it takes to arrive, and how long to leave.
- *
- * Not the same token, and the asymmetry is the point: arriving is the part that has to be
- * seen, leaving is the part that has to be out of the way. It is the shape of every platform's
- * transient-notice motion. The theme says how long each is (enum inkcell_motion); what belongs
- * here is only which of the two kinds of movement this is.
- */
-#define INKCELL_FB_SNACKBAR_IN_MOTION INKCELL_MOTION_MEDIUM
-#define INKCELL_FB_SNACKBAR_OUT_MOTION INKCELL_MOTION_SHORT
+#define INKCELL_FB_OVERLAY_ID_SNACKBAR 0xFFFFFF01U
 
 /* Material allows one line or two, and two is where a notice stops being one on a 3.2" panel.
    Anything longer is clipped rather than allowed to grow into the body. */
@@ -58,32 +47,16 @@ void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state,
         /*
          * A different notice, so it *arrives* rather than swapping its words.
          *
-         * The table is put back to nothing with a zero duration first, then aimed at the
-         * resting place below - which is the only way to get an entrance out of it, since
-         * re-aiming at a target it already holds is deliberately a no-op and a slot seen for
-         * the first time adopts its target rather than animating to it. Both of those are what
-         * stops a switch sliding on the frame a screen opens; here they have to be stepped
-         * around, because a notice appearing is exactly the thing worth showing.
+         * The layer is taken down with no exit first, so the next frame sees it come up from
+         * nothing - which is what makes a second "Not connected" arrive rather than sit there
+         * looking like the first one never left. A notice replacing another is the one case
+         * where a layer should be interrupted rather than re-aimed.
          */
         (void)inkcell_str_copy(state->snackbar, sizeof state->snackbar, text);
         state->snackbar_until_ms = bar->until_ms;
-        (void)inkcell_anim_track(&state->anim, INKCELL_FB_ANIM_ID_SNACKBAR, state->now_ms, 0, 0U,
-                                 INKCELL_EASE_OUT);
+        inkcell_fb_overlay_drop(state, INKCELL_FB_OVERLAY_ID_SNACKBAR);
     }
     if (state->snackbar[0] == '\0') {
-        return;
-    }
-
-    const int32_t position = inkcell_anim_track(
-        &state->anim, INKCELL_FB_ANIM_ID_SNACKBAR, state->now_ms, showing ? INKCELL_ANIM_ONE : 0,
-        inkcell_fb_motion(state,
-                          showing ? INKCELL_FB_SNACKBAR_IN_MOTION : INKCELL_FB_SNACKBAR_OUT_MOTION),
-        INKCELL_EASE_OUT);
-    if (!showing && position == 0) {
-        /* All the way out. The store forgot the words several frames ago; now so does this,
-           and the next notice starts from an empty slot rather than from this one's. */
-        state->snackbar[0] = '\0';
-        state->snackbar_until_ms = 0U;
         return;
     }
 
@@ -122,25 +95,49 @@ void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state,
         words = (size_t)adv;
     }
 
-    const int box_w = (int)words + 2 * pad_x;
-    /* Centred on the panel rather than against the leading margin. A bar sized to its own words
-       and pinned to the left edge reads as the start of a row that ran out of things to say -
-       which is what the footer line it replaced was. Centred, it reads as one object placed
-       over the screen, and it stays put as the wording changes length instead of growing
-       rightwards out of a fixed corner. */
-    const int box_x = ((int)state->var.xres - box_w) / 2;
-    const int box_h = (int)lines * line + 2 * pad_y;
-    /* Where it comes to rest: over the bottom of the body, a full margin clear of the footer.
-       A card stops half a margin short of the footer because a card is *in* the body and the
-       body's own bottom edge is where it belongs; this one is over everything, so it keeps the
-       distance the panel edge keeps rather than the one the body does. */
-    const int rest_y = layout->footer_y - margin - box_h;
-    /* And where it comes from: entirely below the panel. A container that slid in from just
-       off its resting place reads as a nudge; one that comes up from off-screen reads as
-       something arriving, which is the whole of what this shape is for. */
-    const int off_y = (int)state->var.yres;
-    inkcell_fb_animation_damage(state, box_x, rest_y, box_w, off_y - rest_y + box_h);
-    const int y = off_y + (int)(((int64_t)(rest_y - off_y) * position) / INKCELL_ANIM_ONE);
+    /*
+     * The band it comes up into: the body, ending a full margin clear of the footer.
+     *
+     * A layer rests against the edge of its region, so a region that stops short is how a
+     * floating notice says it floats - which is what this is. A card stops half a margin short
+     * of the footer because a card is *in* the body and the body's own bottom edge is where it
+     * belongs; this one is over everything, so it keeps the distance the panel edge keeps
+     * rather than the one the body does.
+     */
+    const struct inkcell_fb_rect bounds = {
+        .x = 0,
+        .y = layout->nav_y,
+        .w = (int)state->var.xres,
+        .h = layout->footer_y - margin - layout->nav_y,
+    };
+
+    struct inkcell_overlay_frame frame;
+    if (!inkcell_fb_overlay_begin(state,
+                                  &(struct inkcell_overlay){
+                                      .id = INKCELL_FB_OVERLAY_ID_SNACKBAR,
+                                      .up = showing,
+                                      .placement = INKCELL_OVERLAY_BOTTOM,
+                                      /* From off the panel, not from just under its resting
+                                         place: a container that slid in a few pixels reads as
+                                         a nudge, and one that comes up from off-screen reads
+                                         as something arriving. That is the whole of what this
+                                         shape is for. */
+                                      .travel = INKCELL_OVERLAY_TRAVEL_OFF_PANEL,
+                                      .w = (int)words + 2 * pad_x,
+                                      .h = (int)lines * line + 2 * pad_y,
+                                      .bounds = bounds,
+                                      /* No scrim and not modal. A notice is not a question -
+                                         nothing about it is waiting for a press, and dimming
+                                         the screen to say "Sent" would be the loudest thing
+                                         on the panel saying the quietest thing. */
+                                  },
+                                  &frame)) {
+        /* All the way out. The store forgot the words several frames ago; now so does this,
+           and the next notice starts from nothing rather than from this one's position. */
+        state->snackbar[0] = '\0';
+        state->snackbar_until_ms = 0U;
+        return;
+    }
 
     /*
      * The inverted surface, and no edge on it.
@@ -150,19 +147,20 @@ void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state,
      * the ground the theme has - so the fill is the whole cue, and an outline over it would be
      * drawing a border around the most obvious thing on the panel.
      */
-    inkcell_fb_fill_round_rect(state, box_x, y, box_w, box_h,
+    inkcell_fb_fill_round_rect(state, frame.box.x, frame.box.y, frame.box.w, frame.box.h,
                                inkcell_fb_radius(state, INKCELL_SHAPE_SM),
                                inkcell_fb_color(state, INKCELL_COLOR_SURFACE_INVERSE));
 
     const struct inkcell_rgb ink = inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_INVERSE);
     struct inkcell_wrap wrap;
     inkcell_wrap_begin_measured(&wrap, state->snackbar, budget, &metric);
-    int text_y = y + pad_y;
+    int text_y = frame.box.y + pad_y;
     for (uint32_t drawn = 0U; drawn < lines && inkcell_wrap_next(&wrap); ++drawn) {
-        inkcell_fb_draw_text(state, box_x + pad_x, text_y, wrap.line, scale, ink,
+        inkcell_fb_draw_text(state, frame.box.x + pad_x, text_y, wrap.line, scale, ink,
                              inkcell_fb_color(state, INKCELL_COLOR_SURFACE_INVERSE));
         text_y += line;
     }
+    inkcell_fb_overlay_end(state, &frame);
 }
 
 /* ---- the dialog ---------------------------------------------------------------------------- */
@@ -171,6 +169,31 @@ void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state,
    read - it is the only thing on the panel that says what *kind* of question this is before a
    word of it has been - and clamped by inkcell_fb_draw_icon() to what the sprite can carry. */
 #define INKCELL_FB_DIALOG_ICON_SCALE 3
+
+/*
+ * `src` shortened until what it draws fits `max_w` pixels.
+ *
+ * Measured, never counted. A width divided by inkcell_fb_char_adv() is a *nominal* column
+ * count, and on the proportional face the advance is an average rather than a width - so a
+ * label of narrow letters is cut several cells early and one of wide letters still overhangs.
+ * The menu found this the moment it was drawn: "Mute notifications" came out as "Mute
+ * notificatio" inside a panel measured to hold the whole of it.
+ *
+ * Cut on cell boundaries, so a label with an emoji or an accented character in it loses a
+ * whole glyph rather than half of a UTF-8 sequence. A label that cannot be made to fit at all
+ * keeps its first cell: something is drawn, and the row still marks where the press lands.
+ */
+static void inkcell_fb_fit_text(const struct inkcell_backend_fb_state *state, const char *src,
+                                int scale, int max_w, char *out, size_t out_len) {
+    inkcell_str_copy(out, out_len, src != NULL ? src : "");
+    while (inkcell_fb_text_width(state, out, scale) > max_w) {
+        const size_t cells = inkcell_text_cells(out);
+        if (cells <= 1U) {
+            return;
+        }
+        inkcell_text_cell_truncate(out, cells - 1U);
+    }
+}
 
 /*
  * `src` shortened until the button holding it fits `max_w`.
@@ -196,44 +219,58 @@ static void inkcell_fb_fit_button_label(const struct inkcell_backend_fb_state *s
     }
 }
 
-void inkcell_fb_draw_dialog(const struct inkcell_backend_fb_state *state,
-                            const struct inkcell_fb_layout *layout,
-                            const struct inkcell_fb_dialog *dialog) {
-    if (dialog == NULL) {
-        return;
-    }
-    const int scale = state->scale;
-    const int margin = inkcell_fb_margin(state);
-    const int line = layout->line;
-    const int edge = inkcell_fb_edge(state);
-    const int pad = margin;
-    const int adv = inkcell_fb_char_adv(state, scale);
+/*
+ * The dialog, measured.
+ *
+ * Split out of the draw because a layer is *handed* a size rather than deciding one, and a
+ * dialog's height depends on how far its paragraph wraps. Two calls rather than one, which is
+ * the shape every measure-then-draw component here takes - the card, the list note, the
+ * settings slider - and for the same reason: whoever places the thing has to know how big it
+ * is before the first pixel goes down.
+ */
+struct inkcell_fb_dialog_metrics {
+    int scale, line, pad, edge, adv, gap;
+    int text_w;
+    size_t text_budget, text_cols;
+    bool has_icon, has_headline, stacked;
+    int icon_scale, icon_h, head_h, button_h, actions_h;
+    int accept_w, cancel_w;
+    char accept_label[INKCELL_LINE_MAX];
+    char cancel_label[INKCELL_LINE_MAX];
+    uint32_t text_lines;
+    int height;
+};
 
-    /* One decision for the whole panel: the icon, the headline and the accept button's fill all
-       come off this, so a destructive dialog cannot end up half red. */
-    const enum inkcell_family accept_family =
-        dialog->destructive ? INKCELL_FAMILY_ERROR : INKCELL_FAMILY_PRIMARY;
-    const enum inkcell_tone accent_tone = inkcell_family_tone(accept_family);
+static struct inkcell_fb_dialog_metrics
+inkcell_fb_dialog_measure(const struct inkcell_backend_fb_state *state,
+                          const struct inkcell_fb_dialog *dialog, int width, int room) {
+    struct inkcell_fb_dialog_metrics m;
+    memset(&m, 0, sizeof m);
+    m.scale = state->scale;
+    m.line = inkcell_fb_line_adv(state, m.scale);
+    /* The panel's inset is the body margin, which is what the card uses: a surface over the
+       body is padded by the same amount the body is padded from the panel edge. */
+    m.pad = inkcell_fb_margin(state);
+    m.edge = inkcell_fb_edge(state);
+    m.adv = inkcell_fb_char_adv(state, m.scale);
+    m.gap = m.scale * 2;
 
-    const int panel_x = inkcell_fb_gutter(state);
-    const int panel_w = (int)state->var.xres - margin;
     /* The panel's own text column, which is narrower than the body's - a dialog is inset from
        the screen and its words are inset again from its edge. */
-    const int text_w = panel_w - 2 * pad;
-    /* In pixels, for the same reason the snackbar's budget is: the panel has to hold the line
-       as drawn. `text_cols` is what the clip below still counts in. */
-    const size_t text_budget = text_w > 0 ? (size_t)text_w : 1U;
-    const size_t text_cols = text_w > adv ? (size_t)(text_w / adv) : 1U;
+    m.text_w = width - 2 * m.pad;
+    /* In pixels, for the reason the snackbar's budget is: the panel has to hold the line as
+       drawn. `text_cols` is what the headline's clip still counts in. */
+    m.text_budget = m.text_w > 0 ? (size_t)m.text_w : 1U;
+    m.text_cols = m.text_w > m.adv ? (size_t)(m.text_w / m.adv) : 1U;
 
-    const int icon_scale = scale * INKCELL_FB_DIALOG_ICON_SCALE;
-    const bool has_icon = inkcell_icon_is_valid(dialog->icon);
-    const int icon_h = has_icon ? inkcell_fb_line_adv(state, icon_scale) : 0;
-    const bool has_headline = dialog->headline != NULL && dialog->headline[0] != '\0';
+    m.icon_scale = m.scale * INKCELL_FB_DIALOG_ICON_SCALE;
+    m.has_icon = inkcell_icon_is_valid(dialog->icon);
+    m.icon_h = m.has_icon ? inkcell_fb_line_adv(state, m.icon_scale) : 0;
+    m.has_headline = dialog->headline != NULL && dialog->headline[0] != '\0';
     /* A little more than a line: the headline and the paragraph under it are the same glyph
        size, so the gap is the only thing distinguishing a question from its explanation. */
-    const int head_h = has_headline ? line + scale : 0;
-    const int button_h = line + inkcell_fb_space(state, INKCELL_SPACE_MD);
-    const int room = layout->footer_y - layout->body_y - line;
+    m.head_h = m.has_headline ? m.line + m.scale : 0;
+    m.button_h = m.line + inkcell_fb_space(state, INKCELL_SPACE_MD);
 
     /*
      * The action row, measured before the panel is: how tall the panel has to be depends on
@@ -246,78 +283,96 @@ void inkcell_fb_draw_dialog(const struct inkcell_backend_fb_state *state,
      * does with dialog actions too long to sit in a line, and each label is fitted to the panel
      * so a single button can never overhang it either.
      */
-    const int gap = scale * 2;
-    char accept_label[INKCELL_LINE_MAX];
-    char cancel_label[INKCELL_LINE_MAX];
-    inkcell_fb_fit_button_label(state, INKCELL_ICON_CHECK, dialog->accept, scale, text_w,
-                                accept_label, sizeof accept_label);
-    inkcell_fb_fit_button_label(state, INKCELL_ICON_CLOSE, dialog->cancel, scale, text_w,
-                                cancel_label, sizeof cancel_label);
-    const int cancel_w = inkcell_fb_button_width(state, INKCELL_ICON_CLOSE, cancel_label, scale);
-    const int accept_w = inkcell_fb_button_width(state, INKCELL_ICON_CHECK, accept_label, scale);
+    inkcell_fb_fit_button_label(state, INKCELL_ICON_CHECK, dialog->accept, m.scale, m.text_w,
+                                m.accept_label, sizeof m.accept_label);
+    inkcell_fb_fit_button_label(state, INKCELL_ICON_CLOSE, dialog->cancel, m.scale, m.text_w,
+                                m.cancel_label, sizeof m.cancel_label);
+    m.cancel_w = inkcell_fb_button_width(state, INKCELL_ICON_CLOSE, m.cancel_label, m.scale);
+    m.accept_w = inkcell_fb_button_width(state, INKCELL_ICON_CHECK, m.accept_label, m.scale);
     /* Stacked puts the answer that acts on top, the way a stacked dialog orders them - the
        dismissive one stays nearest the thumb. */
-    const bool stacked = (accept_w + gap + cancel_w) > text_w;
-    const int actions_h = stacked ? (2 * button_h + gap) : button_h;
+    m.stacked = (m.accept_w + m.gap + m.cancel_w) > m.text_w;
+    m.actions_h = m.stacked ? (2 * m.button_h + m.gap) : m.button_h;
 
     /*
-     * Measure before drawing, as a card does and for the same reason: the fill has to go down
-     * before the text, and how tall it is depends on how far the paragraph wraps.
-     *
-     * The paragraph is also the only part that gives way. Everything else on the panel is
-     * either the question or the answers, and a dialog that dropped one of its buttons to fit
-     * its explanation would be unanswerable - so the buttons, the headline and the icon are
+     * The paragraph is the only part that gives way. Everything else on the panel is either
+     * the question or the answers, and a dialog that dropped one of its buttons to fit its
+     * explanation would be unanswerable - so the buttons, the headline and the icon are
      * reserved first and the supporting text takes what is left.
      */
-    const int fixed = pad + icon_h + head_h + line / 2 + actions_h + pad;
+    const int fixed = m.pad + m.icon_h + m.head_h + m.line / 2 + m.actions_h + m.pad;
     const int text_room = room - fixed;
-    const uint32_t fits = text_room > 0 ? (uint32_t)(text_room / line) : 0U;
-    uint32_t text_lines = (dialog->text != NULL && dialog->text[0] != '\0')
-                              ? inkcell_fb_wrapped_lines(state, dialog->text, text_budget, scale)
-                              : 0U;
-    if (text_lines > fits) {
-        text_lines = fits;
+    const uint32_t fits = text_room > 0 ? (uint32_t)(text_room / m.line) : 0U;
+    m.text_lines = (dialog->text != NULL && dialog->text[0] != '\0')
+                       ? inkcell_fb_wrapped_lines(state, dialog->text, m.text_budget, m.scale)
+                       : 0U;
+    if (m.text_lines > fits) {
+        m.text_lines = fits;
     }
+    m.height = fixed + (int)m.text_lines * m.line;
+    if (m.height > room) {
+        m.height = room;
+    }
+    return m;
+}
 
-    int panel_h = fixed + (int)text_lines * line;
-    if (panel_h > room) {
-        panel_h = room;
+int inkcell_fb_dialog_height(const struct inkcell_backend_fb_state *state,
+                             const struct inkcell_fb_dialog *dialog, int width, int room) {
+    if (state == NULL || dialog == NULL) {
+        return 0;
     }
-    /* Centred in what is left of the body, which is what makes it read as something placed over
-       the screen rather than as the screen's own first rows. */
-    const int panel_y = layout->body_y + (room > panel_h ? (room - panel_h) / 2 : 0);
+    return inkcell_fb_dialog_measure(state, dialog, width, room).height;
+}
+
+void inkcell_fb_draw_dialog_at(const struct inkcell_backend_fb_state *state,
+                               struct inkcell_fb_rect box, const struct inkcell_fb_dialog *dialog) {
+    if (state == NULL || dialog == NULL || box.w <= 0 || box.h <= 0) {
+        return;
+    }
+    /* Measured against the box it was handed rather than against the body: the layer has
+       already decided how big this is, and a second opinion about it here would be a panel
+       whose contents disagree with its own edges while it is arriving. */
+    const struct inkcell_fb_dialog_metrics m =
+        inkcell_fb_dialog_measure(state, dialog, box.w, box.h);
+
+    /* One decision for the whole panel: the icon, the headline and the accept button's fill all
+       come off this, so a destructive dialog cannot end up half red. */
+    const enum inkcell_family accept_family =
+        dialog->destructive ? INKCELL_FAMILY_ERROR : INKCELL_FAMILY_PRIMARY;
+    const enum inkcell_tone accent_tone = inkcell_family_tone(accept_family);
 
     const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_LG);
-    inkcell_fb_fill_round_rect(state, panel_x, panel_y, panel_w, panel_h, radius + edge,
+    inkcell_fb_fill_round_rect(state, box.x, box.y, box.w, box.h, radius + m.edge,
                                inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
-    inkcell_fb_fill_round_rect(state, panel_x + edge, panel_y + edge, panel_w - 2 * edge,
-                               panel_h - 2 * edge, radius,
+    inkcell_fb_fill_round_rect(state, box.x + m.edge, box.y + m.edge, box.w - 2 * m.edge,
+                               box.h - 2 * m.edge, radius,
                                inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
 
-    const int content_x = panel_x + pad;
-    int y = panel_y + pad;
+    const int content_x = box.x + m.pad;
+    int y = box.y + m.pad;
 
-    if (has_icon) {
-        inkcell_fb_draw_icon(state, content_x, y, dialog->icon, icon_scale,
+    if (m.has_icon) {
+        inkcell_fb_draw_icon(state, content_x, y, dialog->icon, m.icon_scale,
                              inkcell_fb_tone_color(state, accent_tone),
                              inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
-        y += icon_h;
+        y += m.icon_h;
     }
 
-    if (has_headline) {
+    if (m.has_headline) {
         struct inkcell_line headline;
         inkcell_line_reset(&headline);
         inkcell_line_printf(&headline, "%s", dialog->headline);
-        inkcell_line_fit(&headline, text_cols);
-        inkcell_fb_draw_text_weight(state, content_x, y, inkcell_line_text(&headline), scale,
+        inkcell_line_fit(&headline, m.text_cols);
+        inkcell_fb_draw_text_weight(state, content_x, y, inkcell_line_text(&headline), m.scale,
                                     inkcell_fb_type_weight(state, INKCELL_TYPE_TITLE),
                                     inkcell_fb_tone_color(state, accent_tone),
                                     inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
-        y += head_h;
+        y += m.head_h;
     }
 
-    if (text_lines > 0U) {
-        inkcell_fb_draw_wrapped_at(state, content_x, y, dialog->text, text_budget, (int)text_lines,
+    if (m.text_lines > 0U) {
+        inkcell_fb_draw_wrapped_at(state, content_x, y, dialog->text, m.text_budget,
+                                   (int)m.text_lines,
                                    inkcell_fb_tone_color(state, INKCELL_TONE_NORMAL),
                                    inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
     }
@@ -327,22 +382,23 @@ void inkcell_fb_draw_dialog(const struct inkcell_backend_fb_state *state,
      * right, so the press that costs something is never the one nearest a thumb resting where
      * it was. Stacked, the same reasoning puts the acting answer on top.
      */
-    const int right = panel_x + panel_w - pad;
-    const int accept_y = panel_y + panel_h - pad - (stacked ? (2 * button_h + gap) : button_h);
-    const int cancel_y = stacked ? (accept_y + button_h + gap) : accept_y;
-    const int accept_x = right - accept_w;
-    const int cancel_x = stacked ? (right - cancel_w) : (accept_x - gap - cancel_w);
+    const int right = box.x + box.w - m.pad;
+    const int accept_y =
+        box.y + box.h - m.pad - (m.stacked ? (2 * m.button_h + m.gap) : m.button_h);
+    const int cancel_y = m.stacked ? (accept_y + m.button_h + m.gap) : accept_y;
+    const int accept_x = right - m.accept_w;
+    const int cancel_x = m.stacked ? (right - m.cancel_w) : (accept_x - m.gap - m.cancel_w);
 
     const struct inkcell_fb_button cancel = {
-        .rect = {cancel_x, cancel_y, cancel_w, button_h},
+        .rect = {cancel_x, cancel_y, m.cancel_w, m.button_h},
         .icon = INKCELL_ICON_CLOSE,
-        .label = cancel_label,
+        .label = m.cancel_label,
         .selected = dialog->cursor != 0U,
         .variant = INKCELL_FB_BUTTON_TEXT,
         .shape = INKCELL_SHAPE_FULL,
         .idle_tone = INKCELL_TONE_NORMAL,
         .ground = INKCELL_COLOR_SURFACE_HIGH,
-        .scale = scale,
+        .scale = m.scale,
         .focus_id = dialog->action_focus_id != INKCELL_FOCUS_NONE ? dialog->action_focus_id + 1U
                                                                   : INKCELL_FOCUS_NONE,
     };
@@ -365,9 +421,9 @@ void inkcell_fb_draw_dialog(const struct inkcell_backend_fb_state *state,
      */
     const bool accept_selected = dialog->cursor == 0U;
     const struct inkcell_fb_button accept = {
-        .rect = {accept_x, accept_y, accept_w, button_h},
+        .rect = {accept_x, accept_y, m.accept_w, m.button_h},
         .icon = INKCELL_ICON_CHECK,
-        .label = accept_label,
+        .label = m.accept_label,
         .selected = accept_selected,
         .variant = accept_selected ? INKCELL_FB_BUTTON_TONAL : INKCELL_FB_BUTTON_TEXT,
         /* The dialog's family, so a destructive confirm is a red pill rather than a red word on
@@ -376,10 +432,58 @@ void inkcell_fb_draw_dialog(const struct inkcell_backend_fb_state *state,
         .shape = INKCELL_SHAPE_FULL,
         .idle_tone = accent_tone,
         .ground = INKCELL_COLOR_SURFACE_HIGH,
-        .scale = scale,
+        .scale = m.scale,
         .focus_id = dialog->action_focus_id,
     };
     inkcell_fb_draw_button(state, &accept);
+}
+
+bool inkcell_fb_draw_dialog(struct inkcell_backend_fb_state *state,
+                            const struct inkcell_fb_layout *layout,
+                            const struct inkcell_fb_dialog *dialog, uint32_t id, bool up) {
+    if (state == NULL || layout == NULL || dialog == NULL) {
+        return false;
+    }
+    /*
+     * The region the dialog belongs to, and therefore what the scrim dims: from under the
+     * navigation bar down to the top of the action bar.
+     *
+     * Not the whole panel, and that is the decision this port turns on. A dialog is one
+     * screen asking a question; dimming the tab strip and the keycaps too would say the
+     * application had been suspended, which is what a full-screen scrim means everywhere it is
+     * used. The keycaps in particular must stay bright - they are how the question gets
+     * answered.
+     */
+    const struct inkcell_fb_rect bounds = {
+        .x = 0,
+        .y = layout->nav_y,
+        .w = (int)state->var.xres,
+        .h = layout->footer_y - layout->nav_y,
+    };
+    const int width = (int)state->var.xres - 2 * inkcell_fb_gutter(state);
+    const int room = bounds.h - 2 * inkcell_fb_gutter(state);
+
+    struct inkcell_overlay_frame frame;
+    if (!inkcell_fb_overlay_begin(state,
+                                  &(struct inkcell_overlay){
+                                      .id = id,
+                                      .up = up,
+                                      .placement = INKCELL_OVERLAY_CENTER,
+                                      /* A short way up rather than in from an edge: a dialog is not
+                                         sliding past, it is appearing where the question is. */
+                                      .travel = INKCELL_OVERLAY_TRAVEL_NEAR,
+                                      .w = width,
+                                      .h = inkcell_fb_dialog_height(state, dialog, width, room),
+                                      .bounds = bounds,
+                                      .scrim = true,
+                                      .modal = true,
+                                  },
+                                  &frame)) {
+        return false;
+    }
+    inkcell_fb_draw_dialog_at(state, frame.box, dialog);
+    inkcell_fb_overlay_end(state, &frame);
+    return true;
 }
 
 /* ---- the QR code ---------------------------------------------------------------------------- */
@@ -442,4 +546,302 @@ void inkcell_fb_draw_qr(const struct inkcell_backend_fb_state *state,
             }
         }
     }
+}
+
+/* ---- the menu ------------------------------------------------------------------------------
+ *
+ * A column of verbs on a raised panel. See the header for why this is three dozen lines rather
+ * than a screen: the box, the arrival, the scrim and the press all belong to the layer, so what
+ * is left here is a measure and a loop.
+ */
+
+/* The room a menu leaves round its rows, and the room a row leaves round its words. Both are
+   the panel inset the dialog and the card take, so three surfaces over the body are padded
+   alike rather than each deciding. */
+static int inkcell_fb_menu_pad(const struct inkcell_backend_fb_state *state) {
+    return inkcell_fb_gutter(state);
+}
+
+/* How tall one row is: a line, plus the padding that makes it a place to press rather than a
+   line of text. The keycap's own height arithmetic, for the keycap's reason - a row a cursor
+   lands on has to be big enough to read as a target. */
+static int inkcell_fb_menu_row_h(const struct inkcell_backend_fb_state *state) {
+    return inkcell_fb_line_adv(state, state->scale) + inkcell_fb_space(state, INKCELL_SPACE_SM);
+}
+
+/* Whether a row is one the cursor may stand on. An item with no words is a gap a screen left
+   in a fixed array, and a disabled one is a verb that cannot be done - neither is a place to
+   be, and neither is registered. */
+static bool inkcell_fb_menu_item_live(const struct inkcell_fb_menu_item *item) {
+    return item->label != NULL && item->label[0] != '\0' && !item->disabled;
+}
+
+struct inkcell_fb_rect inkcell_fb_menu_box(const struct inkcell_backend_fb_state *state,
+                                           const struct inkcell_fb_menu *menu, int max_w) {
+    struct inkcell_fb_rect box = {0, 0, 0, 0};
+    if (state == NULL || menu == NULL || menu->items == NULL || menu->count == 0U) {
+        return box;
+    }
+    const int scale = state->scale;
+    const int pad = inkcell_fb_menu_pad(state);
+    const int gap = inkcell_fb_space(state, INKCELL_SPACE_SM);
+    const int icon = inkcell_fb_icon_box(state, scale);
+    const int row_h = inkcell_fb_menu_row_h(state);
+
+    /*
+     * Both slots are reserved for the whole menu whether or not every row fills them.
+     *
+     * A menu where the rows with an icon start their words a gutter to the right of the rows
+     * without one is a menu with two left edges, which is the list's own rule
+     * (INKCELL_FB_LEADING_ICON) and is wrong here for the same reason. The trailing check is
+     * the same argument at the other end: a menu that is a choice has one checked row, and the
+     * other rows' words must not run under where that check is.
+     */
+    int widest = 0;
+    uint32_t rows = 0U;
+    for (size_t i = 0U; i < menu->count; ++i) {
+        const struct inkcell_fb_menu_item *item = &menu->items[i];
+        if (item->label == NULL || item->label[0] == '\0') {
+            continue;
+        }
+        const int w = inkcell_fb_text_width(state, item->label, scale);
+        if (w > widest) {
+            widest = w;
+        }
+        ++rows;
+    }
+    if (rows == 0U) {
+        return box;
+    }
+    const bool has_heading = menu->heading != NULL && menu->heading[0] != '\0';
+    if (has_heading) {
+        const int small = inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL);
+        const int head_w = inkcell_fb_text_width(state, menu->heading, small);
+        if (head_w > widest) {
+            widest = head_w;
+        }
+    }
+
+    box.w = pad + icon + gap + widest + gap + icon + pad;
+    if (max_w > 0 && box.w > max_w) {
+        box.w = max_w;
+    }
+    box.h = 2 * pad + (int)rows * row_h;
+    if (has_heading) {
+        box.h += inkcell_fb_line_adv(state, inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL));
+    }
+    return box;
+}
+
+void inkcell_fb_draw_menu(const struct inkcell_backend_fb_state *state, struct inkcell_fb_rect box,
+                          const struct inkcell_fb_menu *menu) {
+    if (state == NULL || menu == NULL || menu->items == NULL || box.w <= 0 || box.h <= 0) {
+        return;
+    }
+    const int scale = state->scale;
+    const int pad = inkcell_fb_menu_pad(state);
+    const int gap = inkcell_fb_space(state, INKCELL_SPACE_SM);
+    const int icon = inkcell_fb_icon_box(state, scale);
+    const int row_h = inkcell_fb_menu_row_h(state);
+    const int edge = inkcell_fb_edge(state);
+    const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_MD);
+
+    /*
+     * The raised surface and its hairline, exactly as a card takes them. A menu is one step
+     * further from the ground than the body and one step nearer than a dialog, which is what
+     * SURFACE_HIGH already means - the edge is there because a fill one step off the ground is
+     * not findable in daylight on its own.
+     */
+    inkcell_fb_fill_round_rect(state, box.x, box.y, box.w, box.h, radius + edge,
+                               inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
+    inkcell_fb_fill_round_rect(state, box.x + edge, box.y + edge, box.w - 2 * edge,
+                               box.h - 2 * edge, radius,
+                               inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
+    const enum inkcell_color ground = INKCELL_COLOR_SURFACE_HIGH;
+
+    int y = box.y + pad;
+    if (menu->heading != NULL && menu->heading[0] != '\0') {
+        /* At the label scale and in the dim ink, which is what a section heading is everywhere
+           else in this toolkit - see inkcell_fb_list_subheader(). It is not a row: nothing
+           lands on it, so it registers nothing. */
+        const int small = inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL);
+        inkcell_fb_draw_text_weight(state, box.x + pad, y, menu->heading, small,
+                                    inkcell_fb_type_weight(state, INKCELL_TYPE_LABEL),
+                                    inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM),
+                                    inkcell_fb_color(state, ground));
+        y += inkcell_fb_line_adv(state, small);
+    }
+
+    const int text_x = box.x + pad + icon + gap;
+    const int text_right = box.x + box.w - pad - icon - gap;
+    for (size_t i = 0U; i < menu->count; ++i) {
+        const struct inkcell_fb_menu_item *item = &menu->items[i];
+        if (item->label == NULL || item->label[0] == '\0') {
+            continue;
+        }
+        const bool live = inkcell_fb_menu_item_live(item);
+        const bool selected = (uint32_t)i == menu->cursor;
+        /*
+         * The fill under the cursor is the row highlight the whole toolkit uses, taken from
+         * the surface the menu is standing on rather than from the body's - a state layer
+         * mixed into the wrong ground is a highlight that is the right colour on one surface
+         * and a smudge on the other.
+         */
+        struct inkcell_rgb row_ground = inkcell_fb_color(state, ground);
+        if (selected && live) {
+            row_ground =
+                inkcell_fb_state_layer(state, ground, INKCELL_COLOR_TEXT, INKCELL_STATE_SELECTED);
+            inkcell_fb_fill_round_rect(state, box.x + pad / 2, y, box.w - pad, row_h,
+                                       inkcell_fb_radius(state, INKCELL_SHAPE_SM), row_ground);
+        }
+
+        /*
+         * Disabled is the dim ink whatever the row meant, because a verb that cannot be done
+         * is not a warning or a danger - it is absent. A red row greyed out would be shouting
+         * about something the reader cannot act on.
+         */
+        const struct inkcell_rgb ink = live ? inkcell_fb_tone_color(state, item->tone)
+                                            : inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM);
+
+        const int glyph_y = y + (row_h - inkcell_fb_line_adv(state, scale)) / 2;
+        if (inkcell_icon_is_valid(item->icon)) {
+            inkcell_fb_draw_icon(state, box.x + pad, glyph_y, item->icon, scale, ink, row_ground);
+        }
+        /* Fitted to the room between the two slots, in pixels. The box was measured to hold
+           the longest label whole, so this only ever cuts when a caller's `max_w` made the
+           panel narrower than the menu asked for. */
+        char label[INKCELL_LINE_MAX];
+        inkcell_fb_fit_text(state, item->label, scale, text_right - text_x, label, sizeof label);
+        inkcell_fb_draw_text(state, text_x, glyph_y, label, scale, ink, row_ground);
+        if (item->checked) {
+            inkcell_fb_draw_icon(state, text_right + gap, glyph_y, INKCELL_ICON_CHECK, scale, ink,
+                                 row_ground);
+        }
+
+        if (live && menu->focus_base != INKCELL_FOCUS_NONE) {
+            /* The box the highlight paints, so the ring lands on what the fill covers rather
+               than on the text inside it - inkcell_fb_list_row()'s rule. */
+            const struct inkcell_fb_rect hit = {box.x + pad / 2, y, box.w - pad, row_h};
+            inkcell_fb_focus_register_shaped(state, menu->focus_base + (uint32_t)i, &hit,
+                                             INKCELL_SHAPE_SM);
+        }
+        y += row_h;
+    }
+}
+
+/* ---- the bottom sheet ----------------------------------------------------------------------- */
+
+/* How wide the grabber is, as a fraction of the sheet: a tenth. Material's is 32dp against a
+   360dp sheet, which is very nearly this, and a fraction rather than a length is what keeps it
+   looking like the same mark at every scale the theme allows. */
+#define INKCELL_FB_SHEET_GRABBER_NUM 1
+#define INKCELL_FB_SHEET_GRABBER_DEN 10
+
+/* The band the grabber hangs in: a line's worth, with the mark centred in it. */
+static int inkcell_fb_sheet_grabber_h(const struct inkcell_backend_fb_state *state) {
+    return inkcell_fb_line_adv(state, inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL));
+}
+
+static int inkcell_fb_sheet_title_h(const struct inkcell_backend_fb_state *state,
+                                    const struct inkcell_fb_sheet *sheet) {
+    if (sheet == NULL || sheet->title == NULL || sheet->title[0] == '\0') {
+        return 0;
+    }
+    return inkcell_fb_line_adv(state, inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE)) +
+           inkcell_fb_space(state, INKCELL_SPACE_SM);
+}
+
+int inkcell_fb_sheet_height(const struct inkcell_backend_fb_state *state,
+                            const struct inkcell_fb_sheet *sheet, int content_h) {
+    if (state == NULL) {
+        return 0;
+    }
+    /* The bottom inset only: the grabber already leaves air above the title. Flush with the
+       edge of the panel below, because that edge is where the sheet came from. */
+    return inkcell_fb_sheet_grabber_h(state) + inkcell_fb_sheet_title_h(state, sheet) +
+           (content_h > 0 ? content_h : 0) + inkcell_fb_margin(state);
+}
+
+struct inkcell_fb_rect inkcell_fb_draw_sheet(const struct inkcell_backend_fb_state *state,
+                                             struct inkcell_fb_rect box,
+                                             const struct inkcell_fb_sheet *sheet) {
+    struct inkcell_fb_rect content = {0, 0, 0, 0};
+    if (state == NULL || box.w <= 0 || box.h <= 0) {
+        return content;
+    }
+    /*
+     * The body's own margin, not the half-margin a panel stands off an edge by.
+     *
+     * A sheet is full bleed: it has no left or right edge to stand off, so what its content
+     * lines up with is the *body behind it* - the rows the reader was looking at a moment ago.
+     * Inset by a half-margin the sheet's words start eight pixels left of every row on the
+     * screen it came from, which reads as a panel that missed.
+     */
+    const int pad = inkcell_fb_margin(state);
+    const int edge = inkcell_fb_edge(state);
+    const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_LG);
+
+    /*
+     * Square at the bottom and round at the top, which is what says it came up from the edge
+     * rather than being placed in the middle. It is the card list's own rule - a surface cut
+     * by the panel keeps its corners square on the cut end, because a rounded corner where the
+     * screen merely stopped is a surface claiming to end there.
+     */
+    inkcell_fb_fill_round_rect_ends(state, box.x, box.y, box.w, box.h, radius + edge,
+                                    inkcell_fb_color(state, INKCELL_COLOR_OUTLINE), true, false);
+    inkcell_fb_fill_round_rect_ends(
+        state, box.x + edge, box.y + edge, box.w - 2 * edge, box.h - edge, radius,
+        inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH), true, false);
+    const enum inkcell_color ground = INKCELL_COLOR_SURFACE_HIGH;
+
+    /*
+     * The grabber. Not pressable - there is no touch on this device - and drawn anyway,
+     * because it is the mark every platform has trained readers to read as "this came up, and
+     * it can go back down". A sheet without it is a panel that looks as though it had always
+     * been there.
+     */
+    const int grab_h = inkcell_fb_sheet_grabber_h(state);
+    const int grab_w = box.w * INKCELL_FB_SHEET_GRABBER_NUM / INKCELL_FB_SHEET_GRABBER_DEN;
+    const int bar = inkcell_fb_edge(state) * 2;
+    inkcell_fb_fill_round_rect(state, box.x + (box.w - grab_w) / 2, box.y + (grab_h - bar) / 2,
+                               grab_w, bar, bar / 2,
+                               inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
+
+    int y = box.y + grab_h;
+    const int title_h = inkcell_fb_sheet_title_h(state, sheet);
+    if (title_h > 0) {
+        const int title_scale = inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE);
+        int right = box.x + box.w - pad;
+        if (sheet->detail != NULL && sheet->detail[0] != '\0') {
+            /* Against the trailing edge and in the quiet ink: a fact about the sheet rather
+               than part of its name, which is the app bar's badge slot read one surface down. */
+            const int small = inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL);
+            const int w = inkcell_fb_text_width(state, sheet->detail, small);
+            const int lift =
+                (inkcell_fb_line_adv(state, title_scale) - inkcell_fb_line_adv(state, small)) / 2;
+            inkcell_fb_draw_text(state, right - w, y + lift, sheet->detail, small,
+                                 inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM),
+                                 inkcell_fb_color(state, ground));
+            right -= w + inkcell_fb_space(state, INKCELL_SPACE_SM);
+        }
+        const int left = box.x + pad;
+        char title[INKCELL_LINE_MAX];
+        inkcell_fb_fit_text(state, sheet->title, title_scale, right - left, title, sizeof title);
+        inkcell_fb_draw_text_weight(
+            state, left, y, title, title_scale, inkcell_fb_type_weight(state, INKCELL_TYPE_TITLE),
+            inkcell_fb_color(state, INKCELL_COLOR_TEXT), inkcell_fb_color(state, ground));
+        y += title_h;
+    }
+
+    content.x = box.x + pad;
+    content.y = y;
+    content.w = box.w - 2 * pad;
+    content.h = box.y + box.h - pad - y;
+    if (content.w < 0) {
+        content.w = 0;
+    }
+    if (content.h < 0) {
+        content.h = 0;
+    }
+    return content;
 }

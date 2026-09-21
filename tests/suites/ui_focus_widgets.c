@@ -31,6 +31,9 @@ enum {
     W_ID_ROW = 1000,
     W_ID_DIALOG = 300,
     W_ID_BUTTON = 400,
+    /* A layer id rather than a focus id: the two spaces are unrelated, and a dialog on a
+       layer needs one of each. */
+    W_ID_DIALOG_LAYER = 9000,
 };
 
 struct focus_harness {
@@ -224,7 +227,10 @@ static void focus_dialog_draw(struct focus_harness *h) {
         .cursor = 0U,
         .action_focus_id = W_ID_DIALOG,
     };
-    inkcell_fb_draw_dialog(h->state, &layout, &dialog);
+    /* A layer now, so it takes an id and an `up`. The pair it registers is the same pair it
+       always registered - a dialog sized to the body has nowhere to travel, which is why this
+       is still one frame rather than two. See inkcell_overlay_from(). */
+    (void)inkcell_fb_draw_dialog(h->state, &layout, &dialog, W_ID_DIALOG_LAYER, true);
 }
 
 INKCELL_TEST_CASE(focus_widgets_dialog_answers_are_reachable_either_way_round, unit) {

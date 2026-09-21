@@ -185,6 +185,85 @@ struct inkcell_fb_view {
     int x, y, right, bottom; /* the accumulated clip, panel coordinates */
 };
 
+/*
+ * No layer. What inkcell_fb_overlay_modal() answers on a frame with nothing modal on it, and
+ * the id a layer may not take - for the reason INKCELL_FOCUS_NONE is reserved in the focus map:
+ * an id space where "none" is a legal key is an id space where a caller that forgot to set one
+ * gets a working layer instead of a diagnostic.
+ */
+#define INKCELL_OVERLAY_NONE 0U
+
+/*
+ * How many layers a frame can hold.
+ *
+ * Four, and the number is the same one the view stack takes, for the same reason: a scrimmed
+ * sheet with a menu over it and a notice over that is three, and the fourth is the slack that
+ * keeps a screen from having to count. A fifth is refused rather than evicting one of the four
+ * - an overlay quietly dropped is a question nobody can answer - and a screen that wants five
+ * modals at once has a screen problem rather than a toolkit one.
+ */
+#define INKCELL_OVERLAY_SLOTS 4U
+
+/*
+ * ---- the overlay stack ----
+ *
+ * One layer's memory between frames. See include/inkcell/ui/overlay.h, which is where the
+ * whole of the reasoning is; what is here is only the shape of it, because the state struct is
+ * the one place every frame-lived fact in this backend is kept.
+ */
+struct inkcell_fb_overlay_slot {
+    uint32_t id; /* INKCELL_OVERLAY_NONE is free */
+    uint64_t touched_ms;
+    /* How far in it is: 0 gone, INKCELL_ANIM_ONE fully arrived. The whole of the lifetime -
+       a layer with anything left in here is a layer still on the panel, whatever the app
+       thinks. */
+    struct inkcell_anim travel;
+    /*
+     * Where in the frame's draw order it came, and whether it takes the press there. Together
+     * they are what inkcell_fb_overlay_modal() answers with: "drawn last is on top", read
+     * backwards, which is the one stacking rule an immediate-mode frame can state without a
+     * screen keeping a second list in agreement with the first.
+     */
+    uint32_t order;
+    bool modal;
+    bool up; /* what it was last aimed at, so an exit can be told from an entrance */
+    /*
+     * The box it painted last frame, padded by its travel.
+     *
+     * Carried for the reason the focus ring's is: erasing a layer is not the layer's own work,
+     * because what is under it belongs to whatever drew there and that drawing happens before
+     * the layer is asked to move. So it is declared as damage at the top of the next frame,
+     * where it is in place before anything paints.
+     */
+    struct inkcell_fb_damage_rect drawn;
+};
+
+/*
+ * Takes every layer off the frame at once, with no exit.
+ *
+ * For the change that is not a change of mind: a theme or a scale swap re-measures everything,
+ * so the boxes these layers are travelling between describe a geometry that no longer exists -
+ * which is inkcell_anim_table_reset()'s reason, one header over. A layer the app still wants is
+ * re-adopted on the next frame at its resting place, which is right: the panel it is on has
+ * just been redrawn at a different size, and a layer that animated into that would be
+ * announcing the theme change rather than itself.
+ */
+void inkcell_fb_overlay_reset(struct inkcell_backend_fb_state *state);
+
+/*
+ * Takes one layer off the frame at once, with no exit, so the next frame sees it arrive from
+ * nothing.
+ *
+ * For the case a re-aim cannot express: a layer whose *content* has been replaced while it was
+ * up. A second notice reading the same words as the first is a second arrival, not a text
+ * swap, and a layer told to go where it already is does nothing at all - deliberately, because
+ * that no-op is what stops every settled widget animating on every frame. The snackbar is the
+ * one caller, and it is the caller this exists for.
+ *
+ * A layer nothing is holding is unaffected, so this is safe to call on an id that is not up.
+ */
+void inkcell_fb_overlay_drop(struct inkcell_backend_fb_state *state, uint32_t id);
+
 struct inkcell_backend_fb_state {
     /* The body rows the last paged list was laid out in - what the app pages its content by,
        read back through the backend's page_rows() vtable entry. */
@@ -322,6 +401,17 @@ struct inkcell_backend_fb_state {
      */
     struct inkcell_fb_view views_stack[INKCELL_FB_VIEW_DEPTH];
     uint32_t views;
+    /*
+     * The layers over this frame, and the counter that orders them.
+     *
+     * Kept here rather than in the animation table for the reason `slide`, `focus_ring` and
+     * `list_glide` are: that table is for widgets with nowhere of their own to keep a
+     * position, and a layer is not a widget - it outlives the app's interest in it, which is
+     * the one thing a keyed scalar cannot express. `overlay_order` is reset at the top of
+     * each frame and handed out as layers open, so the last one drawn has the highest.
+     */
+    struct inkcell_fb_overlay_slot overlays[INKCELL_OVERLAY_SLOTS];
+    uint32_t overlay_order;
 };
 
 /*
@@ -495,6 +585,10 @@ struct inkcell_rgb inkcell_fb_state_layer(const struct inkcell_backend_fb_state 
                                           enum inkcell_state ui_state);
 /* Pixels between the panel edge and the body. */
 int inkcell_fb_margin(const struct inkcell_backend_fb_state *state);
+
+/* How far towards INKCELL_COLOR_SCRIM a modal takes the frame behind it, as a percentage: the
+   theme's metrics.scrim_pct. What inkcell_fb_scrim_rect() is handed by a layer easing one in. */
+int inkcell_fb_scrim_depth(const struct inkcell_backend_fb_state *state);
 /* The corner radius for a kind of container, at the frame's own glyph scale. The only way a
    radius enters the framebuffer layers, for the reason inkcell_fb_color() is the only way a colour
    does; see enum inkcell_shape. */

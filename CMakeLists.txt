@@ -85,6 +85,8 @@ add_library(inkcell STATIC
     src/fb/fb.c
     src/fb/fb_draw.c
     src/fb/fb_capture.c
+    # what is drawn over a frame rather than in it: the box, the travel, the scrim, the stack
+    src/fb/overlay.c
     src/fb/widgets_bubble.c
     src/fb/widgets_button.c
     src/fb/widgets_card.c

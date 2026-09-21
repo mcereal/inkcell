@@ -2,8 +2,14 @@
 #define INKCELL_BACKENDS_FB_WIDGETS_OVERLAY_H
 
 /*
- * What is drawn over a screen rather than in it: the dialog that owns the body while it is up,
- * the snackbar that slides in over the action bar, and the QR code a screen hands a link to.
+ * What is drawn over a screen rather than in it: the dialog, the menu, the bottom sheet, the
+ * snackbar, and the QR code a screen hands a link to.
+ *
+ * All but the last are *content for a layer*. include/inkcell/ui/overlay.h is the layer - the
+ * box, the way in and out, the scrim, the stack and who owns the press - and everything here
+ * is what goes in one. That split is why the menu and the sheet exist at all: each of them is
+ * a few dozen lines of drawing now that none of them has to bring its own answer to "where
+ * does this go and how does it get there".
  */
 
 /*
@@ -14,6 +20,7 @@
 #include "inkcell/ui/fb_draw.h"
 
 #include "inkcell/ui/icon.h"
+#include "inkcell/ui/overlay.h"
 #include "inkcell/ui/theme.h"
 #include "inkcell/utils/qr.h"
 
@@ -31,11 +38,16 @@
  * the shape that difference has everywhere else: the question lifted onto its own surface, and
  * the answers as *buttons* rather than as rows.
  *
- * It fills the body rather than floating over it, and that is deliberate rather than a
- * shortcut. A dialog elsewhere dims what is behind it with a scrim, and a scrim is alpha; the
- * Brick's display engine composites fb0 against its own layer, so there is nothing to blend
- * against and no scrim to draw. What stands in for it is that nothing else is on screen -
- * inkcell_fb_render_confirm() is a screen, not an overlay - so there is nothing left to dim.
+ * It used to fill the body, and the note here said that was deliberate: a dialog elsewhere
+ * dims what is behind it with a scrim, a scrim is alpha, and the Brick's display engine
+ * composites fb0 against its own layer, so there was nothing to blend against. The premise was
+ * right and the conclusion was not - a scrim blends against what is already *on* the page, not
+ * against what is behind it, and we drew that ourselves a few microseconds earlier. See
+ * INKCELL_COLOR_SCRIM.
+ *
+ * So it is a panel over the body now, on a layer, with the frame behind it dimmed and still
+ * visible. The scrim covers the body and stops at the navigation bar: this screen is asking a
+ * question, the application has not been replaced.
  *
  * The action row is the reason the two answers move off the list. Both are one press away
  * whichever is under the cursor, so the pair reads as a choice rather than as a menu; and the
@@ -75,10 +87,40 @@ struct inkcell_fb_dialog {
     uint32_t action_focus_id;
 };
 
-/* Draws the dialog into the body. It owns the whole of it, so there is no `y` to advance. */
-void inkcell_fb_draw_dialog(const struct inkcell_backend_fb_state *state,
+/*
+ * How tall this dialog needs to be in a panel `width` wide, given `room` to grow into.
+ *
+ * Asked before the layer is opened, because a layer is handed a size rather than deciding one:
+ * a dialog's height depends on how far its paragraph wraps, which is a fact about the words
+ * and not about where the panel ends up. The paragraph is the only part that gives way - the
+ * buttons, the headline and the icon are reserved first, because a dialog that dropped one of
+ * its buttons to fit its explanation would be unanswerable.
+ */
+int inkcell_fb_dialog_height(const struct inkcell_backend_fb_state *state,
+                             const struct inkcell_fb_dialog *dialog, int width, int room);
+
+/* Draws it into `box`, for a screen that has opened a layer of its own. */
+void inkcell_fb_draw_dialog_at(const struct inkcell_backend_fb_state *state,
+                               struct inkcell_fb_rect box, const struct inkcell_fb_dialog *dialog);
+
+/*
+ * The whole thing: measures the dialog, opens a centred and scrimmed layer over the body, and
+ * draws into it.
+ *
+ * `id` names the layer and `up` is whether the app still wants it. Returns false once it has
+ * finished leaving, so a screen that has other things to draw over the dialog can tell - and
+ * so the call reads the way every layer does:
+ *
+ *     (void)inkcell_fb_draw_dialog(state, &layout, &dialog, SCREEN_CONFIRM, nav->confirming);
+ *
+ * The scrim stops at `layout->nav_y`, not at the top of the panel. See the note above.
+ *
+ * Mutable state, unlike the const it used to take: a dialog arrives and leaves now, and where
+ * it has got to is the one thing about it the frame itself remembers.
+ */
+bool inkcell_fb_draw_dialog(struct inkcell_backend_fb_state *state,
                             const struct inkcell_fb_layout *layout,
-                            const struct inkcell_fb_dialog *dialog);
+                            const struct inkcell_fb_dialog *dialog, uint32_t id, bool up);
 
 /* ---- the snackbar -------------------------------------------------------------------------
  *
@@ -127,6 +169,128 @@ struct inkcell_fb_snackbar {
 void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state,
                               const struct inkcell_fb_layout *layout,
                               const struct inkcell_fb_snackbar *bar);
+
+/* ---- the menu --------------------------------------------------------------------------------
+ *
+ * A short column of verbs on a raised panel, hanging off the thing that opened it.
+ *
+ * The shape that had nowhere to live. A screen here that wanted one had to become a screen
+ * instead - a whole page with an app bar and a back affordance, for four verbs - because the
+ * alternative was a widget answering "where does this go", "how does it arrive", "what is
+ * under it" and "who owns B" entirely by itself. On a layer it is a measure and a loop.
+ *
+ * What makes it a menu rather than a short list is the *anchor*. A list is the screen's
+ * content; a menu is about the one control it came out of, so the layer lines its leading edge
+ * up with that control's and flips it above when there is no room below - see
+ * INKCELL_OVERLAY_ANCHOR. The reader's eye is already on the button they pressed, which is
+ * where the panel appears.
+ *
+ * Rows rather than buttons, and a check rather than a fill on the chosen one: a menu is a list
+ * of things that can be done, and a row of pills would be a toolbar. Each item registers a
+ * focus box, so the d-pad walks it and inkcell_focus_step() answers at its ends - the same
+ * mechanism a list uses, for the same reason.
+ */
+
+struct inkcell_fb_menu_item {
+    /* The verb. An item with no words is skipped, which is what lets a screen build a fixed
+       array and leave the entries it has nothing for empty. */
+    const char *label;
+    /* The leading symbol. INKCELL_ICON_NONE leaves the slot empty rather than closing it up: a
+       menu where some rows have an icon and some do not is a menu whose words start in two
+       columns, which is the list's own rule (INKCELL_FB_LEADING_ICON) applied here. */
+    enum inkcell_icon icon;
+    /* A trailing check: this is the option currently in force. What a menu that is a *choice*
+       draws, as against one that is a set of verbs. */
+    bool checked;
+    /* What the row means. A tone, never a colour - and it colours the words rather than the
+       row, so the one verb that destroys something is findable and a menu of them is not a
+       wall. That is the argument INKCELL_FB_LEADING_TONAL makes one header over. */
+    enum inkcell_tone tone;
+    /* Greyed, and registered nowhere - so the cursor steps over it rather than landing on a
+       verb that does nothing. */
+    bool disabled;
+};
+
+struct inkcell_fb_menu {
+    const struct inkcell_fb_menu_item *items;
+    size_t count;
+    /* An optional heading over the first item, at the label scale: what this menu is *of*.
+       NULL for a menu whose verbs speak for themselves, which is most of them. */
+    const char *heading;
+    /* Which item the cursor is on. Out of range highlights nothing, which is what a menu
+       steered entirely by the focus map passes. */
+    uint32_t cursor;
+    /* What the d-pad calls the rows: item `i` is `focus_base + i`, the numbering
+       inkcell_fb_list_focus() uses and for its reason - a screen's menu cursor is already an
+       item index. INKCELL_FOCUS_NONE registers nothing. */
+    uint32_t focus_base;
+};
+
+/*
+ * The box this menu wants: wide enough for its longest row, tall enough for all of them.
+ *
+ * Measured rather than stated, because a menu is a handful of verbs and their lengths are the
+ * only thing that decides how wide it should be. Asked before the layer is opened, like the
+ * dialog's height and for the same reason: a layer is handed a size, it does not invent one.
+ * `max_w` is what it may not exceed.
+ */
+struct inkcell_fb_rect inkcell_fb_menu_box(const struct inkcell_backend_fb_state *state,
+                                           const struct inkcell_fb_menu *menu, int max_w);
+
+/* Draws it into `box` - the one a layer handed back. */
+void inkcell_fb_draw_menu(const struct inkcell_backend_fb_state *state, struct inkcell_fb_rect box,
+                          const struct inkcell_fb_menu *menu);
+
+/* ---- the bottom sheet ------------------------------------------------------------------------
+ *
+ * A panel that comes up from the bottom edge and holds whatever the screen puts in it.
+ *
+ * The other shape that had nowhere to live, and the one the dialog kept being used for. A
+ * dialog asks a question with two answers; a sheet is for everything else that should not cost
+ * a screen - a filter, a picker, the details of the row under the cursor. It comes up from the
+ * edge rather than appearing in the middle because that is what says it is *over* this screen
+ * rather than a new one: what it came from is still there behind it, dimmed, and going back
+ * means putting the sheet down rather than navigating.
+ *
+ * The grabber at the top is the one piece of furniture it draws that is not content. It is not
+ * pressable - there is no touch on this device - and it is drawn anyway, because it is the
+ * mark every platform has trained readers to read as "this came up, and it can go back down".
+ * A sheet without it is a panel that looks as though it had always been there.
+ *
+ * The content is the screen's. inkcell_fb_draw_sheet() paints the surface, the grabber and the
+ * title and hands back the rectangle underneath them - so a sheet holding a list is a list
+ * drawn into that rectangle, and a sheet holding a form is a form.
+ */
+struct inkcell_fb_sheet {
+    /* The heading, at INKCELL_TYPE_TITLE. NULL for a sheet whose content names itself. */
+    const char *title;
+    /* A fact about the sheet against its trailing edge, in the dim ink: a count, a unit. NULL
+       for none. */
+    const char *detail;
+};
+
+/*
+ * How tall a sheet holding `content_h` pixels of content has to be: the content plus the
+ * grabber, the title and the insets.
+ *
+ * Asked before the layer is opened, because the layer is handed a size. The arithmetic is here
+ * rather than at the call site for the reason every measure in this toolkit is - a screen that
+ * worked out a sheet's chrome would disagree with the thing drawing it the moment either
+ * changed.
+ */
+int inkcell_fb_sheet_height(const struct inkcell_backend_fb_state *state,
+                            const struct inkcell_fb_sheet *sheet, int content_h);
+
+/*
+ * Draws the surface, the grabber and the title into `box`, and hands back the rectangle left
+ * for the content.
+ *
+ * A zero-height answer is a sheet with no room in it, which a caller should read as nothing to
+ * draw rather than as a rectangle to draw into.
+ */
+struct inkcell_fb_rect inkcell_fb_draw_sheet(const struct inkcell_backend_fb_state *state,
+                                             struct inkcell_fb_rect box,
+                                             const struct inkcell_fb_sheet *sheet);
 
 /* ---- the QR code ----------------------------------------------------------------------------
  *
