@@ -183,6 +183,88 @@ void inkcell_fb_shift_end(struct inkcell_backend_fb_state *state) {
     }
 }
 
+/* ---- the view stack --------------------------------------------------------------------------
+ *
+ * See include/inkcell/ui/fb_draw.h. Everything here is composition: a push adds its offset to
+ * the one already in force and intersects its box with the box already in force, so the clip
+ * that every pixel goes through - inkcell_fb_clip_box() - reads one entry and does no walking.
+ */
+
+/* The whole panel, as an entry: what the bottom of the stack is measured against. */
+static struct inkcell_fb_view inkcell_fb_view_panel(const struct inkcell_backend_fb_state *state) {
+    return (struct inkcell_fb_view){
+        .dx = 0,
+        .dy = 0,
+        .x = 0,
+        .y = 0,
+        .right = (int)state->var.xres,
+        .bottom = (int)state->var.yres,
+    };
+}
+
+/* The entry in force, or the panel when nothing is pushed. */
+static struct inkcell_fb_view inkcell_fb_view_top(const struct inkcell_backend_fb_state *state) {
+    if (state->views == 0U) {
+        return inkcell_fb_view_panel(state);
+    }
+    return state->views_stack[state->views - 1U];
+}
+
+bool inkcell_fb_view_push(struct inkcell_backend_fb_state *state, struct inkcell_fb_rect box,
+                          int dx, int dy) {
+    if (state == NULL || state->views >= INKCELL_FB_VIEW_DEPTH) {
+        return false;
+    }
+    const struct inkcell_fb_view under = inkcell_fb_view_top(state);
+    /* The box arrives in the *enclosing* view's coordinates, which is what a caller has in
+       hand: a sheet's content asks for a region of the sheet, not a region of the panel. So it
+       is translated by what is already in force before it is intersected with it. */
+    const int left = box.x + under.dx;
+    const int top = box.y + under.dy;
+    struct inkcell_fb_view view = {
+        .dx = under.dx + dx,
+        .dy = under.dy + dy,
+        .x = left > under.x ? left : under.x,
+        .y = top > under.y ? top : under.y,
+        .right = (left + box.w) < under.right ? (left + box.w) : under.right,
+        .bottom = (top + box.h) < under.bottom ? (top + box.h) : under.bottom,
+    };
+    if (view.right <= view.x || view.bottom <= view.y) {
+        /* Nothing of it is on the panel. Refused rather than pushed empty, so a caller cannot
+           spend a frame drawing into a window that is not there - and so the `if` around the
+           push is the whole of the test. */
+        return false;
+    }
+    state->views_stack[state->views++] = view;
+    return true;
+}
+
+void inkcell_fb_view_pop(struct inkcell_backend_fb_state *state) {
+    if (state != NULL && state->views > 0U) {
+        state->views--;
+    }
+}
+
+struct inkcell_fb_rect inkcell_fb_view_box(const struct inkcell_backend_fb_state *state) {
+    if (state == NULL) {
+        return (struct inkcell_fb_rect){0, 0, 0, 0};
+    }
+    const struct inkcell_fb_view view = inkcell_fb_view_top(state);
+    return (struct inkcell_fb_rect){
+        .x = view.x, .y = view.y, .w = view.right - view.x, .h = view.bottom - view.y};
+}
+
+struct inkcell_fb_rect inkcell_fb_view_content_box(const struct inkcell_backend_fb_state *state) {
+    if (state == NULL) {
+        return (struct inkcell_fb_rect){0, 0, 0, 0};
+    }
+    const struct inkcell_fb_view view = inkcell_fb_view_top(state);
+    return (struct inkcell_fb_rect){.x = view.x - view.dx,
+                                    .y = view.y - view.dy,
+                                    .w = view.right - view.x,
+                                    .h = view.bottom - view.y};
+}
+
 bool inkcell_fb_state_set_theme_by_id(struct inkcell_backend_fb_state *state, const char *id) {
     if (state == NULL || id == NULL || id[0] == '\0') {
         /* Nothing named one - the capture harness has no app behind it - so keep drawing with
@@ -263,14 +345,22 @@ static void inkcell_fb_focus_put(const struct inkcell_backend_fb_state *state, u
      *     navigable only in the parts that had landed. The boxes here are where the layout put
      *     things, which is where they will be when the slide ends and where a press is resolved
      *     against in the meantime.
+     *
+     * The *view* stack is the one transform that does apply, and the difference is the whole
+     * reason it is a different mechanism. A view can move part of the frame out of sight: a row
+     * scrolled past the top of its viewport, a menu item below the bottom of the menu. Those
+     * are not places to stand, and a map that held them would let the cursor walk onto
+     * something nobody can see and then press it. So a box is registered where the view put it,
+     * and one the view cut away entirely is not registered at all - which is the rule the list
+     * has always followed by registering only the rows it drew, stated once for everything.
      */
-    const int panel_w = (int)state->var.xres;
-    const int panel_h = (int)state->var.yres;
-    if (rect->x >= panel_w || rect->y >= panel_h || rect->x + rect->w <= 0 ||
-        rect->y + rect->h <= 0) {
+    const struct inkcell_fb_view view = inkcell_fb_view_top(state);
+    const int x = rect->x + view.dx;
+    const int y = rect->y + view.dy;
+    if (x >= view.right || y >= view.bottom || x + rect->w <= view.x || y + rect->h <= view.y) {
         return;
     }
-    (void)inkcell_focus_add_round(state->focus, id, rect->x, rect->y, rect->w, rect->h, radius);
+    (void)inkcell_focus_add_round(state->focus, id, x, y, rect->w, rect->h, radius);
 }
 
 void inkcell_fb_focus_register(const struct inkcell_backend_fb_state *state, uint32_t id,
@@ -586,12 +676,53 @@ static bool inkcell_fb_clip_box(const struct inkcell_backend_fb_state *state, in
     int dx = 0;
     int dy = 0;
     /*
-     * The frame's transform, before anything is measured against the panel: a screen arriving
-     * from off the right-hand edge is drawn at coordinates that are not on the panel at all,
-     * and the clamp below is what turns that into the part of it that has arrived. The band is
-     * applied here rather than left to the caller for the same reason - a row whose glyphs
-     * overhang the top of the body must be cut off at the body, not drawn over the navigation
-     * bar it is sliding underneath. See inkcell_fb_shift_begin().
+     * The view stack first, because it is the *innermost* transform: a box arrives here in
+     * whatever coordinates the region it was drawn in uses, and the entry in force is what
+     * turns those into the frame's. The offset moves it and the box cuts it, and both are
+     * already composed down to one of each - see inkcell_fb_view_push().
+     *
+     * `dx`/`dy` are how far into the source the clipped box starts, which is what a glyph or a
+     * sprite has to skip to line up with where it landed. A row half above the top of a
+     * scrolled viewport is exactly that case, and it is why the trim is accumulated rather than
+     * the coordinate simply clamped.
+     */
+    if (state->views > 0U) {
+        const struct inkcell_fb_view *const view = &state->views_stack[state->views - 1U];
+        x += view->dx;
+        y += view->dy;
+        if (x < view->x) {
+            const int trimmed = view->x - x;
+            w -= trimmed;
+            dx += trimmed;
+            x = view->x;
+        }
+        if (y < view->y) {
+            const int trimmed = view->y - y;
+            h -= trimmed;
+            dy += trimmed;
+            y = view->y;
+        }
+        if (x + w > view->right) {
+            w = view->right - x;
+        }
+        if (y + h > view->bottom) {
+            h = view->bottom - y;
+        }
+        if (w <= 0 || h <= 0) {
+            return false;
+        }
+    }
+    /*
+     * Then the frame's transform, which is the outermost one: a screen arriving from off the
+     * right-hand edge is drawn at coordinates that are not on the panel at all, and the clamp
+     * below is what turns that into the part of it that has arrived. After the view rather than
+     * before it, so a region of a screen that is sliding slides with the screen - the window
+     * and what is in it travel together, which is what makes a view inside a transition a
+     * region of the frame rather than a hole cut in the panel.
+     *
+     * The band is applied here rather than left to the caller for the same reason - a row whose
+     * glyphs overhang the top of the body must be cut off at the body, not drawn over the
+     * navigation bar it is sliding underneath. See inkcell_fb_shift_begin().
      */
     if (state->shift_active) {
         x += state->shift_x;

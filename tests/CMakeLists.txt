@@ -19,6 +19,7 @@ set(INKCELL_TEST_SUITES
     suites/ui_shapes.c
     suites/ui_text.c
     suites/ui_theme.c
+    suites/ui_view.c
 )
 
 add_executable(inkcell_tests

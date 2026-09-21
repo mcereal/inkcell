@@ -153,6 +153,38 @@ struct inkcell_fb_focus_ring {
     struct inkcell_fb_damage_rect drawn;
 };
 
+/* A box in pixels. The geometry vocabulary every layer above shares: a component is handed
+   one, or measures one, and inkcell_fb_draw.c's primitives take it apart again. */
+struct inkcell_fb_rect {
+    int x, y, w, h;
+};
+
+/*
+ * ---- the view stack ----
+ *
+ * How deep the nesting goes.
+ *
+ * Four, because four is what the frame can actually stack: a scrolled body, a sheet over it
+ * that scrolls too, and a menu over that is three, and the fourth is the slack that keeps a
+ * component from having to know how many are already in force. A push past the end is refused
+ * rather than dropped silently - see inkcell_fb_view_push().
+ */
+#define INKCELL_FB_VIEW_DEPTH 4U
+
+/*
+ * One entry on the view stack: where content drawn inside it lands, and what cuts it.
+ *
+ * Both are *absolute* rather than relative to the entry below, so the clip every pixel goes
+ * through reads one slot and does no walking. Composing on the way in is the whole trick: a
+ * push inside a push adds its offset to the one already in force and intersects its box with
+ * the box already in force, so what a pixel is measured against is a single translate and a
+ * single rectangle however deep the frame got.
+ */
+struct inkcell_fb_view {
+    int dx, dy;              /* the accumulated translation, panel coordinates */
+    int x, y, right, bottom; /* the accumulated clip, panel coordinates */
+};
+
 struct inkcell_backend_fb_state {
     /* The body rows the last paged list was laid out in - what the app pages its content by,
        read back through the backend's page_rows() vtable entry. */
@@ -283,6 +315,13 @@ struct inkcell_backend_fb_state {
     int shift_top;
     int shift_bottom;
     bool shift_active;
+    /*
+     * The view stack: the nested translations and clips pushed by
+     * inkcell_fb_view_push(). `views` is how many are in force, and slot `views - 1` is the
+     * one every pixel is measured against.
+     */
+    struct inkcell_fb_view views_stack[INKCELL_FB_VIEW_DEPTH];
+    uint32_t views;
 };
 
 /*
@@ -340,6 +379,80 @@ int inkcell_fb_transition_offset(struct inkcell_backend_fb_state *state);
  */
 void inkcell_fb_shift_begin(struct inkcell_backend_fb_state *state, int dx, int top, int bottom);
 void inkcell_fb_shift_end(struct inkcell_backend_fb_state *state);
+
+/*
+ * ---- the view stack ------------------------------------------------------------------------
+ *
+ * A box on the panel, and an offset the content inside it is drawn at.
+ *
+ * inkcell_fb_shift_begin() one comment up is the *frame's* transform and there is deliberately
+ * one of them. This is the other kind: a region of the frame that has content of its own, laid
+ * out in coordinates that are not the panel's, and cut where the region ends. Two things in this
+ * toolkit need one and neither could be built without it.
+ *
+ *   - **A scrolled body.** A list windowed by row index can only ever be at a row boundary,
+ *     which is why the glide had to be a displacement bolted onto a window rather than a
+ *     position. Push a view with `dy` of minus the scroll offset and the body is simply drawn
+ *     at its own coordinates - the whole content, from the first item to the last - and what
+ *     lands on the panel is the part the offset put there. A half-row at the top edge is then
+ *     not a special case; it is what a pixel offset that is not a multiple of a line looks
+ *     like.
+ *   - **An overlay.** A menu, a sheet or a dialog is a panel that arrives, and what stops it
+ *     painting over the chrome while it is half way in is a clip - not a check inside every
+ *     widget it happens to contain. See include/inkcell/ui/overlay.h.
+ *
+ * Three properties, and each of them is why this is a stack rather than a second `shift`:
+ *
+ *   - **It nests.** A sheet that scrolls is a view inside a view, and the offsets add while the
+ *     boxes intersect. A component inside one does not know how many are in force.
+ *   - **It is composed on the way in**, so the clip every pixel goes through reads one entry.
+ *     See struct inkcell_fb_view.
+ *   - **The focus map goes through it too**, which the frame's own transform deliberately does
+ *     not. That is not an inconsistency: a slide moves the whole frame by one dx and so changes
+ *     no answer the map is asked for, while a view can move part of it *out of sight*. A row
+ *     scrolled past the top of its viewport is not a place to stand, and a map that held it
+ *     would let the cursor walk onto something nobody can see. So a box registered inside a
+ *     view is registered where the view put it, and one the view cut away entirely is not
+ *     registered at all. That is the same rule the list has always followed by only registering
+ *     the rows it drew - stated once, for everything.
+ *
+ * Returns false when the box has nothing on the panel in it, or when the stack is full, and
+ * *nothing is pushed* in either case - so the pop is conditional on the push, exactly as it
+ * reads:
+ *
+ *     if (inkcell_fb_view_push(state, box, 0, -offset)) {
+ *         ... draw the content at its own coordinates ...
+ *         inkcell_fb_view_pop(state);
+ *     }
+ *
+ * A false is a region with nothing visible in it, so the draw inside it had nothing to
+ * contribute anyway. The one thing a caller must not do is pop a push that was refused, which
+ * is what the `if` is for.
+ */
+bool inkcell_fb_view_push(struct inkcell_backend_fb_state *state, struct inkcell_fb_rect box,
+                          int dx, int dy);
+void inkcell_fb_view_pop(struct inkcell_backend_fb_state *state);
+
+/*
+ * The box the innermost view is cutting to, in panel coordinates, or the whole panel when none
+ * is pushed.
+ *
+ * What a component inside a view asks when it has to know whether it is worth drawing something
+ * - a list skipping the rows above the viewport rather than clipping several hundred of them
+ * one pixel at a time. It is the clip, not the content: a view translated by an offset reports
+ * where its window is on the panel, not where its content thinks it is.
+ */
+struct inkcell_fb_rect inkcell_fb_view_box(const struct inkcell_backend_fb_state *state);
+
+/*
+ * The same box in the *content's* coordinates: what a caller inside a view has to draw to fill
+ * it, with the translation taken back off.
+ *
+ * A list walking its items needs this rather than the panel box. It places row four hundred at
+ * its own y, and what it wants to know is which of its rows land in the window - a question
+ * asked in the coordinates the rows are in.
+ */
+struct inkcell_fb_rect inkcell_fb_view_content_box(const struct inkcell_backend_fb_state *state);
 
 /*
  * Adopts the theme named by `id`, when it is one this build knows and is not already drawing.
@@ -435,12 +548,6 @@ int inkcell_fb_edge(const struct inkcell_backend_fb_state *state);
  * edge, not room around text, so it tracks the body margin rather than the glyph scale.
  */
 int inkcell_fb_rail_gutter(const struct inkcell_backend_fb_state *state);
-
-/* A box in pixels. The geometry vocabulary every layer above shares: a component is handed
-   one, or measures one, and inkcell_fb_draw.c's primitives take it apart again. */
-struct inkcell_fb_rect {
-    int x, y, w, h;
-};
 
 /*
  * Where a list's rows stand, horizontally. The one answer, asked by everything that draws one.
