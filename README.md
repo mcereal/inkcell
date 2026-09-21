@@ -16,6 +16,7 @@ backend and its component set, and the evdev layer that turns a handheld's butto
 | **Glyphs** | Emoji, icons and font tables, generated (`scripts/gen-*.py`) and committed. |
 | **Layout** | Lines measured in *cells*, scroll windows, text wrapping done once for both the measure and the draw pass. |
 | **Focus** | A d-pad answered against the rectangles the components drew - "right from here lands on *that*" - so a grid, a card with two verbs on it or a form with a chip row in it is a layout rather than an index somebody maintains. The cursor is one ring, and it travels. |
+| **Motion** | Durations and curves as *tokens*, so a set of controls moves as one system - and the two things that move without being a control: the focus ring travelling between boxes, and a list gliding between windows instead of flicking between them. |
 | **Widgets** | Buttons, chips, app bars, list rows, chat bubbles, cards, switches, segmented buttons, meters, charts, dialogs, snackbars, QR codes. |
 | **Shapes** | Anti-aliased rounded rectangles, rings and arcs, in integers - so a curve is the same curve on every host that draws it. |
 | **Framebuffer** | `/dev/fb0`, the page flip, damage tracking, a glyph cache, and an off-screen renderer for screenshots. |

@@ -83,13 +83,15 @@ bool inkcell_fb_state_animating(const struct inkcell_backend_fb_state *state) {
     if (state == NULL) {
         return false;
     }
-    /* The transition and the focus ring are asked about separately from the table because they
-       are kept separately - see `slide` and `focus_ring` on the state. A frame owes another one
+    /* The transition, the focus ring and a gliding list are asked about separately from the
+       table because they are kept separately - see `slide`, `focus_ring` and `list_glide` on
+       the state. A frame owes another one
        while either has somewhere to be. An app still filling owes one for a reason that is not an
        animation at all: the next piece is read on the next frame, so without this the fill would
        stop wherever the last press left it. */
     return inkcell_anim_active(&state->slide, state->now_ms) ||
            inkcell_anim_active(&state->focus_ring.travel, state->now_ms) ||
+           inkcell_anim_active(&state->list_glide.travel, state->now_ms) ||
            inkcell_anim_table_active(&state->anim, state->now_ms) || inkcell_fb_app_pending(state);
 }
 

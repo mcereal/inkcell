@@ -15,6 +15,7 @@ set(INKCELL_TEST_SUITES
     suites/ui_icon.c
     suites/ui_keyboard.c
     suites/ui_layout.c
+    suites/ui_list_glide.c
     suites/ui_shapes.c
     suites/ui_text.c
     suites/ui_theme.c

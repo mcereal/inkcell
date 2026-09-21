@@ -228,8 +228,11 @@ INKCELL_TEST_CASE(focus_ring_forgets_a_box_that_left_the_frame, unit) {
 }
 
 /*
- * The ring follows the box it is on when the box moves under it, which on a list that scrolled
- * a row is the ordinary case rather than an edge one.
+ * The ring goes exactly where its box went.
+ *
+ * A box moving under the ring is not the cursor moving - a list gliding between windows shifts
+ * its rows a few pixels per frame - so following is what keeps the ring on its own row. A
+ * journey there would trail it by an easing curve for the length of the scroll.
  */
 INKCELL_TEST_CASE(focus_ring_follows_a_box_that_moved, unit) {
     struct ring_harness h;
@@ -237,19 +240,34 @@ INKCELL_TEST_CASE(focus_ring_follows_a_box_that_moved, unit) {
 
     inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_LEFT);
 
-    /* The same id, one row further up: what a list looks like after it scrolled. */
+    /* The same id, one row further up: what a list looks like after it scrolled. The second
+       box stays registered throughout, because the journey below starts from this frame. */
     inkcell_focus_begin(&h.map, h.storage, RING_STORAGE);
     (void)inkcell_focus_add_round(&h.map, RING_ID_LEFT, 100, 60, 80, 40, 8);
+    (void)inkcell_focus_add_round(&h.map, RING_ID_BELOW, 100, 300, 80, 40, 8);
     inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_LEFT);
-    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_state_animating(h.state), ring_close(&h),
-                                 "a box that moved under the ring is a journey");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_state_animating(h.state), ring_close(&h),
+                                 "following a box is not a journey and owes no frames of its own");
 
-    inkcell_fb_state_set_now(h.state, RING_T0 + ring_motion(&h));
-    inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_LEFT);
     struct inkcell_focus_rect at = {0, 0, 0, 0};
     (void)inkcell_fb_focus_ring_rect(h.state, &at, NULL);
     INKCELL_TEST_FAIL_IF_CLEANUP(at.y != 60, ring_close(&h),
-                                 "and it should end up where the box went");
+                                 "it should be where the box went, on the same frame");
+
+    /* A move that is still in flight is not broken off by its destination moving: the journey
+       keeps its start and its clock and lands on the corrected box. */
+    inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_BELOW);
+    inkcell_fb_state_set_now(h.state, RING_T0 + ring_motion(&h) / 2U);
+    inkcell_focus_begin(&h.map, h.storage, RING_STORAGE);
+    (void)inkcell_focus_add_round(&h.map, RING_ID_BELOW, 100, 320, 80, 40, 8);
+    inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_BELOW);
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_state_animating(h.state), ring_close(&h),
+                                 "a journey under way should still be under way");
+    inkcell_fb_state_set_now(h.state, RING_T0 + 2U * ring_motion(&h));
+    inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_BELOW);
+    (void)inkcell_fb_focus_ring_rect(h.state, &at, NULL);
+    INKCELL_TEST_FAIL_IF_CLEANUP(at.y != 320, ring_close(&h),
+                                 "and land where the box had moved to");
     ring_close(&h);
     record_success(test_name);
 }

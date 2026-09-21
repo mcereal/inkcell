@@ -128,3 +128,11 @@ focus_ring contrast 3 1024x768 afbce8b634093c4f
 focus_ring contrast 4 1024x768 b4ac00644920e1d1
 focus_ring colorblind 3 1024x768 e386582c49e9ec27
 focus_ring colorblind 4 1024x768 f76ed5007ff268f9
+glide dark 3 1024x768 5e63ef887f5d45e5
+glide dark 4 1024x768 f1dc9fb859e65135
+glide light 3 1024x768 97191cb5d4959e31
+glide light 4 1024x768 ba346e2cd0f21bbb
+glide contrast 3 1024x768 e6daa7690be7b10a
+glide contrast 4 1024x768 94c88a9e43891135
+glide colorblind 3 1024x768 a818c09b91f7b757
+glide colorblind 4 1024x768 2f3866189d5d26a9

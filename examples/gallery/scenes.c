@@ -51,6 +51,13 @@ static const struct gallery_scene k_scenes[] = {
      * rather than sitting on something.
      */
     {"focus_ring", gallery_scene_focus_ring, 20U},
+    /*
+     * A list between two windows, caught early. The curve is an ease-out and most of the
+     * distance is gone within the first third of it, so a picture has to be taken while the
+     * rows are still well out of place - and off a row boundary, because the tell that says a
+     * list is moving rather than sitting is the half-row the body cuts at its top edge.
+     */
+    {"glide", gallery_scene_glide, 54U},
 };
 
 const struct gallery_scene *gallery_scenes(size_t *count) {
