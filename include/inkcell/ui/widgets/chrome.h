@@ -53,7 +53,7 @@
  * `rows` is recomputed by each piece of chrome that consumes body rows, so it is always the
  * count against the body's *real* top, never a deduction from this one.
  */
-struct inkcell_fb_layout inkcell_fb_layout_begin(const struct inkcell_backend_fb_state *state,
+struct inkcell_fb_layout inkcell_fb_layout_begin(const struct inkcell_draw_state *state,
                                                  bool footer, bool back);
 
 /*
@@ -63,7 +63,7 @@ struct inkcell_fb_layout inkcell_fb_layout_begin(const struct inkcell_backend_fb
  * an application calls it after making room of its own - a text field above a list, a chart the
  * screen reserved - so that the list below counts the rows that are actually there.
  */
-uint32_t inkcell_fb_layout_rows(const struct inkcell_backend_fb_state *state,
+uint32_t inkcell_fb_layout_rows(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_layout *layout);
 
 /* ---- the navigation bar ---------------------------------------------------------------------
@@ -78,7 +78,7 @@ uint32_t inkcell_fb_layout_rows(const struct inkcell_backend_fb_state *state,
  *
  * Consumes the room it occupies: `layout->body_y` comes back pointing at the first body row.
  */
-void inkcell_fb_draw_nav_bar(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_nav_bar(const struct inkcell_draw_state *state,
                              struct inkcell_fb_layout *layout, const struct inkcell_fb_chip *tabs,
                              size_t count, size_t active);
 
@@ -106,7 +106,7 @@ void inkcell_fb_draw_nav_bar(const struct inkcell_backend_fb_state *state,
  * Which states count is not this file's business: the application answers it once, for
  * every backend, and passes the answer in.
  */
-void inkcell_fb_draw_progress(struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_progress(struct inkcell_draw_state *state,
                               const struct inkcell_fb_layout *layout, bool busy);
 
 /* ---- the banner ------------------------------------------------------------------------------
@@ -159,7 +159,7 @@ struct inkcell_fb_banner {
  * Recomputes `rows` from the body's real bottom rather than deducting a row count, for the
  * reason inkcell_fb_draw_app_bar() does - see the comment on its tail.
  */
-void inkcell_fb_draw_banner(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_banner(const struct inkcell_draw_state *state,
                             struct inkcell_fb_layout *layout,
                             const struct inkcell_fb_banner *banner);
 
@@ -207,7 +207,7 @@ struct inkcell_fb_action_bar {
 
 /* The room the bar wants at the foot of the panel - what a caller subtracts from the panel
    height to find where the body ends. */
-int inkcell_fb_action_bar_height(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_action_bar_height(const struct inkcell_draw_state *state,
                                  const struct inkcell_fb_layout *layout);
 
 /*
@@ -218,7 +218,7 @@ int inkcell_fb_action_bar_height(const struct inkcell_backend_fb_state *state,
  * press the screen is for survives and "L/R tabs" - true everywhere, and therefore the least
  * worth the room - is what goes.
  */
-void inkcell_fb_draw_action_bar(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_action_bar(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_layout *layout,
                                 const struct inkcell_fb_action_bar *bar);
 
@@ -341,7 +341,7 @@ struct inkcell_fb_fab {
  * A zero-width box is a frame with no room for one - a panel too short between its chrome and
  * its footer - and is what inkcell_fb_draw_fab() draws and registers nothing for.
  */
-struct inkcell_fb_rect inkcell_fb_fab_box(const struct inkcell_backend_fb_state *state,
+struct inkcell_fb_rect inkcell_fb_fab_box(const struct inkcell_draw_state *state,
                                           const struct inkcell_fb_layout *layout,
                                           const struct inkcell_fb_fab *fab);
 
@@ -355,7 +355,7 @@ struct inkcell_fb_rect inkcell_fb_fab_box(const struct inkcell_backend_fb_state 
  *
  * Zero when there is no room for a FAB at all, so a caller adds it without testing first.
  */
-int inkcell_fb_fab_clearance(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_fab_clearance(const struct inkcell_draw_state *state,
                              const struct inkcell_fb_layout *layout,
                              const struct inkcell_fb_fab *fab);
 
@@ -375,7 +375,7 @@ int inkcell_fb_fab_clearance(const struct inkcell_backend_fb_state *state,
  * Drawn after the body and before the action bar - it floats over the screen's content and
  * under the frame's own chrome, which is the order those two sentences are true in.
  */
-struct inkcell_fb_rect inkcell_fb_draw_fab(struct inkcell_backend_fb_state *state,
+struct inkcell_fb_rect inkcell_fb_draw_fab(struct inkcell_draw_state *state,
                                            const struct inkcell_fb_layout *layout,
                                            const struct inkcell_fb_fab *fab);
 
@@ -419,7 +419,7 @@ struct inkcell_fb_app_bar {
     enum inkcell_family badge_family;
 };
 
-void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_app_bar(const struct inkcell_draw_state *state,
                              struct inkcell_fb_layout *layout,
                              const struct inkcell_fb_app_bar *bar);
 
@@ -435,7 +435,7 @@ void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state,
  * A trail is one extra line, which is the only thing about a bar that changes its height. What
  * the title says, and whether there is a badge, do not.
  */
-int inkcell_fb_app_bar_height(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_app_bar_height(const struct inkcell_draw_state *state,
                               const struct inkcell_fb_layout *layout, size_t trail_count);
 
 /*
@@ -446,20 +446,20 @@ int inkcell_fb_app_bar_height(const struct inkcell_backend_fb_state *state,
  * everywhere: the screen is blank, so the one thing on it can afford to be the size that says
  * "this is empty on purpose" rather than "this failed to load".
  */
-void inkcell_fb_draw_empty(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_empty(const struct inkcell_draw_state *state,
                            const struct inkcell_fb_layout *layout, enum inkcell_icon icon,
                            const char *text);
 
 /* How tall a hairline is at `scale` - what a caller stacking something under one has to clear.
    Beside the call that draws one because two expressions for one thickness is how a bar ends up
    overlapping the rule above it. */
-int inkcell_fb_rule_height(const struct inkcell_backend_fb_state *state, int scale);
+int inkcell_fb_rule_height(const struct inkcell_draw_state *state, int scale);
 
 /* A hairline separator - under the tab strip, above a detail pane. The role says which of the
    theme's two rule colours it is: INKCELL_COLOR_RULE for a separator inside the body,
    INKCELL_COLOR_RULE_STRONG for the one that closes the chrome off. */
-void inkcell_fb_draw_rule(const struct inkcell_backend_fb_state *state, int x, int y, int w,
-                          int scale, enum inkcell_color role);
+void inkcell_fb_draw_rule(const struct inkcell_draw_state *state, int x, int y, int w, int scale,
+                          enum inkcell_color role);
 
 /* "Messages (12)", or "Messages (12, +40 older)" when a ring has dropped some. */
 void inkcell_fb_title_count(char *out, size_t out_len, const char *name, uint32_t count,

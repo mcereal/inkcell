@@ -21,7 +21,7 @@ enum {
     GALLERY_ANIM_ROW_METER = 0x1140,
 };
 
-void gallery_scene_list(struct inkcell_backend_fb_state *state) {
+void gallery_scene_list(struct inkcell_draw_state *state) {
     struct inkcell_fb_layout layout = gallery_frame(state, GALLERY_STR_HEAD_ROWS, 1U);
     const int scale = layout.small;
 

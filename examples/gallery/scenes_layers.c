@@ -28,7 +28,7 @@
 
 #include "inkcell/ui/overlay.h"
 
-void gallery_scene_layers(struct inkcell_backend_fb_state *state) {
+void gallery_scene_layers(struct inkcell_draw_state *state) {
     struct inkcell_fb_layout layout = gallery_frame(state, GALLERY_STR_HEAD_LAYERS, 0U);
 
     /* A body to land on, and a busy one: the thing to check about an overlay is whether what

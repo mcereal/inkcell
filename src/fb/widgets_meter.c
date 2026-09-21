@@ -49,7 +49,7 @@
  */
 #define INKCELL_FB_METER_PILL_PHASE 400
 
-int inkcell_fb_meter_thickness(const struct inkcell_backend_fb_state *state, int scale) {
+int inkcell_fb_meter_thickness(const struct inkcell_draw_state *state, int scale) {
     const int thickness =
         inkcell_scale_px((int)inkcell_fb_metrics(state)->meter_thickness, scale > 0 ? scale : 1);
     return thickness > 1 ? thickness : 1;
@@ -86,8 +86,7 @@ static int inkcell_fb_band_mark(const struct inkcell_fb_meter *meter, int32_t bo
     return (int)(((int64_t)meter->rect.w * permille) / INKCELL_ANIM_ONE);
 }
 
-void inkcell_fb_draw_meter(struct inkcell_backend_fb_state *state,
-                           const struct inkcell_fb_meter *meter) {
+void inkcell_fb_draw_meter(struct inkcell_draw_state *state, const struct inkcell_fb_meter *meter) {
     if (meter == NULL || meter->rect.w <= 0 || meter->rect.h <= 0) {
         return;
     }
@@ -255,7 +254,7 @@ void inkcell_fb_draw_meter(struct inkcell_backend_fb_state *state,
  * wide as the circle is a line whose ends are outside it. Seven tenths is the inscribed square,
  * near enough, and it is a ratio rather than a root because nothing here wants a float.
  */
-static void inkcell_fb_dial_label(const struct inkcell_backend_fb_state *state,
+static void inkcell_fb_dial_label(const struct inkcell_draw_state *state,
                                   const struct inkcell_fb_dial *dial, int cx, int cy, int side,
                                   int thickness) {
     if (dial->label == NULL || dial->label[0] == '\0') {
@@ -288,18 +287,17 @@ static void inkcell_fb_dial_label(const struct inkcell_backend_fb_state *state,
     }
 }
 
-int inkcell_fb_dial_thickness(const struct inkcell_backend_fb_state *state, int scale) {
+int inkcell_fb_dial_thickness(const struct inkcell_draw_state *state, int scale) {
     return inkcell_fb_meter_thickness(state, scale);
 }
 
-int inkcell_fb_dial_min_side(const struct inkcell_backend_fb_state *state, int scale) {
+int inkcell_fb_dial_min_side(const struct inkcell_draw_state *state, int scale) {
     /* Two walls and a hole at least as wide as one of them: below that the ring closes up into
        a disc and stops being a reading at all. */
     return 3 * inkcell_fb_dial_thickness(state, scale);
 }
 
-void inkcell_fb_draw_dial(struct inkcell_backend_fb_state *state,
-                          const struct inkcell_fb_dial *dial) {
+void inkcell_fb_draw_dial(struct inkcell_draw_state *state, const struct inkcell_fb_dial *dial) {
     if (dial == NULL || dial->rect.w <= 0 || dial->rect.h <= 0) {
         return;
     }
@@ -410,7 +408,7 @@ void inkcell_fb_draw_dial(struct inkcell_backend_fb_state *state,
 #define INKCELL_FB_SLIDER_HANDLE_REST 3 /* in halves of a track */
 #define INKCELL_FB_SLIDER_HANDLE_FOCUS 4
 
-int inkcell_fb_slider_height(const struct inkcell_backend_fb_state *state, int scale) {
+int inkcell_fb_slider_height(const struct inkcell_draw_state *state, int scale) {
     return inkcell_fb_meter_thickness(state, scale) * INKCELL_FB_SLIDER_TRACK *
            INKCELL_FB_SLIDER_HANDLE_FOCUS / 2;
 }
@@ -430,7 +428,7 @@ int inkcell_fb_slider_height(const struct inkcell_backend_fb_state *state, int s
  * honest answer for a list too long to mark. The ends are skipped for the reason the band's are:
  * a notch at the very edge of a track is the edge of the track.
  */
-static void inkcell_fb_slider_stops(const struct inkcell_backend_fb_state *state,
+static void inkcell_fb_slider_stops(const struct inkcell_draw_state *state,
                                     const struct inkcell_fb_rect *track, int handle_w,
                                     uint32_t stops, struct inkcell_rgb ground) {
     const int notch = inkcell_fb_space(state, INKCELL_SPACE_XS) > 0
@@ -449,7 +447,7 @@ static void inkcell_fb_slider_stops(const struct inkcell_backend_fb_state *state
     }
 }
 
-void inkcell_fb_draw_slider(struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_slider(struct inkcell_draw_state *state,
                             const struct inkcell_fb_slider *slider) {
     if (slider == NULL || slider->rect.w <= 0 || slider->rect.h <= 0) {
         return;
@@ -555,7 +553,7 @@ void inkcell_fb_draw_slider(struct inkcell_backend_fb_state *state,
 
 /* ---- the signal staircase ------------------------------------------------------------------ */
 
-void inkcell_fb_draw_signal(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_signal(const struct inkcell_draw_state *state,
                             const struct inkcell_fb_rect *box, uint8_t level,
                             struct inkcell_rgb ink, struct inkcell_rgb unlit) {
     if (box == NULL || box->w <= 0 || box->h <= 0) {
@@ -601,7 +599,7 @@ void inkcell_fb_draw_signal(const struct inkcell_backend_fb_state *state,
 
 /* ---- the sparkline ------------------------------------------------------------------------- */
 
-int inkcell_fb_sparkline_height(const struct inkcell_backend_fb_state *state, int scale) {
+int inkcell_fb_sparkline_height(const struct inkcell_draw_state *state, int scale) {
     const int height = inkcell_fb_line_adv(state, scale) - inkcell_step_px(scale);
     return height > 1 ? height : 1;
 }
@@ -630,8 +628,8 @@ static int inkcell_fb_spark_stroke(int scale) {
  * axis is time, steep is the ordinary case: two readings a minute apart on a line spanning an
  * hour land within a few columns of each other.
  */
-static void inkcell_fb_spark_segment(const struct inkcell_backend_fb_state *state, int x0, int y0,
-                                     int x1, int y1, int stroke, struct inkcell_rgb color) {
+static void inkcell_fb_spark_segment(const struct inkcell_draw_state *state, int x0, int y0, int x1,
+                                     int y1, int stroke, struct inkcell_rgb color) {
     if (x1 < x0) {
         const int swap_x = x0, swap_y = y0;
         x0 = x1;
@@ -659,7 +657,7 @@ static void inkcell_fb_spark_segment(const struct inkcell_backend_fb_state *stat
     }
 }
 
-void inkcell_fb_draw_sparkline(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_sparkline(const struct inkcell_draw_state *state,
                                const struct inkcell_fb_sparkline *spark) {
     if (spark == NULL || spark->points == NULL || spark->rect.w <= 0 || spark->rect.h <= 0) {
         return;
@@ -764,11 +762,11 @@ void inkcell_fb_draw_sparkline(const struct inkcell_backend_fb_state *state,
 INKCELL_STATIC_ASSERT((int)INKCELL_PROPORTION_PARTS == (int)INKCELL_SERIES_COLORS,
                       "a composition may have exactly as many parts as there are series colours");
 
-int inkcell_fb_proportion_thickness(const struct inkcell_backend_fb_state *state, int scale) {
+int inkcell_fb_proportion_thickness(const struct inkcell_draw_state *state, int scale) {
     return inkcell_fb_meter_thickness(state, scale);
 }
 
-void inkcell_fb_draw_proportion(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_proportion(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_proportion *bar) {
     if (bar == NULL || bar->count < 2U || bar->rect.w <= 0 || bar->rect.h <= 0) {
         return;
@@ -891,7 +889,7 @@ static int inkcell_fb_chart_rule(int scale) {
     return rule > 1 ? rule : 1;
 }
 
-int inkcell_fb_chart_min_height(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_chart_min_height(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_layout *layout) {
     (void)state;
     /* The chrome, and a plot at least as tall again as the chrome under it. Below that the
@@ -908,7 +906,7 @@ int inkcell_fb_chart_min_height(const struct inkcell_backend_fb_state *state,
  * meter answers the same question by cutting a notch in its own track, which is a gap in a thing
  * the eye has already found; there is no track here to cut, so the mark has to be visibly a mark.
  */
-static void inkcell_fb_chart_threshold(const struct inkcell_backend_fb_state *state,
+static void inkcell_fb_chart_threshold(const struct inkcell_draw_state *state,
                                        const struct inkcell_fb_rect *plot, int travel,
                                        int32_t value, struct inkcell_scale scale, int rule,
                                        struct inkcell_rgb ink) {
@@ -950,7 +948,7 @@ static void inkcell_fb_chart_threshold(const struct inkcell_backend_fb_state *st
  * text. Naming the parts in their own colours is what every spreadsheet does and it is four more
  * contrast pairs per theme, to say what a swatch already says.
  */
-static void inkcell_fb_chart_legend(const struct inkcell_backend_fb_state *state,
+static void inkcell_fb_chart_legend(const struct inkcell_draw_state *state,
                                     const struct inkcell_fb_layout *layout,
                                     const struct inkcell_fb_chart *chart, int x, int y) {
     const int scale = layout->small;
@@ -1017,7 +1015,7 @@ static void inkcell_fb_chart_legend(const struct inkcell_backend_fb_state *state
  *
  * True when it put a mark on the panel.
  */
-static bool inkcell_fb_chart_bins(const struct inkcell_backend_fb_state *state,
+static bool inkcell_fb_chart_bins(const struct inkcell_draw_state *state,
                                   const struct inkcell_fb_rect *plot, int travel, int stroke,
                                   int rule, struct inkcell_scale scale,
                                   const struct inkcell_fb_chart_line *line,
@@ -1093,7 +1091,7 @@ static bool inkcell_fb_chart_bins(const struct inkcell_backend_fb_state *state,
  * lines under it say what came out. Put underneath, the control would be the third line of a
  * caption. Centred, because it is about the whole horizontal rather than either end of it.
  */
-static int inkcell_fb_chart_strip(const struct inkcell_backend_fb_state *state,
+static int inkcell_fb_chart_strip(const struct inkcell_draw_state *state,
                                   const struct inkcell_fb_layout *layout,
                                   const struct inkcell_fb_rect *rect,
                                   const struct inkcell_fb_segmented *spans, int *out_width) {
@@ -1113,7 +1111,7 @@ static int inkcell_fb_chart_strip(const struct inkcell_backend_fb_state *state,
     return strip + gap;
 }
 
-uint32_t inkcell_fb_chart_reading_rows(const struct inkcell_backend_fb_state *state,
+uint32_t inkcell_fb_chart_reading_rows(const struct inkcell_draw_state *state,
                                        const struct inkcell_fb_layout *layout,
                                        const struct inkcell_fb_rect *rect,
                                        const struct inkcell_fb_segmented *spans) {
@@ -1145,7 +1143,7 @@ uint32_t inkcell_fb_chart_reading_rows(const struct inkcell_backend_fb_state *st
  * The newest row is the one every other row is measured from, so it says so rather than "0s" -
  * a zero there is a duration the reader has to work out is not a reading.
  */
-static void inkcell_fb_draw_chart_readings(const struct inkcell_backend_fb_state *state,
+static void inkcell_fb_draw_chart_readings(const struct inkcell_draw_state *state,
                                            const struct inkcell_fb_layout *layout,
                                            const struct inkcell_fb_chart *chart,
                                            const struct inkcell_fb_rect *body) {
@@ -1218,7 +1216,7 @@ static void inkcell_fb_draw_chart_readings(const struct inkcell_backend_fb_state
     }
 }
 
-void inkcell_fb_draw_chart(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_chart(const struct inkcell_draw_state *state,
                            const struct inkcell_fb_layout *layout,
                            const struct inkcell_fb_chart *chart) {
     if (chart == NULL || chart->rect.w <= 0 || chart->rect.h <= 0) {

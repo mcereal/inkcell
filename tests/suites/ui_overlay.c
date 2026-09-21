@@ -42,7 +42,7 @@ enum {
 
 struct overlay_harness {
     struct inkcell_capture *capture;
-    struct inkcell_backend_fb_state *state;
+    struct inkcell_draw_state *state;
     uint64_t now_ms;
 };
 

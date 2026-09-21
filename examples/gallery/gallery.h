@@ -103,7 +103,7 @@ struct gallery_scene {
     /* Draws one whole frame. Mutable because the components that animate - the switch, the
        meter, the slider - keep their position on the state, and a scene is entitled to the
        same components a screen gets rather than to a frozen copy of them. */
-    void (*render)(struct inkcell_backend_fb_state *state);
+    void (*render)(struct inkcell_draw_state *state);
     /*
      * How far to step the clock before taking the picture, in milliseconds. 0 means the first
      * frame is the picture.
@@ -126,29 +126,29 @@ struct gallery_scene {
 const struct gallery_scene *gallery_scenes(size_t *count);
 
 /* One scene per file under scenes_*.c, in the order scenes.c lists them. */
-void gallery_scene_buttons(struct inkcell_backend_fb_state *state);
-void gallery_scene_chrome(struct inkcell_backend_fb_state *state);
-void gallery_scene_fab(struct inkcell_backend_fb_state *state);
-void gallery_scene_controls(struct inkcell_backend_fb_state *state);
-void gallery_scene_list(struct inkcell_backend_fb_state *state);
-void gallery_scene_grid(struct inkcell_backend_fb_state *state);
-void gallery_scene_grid_covers(struct inkcell_backend_fb_state *state);
-void gallery_scene_cards(struct inkcell_backend_fb_state *state);
-void gallery_scene_meters(struct inkcell_backend_fb_state *state);
-void gallery_scene_transcript(struct inkcell_backend_fb_state *state);
-void gallery_scene_overlays(struct inkcell_backend_fb_state *state);
-void gallery_scene_typography(struct inkcell_backend_fb_state *state);
-void gallery_scene_palette(struct inkcell_backend_fb_state *state);
-void gallery_scene_shapes(struct inkcell_backend_fb_state *state);
-void gallery_scene_keyboard(struct inkcell_backend_fb_state *state);
-void gallery_scene_keyboard_emoji(struct inkcell_backend_fb_state *state);
-void gallery_scene_focus(struct inkcell_backend_fb_state *state);
-void gallery_scene_focus_ring(struct inkcell_backend_fb_state *state);
-void gallery_scene_glide(struct inkcell_backend_fb_state *state);
-void gallery_scene_layers(struct inkcell_backend_fb_state *state);
-void gallery_scene_scroll(struct inkcell_backend_fb_state *state);
-void gallery_scene_scroll_overscroll(struct inkcell_backend_fb_state *state);
-void gallery_scene_scroll_title(struct inkcell_backend_fb_state *state);
+void gallery_scene_buttons(struct inkcell_draw_state *state);
+void gallery_scene_chrome(struct inkcell_draw_state *state);
+void gallery_scene_fab(struct inkcell_draw_state *state);
+void gallery_scene_controls(struct inkcell_draw_state *state);
+void gallery_scene_list(struct inkcell_draw_state *state);
+void gallery_scene_grid(struct inkcell_draw_state *state);
+void gallery_scene_grid_covers(struct inkcell_draw_state *state);
+void gallery_scene_cards(struct inkcell_draw_state *state);
+void gallery_scene_meters(struct inkcell_draw_state *state);
+void gallery_scene_transcript(struct inkcell_draw_state *state);
+void gallery_scene_overlays(struct inkcell_draw_state *state);
+void gallery_scene_typography(struct inkcell_draw_state *state);
+void gallery_scene_palette(struct inkcell_draw_state *state);
+void gallery_scene_shapes(struct inkcell_draw_state *state);
+void gallery_scene_keyboard(struct inkcell_draw_state *state);
+void gallery_scene_keyboard_emoji(struct inkcell_draw_state *state);
+void gallery_scene_focus(struct inkcell_draw_state *state);
+void gallery_scene_focus_ring(struct inkcell_draw_state *state);
+void gallery_scene_glide(struct inkcell_draw_state *state);
+void gallery_scene_layers(struct inkcell_draw_state *state);
+void gallery_scene_scroll(struct inkcell_draw_state *state);
+void gallery_scene_scroll_overscroll(struct inkcell_draw_state *state);
+void gallery_scene_scroll_title(struct inkcell_draw_state *state);
 
 /* ---- shared scene furniture --------------------------------------------------------------------
  *
@@ -156,15 +156,14 @@ void gallery_scene_scroll_title(struct inkcell_backend_fb_state *state);
  * bottom, so that a specimen is shown where it would really sit rather than floating on a blank
  * panel. Returns the layout with the chrome's room already taken out of it.
  */
-struct inkcell_fb_layout gallery_frame(struct inkcell_backend_fb_state *state,
-                                       enum gallery_str_id title, size_t tab);
+struct inkcell_fb_layout gallery_frame(struct inkcell_draw_state *state, enum gallery_str_id title,
+                                       size_t tab);
 
 /* The keycap row, drawn last because it sits over a body that was laid out before it. */
-void gallery_footer(const struct inkcell_backend_fb_state *state,
-                    const struct inkcell_fb_layout *layout);
+void gallery_footer(const struct inkcell_draw_state *state, const struct inkcell_fb_layout *layout);
 
 /* A section heading inside a scene's body, and the row it leaves the next thing standing on. */
-int gallery_section(const struct inkcell_backend_fb_state *state,
-                    const struct inkcell_fb_layout *layout, int y, enum gallery_str_id title);
+int gallery_section(const struct inkcell_draw_state *state, const struct inkcell_fb_layout *layout,
+                    int y, enum gallery_str_id title);
 
 #endif /* INKCELL_GALLERY_H */

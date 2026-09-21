@@ -36,7 +36,7 @@
  * what is being reserved is room for text in general rather than for a particular string, which
  * is exactly the case the note in the README leaves the nominal advance for.
  */
-static int inkcell_fb_tile_floor(const struct inkcell_backend_fb_state *state, int label_scale) {
+static int inkcell_fb_tile_floor(const struct inkcell_draw_state *state, int label_scale) {
     const int pad = inkcell_fb_space(state, INKCELL_SPACE_MD);
     const int art = inkcell_fb_icon_drawn(state, state->scale) + 2 * pad;
     const int words = 4 * inkcell_fb_char_adv(state, label_scale) + 2 * pad;
@@ -73,7 +73,7 @@ static int inkcell_fb_tile_art_h(int width, enum inkcell_fb_tile_ratio ratio) {
     }
 }
 
-struct inkcell_fb_grid inkcell_fb_grid_begin(const struct inkcell_backend_fb_state *state,
+struct inkcell_fb_grid inkcell_fb_grid_begin(const struct inkcell_draw_state *state,
                                              const struct inkcell_fb_layout *layout, uint32_t count,
                                              uint32_t cursor,
                                              const struct inkcell_fb_grid_style *style) {
@@ -248,7 +248,7 @@ void inkcell_fb_grid_focus(struct inkcell_fb_grid *grid, uint32_t base) {
  * face drawn through inkcell_fb_grid_tile_box() would otherwise be a tile on the panel that the
  * cursor cannot reach.
  */
-void inkcell_fb_grid_focus_tile(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_grid_focus_tile(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_grid *grid, uint32_t index) {
     if (state == NULL || grid == NULL || grid->focus_base == INKCELL_FOCUS_NONE) {
         return;
@@ -272,7 +272,7 @@ struct inkcell_focus_run inkcell_fb_grid_run(const struct inkcell_fb_grid *grid)
 
 /* The rail, drawn once per grid by the first tile that draws. The list's rail, in the list's
    gutter, measured over the grid's window of rows - see inkcell_fb_draw_list_rail(). */
-static void inkcell_fb_grid_chrome(const struct inkcell_backend_fb_state *state,
+static void inkcell_fb_grid_chrome(const struct inkcell_draw_state *state,
                                    struct inkcell_fb_grid *grid) {
     if (grid->chrome_drawn) {
         return;
@@ -295,7 +295,7 @@ static void inkcell_fb_grid_chrome(const struct inkcell_backend_fb_state *state,
  * centred on the glyph body rather than on the line advance, because the advance carries the
  * gap accents hang in and counting it sits the picture low in the tile.
  */
-static void inkcell_fb_tile_art(const struct inkcell_backend_fb_state *state,
+static void inkcell_fb_tile_art(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_tile *tile, int x, int y, int w, int h,
                                 struct inkcell_paint paint) {
     const int pad = inkcell_fb_space(state, INKCELL_SPACE_MD);
@@ -379,7 +379,7 @@ static void inkcell_fb_tile_art(const struct inkcell_backend_fb_state *state,
  * a tile's name is a label, and a label that spilled onto a third line would be a tile drawing
  * over the one below it.
  */
-static uint32_t inkcell_fb_tile_text(const struct inkcell_backend_fb_state *state, int x, int y,
+static uint32_t inkcell_fb_tile_text(const struct inkcell_draw_state *state, int x, int y,
                                      int width, const char *text, int scale,
                                      enum inkcell_weight weight, uint32_t lines, bool centred,
                                      struct inkcell_rgb ink, struct inkcell_rgb ground) {
@@ -413,7 +413,7 @@ static uint32_t inkcell_fb_tile_text(const struct inkcell_backend_fb_state *stat
  * name below the tile stands on the body's ground instead, where INKCELL_TONE_DIM is a role
  * with a contract of its own - so that half says it the way every list row says it.
  */
-static void inkcell_fb_tile_label(const struct inkcell_backend_fb_state *state,
+static void inkcell_fb_tile_label(const struct inkcell_draw_state *state,
                                   const struct inkcell_fb_grid *grid,
                                   const struct inkcell_fb_tile *tile, struct inkcell_paint paint) {
     if (grid->label_place == INKCELL_FB_TILE_LABEL_NONE || grid->label_h <= 0) {
@@ -446,7 +446,7 @@ static void inkcell_fb_tile_label(const struct inkcell_backend_fb_state *state,
 /* The count in the top trailing corner, in the space the tile's own padding already leaves. A
    badge that reached the corner would sit on the container's curve, which is where the corner
    has already begun to turn away underneath it. */
-static void inkcell_fb_tile_badge(const struct inkcell_backend_fb_state *state,
+static void inkcell_fb_tile_badge(const struct inkcell_draw_state *state,
                                   const struct inkcell_fb_grid *grid,
                                   const struct inkcell_fb_tile *tile) {
     if (tile->badge == NULL || tile->badge[0] == '\0') {
@@ -466,9 +466,8 @@ static void inkcell_fb_tile_badge(const struct inkcell_backend_fb_state *state,
                           tile->badge_family, scale);
 }
 
-void inkcell_fb_grid_tile(const struct inkcell_backend_fb_state *state,
-                          struct inkcell_fb_grid *grid, uint32_t index,
-                          const struct inkcell_fb_tile *tile) {
+void inkcell_fb_grid_tile(const struct inkcell_draw_state *state, struct inkcell_fb_grid *grid,
+                          uint32_t index, const struct inkcell_fb_tile *tile) {
     if (state == NULL || grid == NULL || tile == NULL) {
         return;
     }

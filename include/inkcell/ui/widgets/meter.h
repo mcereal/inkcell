@@ -121,12 +121,11 @@ struct inkcell_fb_meter {
 
 /* The height a meter wants at `scale`, in pixels. From the theme's metrics, so a bar keeps its
    proportion to the text beside it when a theme changes the glyph scale. */
-int inkcell_fb_meter_thickness(const struct inkcell_backend_fb_state *state, int scale);
+int inkcell_fb_meter_thickness(const struct inkcell_draw_state *state, int scale);
 
 /* Draws it, advancing the fill towards its target - or the pill along its loop. Needs the
    mutable state for the same reason the switch does. */
-void inkcell_fb_draw_meter(struct inkcell_backend_fb_state *state,
-                           const struct inkcell_fb_meter *meter);
+void inkcell_fb_draw_meter(struct inkcell_draw_state *state, const struct inkcell_fb_meter *meter);
 
 /* ---- the dial --------------------------------------------------------------------------------
  *
@@ -205,7 +204,7 @@ struct inkcell_fb_dial {
 
 /* What a ring at `scale` should be thick, which is the bar's thickness there - so a dial and a
    meter on one screen are drawn with one weight. Goes in `thickness` above. */
-int inkcell_fb_dial_thickness(const struct inkcell_backend_fb_state *state, int scale);
+int inkcell_fb_dial_thickness(const struct inkcell_draw_state *state, int scale);
 
 /*
  * The smallest box worth drawing a dial in at `scale` - twice the thickness plus room for the
@@ -216,12 +215,11 @@ int inkcell_fb_dial_thickness(const struct inkcell_backend_fb_state *state, int 
  * thickness is the whole of the arithmetic, so a caller stating its own thickness can work it
  * out directly.
  */
-int inkcell_fb_dial_min_side(const struct inkcell_backend_fb_state *state, int scale);
+int inkcell_fb_dial_min_side(const struct inkcell_draw_state *state, int scale);
 
 /* Mutable for the reason the meter is: where the arc has got to lives on the state, keyed by
    `id`, because a screen renderer is rebuilt from nothing every frame. */
-void inkcell_fb_draw_dial(struct inkcell_backend_fb_state *state,
-                          const struct inkcell_fb_dial *dial);
+void inkcell_fb_draw_dial(struct inkcell_draw_state *state, const struct inkcell_fb_dial *dial);
 
 /* ---- the slider ------------------------------------------------------------------------------
  *
@@ -291,11 +289,11 @@ struct inkcell_fb_slider {
 /* The height the whole control wants at `scale` - the handle's, which is taller than its track.
    Reserved whether or not the cursor is on the row, so a handle standing up under the cursor
    does not make the row it is on grow and shift every row below it. */
-int inkcell_fb_slider_height(const struct inkcell_backend_fb_state *state, int scale);
+int inkcell_fb_slider_height(const struct inkcell_draw_state *state, int scale);
 
 /* Draws the track, its stops, and the handle at `position`, easing the handle towards it. Needs
    the mutable state for the reason the meter and the switch do. */
-void inkcell_fb_draw_slider(struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_slider(struct inkcell_draw_state *state,
                             const struct inkcell_fb_slider *slider);
 
 /* ---- the signal staircase -------------------------------------------------------------------
@@ -323,7 +321,7 @@ void inkcell_fb_draw_slider(struct inkcell_backend_fb_state *state,
  * from the row it is on - which is what the trailing slot already does for every other thing it
  * draws, and what keeps this from being a fifth colour every theme has to be validated for.
  */
-void inkcell_fb_draw_signal(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_signal(const struct inkcell_draw_state *state,
                             const struct inkcell_fb_rect *box, uint8_t level,
                             struct inkcell_rgb ink, struct inkcell_rgb unlit);
 
@@ -397,11 +395,11 @@ struct inkcell_fb_sparkline {
  * line's whole reading is in its height, so every pixel of it is a pixel of the answer. This is
  * as tall as a row's own text, which is as tall as a slot can be without the row growing.
  */
-int inkcell_fb_sparkline_height(const struct inkcell_backend_fb_state *state, int scale);
+int inkcell_fb_sparkline_height(const struct inkcell_draw_state *state, int scale);
 
 /* Draws the floor and the line. Const state, unlike the meter and the slider: there is no
    animation to step - see above. */
-void inkcell_fb_draw_sparkline(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_sparkline(const struct inkcell_draw_state *state,
                                const struct inkcell_fb_sparkline *spark);
 
 /* ---- the proportion bar ----------------------------------------------------------------------
@@ -478,11 +476,11 @@ struct inkcell_fb_proportion {
 /* The height a composition wants at `scale` - the meter's, deliberately. A card that carried a
    bar of one weight and a bar of another would be reporting a difference between them that is
    not there: both are a reading drawn as a length. */
-int inkcell_fb_proportion_thickness(const struct inkcell_backend_fb_state *state, int scale);
+int inkcell_fb_proportion_thickness(const struct inkcell_draw_state *state, int scale);
 
 /* Draws it. Const state, like the sparkline and unlike the meter: there is no animation to step
    - see above. Fewer than two parts, or parts that sum to nothing, draws nothing at all. */
-void inkcell_fb_draw_proportion(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_proportion(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_proportion *bar);
 
 /* ---- the chart ------------------------------------------------------------------------------
@@ -682,7 +680,7 @@ struct inkcell_fb_chart {
  * smear above it rather than a picture. A caller with less room draws something else; there is
  * no clipped chart, for the reason there is no clipped card.
  */
-int inkcell_fb_chart_min_height(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_chart_min_height(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_layout *layout);
 
 /*
@@ -697,14 +695,14 @@ int inkcell_fb_chart_min_height(const struct inkcell_backend_fb_state *state,
  * `rect` and `spans` are the chart's own, so the two calls measure the same room. Zero when
  * there is not enough of it - the same answer inkcell_fb_draw_chart() gives by drawing nothing.
  */
-uint32_t inkcell_fb_chart_reading_rows(const struct inkcell_backend_fb_state *state,
+uint32_t inkcell_fb_chart_reading_rows(const struct inkcell_draw_state *state,
                                        const struct inkcell_fb_layout *layout,
                                        const struct inkcell_fb_rect *rect,
                                        const struct inkcell_fb_segmented *spans);
 
 /* Draws the frame, the threshold rules, the lines and the legend. Const state, like the
    sparkline and the composition: there is nothing here to animate. */
-void inkcell_fb_draw_chart(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_chart(const struct inkcell_draw_state *state,
                            const struct inkcell_fb_layout *layout,
                            const struct inkcell_fb_chart *chart);
 

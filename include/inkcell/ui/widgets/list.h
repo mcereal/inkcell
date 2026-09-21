@@ -75,7 +75,7 @@ struct inkcell_fb_list {
      * does not animate - and a gliding row does, so the handle it animates through is the
      * list's rather than the parameter's. It is borrowed for the frame, like `heights`.
      */
-    struct inkcell_backend_fb_state *glide_state;
+    struct inkcell_draw_state *glide_state;
     int glide_dy;
     /*
      * How tall the window is, which is what a glide is clipped to.
@@ -309,7 +309,7 @@ void inkcell_fb_list_focus(struct inkcell_fb_list *list, uint32_t base);
  * its own, there is one per frame, and a body sliding two ways at once is not a thing to look
  * at. The list jumps that frame and glides from the next.
  */
-void inkcell_fb_list_glide(struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
+void inkcell_fb_list_glide(struct inkcell_draw_state *state, struct inkcell_fb_list *list,
                            uint32_t id);
 
 bool inkcell_fb_list_next(struct inkcell_fb_list *list, uint32_t *index);
@@ -346,13 +346,12 @@ uint32_t inkcell_fb_list_row_height(const struct inkcell_fb_list *list, uint32_t
  */
 
 /* Draws the row - highlighted when `index` is the cursor - and advances. */
-void inkcell_fb_list_row(const struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
+void inkcell_fb_list_row(const struct inkcell_draw_state *state, struct inkcell_fb_list *list,
                          uint32_t index, const char *text, enum inkcell_tone tone);
 
 /* Same, taking the line builder directly, which is how most rows are assembled. */
-void inkcell_fb_list_row_line(const struct inkcell_backend_fb_state *state,
-                              struct inkcell_fb_list *list, uint32_t index,
-                              struct inkcell_line *line, enum inkcell_tone tone);
+void inkcell_fb_list_row_line(const struct inkcell_draw_state *state, struct inkcell_fb_list *list,
+                              uint32_t index, struct inkcell_line *line, enum inkcell_tone tone);
 
 /* What sits at the row's leading edge. */
 enum inkcell_fb_leading_kind {
@@ -445,8 +444,8 @@ struct inkcell_fb_leading {
  * heading is the one cell the eye finds when it is looking for Signal rather than Identity,
  * which is the same argument struct inkcell_fb_card's own icon is there for.
  */
-void inkcell_fb_list_subheader(const struct inkcell_backend_fb_state *state,
-                               struct inkcell_fb_list *list, uint32_t index, const char *text);
+void inkcell_fb_list_subheader(const struct inkcell_draw_state *state, struct inkcell_fb_list *list,
+                               uint32_t index, const char *text);
 
 /*
  * The same heading, indented to a list that declares a leading slot.
@@ -465,7 +464,7 @@ void inkcell_fb_list_subheader(const struct inkcell_backend_fb_state *state,
  *
  * inkcell_fb_list_subheader() is this with no slot, which is every list that has no icons in it.
  */
-void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_list_subheader_icon(const struct inkcell_draw_state *state,
                                     struct inkcell_fb_list *list, uint32_t index, const char *text,
                                     struct inkcell_fb_leading leading);
 
@@ -491,11 +490,10 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state
  * `heading` may be NULL for a paragraph that names nothing, which is what the topic's own
  * opening note is.
  */
-uint32_t inkcell_fb_list_note_steps(const struct inkcell_backend_fb_state *state,
-                                    const char *heading, const char *body);
+uint32_t inkcell_fb_list_note_steps(const struct inkcell_draw_state *state, const char *heading,
+                                    const char *body);
 
-void inkcell_fb_list_note(const struct inkcell_backend_fb_state *state,
-                          struct inkcell_fb_list *list, uint32_t index, const char *heading,
-                          const char *body);
+void inkcell_fb_list_note(const struct inkcell_draw_state *state, struct inkcell_fb_list *list,
+                          uint32_t index, const char *heading, const char *body);
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_LIST_H */

@@ -29,8 +29,8 @@
 #define DAMAGE_ROWS 2U
 #define DAMAGE_PAGE (DAMAGE_STRIDE * DAMAGE_ROWS)
 
-static struct inkcell_backend_fb_state damage_state(uint8_t *mapping, size_t size) {
-    struct inkcell_backend_fb_state state = {0};
+static struct inkcell_draw_state damage_state(uint8_t *mapping, size_t size) {
+    struct inkcell_draw_state state = {0};
     state.surface = (struct inkcell_surface){
         .pixels = mapping,
         .size = size,
@@ -50,7 +50,7 @@ INKCELL_TEST_CASE(damage_preserves_mirror_and_padding, unit) {
     uint8_t frame[DAMAGE_PAGE];
     memset(mapping, 0xA5, sizeof mapping);
     memset(frame, 0x31, sizeof frame);
-    struct inkcell_backend_fb_state state = damage_state(mapping, sizeof mapping);
+    struct inkcell_draw_state state = damage_state(mapping, sizeof mapping);
 
     INKCELL_TEST_FAIL_IF(inkcell_fb_copy_damage(&state, frame, previous, true, true) != 64U,
                          "first frame must initialize both pages");
@@ -90,7 +90,7 @@ INKCELL_TEST_CASE(damage_refuses_a_mirror_that_does_not_fit, unit) {
     uint8_t frame[DAMAGE_PAGE];
     memset(mapping, 0xA5, sizeof mapping);
     memset(frame, 0x31, sizeof frame);
-    struct inkcell_backend_fb_state state = damage_state(mapping, sizeof mapping);
+    struct inkcell_draw_state state = damage_state(mapping, sizeof mapping);
 
     INKCELL_TEST_FAIL_IF(inkcell_fb_copy_damage(&state, frame, previous, true, true) != DAMAGE_PAGE,
                          "a one-page surface must be written once however the caller asked");
@@ -106,7 +106,7 @@ INKCELL_TEST_CASE(damage_refuses_a_surface_with_no_pixel_size, unit) {
     uint8_t frame[DAMAGE_PAGE];
     memset(mapping, 0xA5, sizeof mapping);
     memset(frame, 0x31, sizeof frame);
-    struct inkcell_backend_fb_state state = damage_state(mapping, sizeof mapping);
+    struct inkcell_draw_state state = damage_state(mapping, sizeof mapping);
     state.surface.bytes_per_pixel = 0U;
 
     INKCELL_TEST_FAIL_IF(inkcell_fb_copy_damage(&state, frame, previous, true, false) != 0U,

@@ -262,7 +262,7 @@ INKCELL_TEST_CASE(grid_cramped_initials_stop_at_a_whole_step, unit) {
         record_failure(test_name, "the capture should open");
         return;
     }
-    struct inkcell_backend_fb_state *state = inkcell_capture_state(capture);
+    struct inkcell_draw_state *state = inkcell_capture_state(capture);
 
     uint32_t width = 0U, height = 0U;
     size_t stride = 0U;

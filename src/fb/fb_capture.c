@@ -29,7 +29,7 @@
 #include <string.h>
 
 struct inkcell_capture {
-    struct inkcell_backend_fb_state state;
+    struct inkcell_draw_state state;
     uint32_t width;
     uint32_t height;
 };
@@ -60,7 +60,7 @@ int inkcell_capture_open(struct inkcell_capture **out, uint32_t width, uint32_t 
     capture->width = width;
     capture->height = height;
 
-    struct inkcell_backend_fb_state *state = &capture->state;
+    struct inkcell_draw_state *state = &capture->state;
     state->surface = (struct inkcell_surface){
         .pixels = pixels,
         .size = page_bytes,
@@ -80,7 +80,7 @@ int inkcell_capture_open(struct inkcell_capture **out, uint32_t width, uint32_t 
     return 0;
 }
 
-struct inkcell_backend_fb_state *inkcell_capture_state(struct inkcell_capture *capture) {
+struct inkcell_draw_state *inkcell_capture_state(struct inkcell_capture *capture) {
     return capture == NULL ? NULL : &capture->state;
 }
 

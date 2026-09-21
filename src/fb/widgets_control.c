@@ -28,7 +28,7 @@
 
 /* Shorter than the line advance, which carries the gap between rows: a control as tall as the
    advance touches the row above it. */
-static int inkcell_fb_switch_height(const struct inkcell_backend_fb_state *state, int scale) {
+static int inkcell_fb_switch_height(const struct inkcell_draw_state *state, int scale) {
     const int height =
         inkcell_fb_line_adv(state, scale) - inkcell_fb_space_at(state, INKCELL_SPACE_MD, scale);
     return height < 6 ? 6 : height;
@@ -42,8 +42,7 @@ static int inkcell_fb_switch_height(const struct inkcell_backend_fb_state *state
  * sits in, how far it travels - falls out of the height below, so a theme that asks for bigger
  * text gets a proportionally bigger control and no renderer is touched.
  */
-void inkcell_fb_switch_size(const struct inkcell_backend_fb_state *state, int scale, int *w,
-                            int *h) {
+void inkcell_fb_switch_size(const struct inkcell_draw_state *state, int scale, int *w, int *h) {
     const int height = inkcell_fb_switch_height(state, scale);
     if (h != NULL) {
         *h = height;
@@ -53,8 +52,7 @@ void inkcell_fb_switch_size(const struct inkcell_backend_fb_state *state, int sc
     }
 }
 
-void inkcell_fb_draw_switch(struct inkcell_backend_fb_state *state,
-                            const struct inkcell_fb_switch *sw) {
+void inkcell_fb_draw_switch(struct inkcell_draw_state *state, const struct inkcell_fb_switch *sw) {
     if (sw == NULL || sw->rect.w <= 0 || sw->rect.h <= 0) {
         return;
     }
@@ -140,8 +138,7 @@ void inkcell_fb_draw_switch(struct inkcell_backend_fb_state *state,
  */
 #define INKCELL_FB_SELECTION_MOTION INKCELL_MOTION_SHORT
 
-void inkcell_fb_selection_size(const struct inkcell_backend_fb_state *state, int scale, int *w,
-                               int *h) {
+void inkcell_fb_selection_size(const struct inkcell_draw_state *state, int scale, int *w, int *h) {
     /* A square of the switch's height, so a list mixing the two controls has them the same
        distance off its rows' top and bottom edges. */
     const int side = inkcell_fb_switch_height(state, scale);
@@ -162,7 +159,7 @@ void inkcell_fb_selection_size(const struct inkcell_backend_fb_state *state, int
  * smallest overruns, which is a checkbox that draws its fill and no tick: at that size the fill
  * is the whole of what can be read anyway.
  */
-static int inkcell_fb_icon_scale_within(const struct inkcell_backend_fb_state *state, int box) {
+static int inkcell_fb_icon_scale_within(const struct inkcell_draw_state *state, int box) {
     for (int scale = state->scale; scale > 0; scale -= INKCELL_SCALE(1)) {
         if (inkcell_fb_icon_drawn(state, scale) <= box) {
             return scale;
@@ -171,7 +168,7 @@ static int inkcell_fb_icon_scale_within(const struct inkcell_backend_fb_state *s
     return 0;
 }
 
-void inkcell_fb_draw_selection(struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_selection(struct inkcell_draw_state *state,
                                const struct inkcell_fb_selection *sel) {
     if (sel == NULL || sel->rect.w <= 0 || sel->rect.h <= 0) {
         return;
@@ -286,11 +283,11 @@ void inkcell_fb_draw_selection(struct inkcell_backend_fb_state *state,
 
 /* ---- the segmented button ------------------------------------------------------------------ */
 
-int inkcell_fb_segmented_height(const struct inkcell_backend_fb_state *state, int scale) {
+int inkcell_fb_segmented_height(const struct inkcell_draw_state *state, int scale) {
     return inkcell_fb_switch_height(state, scale);
 }
 
-int inkcell_fb_segmented_width(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_segmented_width(const struct inkcell_draw_state *state,
                                const struct inkcell_fb_segmented *segmented, int scale) {
     if (segmented == NULL || segmented->count == 0U ||
         segmented->count > INKCELL_FB_SEGMENTED_MAX) {
@@ -316,7 +313,7 @@ int inkcell_fb_segmented_width(const struct inkcell_backend_fb_state *state,
     return (int)segmented->count * widest;
 }
 
-void inkcell_fb_draw_segmented(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_segmented(const struct inkcell_draw_state *state,
                                const struct inkcell_fb_rect *rect,
                                const struct inkcell_fb_segmented *segmented, bool selected,
                                enum inkcell_color ground, int scale) {
@@ -403,7 +400,7 @@ void inkcell_fb_draw_segmented(const struct inkcell_backend_fb_state *state,
 /* ---- the text field ------------------------------------------------------------------------ */
 
 /* The box's own height, without the label over it or the counter under it. */
-static int inkcell_fb_text_field_box_h(const struct inkcell_backend_fb_state *state,
+static int inkcell_fb_text_field_box_h(const struct inkcell_draw_state *state,
                                        const struct inkcell_fb_layout *layout,
                                        const struct inkcell_fb_text_field *field) {
     const uint32_t lines = field->lines > 0U ? field->lines : 1U;
@@ -413,7 +410,7 @@ static int inkcell_fb_text_field_box_h(const struct inkcell_backend_fb_state *st
 /* The label's line, and the counter's. Both are chrome: they report on the field rather than
    being part of what is in it, so they are drawn at the smaller scale the footer and the tab
    strip use. Zero when the field carries neither. */
-static int inkcell_fb_text_field_label_h(const struct inkcell_backend_fb_state *state,
+static int inkcell_fb_text_field_label_h(const struct inkcell_draw_state *state,
                                          const struct inkcell_fb_layout *layout,
                                          const struct inkcell_fb_text_field *field) {
     return (field->label != NULL && field->label[0] != '\0')
@@ -421,7 +418,7 @@ static int inkcell_fb_text_field_label_h(const struct inkcell_backend_fb_state *
                : 0;
 }
 
-static int inkcell_fb_text_field_counter_h(const struct inkcell_backend_fb_state *state,
+static int inkcell_fb_text_field_counter_h(const struct inkcell_draw_state *state,
                                            const struct inkcell_fb_layout *layout,
                                            const struct inkcell_fb_text_field *field) {
     return (field->counter != NULL && field->counter[0] != '\0')
@@ -429,7 +426,7 @@ static int inkcell_fb_text_field_counter_h(const struct inkcell_backend_fb_state
                : 0;
 }
 
-int inkcell_fb_text_field_height(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_text_field_height(const struct inkcell_draw_state *state,
                                  const struct inkcell_fb_layout *layout,
                                  const struct inkcell_fb_text_field *field) {
     if (field == NULL) {
@@ -440,7 +437,7 @@ int inkcell_fb_text_field_height(const struct inkcell_backend_fb_state *state,
            inkcell_fb_text_field_counter_h(state, layout, field) + inkcell_step_px(state->scale);
 }
 
-void inkcell_fb_draw_text_field(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_text_field(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_layout *layout, int *y,
                                 const struct inkcell_fb_text_field *field) {
     if (field == NULL || y == NULL) {

@@ -29,7 +29,7 @@ static const struct inkcell_rgb k_ink = {255U, 255U, 255U};
 
 struct shapes_page {
     struct inkcell_capture *capture;
-    struct inkcell_backend_fb_state *state;
+    struct inkcell_draw_state *state;
     const uint8_t *pixels;
     size_t stride;
 };
@@ -227,7 +227,7 @@ INKCELL_TEST_CASE(shapes_stroke_wider_than_any_row_buffer, unit) {
     struct inkcell_capture *capture = NULL;
     INKCELL_TEST_FAIL_IF(inkcell_capture_open(&capture, 1200U, 1400U, INKCELL_SCALE(4)) < 0,
                          "a page taller than it is wide should open");
-    struct inkcell_backend_fb_state *state = inkcell_capture_state(capture);
+    struct inkcell_draw_state *state = inkcell_capture_state(capture);
     inkcell_fb_clear(state, k_ground);
 
     /* Half the shorter side, so `band` lands exactly on half the width and the bands meet. */

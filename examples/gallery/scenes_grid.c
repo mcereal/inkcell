@@ -86,7 +86,7 @@ static const char *gallery_grid_name(size_t index) {
     return gallery_text(k_names[index]);
 }
 
-void gallery_scene_grid(struct inkcell_backend_fb_state *state) {
+void gallery_scene_grid(struct inkcell_draw_state *state) {
     struct inkcell_focus_item storage[GRID_STORAGE];
     struct inkcell_focus_map map;
     struct inkcell_fb_layout layout = gallery_frame(state, GALLERY_STR_HEAD_TILES, 1U);
@@ -136,7 +136,7 @@ void gallery_scene_grid(struct inkcell_backend_fb_state *state) {
 /* ---- the shelf ---------------------------------------------------------------------------------
  */
 
-void gallery_scene_grid_covers(struct inkcell_backend_fb_state *state) {
+void gallery_scene_grid_covers(struct inkcell_draw_state *state) {
     struct inkcell_focus_item storage[GRID_STORAGE];
     struct inkcell_focus_map map;
     struct inkcell_fb_layout layout = gallery_frame(state, GALLERY_STR_HEAD_COVERS, 1U);

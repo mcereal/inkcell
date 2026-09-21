@@ -19,7 +19,7 @@
 
 enum { GALLERY_ANIM_CARD_METER = 0x0C00 };
 
-void gallery_scene_cards(struct inkcell_backend_fb_state *state) {
+void gallery_scene_cards(struct inkcell_draw_state *state) {
     struct inkcell_fb_layout layout = gallery_frame(state, GALLERY_STR_HEAD_CARDS, 1U);
     static const struct inkcell_scale k_permille = {.min = 0, .max = 1000};
     static const struct inkcell_band k_band = {.warn = 700, .bad = 880};

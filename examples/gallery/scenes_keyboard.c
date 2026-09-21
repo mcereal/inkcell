@@ -78,7 +78,7 @@ _Static_assert(sizeof k_emoji / sizeof k_emoji[0] == 2U * (size_t)INKCELL_KB_EMO
                "the emoji table and the page count disagree about how many cells there are");
 
 /* The frame both scenes stand in: the heading, the draft, and the row the grid starts on. */
-static int gallery_keyboard_frame(struct inkcell_backend_fb_state *state,
+static int gallery_keyboard_frame(struct inkcell_draw_state *state,
                                   struct inkcell_fb_layout *layout, const char *counter) {
     *layout = gallery_frame(state, GALLERY_STR_HEAD_KEYBOARD, 0U);
     int y = layout->body_y;
@@ -92,7 +92,7 @@ static int gallery_keyboard_frame(struct inkcell_backend_fb_state *state,
     return y;
 }
 
-void gallery_scene_keyboard(struct inkcell_backend_fb_state *state) {
+void gallery_scene_keyboard(struct inkcell_draw_state *state) {
     struct inkcell_fb_layout layout;
     int y = gallery_keyboard_frame(state, &layout, "29/160");
 
@@ -114,7 +114,7 @@ void gallery_scene_keyboard(struct inkcell_backend_fb_state *state) {
     gallery_footer(state, &layout);
 }
 
-void gallery_scene_keyboard_emoji(struct inkcell_backend_fb_state *state) {
+void gallery_scene_keyboard_emoji(struct inkcell_draw_state *state) {
     struct inkcell_fb_layout layout;
     int y = gallery_keyboard_frame(state, &layout, "31/160");
 

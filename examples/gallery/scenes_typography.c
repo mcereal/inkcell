@@ -23,9 +23,8 @@
    it is a specimen, which is why it is here rather than in the catalog. */
 #define GALLERY_PANGRAM "Sphinx of black quartz, judge my vow \xE2\x80\x94 0123456789"
 
-static int specimen(const struct inkcell_backend_fb_state *state,
-                    const struct inkcell_fb_layout *layout, int x, int y, enum inkcell_type type,
-                    enum inkcell_weight weight) {
+static int specimen(const struct inkcell_draw_state *state, const struct inkcell_fb_layout *layout,
+                    int x, int y, enum inkcell_type type, enum inkcell_weight weight) {
     const int scale = inkcell_fb_type_scale(state, type);
     const struct inkcell_rgb ink = inkcell_fb_color(state, INKCELL_COLOR_TEXT);
     const struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_BG);
@@ -49,7 +48,7 @@ static int specimen(const struct inkcell_backend_fb_state *state,
     return y + line + inkcell_fb_space(state, INKCELL_SPACE_SM);
 }
 
-void gallery_scene_typography(struct inkcell_backend_fb_state *state) {
+void gallery_scene_typography(struct inkcell_draw_state *state) {
     struct inkcell_fb_layout layout = gallery_frame(state, GALLERY_STR_HEAD_TYPE, 4U);
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
     int y = layout.body_y;

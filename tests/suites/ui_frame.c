@@ -19,7 +19,7 @@
 /* A state with a panel and a theme on it, and no device behind either. The capture harness is
    the supported way to get one; opening it here keeps these cases honest about using the same
    surface an application does. */
-static struct inkcell_capture *frame_open(struct inkcell_backend_fb_state **state) {
+static struct inkcell_capture *frame_open(struct inkcell_draw_state **state) {
     struct inkcell_capture *capture = NULL;
     if (inkcell_capture_open(&capture, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT,
                              INKCELL_SCALE(4)) < 0) {
@@ -30,7 +30,7 @@ static struct inkcell_capture *frame_open(struct inkcell_backend_fb_state **stat
 }
 
 INKCELL_TEST_CASE(layout_begin_leaves_room_for_the_footer, unit) {
-    struct inkcell_backend_fb_state *state = NULL;
+    struct inkcell_draw_state *state = NULL;
     struct inkcell_capture *capture = frame_open(&state);
     INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
 
@@ -52,7 +52,7 @@ INKCELL_TEST_CASE(layout_begin_leaves_room_for_the_footer, unit) {
 }
 
 INKCELL_TEST_CASE(layout_begin_opens_an_empty_frame, unit) {
-    struct inkcell_backend_fb_state *state = NULL;
+    struct inkcell_draw_state *state = NULL;
     struct inkcell_capture *capture = frame_open(&state);
     INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
 
@@ -79,7 +79,7 @@ INKCELL_TEST_CASE(layout_begin_opens_an_empty_frame, unit) {
 }
 
 INKCELL_TEST_CASE(layout_rows_shrink_as_the_body_top_moves, unit) {
-    struct inkcell_backend_fb_state *state = NULL;
+    struct inkcell_draw_state *state = NULL;
     struct inkcell_capture *capture = frame_open(&state);
     INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
 
@@ -110,7 +110,7 @@ INKCELL_TEST_CASE(layout_rows_shrink_as_the_body_top_moves, unit) {
  * of the footer looks like a grid.
  */
 INKCELL_TEST_CASE(keyboard_grid_sits_on_the_footer, unit) {
-    struct inkcell_backend_fb_state *state = NULL;
+    struct inkcell_draw_state *state = NULL;
     struct inkcell_capture *capture = frame_open(&state);
     INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
 
@@ -150,7 +150,7 @@ INKCELL_TEST_CASE(keyboard_grid_sits_on_the_footer, unit) {
 }
 
 INKCELL_TEST_CASE(animation_damage_unions_and_clamps, unit) {
-    struct inkcell_backend_fb_state *state = NULL;
+    struct inkcell_draw_state *state = NULL;
     struct inkcell_capture *capture = frame_open(&state);
     INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
 
@@ -229,7 +229,7 @@ INKCELL_TEST_CASE(button_cap_never_returns_null, unit) {
  * frozen on the panel, and either alone passes a test that only looks at the other.
  */
 INKCELL_TEST_CASE(animation_damage_draws_outside_the_clip_band, unit) {
-    struct inkcell_backend_fb_state *state = NULL;
+    struct inkcell_draw_state *state = NULL;
     struct inkcell_capture *capture = frame_open(&state);
     INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
 

@@ -95,12 +95,12 @@ struct inkcell_fb_dialog {
  * buttons, the headline and the icon are reserved first, because a dialog that dropped one of
  * its buttons to fit its explanation would be unanswerable.
  */
-int inkcell_fb_dialog_height(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_dialog_height(const struct inkcell_draw_state *state,
                              const struct inkcell_fb_dialog *dialog, int width, int room);
 
 /* Draws it into `box`, for a screen that has opened a layer of its own. */
-void inkcell_fb_draw_dialog_at(const struct inkcell_backend_fb_state *state,
-                               struct inkcell_fb_rect box, const struct inkcell_fb_dialog *dialog);
+void inkcell_fb_draw_dialog_at(const struct inkcell_draw_state *state, struct inkcell_fb_rect box,
+                               const struct inkcell_fb_dialog *dialog);
 
 /*
  * The whole thing: measures the dialog, opens a centred and scrimmed layer over the body, and
@@ -117,7 +117,7 @@ void inkcell_fb_draw_dialog_at(const struct inkcell_backend_fb_state *state,
  * Mutable state, unlike the const it used to take: a dialog arrives and leaves now, and where
  * it has got to is the one thing about it the frame itself remembers.
  */
-bool inkcell_fb_draw_dialog(struct inkcell_backend_fb_state *state,
+bool inkcell_fb_draw_dialog(struct inkcell_draw_state *state,
                             const struct inkcell_fb_layout *layout,
                             const struct inkcell_fb_dialog *dialog, uint32_t id, bool up);
 
@@ -137,7 +137,7 @@ bool inkcell_fb_draw_dialog(struct inkcell_backend_fb_state *state,
  *
  * Everything about it that cannot come from the snapshot - where it has slid to, what it says
  * while it slides back out after the store has forgotten it - is remembered on the state, next
- * to the animation table and for the same reason. See struct inkcell_backend_fb_state.
+ * to the animation table and for the same reason. See struct inkcell_draw_state.
  *
  * Drawn last of everything on the frame, because it is over the UI rather than in it.
  */
@@ -165,7 +165,7 @@ struct inkcell_fb_snackbar {
  * Mutable state, like every animated component here: the position it is coming from and the
  * words it is still carrying both live on the state.
  */
-void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_snackbar(struct inkcell_draw_state *state,
                               const struct inkcell_fb_layout *layout,
                               const struct inkcell_fb_snackbar *bar);
 
@@ -233,11 +233,11 @@ struct inkcell_fb_menu {
  * dialog's height and for the same reason: a layer is handed a size, it does not invent one.
  * `max_w` is what it may not exceed.
  */
-struct inkcell_fb_rect inkcell_fb_menu_box(const struct inkcell_backend_fb_state *state,
+struct inkcell_fb_rect inkcell_fb_menu_box(const struct inkcell_draw_state *state,
                                            const struct inkcell_fb_menu *menu, int max_w);
 
 /* Draws it into `box` - the one a layer handed back. */
-void inkcell_fb_draw_menu(const struct inkcell_backend_fb_state *state, struct inkcell_fb_rect box,
+void inkcell_fb_draw_menu(const struct inkcell_draw_state *state, struct inkcell_fb_rect box,
                           const struct inkcell_fb_menu *menu);
 
 /* ---- the bottom sheet ------------------------------------------------------------------------
@@ -277,7 +277,7 @@ struct inkcell_fb_sheet {
  * worked out a sheet's chrome would disagree with the thing drawing it the moment either
  * changed.
  */
-int inkcell_fb_sheet_height(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_sheet_height(const struct inkcell_draw_state *state,
                             const struct inkcell_fb_sheet *sheet, int content_h);
 
 /*
@@ -287,7 +287,7 @@ int inkcell_fb_sheet_height(const struct inkcell_backend_fb_state *state,
  * A zero-height answer is a sheet with no room in it, which a caller should read as nothing to
  * draw rather than as a rectangle to draw into.
  */
-struct inkcell_fb_rect inkcell_fb_draw_sheet(const struct inkcell_backend_fb_state *state,
+struct inkcell_fb_rect inkcell_fb_draw_sheet(const struct inkcell_draw_state *state,
                                              struct inkcell_fb_rect box,
                                              const struct inkcell_fb_sheet *sheet);
 
@@ -322,7 +322,6 @@ struct inkcell_fb_qr {
 int inkcell_fb_qr_side(const struct inkcell_fb_qr *qr);
 
 /* Draws it centred in its box. Nothing is drawn when inkcell_fb_qr_side() is 0. */
-void inkcell_fb_draw_qr(const struct inkcell_backend_fb_state *state,
-                        const struct inkcell_fb_qr *qr);
+void inkcell_fb_draw_qr(const struct inkcell_draw_state *state, const struct inkcell_fb_qr *qr);
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_OVERLAY_H */

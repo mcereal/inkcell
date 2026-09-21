@@ -31,7 +31,7 @@ enum {
     GALLERY_ANIM_RADIO = 0x5740,
 };
 
-void gallery_scene_controls(struct inkcell_backend_fb_state *state) {
+void gallery_scene_controls(struct inkcell_draw_state *state) {
     struct inkcell_fb_layout layout = gallery_frame(state, GALLERY_STR_HEAD_CONTROLS, 2U);
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
     const int scale = layout.small;

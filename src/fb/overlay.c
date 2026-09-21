@@ -42,12 +42,12 @@
 /* The gap between an anchored layer and the thing it hangs off: the half-margin every panel
    stands off an edge by, for inkcell_fb_gutter()'s reason - what it measures is clearance
    between two surfaces, not room around text. */
-static int inkcell_overlay_anchor_gap(const struct inkcell_backend_fb_state *state) {
+static int inkcell_overlay_anchor_gap(const struct inkcell_draw_state *state) {
     return inkcell_fb_gutter(state);
 }
 
 /* The region a layer belongs to: what it said, or the whole panel when it said nothing. */
-static struct inkcell_fb_rect inkcell_overlay_bounds(const struct inkcell_backend_fb_state *state,
+static struct inkcell_fb_rect inkcell_overlay_bounds(const struct inkcell_draw_state *state,
                                                      const struct inkcell_overlay *overlay) {
     if (overlay->bounds.w > 0 && overlay->bounds.h > 0) {
         return overlay->bounds;
@@ -57,7 +57,7 @@ static struct inkcell_fb_rect inkcell_overlay_bounds(const struct inkcell_backen
 }
 
 /* The slot holding `id`, or NULL. */
-static struct inkcell_fb_overlay_slot *inkcell_overlay_find(struct inkcell_backend_fb_state *state,
+static struct inkcell_fb_overlay_slot *inkcell_overlay_find(struct inkcell_draw_state *state,
                                                             uint32_t id) {
     for (uint32_t i = 0U; i < INKCELL_OVERLAY_SLOTS; ++i) {
         if (state->overlays[i].id == id) {
@@ -78,7 +78,7 @@ static struct inkcell_fb_overlay_slot *inkcell_overlay_find(struct inkcell_backe
  * screen that wanted one finds out by its overlay not appearing rather than by another one
  * vanishing.
  */
-static struct inkcell_fb_overlay_slot *inkcell_overlay_slot(struct inkcell_backend_fb_state *state,
+static struct inkcell_fb_overlay_slot *inkcell_overlay_slot(struct inkcell_draw_state *state,
                                                             uint32_t id) {
     struct inkcell_fb_overlay_slot *slot = inkcell_overlay_find(state, id);
     if (slot != NULL) {
@@ -108,7 +108,7 @@ static int inkcell_overlay_between(int from, int to, int32_t progress) {
  * looks broken, and one that came out a little smaller than asked for looks like a panel. The
  * same reasoning the dialog already applies to its own buttons, applied to the whole box.
  */
-static struct inkcell_fb_rect inkcell_overlay_rest(const struct inkcell_backend_fb_state *state,
+static struct inkcell_fb_rect inkcell_overlay_rest(const struct inkcell_draw_state *state,
                                                    const struct inkcell_overlay *overlay,
                                                    struct inkcell_fb_rect bounds) {
     const int gutter = inkcell_fb_gutter(state);
@@ -195,7 +195,7 @@ static struct inkcell_fb_rect inkcell_overlay_rest(const struct inkcell_backend_
  * a menu that opened upward rises and one that opened downward drops - and neither is a second
  * thing the caller had to say, because the placement already decided which it was.
  */
-static struct inkcell_fb_rect inkcell_overlay_from(const struct inkcell_backend_fb_state *state,
+static struct inkcell_fb_rect inkcell_overlay_from(const struct inkcell_draw_state *state,
                                                    const struct inkcell_overlay *overlay,
                                                    struct inkcell_fb_rect bounds,
                                                    struct inkcell_fb_rect rest) {
@@ -275,7 +275,7 @@ static struct inkcell_fb_damage_rect inkcell_overlay_span(struct inkcell_fb_rect
     return out;
 }
 
-bool inkcell_fb_overlay_begin(struct inkcell_backend_fb_state *state,
+bool inkcell_fb_overlay_begin(struct inkcell_draw_state *state,
                               const struct inkcell_overlay *overlay,
                               struct inkcell_overlay_frame *frame) {
     if (frame != NULL) {
@@ -416,8 +416,7 @@ bool inkcell_fb_overlay_begin(struct inkcell_backend_fb_state *state,
     return true;
 }
 
-void inkcell_fb_overlay_end(struct inkcell_backend_fb_state *state,
-                            struct inkcell_overlay_frame *frame) {
+void inkcell_fb_overlay_end(struct inkcell_draw_state *state, struct inkcell_overlay_frame *frame) {
     if (state == NULL || frame == NULL) {
         return;
     }
@@ -427,7 +426,7 @@ void inkcell_fb_overlay_end(struct inkcell_backend_fb_state *state,
     }
 }
 
-uint32_t inkcell_fb_overlay_modal(const struct inkcell_backend_fb_state *state) {
+uint32_t inkcell_fb_overlay_modal(const struct inkcell_draw_state *state) {
     if (state == NULL) {
         return INKCELL_OVERLAY_NONE;
     }
@@ -448,7 +447,7 @@ uint32_t inkcell_fb_overlay_modal(const struct inkcell_backend_fb_state *state) 
     return best;
 }
 
-bool inkcell_fb_overlay_showing(const struct inkcell_backend_fb_state *state, uint32_t id) {
+bool inkcell_fb_overlay_showing(const struct inkcell_draw_state *state, uint32_t id) {
     if (state == NULL || id == INKCELL_OVERLAY_NONE) {
         return false;
     }
@@ -460,7 +459,7 @@ bool inkcell_fb_overlay_showing(const struct inkcell_backend_fb_state *state, ui
     return false;
 }
 
-void inkcell_fb_overlay_drop(struct inkcell_backend_fb_state *state, uint32_t id) {
+void inkcell_fb_overlay_drop(struct inkcell_draw_state *state, uint32_t id) {
     if (state == NULL || id == INKCELL_OVERLAY_NONE) {
         return;
     }
@@ -479,7 +478,7 @@ void inkcell_fb_overlay_drop(struct inkcell_backend_fb_state *state, uint32_t id
     }
 }
 
-void inkcell_fb_overlay_reset(struct inkcell_backend_fb_state *state) {
+void inkcell_fb_overlay_reset(struct inkcell_draw_state *state) {
     if (state == NULL) {
         return;
     }

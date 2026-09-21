@@ -303,7 +303,7 @@ bool inkcell_fb_card_is_empty(const struct inkcell_fb_card *card);
  * card above it promises the minimum in the first case and the whole in the second. See
  * the application's own status renderer.
  */
-int inkcell_fb_card_height(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_card_height(const struct inkcell_draw_state *state,
                            const struct inkcell_fb_layout *layout,
                            const struct inkcell_fb_card *card);
 
@@ -336,7 +336,7 @@ int inkcell_fb_card_height(const struct inkcell_backend_fb_state *state,
  * The first *row* rather than a line, because a card is refused outright at the point it has
  * nothing but a heading - so this is the smallest height that actually draws something.
  */
-int inkcell_fb_card_min_height(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_card_min_height(const struct inkcell_draw_state *state,
                                const struct inkcell_fb_layout *layout,
                                const struct inkcell_fb_card *card);
 
@@ -363,12 +363,11 @@ int inkcell_fb_card_min_height(const struct inkcell_backend_fb_state *state,
  * A reservation that cannot be afforded is dropped rather than honoured - two cards missing is
  * not an improvement on one - so this never draws less than inkcell_fb_draw_card() would have.
  */
-bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state,
+bool inkcell_fb_draw_card_reserving(struct inkcell_draw_state *state,
                                     const struct inkcell_fb_layout *layout, int *y,
                                     const struct inkcell_fb_card *card, int reserve);
 
-bool inkcell_fb_draw_card(struct inkcell_backend_fb_state *state,
-                          const struct inkcell_fb_layout *layout, int *y,
-                          const struct inkcell_fb_card *card);
+bool inkcell_fb_draw_card(struct inkcell_draw_state *state, const struct inkcell_fb_layout *layout,
+                          int *y, const struct inkcell_fb_card *card);
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_CARD_H */

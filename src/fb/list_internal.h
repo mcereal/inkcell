@@ -29,7 +29,7 @@
  * does a card heading over rows that carry them. See src/fb/widgets_list.c for what it measures
  * and why the fit is measured rather than assumed.
  */
-void inkcell_fb_draw_avatar(const struct inkcell_backend_fb_state *state, int x, int y, int size,
+void inkcell_fb_draw_avatar(const struct inkcell_draw_state *state, int x, int y, int size,
                             const char *label, enum inkcell_icon icon, struct inkcell_paint paint);
 
 /* Whether item `index` draws the cursor's highlight. Never on a list whose card is focused
@@ -44,8 +44,7 @@ bool inkcell_fb_list_has_cards(const struct inkcell_fb_list *list);
 
 /* The card surfaces and the scroll rail, drawn once before the first row. Every entry point
    that draws a row calls it, and it does its work only on the first. */
-void inkcell_fb_list_chrome(const struct inkcell_backend_fb_state *state,
-                            struct inkcell_fb_list *list);
+void inkcell_fb_list_chrome(const struct inkcell_draw_state *state, struct inkcell_fb_list *list);
 
 /*
  * Registers the box item `index` was drawn in, under the list's focus base.
@@ -55,7 +54,7 @@ void inkcell_fb_list_chrome(const struct inkcell_backend_fb_state *state,
  * to be the one that was actually filled. Does nothing on a list with no base, which is every
  * list drawn by a screen that has not asked for this.
  */
-void inkcell_fb_list_focus_row(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_list_focus_row(const struct inkcell_draw_state *state,
                                const struct inkcell_fb_list *list, uint32_t index, int y, int h);
 
 /*
@@ -79,12 +78,12 @@ void inkcell_fb_list_band_end(const struct inkcell_fb_list *list, bool began);
  * forget on one list out of nine. Shared by the list and the grid; see the note above its
  * definition in widgets_list.c for why the window and the track are two arguments.
  */
-void inkcell_fb_draw_list_rail(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_list_rail(const struct inkcell_draw_state *state,
                                const struct inkcell_list *window, int track_y, int track_h);
 
 /* The ink a row's text takes: its tone, or the cursor's, or the quiet pairing for the slots
    that are deliberately secondary. */
-struct inkcell_rgb inkcell_fb_item_ink(const struct inkcell_backend_fb_state *state,
+struct inkcell_rgb inkcell_fb_item_ink(const struct inkcell_draw_state *state,
                                        enum inkcell_tone tone, bool selected, bool quiet);
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_LIST_INTERNAL_H */

@@ -82,12 +82,11 @@ struct inkcell_fb_viewport {
  * False is a window with nothing on the panel in it, and nothing has been pushed - so the pop
  * is conditional on the push, exactly as it reads.
  */
-bool inkcell_fb_viewport_begin(struct inkcell_backend_fb_state *state,
-                               struct inkcell_fb_viewport *view, struct inkcell_fb_rect box,
-                               struct inkcell_scroll *scroll, int32_t content_h);
+bool inkcell_fb_viewport_begin(struct inkcell_draw_state *state, struct inkcell_fb_viewport *view,
+                               struct inkcell_fb_rect box, struct inkcell_scroll *scroll,
+                               int32_t content_h);
 
-void inkcell_fb_viewport_end(struct inkcell_backend_fb_state *state,
-                             struct inkcell_fb_viewport *view);
+void inkcell_fb_viewport_end(struct inkcell_draw_state *state, struct inkcell_fb_viewport *view);
 
 /*
  * A note on who asks for the next frame.
@@ -116,7 +115,7 @@ void inkcell_fb_viewport_end(struct inkcell_backend_fb_state *state,
  * thing on the panel disagreeing that anything had happened - which is exactly what an
  * overscroll is *for*, since the stretch is the only thing saying the list has ended.
  */
-void inkcell_fb_draw_scroll_rail(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_scroll_rail(const struct inkcell_draw_state *state,
                                  const struct inkcell_fb_viewport *view,
                                  const struct inkcell_scroll *scroll);
 
@@ -168,7 +167,7 @@ struct inkcell_fb_large_title {
  * constant here would be a number that stops matching the type scale the first time a theme
  * changes it.
  */
-int inkcell_fb_large_title_travel(const struct inkcell_backend_fb_state *state);
+int inkcell_fb_large_title_travel(const struct inkcell_draw_state *state);
 
 /*
  * Draws the bar at whatever `offset` says it has collapsed to, and consumes the room it took.
@@ -178,7 +177,7 @@ int inkcell_fb_large_title_travel(const struct inkcell_backend_fb_state *state);
  * what an overscroll is for and is what every platform does with a large title being pulled
  * down.
  */
-void inkcell_fb_draw_large_title(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_large_title(const struct inkcell_draw_state *state,
                                  struct inkcell_fb_layout *layout,
                                  const struct inkcell_fb_large_title *bar, int32_t offset);
 

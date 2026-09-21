@@ -33,7 +33,7 @@ enum { VIEW_ID_BOX = 7 };
 
 struct view_harness {
     struct inkcell_capture *capture;
-    struct inkcell_backend_fb_state *state;
+    struct inkcell_draw_state *state;
     struct inkcell_focus_item storage[VIEW_FOCUS_STORAGE];
     struct inkcell_focus_map map;
 };

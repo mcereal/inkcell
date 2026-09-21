@@ -29,7 +29,7 @@ enum {
 
 struct ring_harness {
     struct inkcell_capture *capture;
-    struct inkcell_backend_fb_state *state;
+    struct inkcell_draw_state *state;
     struct inkcell_focus_item storage[RING_STORAGE];
     struct inkcell_focus_map map;
 };

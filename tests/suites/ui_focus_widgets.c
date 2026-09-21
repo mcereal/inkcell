@@ -42,7 +42,7 @@ enum {
 
 struct focus_harness {
     struct inkcell_capture *capture;
-    struct inkcell_backend_fb_state *state;
+    struct inkcell_draw_state *state;
     struct inkcell_focus_item storage[FOCUS_W_STORAGE];
     struct inkcell_focus_map map;
 };

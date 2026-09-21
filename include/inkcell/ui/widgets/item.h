@@ -370,7 +370,7 @@ struct inkcell_fb_list_item {
  * is going - a meter and a progress bar want the same table - so it is the item API that
  * carries it rather than a second entry point per animated slot.
  */
-void inkcell_fb_list_item(struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
+void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_list *list,
                           uint32_t index, const struct inkcell_fb_list_item *item);
 
 /*
@@ -430,13 +430,13 @@ struct inkcell_fb_conversation {
 /* Draws one conversation into the next two rows of `list` and advances past them. Mutable
    state, like every inkcell_fb_list_item() caller: the item is the thing that can carry an animated
    control, so the whole entry point takes the table it would step. */
-void inkcell_fb_draw_conversation(struct inkcell_backend_fb_state *state,
-                                  struct inkcell_fb_list *list, uint32_t index,
+void inkcell_fb_draw_conversation(struct inkcell_draw_state *state, struct inkcell_fb_list *list,
+                                  uint32_t index,
                                   const struct inkcell_fb_conversation *conversation);
 
 /* The label column width for a body this wide - narrow scales give the value more room, at the
    width the theme calls narrow. `preferred` of 0 takes the theme's own. */
-size_t inkcell_fb_field_label_cols(const struct inkcell_backend_fb_state *state,
+size_t inkcell_fb_field_label_cols(const struct inkcell_draw_state *state,
                                    const struct inkcell_fb_layout *layout, size_t preferred);
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_ITEM_H */

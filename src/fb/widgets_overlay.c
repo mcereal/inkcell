@@ -32,7 +32,7 @@
    Anything longer is clipped rather than allowed to grow into the body. */
 #define INKCELL_FB_SNACKBAR_LINES_MAX 2U
 
-void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_snackbar(struct inkcell_draw_state *state,
                               const struct inkcell_fb_layout *layout,
                               const struct inkcell_fb_snackbar *bar) {
     if (state == NULL || layout == NULL) {
@@ -183,8 +183,8 @@ void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state,
  * whole glyph rather than half of a UTF-8 sequence. A label that cannot be made to fit at all
  * keeps its first cell: something is drawn, and the row still marks where the press lands.
  */
-static void inkcell_fb_fit_text(const struct inkcell_backend_fb_state *state, const char *src,
-                                int scale, int max_w, char *out, size_t out_len) {
+static void inkcell_fb_fit_text(const struct inkcell_draw_state *state, const char *src, int scale,
+                                int max_w, char *out, size_t out_len) {
     inkwell_str_copy(out, out_len, src != NULL ? src : "");
     while (inkcell_fb_text_width(state, out, scale) > max_w) {
         const size_t cells = inkcell_text_cells(out);
@@ -206,7 +206,7 @@ static void inkcell_fb_fit_text(const struct inkcell_backend_fb_state *state, co
  * glyph rather than half of a UTF-8 sequence. A label that cannot be made to fit at all keeps
  * its first cell: something is drawn, and the button still marks where the press lands.
  */
-static void inkcell_fb_fit_button_label(const struct inkcell_backend_fb_state *state,
+static void inkcell_fb_fit_button_label(const struct inkcell_draw_state *state,
                                         enum inkcell_icon icon, const char *src, int scale,
                                         int max_w, char *out, size_t out_len) {
     inkwell_str_copy(out, out_len, src != NULL ? src : "");
@@ -242,7 +242,7 @@ struct inkcell_fb_dialog_metrics {
 };
 
 static struct inkcell_fb_dialog_metrics
-inkcell_fb_dialog_measure(const struct inkcell_backend_fb_state *state,
+inkcell_fb_dialog_measure(const struct inkcell_draw_state *state,
                           const struct inkcell_fb_dialog *dialog, int width, int room) {
     struct inkcell_fb_dialog_metrics m;
     memset(&m, 0, sizeof m);
@@ -316,7 +316,7 @@ inkcell_fb_dialog_measure(const struct inkcell_backend_fb_state *state,
     return m;
 }
 
-int inkcell_fb_dialog_height(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_dialog_height(const struct inkcell_draw_state *state,
                              const struct inkcell_fb_dialog *dialog, int width, int room) {
     if (state == NULL || dialog == NULL) {
         return 0;
@@ -324,8 +324,8 @@ int inkcell_fb_dialog_height(const struct inkcell_backend_fb_state *state,
     return inkcell_fb_dialog_measure(state, dialog, width, room).height;
 }
 
-void inkcell_fb_draw_dialog_at(const struct inkcell_backend_fb_state *state,
-                               struct inkcell_fb_rect box, const struct inkcell_fb_dialog *dialog) {
+void inkcell_fb_draw_dialog_at(const struct inkcell_draw_state *state, struct inkcell_fb_rect box,
+                               const struct inkcell_fb_dialog *dialog) {
     if (state == NULL || dialog == NULL || box.w <= 0 || box.h <= 0) {
         return;
     }
@@ -438,7 +438,7 @@ void inkcell_fb_draw_dialog_at(const struct inkcell_backend_fb_state *state,
     inkcell_fb_draw_button(state, &accept);
 }
 
-bool inkcell_fb_draw_dialog(struct inkcell_backend_fb_state *state,
+bool inkcell_fb_draw_dialog(struct inkcell_draw_state *state,
                             const struct inkcell_fb_layout *layout,
                             const struct inkcell_fb_dialog *dialog, uint32_t id, bool up) {
     if (state == NULL || layout == NULL || dialog == NULL) {
@@ -512,8 +512,7 @@ int inkcell_fb_qr_side(const struct inkcell_fb_qr *qr) {
     return px > 0 ? px * ((int)qr->code->size + 8) : 0;
 }
 
-void inkcell_fb_draw_qr(const struct inkcell_backend_fb_state *state,
-                        const struct inkcell_fb_qr *qr) {
+void inkcell_fb_draw_qr(const struct inkcell_draw_state *state, const struct inkcell_fb_qr *qr) {
     const int px = inkcell_fb_qr_module_px(qr);
     if (px <= 0) {
         return;
@@ -558,14 +557,14 @@ void inkcell_fb_draw_qr(const struct inkcell_backend_fb_state *state,
 /* The room a menu leaves round its rows, and the room a row leaves round its words. Both are
    the panel inset the dialog and the card take, so three surfaces over the body are padded
    alike rather than each deciding. */
-static int inkcell_fb_menu_pad(const struct inkcell_backend_fb_state *state) {
+static int inkcell_fb_menu_pad(const struct inkcell_draw_state *state) {
     return inkcell_fb_gutter(state);
 }
 
 /* How tall one row is: a line, plus the padding that makes it a place to press rather than a
    line of text. The keycap's own height arithmetic, for the keycap's reason - a row a cursor
    lands on has to be big enough to read as a target. */
-static int inkcell_fb_menu_row_h(const struct inkcell_backend_fb_state *state) {
+static int inkcell_fb_menu_row_h(const struct inkcell_draw_state *state) {
     return inkcell_fb_line_adv(state, state->scale) + inkcell_fb_space(state, INKCELL_SPACE_SM);
 }
 
@@ -576,7 +575,7 @@ static bool inkcell_fb_menu_item_live(const struct inkcell_fb_menu_item *item) {
     return item->label != NULL && item->label[0] != '\0' && !item->disabled;
 }
 
-struct inkcell_fb_rect inkcell_fb_menu_box(const struct inkcell_backend_fb_state *state,
+struct inkcell_fb_rect inkcell_fb_menu_box(const struct inkcell_draw_state *state,
                                            const struct inkcell_fb_menu *menu, int max_w) {
     struct inkcell_fb_rect box = {0, 0, 0, 0};
     if (state == NULL || menu == NULL || menu->items == NULL || menu->count == 0U) {
@@ -633,7 +632,7 @@ struct inkcell_fb_rect inkcell_fb_menu_box(const struct inkcell_backend_fb_state
     return box;
 }
 
-void inkcell_fb_draw_menu(const struct inkcell_backend_fb_state *state, struct inkcell_fb_rect box,
+void inkcell_fb_draw_menu(const struct inkcell_draw_state *state, struct inkcell_fb_rect box,
                           const struct inkcell_fb_menu *menu) {
     if (state == NULL || menu == NULL || menu->items == NULL || box.w <= 0 || box.h <= 0) {
         return;
@@ -738,11 +737,11 @@ void inkcell_fb_draw_menu(const struct inkcell_backend_fb_state *state, struct i
 #define INKCELL_FB_SHEET_GRABBER_DEN 10
 
 /* The band the grabber hangs in: a line's worth, with the mark centred in it. */
-static int inkcell_fb_sheet_grabber_h(const struct inkcell_backend_fb_state *state) {
+static int inkcell_fb_sheet_grabber_h(const struct inkcell_draw_state *state) {
     return inkcell_fb_line_adv(state, inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL));
 }
 
-static int inkcell_fb_sheet_title_h(const struct inkcell_backend_fb_state *state,
+static int inkcell_fb_sheet_title_h(const struct inkcell_draw_state *state,
                                     const struct inkcell_fb_sheet *sheet) {
     if (sheet == NULL || sheet->title == NULL || sheet->title[0] == '\0') {
         return 0;
@@ -751,7 +750,7 @@ static int inkcell_fb_sheet_title_h(const struct inkcell_backend_fb_state *state
            inkcell_fb_space(state, INKCELL_SPACE_SM);
 }
 
-int inkcell_fb_sheet_height(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_sheet_height(const struct inkcell_draw_state *state,
                             const struct inkcell_fb_sheet *sheet, int content_h) {
     if (state == NULL) {
         return 0;
@@ -762,7 +761,7 @@ int inkcell_fb_sheet_height(const struct inkcell_backend_fb_state *state,
            (content_h > 0 ? content_h : 0) + inkcell_fb_margin(state);
 }
 
-struct inkcell_fb_rect inkcell_fb_draw_sheet(const struct inkcell_backend_fb_state *state,
+struct inkcell_fb_rect inkcell_fb_draw_sheet(const struct inkcell_draw_state *state,
                                              struct inkcell_fb_rect box,
                                              const struct inkcell_fb_sheet *sheet) {
     struct inkcell_fb_rect content = {0, 0, 0, 0};

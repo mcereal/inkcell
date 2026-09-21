@@ -31,7 +31,7 @@
  * last frame a damage comparison is made against.
  *
  * None of it is a renderer's business, which is why it is here rather than on `struct
- * inkcell_backend_fb_state`. A frame needs to know where its pixels go and how one is spelled -
+ * inkcell_draw_state`. A frame needs to know where its pixels go and how one is spelled -
  * that is the `surface` on the state - and nothing at all about how they later reach a display.
  * A backend presenting through a window keeps a texture and a swapchain here instead, and every
  * screen above carries on unchanged.
@@ -39,7 +39,7 @@
  * `state` is first so the two are one allocation and the vtable can hand out either.
  */
 struct inkcell_fb_panel {
-    struct inkcell_backend_fb_state state;
+    struct inkcell_draw_state state;
     int fd;
     struct fb_fix_screeninfo fix;
     struct fb_var_screeninfo var;
@@ -63,7 +63,7 @@ static struct inkcell_fb_panel *inkcell_fb_panel_of(void *state_ptr) {
  * overrides the glyph multiplier the theme asks for - an environment variable rather than a flag
  * because on the Brick the app is started by launch.sh, not by anyone with a shell.
  */
-static void inkcell_fb_apply_theme_from_env(struct inkcell_backend_fb_state *state) {
+static void inkcell_fb_apply_theme_from_env(struct inkcell_draw_state *state) {
     const struct inkcell_theme *theme = inkcell_theme_from_env();
     /* A scale named in the environment outlives a theme switch: it is an explicit choice about
        this panel, where a theme's own scale is only that theme's default. */
@@ -113,7 +113,7 @@ static int inkcell_backend_fb_init(void **state_out, void *userdata) {
     static struct inkcell_fb_panel panel_storage;
     struct inkcell_fb_panel *panel = &panel_storage;
     memset(panel, 0, sizeof *panel);
-    struct inkcell_backend_fb_state *state = &panel->state;
+    struct inkcell_draw_state *state = &panel->state;
 
     panel->fd = open("/dev/fb0", O_RDWR);
     if (panel->fd < 0) {
@@ -189,7 +189,7 @@ static int inkcell_backend_fb_init(void **state_out, void *userdata) {
 static void inkcell_backend_fb_shutdown(void *state_ptr, void *userdata) {
     struct inkcell_fb_panel *panel = inkcell_fb_panel_of(state_ptr);
     if (panel != NULL) {
-        struct inkcell_backend_fb_state *state = &panel->state;
+        struct inkcell_draw_state *state = &panel->state;
         inkcell_fb_set_app(state, NULL);
         inkcell_fb_glyph_cache_free(state);
         free(panel->draw_buffer);
@@ -216,7 +216,7 @@ static void inkcell_backend_fb_shutdown(void *state_ptr, void *userdata) {
  * the pan, mirror changed spans into page 1 as well. Compare in ordinary RAM: reading
  * the display mapping to find differences would itself be expensive on the device.
  */
-size_t inkcell_fb_copy_damage(struct inkcell_backend_fb_state *state, const uint8_t *frame,
+size_t inkcell_fb_copy_damage(struct inkcell_draw_state *state, const uint8_t *frame,
                               uint8_t *previous, bool force, bool mirror) {
     if (state == NULL || frame == NULL || previous == NULL) {
         return 0U;
@@ -295,7 +295,7 @@ static void inkcell_backend_fb_present(void *state_ptr, const void *snapshot, vo
     if (panel == NULL || snapshot == NULL || panel->state.surface.pixels == NULL) {
         return;
     }
-    struct inkcell_backend_fb_state *state = &panel->state;
+    struct inkcell_draw_state *state = &panel->state;
 
     /* One clock reading per frame, taken here rather than inside the drawing code: a widget
        that read the clock for itself would draw two halves of one frame at two different

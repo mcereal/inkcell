@@ -53,7 +53,7 @@ struct inkcell_fb_card_metrics {
 };
 
 static struct inkcell_fb_card_metrics
-inkcell_fb_card_measure(const struct inkcell_backend_fb_state *state,
+inkcell_fb_card_measure(const struct inkcell_draw_state *state,
                         const struct inkcell_fb_layout *layout,
                         const struct inkcell_fb_card *card) {
     const struct inkcell_metrics *metrics = inkcell_fb_metrics(state);
@@ -430,7 +430,7 @@ bool inkcell_fb_card_is_empty(const struct inkcell_fb_card *card) {
     return card == NULL || card->count == 0U;
 }
 
-int inkcell_fb_card_height(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_card_height(const struct inkcell_draw_state *state,
                            const struct inkcell_fb_layout *layout,
                            const struct inkcell_fb_card *card) {
     if (inkcell_fb_card_is_empty(card)) {
@@ -461,7 +461,7 @@ int inkcell_fb_card_height(const struct inkcell_backend_fb_state *state,
  * so nothing moves sideways. A row with no label at all keeps the whole width and is the caller
  * saying the bar is the row; see inkcell_fb_card_meter().
  */
-static int inkcell_fb_card_row_label(struct inkcell_backend_fb_state *state,
+static int inkcell_fb_card_row_label(struct inkcell_draw_state *state,
                                      const struct inkcell_fb_card_metrics *m, int y,
                                      const struct inkcell_fb_card_row *row,
                                      struct inkcell_rgb ground) {
@@ -484,7 +484,7 @@ static int inkcell_fb_card_row_label(struct inkcell_backend_fb_state *state,
 
 /* One row of content, drawn at `y` and returning the rows it used. `max_lines` of 0 means the
    row's own count; anything else is the budget a clipped note has been given. */
-static uint32_t inkcell_fb_draw_card_row(struct inkcell_backend_fb_state *state,
+static uint32_t inkcell_fb_draw_card_row(struct inkcell_draw_state *state,
                                          const struct inkcell_fb_card_metrics *m,
                                          const struct inkcell_fb_layout *layout, int y,
                                          const struct inkcell_fb_card_row *row,
@@ -582,7 +582,7 @@ static uint32_t inkcell_fb_draw_card_row(struct inkcell_backend_fb_state *state,
     return 1U;
 }
 
-int inkcell_fb_card_min_height(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_card_min_height(const struct inkcell_draw_state *state,
                                const struct inkcell_fb_layout *layout,
                                const struct inkcell_fb_card *card) {
     if (inkcell_fb_card_is_empty(card)) {
@@ -602,7 +602,7 @@ int inkcell_fb_card_min_height(const struct inkcell_backend_fb_state *state,
     return inkcell_fb_card_box_height(&m, layout, card, least);
 }
 
-bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state,
+bool inkcell_fb_draw_card_reserving(struct inkcell_draw_state *state,
                                     const struct inkcell_fb_layout *layout, int *y,
                                     const struct inkcell_fb_card *card, int reserve) {
     if (y == NULL || inkcell_fb_card_is_empty(card)) {
@@ -805,8 +805,7 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_backend_fb_state *state,
     return true;
 }
 
-bool inkcell_fb_draw_card(struct inkcell_backend_fb_state *state,
-                          const struct inkcell_fb_layout *layout, int *y,
-                          const struct inkcell_fb_card *card) {
+bool inkcell_fb_draw_card(struct inkcell_draw_state *state, const struct inkcell_fb_layout *layout,
+                          int *y, const struct inkcell_fb_card *card) {
     return inkcell_fb_draw_card_reserving(state, layout, y, card, 0);
 }

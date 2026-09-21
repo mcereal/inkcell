@@ -33,7 +33,7 @@
    about the room rather than about how wide a theme happens to set a particular word. */
 #define FAB_NARROW_WIDTH 240U
 
-static struct inkcell_capture *fab_open(struct inkcell_backend_fb_state **state, uint32_t width,
+static struct inkcell_capture *fab_open(struct inkcell_draw_state **state, uint32_t width,
                                         uint32_t height) {
     struct inkcell_capture *capture = NULL;
     if (inkcell_capture_open(&capture, width, height, INKCELL_SCALE(4)) < 0) {
@@ -44,7 +44,7 @@ static struct inkcell_capture *fab_open(struct inkcell_backend_fb_state **state,
 }
 
 INKCELL_TEST_CASE(fab_anchors_to_the_trailing_corner, unit) {
-    struct inkcell_backend_fb_state *state = NULL;
+    struct inkcell_draw_state *state = NULL;
     struct inkcell_capture *capture =
         fab_open(&state, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT);
     INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
@@ -78,7 +78,7 @@ INKCELL_TEST_CASE(fab_anchors_to_the_trailing_corner, unit) {
 }
 
 INKCELL_TEST_CASE(fab_sizes_differ_in_the_room_around_the_symbol, unit) {
-    struct inkcell_backend_fb_state *state = NULL;
+    struct inkcell_draw_state *state = NULL;
     struct inkcell_capture *capture =
         fab_open(&state, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT);
     INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
@@ -104,7 +104,7 @@ INKCELL_TEST_CASE(fab_sizes_differ_in_the_room_around_the_symbol, unit) {
 }
 
 INKCELL_TEST_CASE(fab_extends_to_hold_its_verb, unit) {
-    struct inkcell_backend_fb_state *state = NULL;
+    struct inkcell_draw_state *state = NULL;
     struct inkcell_capture *capture =
         fab_open(&state, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT);
     INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
@@ -136,7 +136,7 @@ INKCELL_TEST_CASE(fab_extends_to_hold_its_verb, unit) {
 }
 
 INKCELL_TEST_CASE(fab_drops_a_verb_it_cannot_hold, unit) {
-    struct inkcell_backend_fb_state *state = NULL;
+    struct inkcell_draw_state *state = NULL;
     struct inkcell_capture *capture = fab_open(&state, FAB_NARROW_WIDTH, INKCELL_CAPTURE_HEIGHT);
     INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
 
@@ -162,7 +162,7 @@ INKCELL_TEST_CASE(fab_drops_a_verb_it_cannot_hold, unit) {
 }
 
 INKCELL_TEST_CASE(fab_never_grows_to_lose_a_verb, unit) {
-    struct inkcell_backend_fb_state *state = NULL;
+    struct inkcell_draw_state *state = NULL;
     struct inkcell_capture *capture = fab_open(&state, FAB_NARROW_WIDTH, INKCELL_CAPTURE_HEIGHT);
     INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
 
@@ -198,7 +198,7 @@ INKCELL_TEST_CASE(fab_never_grows_to_lose_a_verb, unit) {
 }
 
 INKCELL_TEST_CASE(fab_collapses_through_the_widths_between, unit) {
-    struct inkcell_backend_fb_state *state = NULL;
+    struct inkcell_draw_state *state = NULL;
     struct inkcell_capture *capture =
         fab_open(&state, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT);
     INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
@@ -243,7 +243,7 @@ INKCELL_TEST_CASE(fab_collapses_through_the_widths_between, unit) {
 }
 
 INKCELL_TEST_CASE(fab_without_an_identity_never_travels, unit) {
-    struct inkcell_backend_fb_state *state = NULL;
+    struct inkcell_draw_state *state = NULL;
     struct inkcell_capture *capture =
         fab_open(&state, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT);
     INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
@@ -268,7 +268,7 @@ INKCELL_TEST_CASE(fab_without_an_identity_never_travels, unit) {
 }
 
 INKCELL_TEST_CASE(fab_draws_nothing_it_has_no_room_for, unit) {
-    struct inkcell_backend_fb_state *state = NULL;
+    struct inkcell_draw_state *state = NULL;
     /* A panel with chrome at both ends and almost nothing between them. */
     struct inkcell_capture *capture = fab_open(&state, INKCELL_CAPTURE_WIDTH, 200U);
     INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
@@ -308,7 +308,7 @@ INKCELL_TEST_CASE(fab_draws_nothing_it_has_no_room_for, unit) {
  * the half a fixed-size control never has to think about.
  */
 INKCELL_TEST_CASE(fab_declares_the_rows_it_is_moving_through, unit) {
-    struct inkcell_backend_fb_state *state = NULL;
+    struct inkcell_draw_state *state = NULL;
     struct inkcell_capture *capture =
         fab_open(&state, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT);
     INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
