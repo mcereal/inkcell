@@ -79,6 +79,14 @@ static const struct gallery_scene k_scenes[] = {
      * collapse inside the first frame, which is what leaves anything to photograph at all.
      */
     {"fab", gallery_scene_fab, 40U},
+    /*
+     * The grid, twice, and appended for the manifest's sake like the pages above it. A home
+     * screen scrolled off its first row, so the rail beside it has something to report; and a
+     * shelf of covers ending on a short row, which is the shape a list cannot have and the
+     * reason a press has a second axis.
+     */
+    {"grid", gallery_scene_grid, 0U},
+    {"grid_covers", gallery_scene_grid_covers, 0U},
 };
 
 const struct gallery_scene *gallery_scenes(size_t *count) {

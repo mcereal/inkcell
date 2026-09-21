@@ -415,17 +415,25 @@ static void inkcell_fb_list_cards(const struct inkcell_backend_fb_state *state,
 }
 
 /*
- * The scroll rail. Drawn once per list, by the first row that draws - see inkcell_fb_widgets.h.
+ * The scroll rail beside a window of items. Drawn once per list, by the first row that draws -
+ * see inkcell_fb_widgets.h.
  *
  * It stands in inkcell_fb_rail_gutter()'s strip, which every list has already been measured to
  * leave clear - so it is beside the content rather than over it, on a flat list and on a column of
  * cards alike. Where that strip *is* is asked of inkcell_fb_row_box() rather than worked out from
  * the margin: the card spends its hairline outward from the box, so the free space starts one
  * hairline past the box's own edge and a rail measured from the margin lands on the card.
+ *
+ * The window and the track arrive separately because the two are not the same fact: the window
+ * is what the proportion is derived from and the track is how much panel the mark has to say it
+ * in. A grid is what made that worth splitting - its window is a list of *rows* while its track
+ * is the body the tiles fill - and it is why this is not a `static` of the list's own. The mark
+ * itself is the same mark in the same strip either way, which is the whole reason there is one
+ * of these rather than two.
  */
-static void inkcell_fb_list_rail(const struct inkcell_backend_fb_state *state,
-                                 struct inkcell_fb_list *list) {
-    if (list->track_h <= 0) {
+void inkcell_fb_draw_list_rail(const struct inkcell_backend_fb_state *state,
+                               const struct inkcell_list *window, int track_y, int track_h) {
+    if (state == NULL || window == NULL || track_h <= 0) {
         return;
     }
 
@@ -463,8 +471,7 @@ static void inkcell_fb_list_rail(const struct inkcell_backend_fb_state *state,
 
     /* The proportion is inkcell_list_thumb()'s - no pixels in it, and unit tested there. A
        length of 0 is a list that fits, which draws nothing at all rather than a full track. */
-    const struct inkcell_scroll_thumb thumb =
-        inkcell_list_thumb(&list->model, list->track_h, 4 * width);
+    const struct inkcell_scroll_thumb thumb = inkcell_list_thumb(window, track_h, 4 * width);
     if (thumb.length <= 0) {
         return;
     }
@@ -477,9 +484,9 @@ static void inkcell_fb_list_rail(const struct inkcell_backend_fb_state *state,
        is contract-checked: INKCELL_TONE_DIM owes the ground 3:1 on every theme, so the thumb is
        findable on all four, which a second neutral role chosen by eye against the track was
        not. */
-    inkcell_fb_fill_round_rect(state, x, list->track_y, width, list->track_h, radius,
+    inkcell_fb_fill_round_rect(state, x, track_y, width, track_h, radius,
                                inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK));
-    inkcell_fb_fill_round_rect(state, x, list->track_y + thumb.offset, width, thumb.length, radius,
+    inkcell_fb_fill_round_rect(state, x, track_y + thumb.offset, width, thumb.length, radius,
                                inkcell_fb_tone_color(state, INKCELL_TONE_DIM));
 }
 
@@ -503,7 +510,7 @@ void inkcell_fb_list_chrome(const struct inkcell_backend_fb_state *state,
     }
     list->chrome_drawn = true;
     inkcell_fb_list_cards(state, list);
-    inkcell_fb_list_rail(state, list);
+    inkcell_fb_draw_list_rail(state, &list->model, list->track_y, list->track_h);
 }
 
 /* ---- the glide ------------------------------------------------------------------------------

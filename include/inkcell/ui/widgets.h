@@ -26,6 +26,7 @@
  *   inkcell_fb_widgets_chrome.h    the app bar, the navigation and action bars, the banner, the
  * rule inkcell_fb_widgets_list.h      the list window, its cards and rail, the subheader and the
  * note inkcell_fb_widgets_item.h      one list row and its slots, and the conversation cell
+ *   inkcell_fb_widgets_grid.h      the grid window, and the tile it lays out
  *   inkcell_fb_widgets_bubble.h    the transcript: a message, and the separator between two of them
  *   inkcell_fb_widgets_card.h      a card, built row by row and then drawn
  *   inkcell_fb_widgets_control.h   the switch, the checkbox and radio, the segmented button, the
@@ -62,6 +63,7 @@
 #include "inkcell/ui/widgets/chrome.h"
 #include "inkcell/ui/widgets/control.h"
 #include "inkcell/ui/widgets/focus.h"
+#include "inkcell/ui/widgets/grid.h"
 #include "inkcell/ui/widgets/item.h"
 #include "inkcell/ui/widgets/keyboard.h"
 #include "inkcell/ui/widgets/list.h"

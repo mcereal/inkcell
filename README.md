@@ -15,9 +15,10 @@ backend and its component set, and the evdev layer that turns a handheld's butto
 | **Fonts** | A 5x7 pixel face and a proportional UI face in two weights, all as coverage rather than 1-bit masks, resampled into whatever cell the theme asks for. |
 | **Glyphs** | Emoji, icons and font tables, generated (`scripts/gen-*.py`) and committed. |
 | **Layout** | Lines measured in *cells*, scroll windows, text wrapping done once for both the measure and the draw pass. |
+| **Grids** | A home screen: tiles laid out across and down, a window that scrolls by rows of them, and a press that knows a row's width. A list is the same window one column wide. |
 | **Focus** | A d-pad answered against the rectangles the components drew - "right from here lands on *that*" - so a grid, a card with two verbs on it or a form with a chip row in it is a layout rather than an index somebody maintains. The cursor is one ring, and it travels. |
 | **Motion** | Durations and curves as *tokens*, so a set of controls moves as one system - and the two things that move without being a control: the focus ring travelling between boxes, and a list gliding between windows instead of flicking between them. |
-| **Widgets** | Buttons, chips, app bars, floating action buttons, list rows, chat bubbles, cards, switches, segmented buttons, meters, charts, dialogs, menus, bottom sheets, snackbars, QR codes. |
+| **Widgets** | Buttons, chips, app bars, floating action buttons, list rows, tile grids, chat bubbles, cards, switches, segmented buttons, meters, charts, dialogs, menus, bottom sheets, snackbars, QR codes. |
 | **Layers** | One z-stack for everything drawn *over* a screen: a box from a placement, an entrance and a shorter exit, a scrim over what is behind, and an answer to which overlay owns the press. A new overlay is its content and nothing else. |
 | **Scrolling** | A body positioned in pixels rather than windowed by row index - so it can rest between two rows, give at its ends the way every touch platform does, and drive a large title that collapses into the app bar as it moves. |
 | **Shapes** | Anti-aliased rounded rectangles, rings and arcs, in integers - so a curve is the same curve on every host that draws it. |
@@ -60,7 +61,8 @@ These are authoring rules — breaking one compiles and looks fine.
   panel and a registered rectangle is nothing but that. What is *not* drawn - the three hundred
   rows of a list that is longer than its window - is a `struct inkcell_focus_run`, two numbers
   the screen already has, and `inkcell_focus_step()` answers a press against both halves at
-  once. One ring is then drawn over the lot
+  once. A grid says a third: how many of its ids are side by side, so that down from the tile
+  the reader is on is a row further and not the next number. One ring is then drawn over the lot
   (`inkcell_fb_draw_focus_ring()`), and because it is one object rather than a property of each
   component it can do the thing none of them can: slide from the box the cursor left to the one
   it arrived at, taking that box's own shape as it lands.
@@ -123,7 +125,7 @@ catalog, and writes screens - and it draws every component the library ships, in
 two scales.
 
 ```bash
-make gallery     # 161 pages into build/gallery/, plus build/gallery/contact.png
+make gallery     # 185 pages into build/gallery/, plus build/gallery/contact.png
 ```
 
 It renders through `inkcell_capture`, which is the fb backend with the device taken out of it,

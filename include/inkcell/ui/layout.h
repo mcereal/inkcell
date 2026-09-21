@@ -287,6 +287,71 @@ bool inkcell_list_is_cursor(const struct inkcell_list *list, uint32_t index);
 uint32_t inkcell_list_first_visible(uint32_t cursor, uint32_t count, uint32_t visible);
 
 /*
+ * ---- a grid of tiles -------------------------------------------------------------------------
+ *
+ * The same window, over items laid out in rows of more than one: a home screen.
+ *
+ * A list is a grid one column wide, and that is not a pun - it is the whole of what is shared
+ * and the whole of what is not. Shared: a window derived from the cursor every frame, so there
+ * is no scroll position to get out of step with; a thumb whose proportion is the visible part
+ * of the whole; an iterator that hands back the indices that are on the panel and no others.
+ * Not shared: a step. A list's cursor moves by one item and the window moves by one row,
+ * because the two are the same number; a grid's cursor moves by one item *sideways* and by
+ * `cols` items *downward*, and a window that took the item index for a row index would scroll
+ * the panel three times for one trip across a row of three.
+ *
+ * So a grid is a list *of its rows*, which is exactly what this holds: `rows` is the window,
+ * over one item per row of tiles, and everything with pixels in it - the thumb, the first
+ * visible row, how many rows fit - is asked of that and answered by the arithmetic that was
+ * already tested. What this adds is the only thing the row list cannot know: which items are
+ * in the rows it settled on.
+ *
+ * `cols` is the grid's, not the caller's opinion of the panel. A backend narrows a request it
+ * cannot draw legibly - see inkcell_fb_grid_begin() - and hands the number it settled on back,
+ * which is what the press has to step by. A screen that kept its own column count would be
+ * holding a fact about a layout it did not perform.
+ */
+struct inkcell_grid {
+    /* The window, one item per row of tiles. Public because the two things a grid is asked for
+       between draws - the thumb and how far down it is - are this list's answers, and a
+       forwarding function per question would be this struct claiming to know something it
+       does not. */
+    struct inkcell_list rows;
+    uint32_t count;  /* tiles */
+    uint32_t cursor; /* clamped into [0, count) - count == 0 leaves it 0 */
+    uint32_t cols;   /* tiles per row; never 0 */
+    uint32_t next;   /* iterator position, an item index */
+    uint32_t end;    /* one past the last item in the window */
+};
+
+/*
+ * `cursor` is taken raw from the nav state and clamped here, as inkcell_list_begin() does.
+ * `cols` of 0 is read as 1 - a grid one tile wide is a list, and a grid zero tiles wide is a
+ * division - and `visible_rows` of 0 yields a grid that draws nothing.
+ *
+ * The window is placed on the cursor's *row*: a cursor anywhere in the last row on screen keeps
+ * that whole row on screen, which is what makes a press sideways cost no scroll at all.
+ */
+struct inkcell_grid inkcell_grid_begin(uint32_t count, uint32_t cursor, uint32_t cols,
+                                       uint32_t visible_rows);
+
+/* Hands back each visible index in turn, false when the window is exhausted. Row by row and
+   left to right inside a row, which is also the order a backend's x/y cursor travels in. */
+bool inkcell_grid_next(struct inkcell_grid *grid, uint32_t *index);
+
+bool inkcell_grid_is_cursor(const struct inkcell_grid *grid, uint32_t index);
+
+/* Which row item `index` is in, counting from the top of the whole grid rather than from the
+   top of the window. What a backend advancing a y cursor asks, and what tells a press whether
+   it is on the last row - see `stride` on struct inkcell_focus_run. */
+uint32_t inkcell_grid_row_of(const struct inkcell_grid *grid, uint32_t index);
+
+/* Rows the whole grid occupies, the last one included whether or not it is full. The same
+   number as `grid->rows.count`, named because a caller asking how tall a grid is should not
+   have to know that a grid is a list of its rows. */
+uint32_t inkcell_grid_rows(const struct inkcell_grid *grid);
+
+/*
  * Where a scroll indicator's thumb sits, and how long it is.
  *
  * A thumb, and named one - it was `struct inkcell_scroll` and `inkcell_list_scroll()`, which

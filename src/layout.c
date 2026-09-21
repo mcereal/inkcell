@@ -412,6 +412,66 @@ bool inkcell_list_is_cursor(const struct inkcell_list *list, uint32_t index) {
     return list->count > 0U && index == list->cursor;
 }
 
+/* ---- the grid -------------------------------------------------------------------------------
+ *
+ * A window over rows of tiles, and it is `struct inkcell_list` doing the window arithmetic on a
+ * list of the rows. Nothing here re-derives a first-visible or a thumb; what it derives is the
+ * span of *items* the rows the list settled on hold.
+ */
+
+/* Rows `count` items occupy in `cols` columns, the last one included whether or not it is full.
+   Written as a division and a remainder rather than as (count + cols - 1) / cols, which
+   overflows on a count near the top of the range and has no business doing so here. */
+static uint32_t grid_rows(uint32_t count, uint32_t cols) {
+    return count / cols + (count % cols != 0U ? 1U : 0U);
+}
+
+struct inkcell_grid inkcell_grid_begin(uint32_t count, uint32_t cursor, uint32_t cols,
+                                       uint32_t visible_rows) {
+    struct inkcell_grid grid;
+    memset(&grid, 0, sizeof grid);
+    grid.cols = cols > 0U ? cols : 1U;
+    grid.count = count;
+    grid.cursor = count > 0U && cursor < count ? cursor : 0U;
+    /* The cursor's row, which is what the window is placed on: a press sideways stays in the
+       row it started in, so it must cost no scroll. */
+    grid.rows =
+        inkcell_list_begin(grid_rows(count, grid.cols), grid.cursor / grid.cols, visible_rows);
+
+    /* The items those rows hold. In 64 bits because the product is a row index times a column
+       count and both are the caller's: a grid asked for four hundred million tiles three across
+       is arithmetic, not a reason to wrap. */
+    const uint64_t first = (uint64_t)grid.rows.first * grid.cols;
+    const uint64_t end = first + (uint64_t)grid.rows.visible * grid.cols;
+    grid.next = first < count ? (uint32_t)first : count;
+    grid.end = end < count ? (uint32_t)end : count;
+    return grid;
+}
+
+bool inkcell_grid_next(struct inkcell_grid *grid, uint32_t *index) {
+    if (grid == NULL || index == NULL || grid->next >= grid->end) {
+        return false;
+    }
+    *index = grid->next;
+    grid->next += 1U;
+    return true;
+}
+
+bool inkcell_grid_is_cursor(const struct inkcell_grid *grid, uint32_t index) {
+    return grid != NULL && grid->count > 0U && index == grid->cursor;
+}
+
+uint32_t inkcell_grid_row_of(const struct inkcell_grid *grid, uint32_t index) {
+    if (grid == NULL || grid->cols == 0U) {
+        return 0U;
+    }
+    return index / grid->cols;
+}
+
+uint32_t inkcell_grid_rows(const struct inkcell_grid *grid) {
+    return grid != NULL ? grid->rows.count : 0U;
+}
+
 /* ---- word wrapping -------------------------------------------------------------------------- */
 
 void inkcell_wrap_begin(struct inkcell_wrap *wrap, const char *text, size_t cols) {

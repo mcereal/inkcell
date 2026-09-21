@@ -11,6 +11,7 @@ add_executable(inkcell_gallery
     scenes_fab.c
     scenes_controls.c
     scenes_list.c
+    scenes_grid.c
     scenes_cards.c
     scenes_meters.c
     scenes_transcript.c
