@@ -97,13 +97,20 @@ static struct inkcell_fb_list inkcell_fb_list_open(const struct inkcell_fb_layou
        forty-two wants one the height of what a full window would have been. */
     list.track_y = layout->body_y;
     list.track_h = (int)layout->rows * layout->line;
+    /* The body, until a caller says its window is smaller - see inkcell_fb_list_begin_visible(). */
+    list.band_h = list.track_h;
     return list;
 }
 
 struct inkcell_fb_list inkcell_fb_list_begin_visible(const struct inkcell_fb_layout *layout,
                                                      uint32_t count, uint32_t cursor,
                                                      uint32_t visible) {
-    return inkcell_fb_list_open(layout, inkcell_list_begin(count, cursor, visible));
+    struct inkcell_fb_list list =
+        inkcell_fb_list_open(layout, inkcell_list_begin(count, cursor, visible));
+    /* The rows this list was given, which is what a glide may paint in. The rest of the body
+       belongs to whatever the screen reserved it for. */
+    list.band_h = (int)visible * layout->line;
+    return list;
 }
 
 struct inkcell_fb_list inkcell_fb_list_begin(const struct inkcell_fb_layout *layout, uint32_t count,
@@ -549,7 +556,7 @@ bool inkcell_fb_list_band_begin(const struct inkcell_fb_list *list) {
         return false;
     }
     const int top = list->track_y - list->glide_state->scale;
-    inkcell_fb_shift_begin(list->glide_state, 0, top, top + list->track_h);
+    inkcell_fb_shift_begin(list->glide_state, 0, top, top + list->band_h);
     return true;
 }
 
@@ -675,7 +682,28 @@ void inkcell_fb_list_focus_row(const struct inkcell_backend_fb_state *state,
        it and not the panel. A cursor that could reach a rectangle other than the one the
        highlight draws would be a screen disagreeing with itself about where the reader is. */
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
-    const struct inkcell_fb_rect rect = {.x = box.x, .y = y, .w = box.w, .h = h};
+    struct inkcell_fb_rect rect = {.x = box.x, .y = y, .w = box.w, .h = h};
+    /*
+     * A gliding row is clipped to the window, and what the clip took is not on the frame - so
+     * it is not something the cursor may reach either. Registering the whole box would put an
+     * id at a rectangle the band had cut away: the finder would answer with a row nobody can
+     * see, and the ring, which is drawn outside the band, would draw the proof of it over
+     * whatever is under the list.
+     *
+     * The part that survives is registered rather than nothing, because half a row is still a
+     * row the reader is looking at.
+     */
+    if (list->glide_state != NULL) {
+        const int band_top = list->track_y - state->scale;
+        const int band_bottom = band_top + list->band_h;
+        const int top = (rect.y > band_top) ? rect.y : band_top;
+        const int bottom = (rect.y + rect.h < band_bottom) ? rect.y + rect.h : band_bottom;
+        if (bottom <= top) {
+            return;
+        }
+        rect.y = top;
+        rect.h = bottom - top;
+    }
     /* INKCELL_SHAPE_SM because that is what inkcell_fb_draw_row_fill_on() rounds the highlight
        with, and the ring and the highlight describing one row have to be one shape. */
     inkcell_fb_focus_register_shaped(state, list->focus_base + index, &rect, INKCELL_SHAPE_SM);

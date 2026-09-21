@@ -992,8 +992,11 @@ void inkcell_fb_list_item(struct inkcell_backend_fb_state *state, struct inkcell
      * starts rather than run edge to edge: a leading disc already separates the items, and a
      * full-width rule under one reads as a box drawn around it.
      */
-    const bool last = (index + 1U >= list->model.count) ||
-                      (index + 1U >= list->model.first + list->model.visible);
+    /* The window, plus whatever a glide added below it: a row with more rows under it has a
+       divider, and a tail row sliding into view is a row with more rows under it. Asking the
+       window alone would drop the separator at the seam for the length of every scroll. */
+    const uint32_t end = list->model.first + list->model.visible + list->tail_count;
+    const bool last = (index + 1U >= list->model.count) || (index + 1U >= end);
     if (item->divider && !selected && !last) {
         inkcell_fb_draw_rule(state, g.text_x,
                              g.fill_top + g.fill_h + inkcell_fb_space(state, INKCELL_SPACE_XS),

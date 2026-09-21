@@ -78,6 +78,16 @@ struct inkcell_fb_list {
      */
     struct inkcell_backend_fb_state *glide_state;
     int glide_dy;
+    /*
+     * How tall the window is, which is what a glide is clipped to.
+     *
+     * Not `track_h`, which is deliberately the *body's* height whatever the window holds - a
+     * rail measures what a full window would have been. A list opened with an explicit window
+     * (inkcell_fb_list_begin_visible()) has rows below it that belong to whatever the screen
+     * reserved them for, and a glide painting into them would be this list drawing over
+     * somebody else's content.
+     */
+    int band_h;
     /* The items above the window and below it that the glide draws, so it has something to
        slide in from: `*_count` is the frame's fact and `*_pending` is what the walk has left. A
        press moves a window by as many rows as the model's lookahead gives back, so this is a
