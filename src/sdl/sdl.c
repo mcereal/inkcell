@@ -68,6 +68,12 @@ const struct inkcell_backend *inkcell_backend_sdl(void) {
 
 #include "inkcell/ui/input_codes.h"
 
+#if defined(__APPLE__)
+#include "inkcell/ui/widgets/chrome.h"
+
+#include "sdl_cocoa.h"
+#endif
+
 #include <SDL.h>
 #include <stdlib.h>
 #include <string.h>
@@ -106,11 +112,87 @@ struct inkcell_sdl_panel {
     struct inkcell_input_host host;
     inkcell_key_handler on_key;
     void *key_userdata;
+    /*
+     * The title bar, on a Mac - see src/sdl/sdl_cocoa.h.
+     *
+     * `titlebar_theme` and `strip_px` are what it was last arranged for, so an ordinary frame
+     * asks AppKit nothing and a theme or scale change arranges it again. `strip_points` is how
+     * much of the window's top drags it, in the window points SDL's hit test is asked in; 0
+     * when nothing does.
+     */
+    bool unified_titlebar;
+    const struct inkcell_theme *titlebar_theme;
+    int strip_px;
+    int strip_points;
+    void (*request_frame)(void *userdata);
+    void *frame_userdata;
+    /* A frame was asked for and has not been drawn. animating() says so, because a host that
+       asks it after every present - mesh-client's controller does - would otherwise hear "at
+       rest" and cancel the very frame requested during that present. */
+    bool frame_requested;
 };
 
 static struct inkcell_sdl_panel *inkcell_sdl_panel_of(void *state_ptr) {
     return (struct inkcell_sdl_panel *)state_ptr;
 }
+
+/* ---- the title bar --------------------------------------------------------------------- */
+
+#if defined(__APPLE__)
+/*
+ * The title bar brought into line with the frame: its colour with the theme, and - unified -
+ * the window's buttons with the tab strip and the tabs with the buttons.
+ *
+ * `force` is a resize, which moves the buttons without changing anything this can compare.
+ * Returns whether the tabs have to move, which the frame already drawn does not know: the
+ * caller either has not drawn yet, or asks the application for another.
+ */
+static void inkcell_sdl_request_frame(struct inkcell_sdl_panel *panel) {
+    panel->frame_requested = true;
+    if (panel->request_frame != NULL) {
+        panel->request_frame(panel->frame_userdata);
+    }
+}
+
+static bool inkcell_sdl_titlebar_sync(struct inkcell_sdl_panel *panel, bool force) {
+    struct inkcell_draw_state *const state = &panel->state;
+    const bool restyle = panel->titlebar_theme != state->theme;
+    if (restyle) {
+        inkcell_sdl_cocoa_blend_titlebar(panel->window,
+                                         inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
+        panel->titlebar_theme = state->theme;
+    }
+    if (!panel->unified_titlebar) {
+        return false;
+    }
+    /* The strip's height is the theme's and the scale's, not the frame's, so it is known
+       before anything is drawn - which is what lets the first frame already be clear of the
+       buttons. */
+    const int strip_px =
+        inkcell_fb_nav_bar_height(state, inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL));
+    if (!force && !restyle && strip_px == panel->strip_px) {
+        return false;
+    }
+    panel->strip_px = strip_px;
+    const struct inkcell_sdl_cocoa_controls controls =
+        inkcell_sdl_cocoa_place_controls(panel->window, strip_px);
+    panel->strip_points = controls.strip_points;
+    const bool moved = controls.inset_px != state->top_leading_inset;
+    state->top_leading_inset = controls.inset_px;
+    return moved;
+}
+
+/* The strip is the window's handle, as a title bar is. The whole strip rather than the room
+   between the tabs, because nothing here reads the mouse: a tab is not clicked, so dragging
+   from one takes nothing away. The buttons are AppKit's views and answer before this is
+   asked. */
+static SDL_HitTestResult inkcell_sdl_hit_test(SDL_Window *window, const SDL_Point *point,
+                                              void *data) {
+    (void)window;
+    const struct inkcell_sdl_panel *const panel = (const struct inkcell_sdl_panel *)data;
+    return point->y < panel->strip_points ? SDL_HITTEST_DRAGGABLE : SDL_HITTEST_NORMAL;
+}
+#endif
 
 /* ---- the frame ------------------------------------------------------------------------- */
 
@@ -199,7 +281,20 @@ static void inkcell_backend_sdl_present(void *state_ptr, const void *snapshot, v
     inkcell_fb_state_set_now(state, inkwell_time_monotonic_ms());
     inkcell_latency_frame_begin();
 
+    panel->frame_requested = false;
+#if defined(__APPLE__)
+    /* Before the render, so the tabs are drawn clear of the buttons where they are now... */
+    (void)inkcell_sdl_titlebar_sync(panel, false);
+#endif
     inkcell_fb_render(state, snapshot);
+#if defined(__APPLE__)
+    /* ...and after it, because a frame is where the application gets to change the theme. The
+       bar turns with the strip under it rather than a frame later, and a strip that changed
+       height moves the tabs, which this frame drew where they were. */
+    if (inkcell_sdl_titlebar_sync(panel, false)) {
+        inkcell_sdl_request_frame(panel);
+    }
+#endif
     /* ...which also decides whether the next frame may trust the comparison: see the end of it. */
     const size_t written = inkcell_sdl_upload_damage(panel, !panel->frame_valid);
 
@@ -337,6 +432,15 @@ static int inkcell_sdl_pump(int fd, uint32_t events, void *userdata) {
              */
             if (event.window.event == SDL_WINDOWEVENT_EXPOSED ||
                 event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+#if defined(__APPLE__)
+                /* The one exception: the buttons do not scale with the frame, so a resize
+                   changes how far in the tabs have to start, and that *is* a frame. The blit
+                   still goes first - the old one, scaled, until the new one arrives. */
+                if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED &&
+                    inkcell_sdl_titlebar_sync(panel, true)) {
+                    inkcell_sdl_request_frame(panel);
+                }
+#endif
                 inkcell_sdl_blit(panel);
             }
             break;
@@ -556,6 +660,22 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
     panel->host = context->host;
     panel->on_key = context->on_key;
     panel->key_userdata = context->key_userdata;
+    panel->request_frame = context->request_frame;
+    panel->frame_userdata = context->frame_userdata;
+#if defined(__APPLE__)
+    if (context->unified_titlebar) {
+        panel->unified_titlebar =
+            inkcell_sdl_cocoa_unify_titlebar(panel->window, (int)width, (int)height);
+    }
+    if (panel->unified_titlebar) {
+        /* Half the panel is where the buttons start to crowd the first tab off the strip. */
+        SDL_SetWindowMinimumSize(panel->window, (int)width / 2, (int)height / 2);
+        if (SDL_SetWindowHitTest(panel->window, inkcell_sdl_hit_test, panel) != 0) {
+            inkwell_log_warn("ui", "SDL_SetWindowHitTest failed: %s", SDL_GetError());
+        }
+    }
+    (void)inkcell_sdl_titlebar_sync(panel, true);
+#endif
     inkcell_sdl_pump_start(panel);
 
     SDL_RendererInfo info;
@@ -601,7 +721,7 @@ static void inkcell_backend_sdl_shutdown(void *state_ptr, void *userdata) {
 static bool inkcell_backend_sdl_animating(void *state_ptr, void *userdata) {
     (void)userdata;
     struct inkcell_sdl_panel *const panel = inkcell_sdl_panel_of(state_ptr);
-    return panel != NULL && inkcell_fb_state_animating(&panel->state);
+    return panel != NULL && (panel->frame_requested || inkcell_fb_state_animating(&panel->state));
 }
 
 static uint32_t inkcell_backend_sdl_page_rows(void *state_ptr, void *userdata) {

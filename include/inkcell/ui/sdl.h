@@ -79,6 +79,18 @@ extern "C" {
  *
  * `width`/`height` of 0 take <PREFIX>_SDL_SIZE, then the default above. `title` of NULL takes
  * the library's own.
+ *
+ * `unified_titlebar` is for an application whose frame opens with inkcell_fb_draw_nav_bar(),
+ * and only means anything on a Mac: the frame runs up under a transparent title bar, the
+ * window's three buttons sit in the tab strip, the strip drags the window, and the tabs start
+ * clear of the buttons (`top_leading_inset` on the draw state). Off, the title bar stays and is
+ * painted the strip's colour. Either way the frame is the panel's size and a capture of it is
+ * unchanged - what moves is the first tab, on a Mac, in a window.
+ *
+ * `request_frame` is how the window asks for a frame it cannot draw itself: a resize that
+ * moves the buttons moves the tabs, and a frame needs the application's snapshot. Called with
+ * `frame_userdata`, and expected to end in a present() soon after - it may be NULL, and then
+ * the tabs catch up on whatever frame comes next.
  */
 struct inkcell_backend_sdl_context {
     const struct inkcell_fb_app *app;
@@ -88,6 +100,9 @@ struct inkcell_backend_sdl_context {
     const char *title;
     uint32_t width;
     uint32_t height;
+    bool unified_titlebar;
+    void (*request_frame)(void *userdata);
+    void *frame_userdata;
 };
 
 const struct inkcell_backend *inkcell_backend_sdl(void);
