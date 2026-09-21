@@ -250,6 +250,39 @@ INKCELL_TEST_CASE(view_moves_the_focus_map, unit) {
 }
 
 /*
+ * A box the view cut in half is registered as the half that is on the panel.
+ *
+ * Two things rest on it, and both are the kind of wrong that only shows on a device. The
+ * focus ring is drawn from this map *after* the view has been popped, so a row half above its
+ * viewport would have its ring painted up across the chrome above it - the exact lie the ring
+ * exists to prevent. And a direction is answered by comparing boxes, so a box reaching
+ * somewhere the reader cannot see is a box that wins presses it should lose.
+ */
+INKCELL_TEST_CASE(view_clips_a_half_visible_box, unit) {
+    struct view_harness h;
+    INKCELL_TEST_FAIL_IF(!view_harness_open(&h), "capture should open");
+
+    const struct inkcell_fb_rect box = {0, 100, (int)VIEW_W, 60};
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_view_push(h.state, box, 0, 0), view_harness_close(&h),
+                                 "a band of the panel should push");
+    /* Straddling both edges of the window at once, so one case covers the top and the bottom. */
+    const struct inkcell_fb_rect row = {10, 80, 100, 100};
+    inkcell_fb_focus_register(h.state, VIEW_ID_BOX, &row);
+    inkcell_fb_view_pop(h.state);
+
+    struct inkcell_focus_rect found;
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_focus_rect_of(&h.map, VIEW_ID_BOX, &found),
+                                 view_harness_close(&h), "it should still be registered");
+    INKCELL_TEST_FAIL_IF_CLEANUP(found.y != 100, view_harness_close(&h),
+                                 "the part above the window should be cut off");
+    INKCELL_TEST_FAIL_IF_CLEANUP(found.y + found.h != 160, view_harness_close(&h),
+                                 "and so should the part below it");
+
+    view_harness_close(&h);
+    record_success(test_name);
+}
+
+/*
  * And one the view cut away entirely is not registered at all.
  *
  * The whole point: a row scrolled off the top of a viewport is not somewhere to stand, and a

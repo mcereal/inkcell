@@ -236,6 +236,12 @@ struct inkcell_overlay_frame {
  * must not call inkcell_fb_overlay_end(), which is what the `if` in the example at the top of
  * this header is for.
  *
+ * False is also the answer when the view stack has no room for this layer's clip, which is a
+ * frame with four regions already nested inside each other. Not drawing is the only honest
+ * alternative: unclipped is not a degraded version of clipped, because a sheet arriving would
+ * paint its way up across the app bar, and the promise this call makes is that what it draws
+ * stays inside its region.
+ *
  * Mutable state, like everything here that animates: where a layer has got to is the one thing
  * about it the frame itself remembers.
  */

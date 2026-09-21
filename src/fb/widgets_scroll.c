@@ -103,14 +103,31 @@ void inkcell_fb_draw_scroll_rail(const struct inkcell_backend_fb_state *state,
      * margin wide, centred in the strip outside the widest thing the content can draw, so the
      * two rails are the same mark in the same place and a screen that has one of each does not
      * look like a screen with two different scrollbars.
+     *
+     * Measured from the *viewport's* right edge rather than from the panel's, which is the
+     * whole of the difference between this and a rail beside a list. A list fills the width of
+     * the screen, so the two answers coincide and it was easy to write the panel's; a viewport
+     * need not - a scrolling pane, or a sheet's content - and a rail derived from the panel
+     * would then hang at the screen's edge with the thing it reports somewhere off to the
+     * left, outside the surface it belongs to.
+     *
+     * The strip is derived the way inkcell_fb_row_box() derives the content's, so a viewport
+     * that *does* span the panel puts its rail exactly where a list puts one: the row box is
+     * the width less a gutter either side less the rail's own reserved strip, and the rail
+     * stands in what is left with the hairline's clearance.
      */
     int width = inkcell_fb_gutter(state) / 2;
     if (width < 2) {
         width = 2;
     }
-    const struct inkcell_fb_row_box row = inkcell_fb_row_box(state);
-    const int strip_x = row.x + row.w + inkcell_fb_edge(state);
-    const int strip_w = (int)state->var.xres - strip_x;
+    const int strip_right = view->box.x + view->box.w;
+    const int content_right =
+        strip_right - inkcell_fb_gutter(state) - inkcell_fb_rail_gutter(state);
+    int strip_x = content_right + inkcell_fb_edge(state);
+    if (strip_x < view->box.x) {
+        strip_x = view->box.x;
+    }
+    const int strip_w = strip_right - strip_x;
     if (strip_w < 3) {
         return;
     }

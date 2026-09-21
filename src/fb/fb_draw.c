@@ -366,14 +366,42 @@ static void inkcell_fb_focus_put(const struct inkcell_backend_fb_state *state, u
      * something nobody can see and then press it. So a box is registered where the view put it,
      * and one the view cut away entirely is not registered at all - which is the rule the list
      * has always followed by registering only the rows it drew, stated once for everything.
+     *
+     * And a box the view cut *in half* is registered as the half that is on the panel. That is
+     * the same rule rather than a second one, and both of the things it fixes are real. The
+     * focus ring is drawn after the view has been popped, from the rectangle in this map - so
+     * a row half above its viewport would have its ring painted up across the chrome above it,
+     * which is the exact lie the ring exists to prevent. And a direction is answered by
+     * comparing boxes, so a box that reaches somewhere the reader cannot see is a box that
+     * wins presses it should lose.
+     *
+     * The radius is kept as it was, and that is deliberate: it is the curve the *component*
+     * drew, and a ring that squared its corners at a cut would be reporting a shape nothing on
+     * the panel has. A ring around a half-row follows the half-row.
      */
     const struct inkcell_fb_view view = inkcell_fb_view_top(state);
-    const int x = rect->x + view.dx;
-    const int y = rect->y + view.dy;
-    if (x >= view.right || y >= view.bottom || x + rect->w <= view.x || y + rect->h <= view.y) {
+    int x = rect->x + view.dx;
+    int y = rect->y + view.dy;
+    int w = rect->w;
+    int h = rect->h;
+    if (x < view.x) {
+        w -= view.x - x;
+        x = view.x;
+    }
+    if (y < view.y) {
+        h -= view.y - y;
+        y = view.y;
+    }
+    if (x + w > view.right) {
+        w = view.right - x;
+    }
+    if (y + h > view.bottom) {
+        h = view.bottom - y;
+    }
+    if (w <= 0 || h <= 0) {
         return;
     }
-    (void)inkcell_focus_add_round(state->focus, id, x, y, rect->w, rect->h, radius);
+    (void)inkcell_focus_add_round(state->focus, id, x, y, w, h, radius);
 }
 
 void inkcell_fb_focus_register(const struct inkcell_backend_fb_state *state, uint32_t id,
@@ -480,6 +508,29 @@ void inkcell_fb_app_frame_begin(struct inkcell_backend_fb_state *state) {
     if (painted.valid) {
         inkcell_fb_animation_damage(state, painted.x, painted.y, painted.right - painted.x,
                                     painted.bottom - painted.y);
+    }
+    /*
+     * And every layer's, for the ring's reason exactly - which is worth spelling out, because
+     * the layers first declared their own damage from inkcell_fb_overlay_begin() and that is
+     * a frame too late in precisely the way the paragraph above describes.
+     *
+     * A layer is drawn over the body, so the body under it is drawn *first*. By the time
+     * begin() runs, everything that could have repainted the rows the layer is vacating has
+     * already been told those rows did not change - so under a clip band the old position is
+     * never repainted and the layer leaves a trail behind it.
+     *
+     * The scrim makes the same mistake worse rather than merely visible. It is a
+     * read-modify-write over what is already on the panel, so a region that was dimmed last
+     * frame and not repainted this one gets dimmed *again*: the body behind a modal would
+     * darken a step per frame for as long as the modal was up. That is why the span a layer
+     * records covers its scrim's whole region and not just its own box.
+     */
+    for (uint32_t i = 0U; i < INKCELL_OVERLAY_SLOTS; ++i) {
+        const struct inkcell_fb_damage_rect was = state->overlays[i].drawn;
+        state->overlays[i].drawn = (struct inkcell_fb_damage_rect){0};
+        if (was.valid) {
+            inkcell_fb_animation_damage(state, was.x, was.y, was.right - was.x, was.bottom - was.y);
+        }
     }
     /*
      * And the layer order, which is a fact about one frame's draw sequence rather than

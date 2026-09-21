@@ -348,18 +348,49 @@ bool inkcell_fb_overlay_begin(struct inkcell_backend_fb_state *state,
     };
 
     /*
-     * Where it is, and where it was, declared before anything is drawn.
+     * The clip, before anything is drawn - including the scrim.
      *
-     * The scrim needs the whole of it too: a dim that eased in under a clip band that only
-     * covered the panel would leave the rest of the body at the previous frame's depth.
+     * It is the other half of what the bounds are for. A layer arriving is half outside its
+     * resting place by construction, and content drawn past the region it belongs to would
+     * paint over chrome the frame is not redrawing.
+     *
+     * A push that is refused - the view stack is full - takes the layer off this frame
+     * entirely, rather than drawing it without its clip. Unclipped is not a degraded version
+     * of clipped here: a sheet arriving would paint its way up across the app bar and the tab
+     * strip, and the promise this call makes to its caller is that what it draws stays inside
+     * its region. Not drawing is the only other honest answer, and it is why the push comes
+     * *before* the scrim - a dimmed screen with no panel on it would be worse than either.
+     *
+     * No offset: an overlay's content is placed against the box it was handed, in panel
+     * coordinates, so there is nothing to translate. A sheet whose *content* scrolls pushes a
+     * second view inside this one, which is what the stack nests for.
+     */
+    if (!inkcell_fb_view_push(state, bounds, 0, 0)) {
+        return false;
+    }
+    frame->clipped = true;
+
+    /*
+     * Where it is this frame, recorded for the next one to repaint.
+     *
+     * Declared here and *also* at inkcell_fb_app_frame_begin(), which is the half that took a
+     * round of review to get right. This call runs after the body under the layer has been
+     * drawn, so by now everything that could have repainted the rows the layer is vacating has
+     * already been told they did not change - the old position has to be declared before the
+     * frame starts, and that is what the loop in frame_begin() does with this record. See the
+     * comment there.
+     *
+     * The span takes in the scrim's whole region rather than just the box, because a scrim is
+     * a read-modify-write: a region dimmed last frame and not repainted this one would be
+     * dimmed a second time, and the body behind a modal would darken a step per frame for as
+     * long as the modal was up.
      */
     struct inkcell_fb_damage_rect span = inkcell_overlay_span(box, slot->drawn);
     if (overlay->scrim) {
         span = inkcell_overlay_span(bounds, span);
     }
     inkcell_fb_animation_damage(state, span.x, span.y, span.right - span.x, span.bottom - span.y);
-    slot->drawn = (struct inkcell_fb_damage_rect){
-        .x = box.x, .y = box.y, .right = box.x + box.w, .bottom = box.y + box.h, .valid = true};
+    slot->drawn = span;
 
     /*
      * The scrim, before the panel and after everything under it.
@@ -380,16 +411,6 @@ bool inkcell_fb_overlay_begin(struct inkcell_backend_fb_state *state,
     frame->rest = rest;
     frame->progress = progress;
     frame->arriving = up;
-    /*
-     * The clip, which is the other half of what the bounds are for. A layer arriving is half
-     * outside its resting place by construction, and content drawn past the region it belongs
-     * to would paint over chrome the frame is not redrawing.
-     *
-     * No offset: an overlay's content is placed against the box it was handed, in panel
-     * coordinates, so there is nothing to translate. A sheet whose *content* scrolls pushes a
-     * second view inside this one, which is what the stack nests for.
-     */
-    frame->clipped = inkcell_fb_view_push(state, bounds, 0, 0);
     return true;
 }
 

@@ -386,6 +386,77 @@ INKCELL_TEST_CASE(overlay_stack_refuses_rather_than_evicts, unit) {
 }
 
 /*
+ * A layer whose clip cannot be pushed is not drawn at all.
+ *
+ * Unclipped is not a degraded version of clipped. The call promises its caller that what it
+ * draws stays inside its region, and a sheet arriving without that would paint its way up
+ * across the app bar and the tab strip - so the only other honest answer is to say there is
+ * nothing of it on the panel. The refusal has to come *before* the scrim, too, or the frame
+ * would be dimmed with no panel on it to explain why.
+ */
+INKCELL_TEST_CASE(overlay_refused_when_the_view_stack_is_full, unit) {
+    struct overlay_harness h;
+    INKCELL_TEST_FAIL_IF(!overlay_open(&h), "capture should open");
+
+    const struct inkcell_fb_rect whole = {0, 0, (int)OVERLAY_W, (int)OVERLAY_H};
+    uint32_t pushed = 0U;
+    while (pushed < INKCELL_FB_VIEW_DEPTH && inkcell_fb_view_push(h.state, whole, 0, 0)) {
+        ++pushed;
+    }
+
+    struct inkcell_overlay desc = overlay_sheet(OVERLAY_ID_A, true);
+    desc.scrim = true;
+    const bool shown = overlay_show(&h, &desc, NULL);
+    for (uint32_t i = 0U; i < pushed; ++i) {
+        inkcell_fb_view_pop(h.state);
+    }
+
+    INKCELL_TEST_FAIL_IF_CLEANUP(pushed != INKCELL_FB_VIEW_DEPTH, overlay_close(&h),
+                                 "the views should have filled the stack");
+    INKCELL_TEST_FAIL_IF_CLEANUP(shown, overlay_close(&h),
+                                 "a layer with nowhere to clip should not be drawn");
+
+    overlay_close(&h);
+    record_success(test_name);
+}
+
+/*
+ * A layer's position is declared as damage before the *next* frame draws anything.
+ *
+ * The bug this catches took a round of review to see, and it is one the frame's own code
+ * already had a paragraph about: a layer is drawn over the body, so the body under it is
+ * drawn first, and a layer that declared its old position when it drew would be declaring it
+ * after everything that could have repainted those rows was told they had not changed. Under
+ * a clip band the vacated rows are then never repainted - the layer leaves a trail - and the
+ * scrim, which reads the panel back and writes it darker, dims the same pixels a second time
+ * for every frame the modal is up.
+ */
+INKCELL_TEST_CASE(overlay_damage_is_declared_before_the_next_frame, unit) {
+    struct overlay_harness h;
+    INKCELL_TEST_FAIL_IF(!overlay_open(&h), "capture should open");
+
+    struct inkcell_overlay desc = overlay_sheet(OVERLAY_ID_A, true);
+    desc.scrim = true;
+    desc.bounds = (struct inkcell_fb_rect){0, 20, (int)OVERLAY_W, 200};
+    (void)overlay_show(&h, &desc, NULL);
+
+    /* The next frame, before a single pixel of it is drawn. */
+    overlay_frame(&h, 16U);
+    const struct inkcell_fb_damage_rect damage = h.state->animation_damage;
+
+    INKCELL_TEST_FAIL_IF_CLEANUP(!damage.valid, overlay_close(&h),
+                                 "the frame should open owing a repaint");
+    /* The scrim's whole region, not just the panel's box: a region dimmed last frame and not
+       repainted this one would be dimmed again. */
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        damage.y > desc.bounds.y || damage.bottom < desc.bounds.y + desc.bounds.h,
+        overlay_close(&h), "and it should cover the whole of what the scrim touched");
+
+    overlay_close(&h);
+    record_success(test_name);
+}
+
+/*
  * A layer dropped comes back from nothing rather than from where it was.
  *
  * What the snackbar needs and what a re-aim cannot express: a second notice reading the same
