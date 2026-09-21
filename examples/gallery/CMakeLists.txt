@@ -8,6 +8,7 @@ add_executable(inkcell_gallery
     scenes.c
     scenes_buttons.c
     scenes_chrome.c
+    scenes_fab.c
     scenes_controls.c
     scenes_list.c
     scenes_cards.c

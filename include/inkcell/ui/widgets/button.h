@@ -118,6 +118,27 @@ void inkcell_fb_draw_button(const struct inkcell_backend_fb_state *state,
                             const struct inkcell_fb_button *button);
 
 /*
+ * The fill a variant wears in a state, and the ink that goes on it.
+ *
+ * `has_fill` false means the button lays down no ground of its own and the caller's idle tone
+ * is the ink - which is INKCELL_FB_BUTTON_TEXT at rest and nothing else.
+ *
+ * Stated out here because a second component now needs the answer without going through
+ * inkcell_fb_draw_button(): the floating action button fades its own label as it collapses, so
+ * it draws its contents itself, and it must still be filled with the pair a tonal button is
+ * filled with. The point of a variant is that its two colours travel *together* - every pair
+ * below is one inkcell_theme_validate() holds to 4.5:1 - so what is shared is the table and not
+ * the fill, which is how a caller ends up with a label on a ground nothing checked it against.
+ */
+struct inkcell_fb_button_paint {
+    bool has_fill;
+    struct inkcell_paint paint;
+};
+
+struct inkcell_fb_button_paint inkcell_fb_button_paint(const struct inkcell_backend_fb_state *state,
+                                                       const struct inkcell_fb_button *button);
+
+/*
  * A pill sized to its own label, laid out left to right. Returns the x the next chip starts
  * at, so a strip of them is a loop with no arithmetic in it.
  *

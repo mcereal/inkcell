@@ -128,6 +128,7 @@ const struct gallery_scene *gallery_scenes(size_t *count);
 /* One scene per file under scenes_*.c, in the order scenes.c lists them. */
 void gallery_scene_buttons(struct inkcell_backend_fb_state *state);
 void gallery_scene_chrome(struct inkcell_backend_fb_state *state);
+void gallery_scene_fab(struct inkcell_backend_fb_state *state);
 void gallery_scene_controls(struct inkcell_backend_fb_state *state);
 void gallery_scene_list(struct inkcell_backend_fb_state *state);
 void gallery_scene_cards(struct inkcell_backend_fb_state *state);

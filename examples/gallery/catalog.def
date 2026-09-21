@@ -51,6 +51,9 @@ INKCELL_STR_ENTRY(HEAD_CORNERS,       "Corners")
 INKCELL_STR_ENTRY(HEAD_OUTLINES,      "Outlines")
 INKCELL_STR_ENTRY(HEAD_ARCS,          "Arcs")
 INKCELL_STR_ENTRY(HEAD_DIALS,         "Dials")
+INKCELL_STR_ENTRY(HEAD_FAB,           "Action button")
+INKCELL_STR_ENTRY(HEAD_FAB_SIZES,     "Sizes")
+INKCELL_STR_ENTRY(HEAD_FAB_COLLAPSE,  "Collapsing")
 
 /* ---- verbs ------------------------------------------------------------------------------------
  *
@@ -66,6 +69,10 @@ INKCELL_STR_ENTRY(ACT_OPEN,           "Open")
 INKCELL_STR_ENTRY(ACT_BACK,           "Back")
 INKCELL_STR_ENTRY(ACT_SELECT,         "Select")
 INKCELL_STR_ENTRY(ACT_DISMISS,        "Dismiss")
+/* The extended FAB's verb, and a second one long enough that the strip of specimens has to
+   drop it back to a disc on the narrower themes - which is the case the page is for. */
+INKCELL_STR_ENTRY(ACT_COMPOSE,        "New message")
+INKCELL_STR_ENTRY(ACT_ADD_NODE,       "Add")
 
 /* ---- settings rows ----------------------------------------------------------------------------
  *

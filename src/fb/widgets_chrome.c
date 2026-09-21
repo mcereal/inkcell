@@ -582,3 +582,292 @@ void inkcell_fb_title_count(char *out, size_t out_len, const char *name, uint32_
         inkcell_str_format(out, out_len, INKCELL_STR_LIST_TITLE_COUNT, name, count);
     }
 }
+
+/* ---- the floating action button ---------------------------------------------------------- */
+
+/*
+ * The glyph multiplier the symbol is drawn at, and the one the verb beside it is set in.
+ *
+ * The symbol is a type role rather than a number, so a theme asking for bigger text gets a
+ * bigger FAB along with everything else. The verb is one step under it, which is the proportion
+ * a FAB has everywhere it exists: the picture is the control and the word is a gloss on it, and
+ * a label set as large as the symbol makes the container a button with a big icon in it.
+ */
+static int inkcell_fb_fab_scale(const struct inkcell_backend_fb_state *state,
+                                enum inkcell_fb_fab_size size) {
+    switch (size) {
+    case INKCELL_FB_FAB_SM:
+        return inkcell_fb_type_scale(state, INKCELL_TYPE_BODY);
+    case INKCELL_FB_FAB_LG:
+        /* The one size that grows its symbol as well as its room, the way the large title is the
+           one heading a step above INKCELL_TYPE_TITLE. Unclamped for that same reason: a theme
+           already at the top of the range gets a symbol the font registry resamples rather than
+           one the type scale flattened back into the body. */
+        return inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE) + 1;
+    case INKCELL_FB_FAB_MD:
+    default:
+        return inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE);
+    }
+}
+
+static int inkcell_fb_fab_label_scale(const struct inkcell_backend_fb_state *state,
+                                      enum inkcell_fb_fab_size size) {
+    const int scale = inkcell_fb_fab_scale(state, size) - 1;
+    return scale < INKCELL_SCALE_MIN ? INKCELL_SCALE_MIN : scale;
+}
+
+/*
+ * The room around the symbol: one entry of the spacing scale per size.
+ *
+ * This is the axis the sizes differ on, which is Material's own - a small and a regular FAB
+ * carry the same symbol in different amounts of container. Naming a token rather than a count
+ * of steps is what lets a theme with a denser layout have a denser FAB without this being a
+ * number anywhere.
+ */
+static int inkcell_fb_fab_pad(const struct inkcell_backend_fb_state *state,
+                              enum inkcell_fb_fab_size size, int scale) {
+    switch (size) {
+    case INKCELL_FB_FAB_SM:
+        return inkcell_fb_space_at(state, INKCELL_SPACE_SM, scale);
+    case INKCELL_FB_FAB_LG:
+        return inkcell_fb_space_at(state, INKCELL_SPACE_LG, scale);
+    case INKCELL_FB_FAB_MD:
+    default:
+        return inkcell_fb_space_at(state, INKCELL_SPACE_MD, scale);
+    }
+}
+
+/*
+ * What the two forms measure, and where they stand.
+ *
+ * One struct because every answer below needs the same half-dozen numbers and each of them is
+ * derived from the one before: a second function re-deriving the diameter is a second diameter.
+ * `room` is what the frame can spare for the extended form - the body's own width - and is what
+ * decides whether the verb is shown at all.
+ */
+struct inkcell_fb_fab_metrics {
+    int scale;       /* the symbol's glyph multiplier */
+    int label_scale; /* the verb's */
+    int pad;
+    int gap;      /* between the symbol and the verb */
+    int label_w;  /* the verb, measured */
+    int diameter; /* the collapsed form: square, and therefore a circle */
+    int extended; /* the extended form's width, or `diameter` when there is no verb */
+    int right;    /* where the trailing edge sits */
+    int bottom;   /* and the bottom one */
+    int room;     /* the widest the frame can spare */
+    bool fits;    /* whether the extended form is one of the widths available */
+};
+
+static struct inkcell_fb_fab_metrics
+inkcell_fb_fab_measure(const struct inkcell_backend_fb_state *state,
+                       const struct inkcell_fb_layout *layout, const struct inkcell_fb_fab *fab) {
+    struct inkcell_fb_fab_metrics m = {0};
+    m.scale = inkcell_fb_fab_scale(state, fab->size);
+    m.label_scale = inkcell_fb_fab_label_scale(state, fab->size);
+    m.pad = inkcell_fb_fab_pad(state, fab->size, m.scale);
+    /* Half a cell between a symbol and the word after it - inkcell_fb_draw_button()'s gap, at
+       the symbol's own scale, because it is a space rather than a word. */
+    m.gap = inkcell_fb_char_adv(state, m.scale) / 2;
+    m.diameter = inkcell_fb_icon_box(state, m.scale) + 2 * m.pad;
+
+    const bool has_label = fab->label != NULL && fab->label[0] != '\0';
+    /* Measured, never counted: a verb is words, and on the proportional face two of the same
+       length are not the same width. */
+    m.label_w = has_label ? inkcell_fb_text_width(state, fab->label, m.label_scale) : 0;
+    const int wanted = has_label ? m.diameter + m.gap + m.label_w : m.diameter;
+
+    const int margin = inkcell_fb_margin(state);
+    m.right = (int)state->var.xres - margin;
+    /*
+     * A full margin clear of the footer rather than the half a card stops at, which is the
+     * snackbar's rule and for its reason: a card is *in* the body and belongs against the body's
+     * own bottom edge, while a thing floating over everything keeps the distance the panel edge
+     * keeps.
+     */
+    m.bottom = layout->footer_y - margin;
+    m.room = m.right - margin;
+    /* The verb is shown only while the frame can hold the whole of it. A label that does not
+       fit is a FAB without a label, not a FAB running off the panel - the chip strip's elision,
+       with one label instead of five. */
+    m.fits = has_label && wanted <= m.room;
+    /*
+     * And a verb that cannot be shown moves the *endpoint*, not merely the target.
+     *
+     * The animation carries a fraction rather than a width, so the two ends have to be the two
+     * ends the FAB is actually travelling between. Handed a longer verb than the frame can
+     * hold, a FAB extended at ONE would spend that fraction against a `wanted` several hundred
+     * pixels wider - so the first frame of the collapse would be a pill *growing* to fill the
+     * body before it shrank, through widths nothing was ever drawn at.
+     *
+     * There is nothing honest to travel through there: the pill on the panel was holding a
+     * different verb, and the new one has no pill. So the FAB is its disc on the frame the verb
+     * stops fitting, which is the snackbar's rule for a notice replacing another - a different
+     * thing arrives rather than the old one changing its words.
+     */
+    m.extended = m.fits ? wanted : m.diameter;
+    return m;
+}
+
+/*
+ * The box at a width, which is the one place the anchoring is written down: against the trailing
+ * edge and against the bottom, so a FAB that grows a label grows leftwards and stays put.
+ *
+ * Only a disc the frame cannot hold at all answers with nothing. Every width the caller can
+ * reach is between the two endpoints inkcell_fb_fab_measure() settled, and neither of those is
+ * wider than the room - which is what that function's note about the endpoint is for.
+ */
+static struct inkcell_fb_rect inkcell_fb_fab_rect(const struct inkcell_fb_fab_metrics *m,
+                                                  const struct inkcell_fb_layout *layout,
+                                                  int width) {
+    const struct inkcell_fb_rect none = {0, 0, 0, 0};
+    if (m->diameter <= 0 || m->diameter > m->room || m->bottom - m->diameter < layout->body_y) {
+        return none; /* a frame with nowhere to put one - see inkcell_fb_fab_box() */
+    }
+    return (struct inkcell_fb_rect){
+        .x = m->right - width, .y = m->bottom - m->diameter, .w = width, .h = m->diameter};
+}
+
+struct inkcell_fb_rect inkcell_fb_fab_box(const struct inkcell_backend_fb_state *state,
+                                          const struct inkcell_fb_layout *layout,
+                                          const struct inkcell_fb_fab *fab) {
+    const struct inkcell_fb_rect none = {0, 0, 0, 0};
+    if (state == NULL || layout == NULL || fab == NULL || !inkcell_icon_is_valid(fab->icon)) {
+        return none;
+    }
+    const struct inkcell_fb_fab_metrics m = inkcell_fb_fab_measure(state, layout, fab);
+    /* No test against `fits` here: a verb that does not fit has already left `extended` sitting
+       on the diameter, which is the whole point of settling the endpoint rather than the
+       target. */
+    return inkcell_fb_fab_rect(&m, layout, fab->extended ? m.extended : m.diameter);
+}
+
+int inkcell_fb_fab_clearance(const struct inkcell_backend_fb_state *state,
+                             const struct inkcell_fb_layout *layout,
+                             const struct inkcell_fb_fab *fab) {
+    const struct inkcell_fb_rect box = inkcell_fb_fab_box(state, layout, fab);
+    /* From the top of the disc to the foot of the body. The width is what moves as a FAB
+       collapses and the height is not, so this answer is the same on every frame of one. */
+    return box.w > 0 ? layout->footer_y - box.y : 0;
+}
+
+struct inkcell_fb_rect inkcell_fb_draw_fab(struct inkcell_backend_fb_state *state,
+                                           const struct inkcell_fb_layout *layout,
+                                           const struct inkcell_fb_fab *fab) {
+    const struct inkcell_fb_rect none = {0, 0, 0, 0};
+    if (state == NULL || layout == NULL || fab == NULL || !inkcell_icon_is_valid(fab->icon)) {
+        return none;
+    }
+    const struct inkcell_fb_fab_metrics m = inkcell_fb_fab_measure(state, layout, fab);
+
+    /*
+     * How much of the verb is out, 0 collapsed and ONE extended.
+     *
+     * An entrance is longer than an exit, which is the motion scale's own division of the two
+     * and every platform's: a label arriving has something to say and one leaving has said it.
+     * An id of 0 is not a key - the table reports the target unanimated - so a FAB with no
+     * identity draws correctly at whichever width it was asked for and simply never eases.
+     */
+    const bool out = fab->extended && m.fits;
+    const int32_t shown = inkcell_anim_track(
+        &state->anim, fab->id, state->now_ms, out ? INKCELL_ANIM_ONE : 0,
+        inkcell_fb_motion(state, out ? INKCELL_MOTION_MEDIUM : INKCELL_MOTION_SHORT),
+        INKCELL_EASE_OUT);
+
+    const int width =
+        m.diameter + (int)(((int64_t)(m.extended - m.diameter) * shown) / INKCELL_ANIM_ONE);
+    const struct inkcell_fb_rect box = inkcell_fb_fab_rect(&m, layout, width);
+    if (box.w <= 0) {
+        return none;
+    }
+
+    /*
+     * The pair a tonal button wears, asked for as a pair.
+     *
+     * Not drawn *as* a button, because the verb has to fade rather than appear - but filled from
+     * the same table, so the container under the cursor commits to the family's full strength
+     * here exactly as a tonal control does there. See inkcell_fb_button_paint().
+     */
+    const struct inkcell_fb_button spec = {
+        .selected = fab->selected,
+        .variant = INKCELL_FB_BUTTON_TONAL,
+        .family = fab->family,
+    };
+    const struct inkcell_fb_button_paint paint = inkcell_fb_button_paint(state, &spec);
+
+    /* Registered before anything is painted and before the clip below, which is the button's
+       order and the reason for it: this is the frame saying the box exists rather than saying
+       what colour it came out. With its shape, so a ring that lands here is the curve the FAB
+       was filled with. */
+    inkcell_fb_focus_register_shaped(state, fab->focus_id, &box, INKCELL_SHAPE_FULL);
+
+    /*
+     * Where it is moving, said before it draws - the switch's rule, and every other component
+     * here that animates.
+     *
+     * Without it a frame drawn under a clip band rejects the FAB twice over: the band clips its
+     * fills, and inkcell_fb_copy_damage() skips its rows on the way to the panel. A list
+     * repainting its own rows is exactly such a frame, so a FAB extending beside one would
+     * freeze until something unrelated redrew the whole screen.
+     *
+     * The span is the *widest it could be standing anywhere in*, not the box it came out as,
+     * and that is the half a fixed-size control does not have to think about. A FAB is a
+     * container whose width moves: the rows it vacates as it collapses have to be redrawn and
+     * copied too, and they are not inside the box it is drawing now. There is nowhere to
+     * remember last frame's box - a screen may have more than one of these - so the answer is
+     * derived rather than stored: it travels along one row band with its trailing edge pinned,
+     * so every width it has ever had here is inside the room, and the room is a number the
+     * geometry already knows.
+     */
+    const int pad = inkcell_fb_space_at(state, INKCELL_SPACE_XS, m.scale);
+    inkcell_fb_animation_damage(state, m.right - m.room - pad, box.y - pad, m.room + 2 * pad,
+                                box.h + 2 * pad);
+
+    inkcell_fb_fill_round_rect(state, box.x, box.y, box.w, box.h,
+                               inkcell_fb_radius(state, INKCELL_SHAPE_FULL), paint.paint.fill);
+
+    /*
+     * The contents, inside a view cut to the container.
+     *
+     * A clip rather than a truncation, because the container is between its two widths for the
+     * length of the collapse and a verb shortened by a cell at a time would *pop* through the
+     * journey the easing exists to smooth. The view is the drawing layer's own answer to "cut
+     * this where its window ends", and a FAB collapsing is a window closing on its label.
+     *
+     * It cuts at the padding rather than at the fill, so the last letter goes before it reaches
+     * the capsule's curve - which costs the resting form nothing, since a label that fits ends
+     * exactly there anyway, and is the difference between a verb disappearing into the end of
+     * the pill and one running into it.
+     */
+    const struct inkcell_fb_rect inside = {
+        .x = box.x + m.pad, .y = box.y, .w = box.w - 2 * m.pad, .h = box.h};
+    if (!inkcell_fb_view_push(state, inside, 0, 0)) {
+        return box; /* filled and registered; only its contents had nowhere to land */
+    }
+    /* The symbol and the verb sit on one text line, centred in the box the way a button centres
+       its own content - so the symbol walks to the middle of the disc as the verb goes, rather
+       than staying put while the container shrinks past it. */
+    const int text_h = (int)inkcell_fb_font(state)->height * m.scale;
+    const int content_w = m.diameter - 2 * m.pad + (width - m.diameter);
+    const int x = box.x + (box.w - content_w) / 2;
+    const int y = box.y + (box.h - text_h) / 2;
+    inkcell_fb_draw_icon(state, x, y, fab->icon, m.scale, paint.paint.ink, paint.paint.fill);
+
+    if (shown > 0 && m.label_w > 0) {
+        /*
+         * Faded towards the fill it is written on, by however much of the collapse is done.
+         *
+         * Towards the *fill* and not towards the ground: a glyph here carries coverage rather
+         * than a mask, so ink mixed towards what is actually behind it is a partly faded letter
+         * and ink mixed towards anything else is a letter with a halo. See inkcell_fb_fade().
+         */
+        const struct inkcell_rgb ink =
+            inkcell_fb_fade(paint.paint.ink, paint.paint.fill, INKCELL_ANIM_ONE - shown);
+        const int label_y =
+            box.y + (box.h - (int)inkcell_fb_font(state)->height * m.label_scale) / 2;
+        inkcell_fb_draw_text(state, x + inkcell_fb_icon_box(state, m.scale) + m.gap, label_y,
+                             fab->label, m.label_scale, ink, paint.paint.fill);
+    }
+    inkcell_fb_view_pop(state);
+    return box;
+}

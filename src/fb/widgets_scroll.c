@@ -196,23 +196,6 @@ void inkcell_fb_draw_scroll_rail(const struct inkcell_backend_fb_state *state,
 /* ---- the collapsing app bar -------------------------------------------------------------------
  */
 
-/* A colour mixed `progress` of the way towards another, in permille. What a cross-fade is on a
-   panel with no alpha: text is drawn as coverage against a stated ground, so ink moved towards
-   that ground is a partly faded glyph - drawn by the same blend that anti-aliases its edges. */
-static uint8_t inkcell_fb_mix8(uint8_t from, uint8_t to, int32_t progress) {
-    const int32_t span = (int32_t)to - (int32_t)from;
-    return (uint8_t)((int32_t)from + (span * progress) / INKCELL_ANIM_ONE);
-}
-
-static struct inkcell_rgb inkcell_fb_fade(struct inkcell_rgb ink, struct inkcell_rgb ground,
-                                          int32_t progress) {
-    return (struct inkcell_rgb){
-        .r = inkcell_fb_mix8(ink.r, ground.r, progress),
-        .g = inkcell_fb_mix8(ink.g, ground.g, progress),
-        .b = inkcell_fb_mix8(ink.b, ground.b, progress),
-    };
-}
-
 /* The two heights the bar moves between: collapsed is an ordinary app bar with no trail, and
    expanded is that plus one line of the large title. */
 static int inkcell_fb_large_title_collapsed(const struct inkcell_backend_fb_state *state,

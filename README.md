@@ -17,7 +17,7 @@ backend and its component set, and the evdev layer that turns a handheld's butto
 | **Layout** | Lines measured in *cells*, scroll windows, text wrapping done once for both the measure and the draw pass. |
 | **Focus** | A d-pad answered against the rectangles the components drew - "right from here lands on *that*" - so a grid, a card with two verbs on it or a form with a chip row in it is a layout rather than an index somebody maintains. The cursor is one ring, and it travels. |
 | **Motion** | Durations and curves as *tokens*, so a set of controls moves as one system - and the two things that move without being a control: the focus ring travelling between boxes, and a list gliding between windows instead of flicking between them. |
-| **Widgets** | Buttons, chips, app bars, list rows, chat bubbles, cards, switches, segmented buttons, meters, charts, dialogs, menus, bottom sheets, snackbars, QR codes. |
+| **Widgets** | Buttons, chips, app bars, floating action buttons, list rows, chat bubbles, cards, switches, segmented buttons, meters, charts, dialogs, menus, bottom sheets, snackbars, QR codes. |
 | **Layers** | One z-stack for everything drawn *over* a screen: a box from a placement, an entrance and a shorter exit, a scrim over what is behind, and an answer to which overlay owns the press. A new overlay is its content and nothing else. |
 | **Scrolling** | A body positioned in pixels rather than windowed by row index - so it can rest between two rows, give at its ends the way every touch platform does, and drive a large title that collapses into the app bar as it moves. |
 | **Shapes** | Anti-aliased rounded rectangles, rings and arcs, in integers - so a curve is the same curve on every host that draws it. |
