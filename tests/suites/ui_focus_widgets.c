@@ -17,6 +17,8 @@
 
 #include "framework/inkcell_test.h"
 
+#include "inkcell/ui/backend.h"
+#include "inkcell/ui/fb.h"
 #include "inkcell/ui/fb_capture.h"
 #include "inkcell/ui/focus.h"
 #include "inkcell/ui/widgets.h"
@@ -258,6 +260,45 @@ INKCELL_TEST_CASE(focus_widgets_dialog_answers_are_reachable_either_way_round, u
         inkcell_focus_find(&h.map, W_ID_DIALOG, INKCELL_FOCUS_DOWN) != W_ID_DIALOG + 1U,
         focus_harness_close(&h), "down from the accept should be the cancel it is stacked over");
     focus_harness_close(&h);
+    record_success(test_name);
+}
+
+/* ---- the seam the press is answered through ---------------------------------------------- */
+
+/*
+ * A map is built while a frame is drawn and read between frames, and in an application that
+ * keeps its navigation model away from its renderer those are two different places. The backend
+ * vtable is how the second one reaches the first - the same seam `page_rows` is, one fact along
+ * - so what is asserted here is that what the frame collected is what comes back out.
+ */
+INKCELL_TEST_CASE(focus_widgets_the_backend_hands_back_the_map_the_frame_built, unit) {
+    struct focus_harness h;
+    INKCELL_TEST_FAIL_IF(!focus_harness_open(&h, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT),
+                         "the capture should open");
+    focus_dialog_draw(&h);
+
+    const struct inkcell_backend *const backend = inkcell_backend_fb();
+    INKCELL_TEST_FAIL_IF_CLEANUP(backend == NULL || backend->focus_map == NULL,
+                                 focus_harness_close(&h),
+                                 "the fb backend should answer for its focus map");
+    const struct inkcell_focus_map *const out = backend->focus_map(h.state, NULL);
+    INKCELL_TEST_FAIL_IF_CLEANUP(out != &h.map, focus_harness_close(&h),
+                                 "the map handed back should be the one pushed in");
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_focus_has(out, W_ID_DIALOG), focus_harness_close(&h),
+                                 "and it should still hold what the frame registered");
+    focus_harness_close(&h);
+
+    /* Nothing pushed in is the whole of the opt-out, and it has to survive the round trip as
+       NULL rather than as an empty map: a caller that got one of those would be told the frame
+       had drawn nothing reachable, which is a different claim. */
+    struct inkcell_capture *bare = NULL;
+    INKCELL_TEST_FAIL_IF(
+        inkcell_capture_open(&bare, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT, 2) < 0,
+        "the bare capture should open");
+    INKCELL_TEST_FAIL_IF_CLEANUP(backend->focus_map(inkcell_capture_state(bare), NULL) != NULL,
+                                 inkcell_capture_close(bare),
+                                 "a backend nobody handed a map to should answer NULL");
+    inkcell_capture_close(bare);
     record_success(test_name);
 }
 
