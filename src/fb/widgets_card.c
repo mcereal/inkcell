@@ -63,7 +63,7 @@ inkcell_fb_card_measure(const struct inkcell_backend_fb_state *state,
 
     m.x = inkcell_fb_margin(state);
     m.width = (int)state->var.xres - 2 * m.x;
-    m.pad = (int)metrics->card_pad * scale;
+    m.pad = inkcell_scale_px((int)metrics->card_pad, scale);
     /* Half as much above and below as at the sides, which is not a fudge: a row is a line
        *advance* tall, and the advance already carries the leading that accents hang in, so the
        full inset is counted twice at the top and bottom of a stack of rows and only once at
@@ -525,7 +525,7 @@ static uint32_t inkcell_fb_draw_card_row(struct inkcell_backend_fb_state *state,
         if (bar_right - bar_x > 0) {
             const struct inkcell_fb_meter meter = {
                 .rect = {.x = bar_x,
-                         .y = y + (layout->line - state->scale - height) / 2,
+                         .y = y + (layout->line - inkcell_step_px(state->scale) - height) / 2,
                          .w = bar_right - bar_x,
                          .h = height},
                 .id = row->meter_id,
@@ -550,7 +550,7 @@ static uint32_t inkcell_fb_draw_card_row(struct inkcell_backend_fb_state *state,
         if (bar_right - bar_x > 0) {
             struct inkcell_fb_proportion bar = {
                 .rect = {.x = bar_x,
-                         .y = y + (layout->line - state->scale - height) / 2,
+                         .y = y + (layout->line - inkcell_step_px(state->scale) - height) / 2,
                          .w = bar_right - bar_x,
                          .h = height},
                 .count = row->part_count,

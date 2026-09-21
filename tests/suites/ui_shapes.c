@@ -36,7 +36,7 @@ struct shapes_page {
 
 static bool shapes_open(struct shapes_page *page) {
     page->capture = NULL;
-    if (inkcell_capture_open(&page->capture, SHAPES_W, SHAPES_H, 4) < 0) {
+    if (inkcell_capture_open(&page->capture, SHAPES_W, SHAPES_H, INKCELL_SCALE(4)) < 0) {
         return false;
     }
     page->state = inkcell_capture_state(page->capture);
@@ -225,7 +225,7 @@ INKCELL_TEST_CASE(shapes_stroke_wider_than_any_row_buffer, unit) {
      * that size, which is why the gallery could not have found it.
      */
     struct inkcell_capture *capture = NULL;
-    INKCELL_TEST_FAIL_IF(inkcell_capture_open(&capture, 1200U, 1400U, 4) < 0,
+    INKCELL_TEST_FAIL_IF(inkcell_capture_open(&capture, 1200U, 1400U, INKCELL_SCALE(4)) < 0,
                          "a page taller than it is wide should open");
     struct inkcell_backend_fb_state *state = inkcell_capture_state(capture);
     inkcell_fb_clear(state, k_ground);

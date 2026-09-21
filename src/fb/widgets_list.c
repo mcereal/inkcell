@@ -61,16 +61,17 @@ void inkcell_fb_draw_avatar(const struct inkcell_backend_fb_state *state, int x,
     int scale = state->scale;
     /* Measured at each scale rather than counted once: the initials are two letters of a name,
        and "WW" and "II" are the same two cells and nothing like the same width. */
-    while (scale > 1 && ((has_icon ? inkcell_fb_icon_box(state, scale)
-                                   : inkcell_fb_text_width(state, label, scale)) > room ||
-                         (int)inkcell_fb_font(state)->height * scale > room)) {
-        --scale;
+    while (scale > INKCELL_SCALE(1) &&
+           ((has_icon ? inkcell_fb_icon_box(state, scale)
+                      : inkcell_fb_text_width(state, label, scale)) > room ||
+            inkcell_scale_px((int)inkcell_fb_font(state)->height, scale) > room)) {
+        scale -= INKCELL_SCALE(1);
     }
 
     /* Centred in cells, and vertically on the glyph body rather than the line advance - the
        advance carries the gap accents hang in, and counting it sits the initials low in the
        disc. The same reasoning as inkcell_fb_draw_button's label. */
-    const int text_h = (int)inkcell_fb_font(state)->height * scale;
+    const int text_h = inkcell_scale_px((int)inkcell_fb_font(state)->height, scale);
     const int content_y = y + (size - text_h) / 2;
     if (has_icon) {
         inkcell_fb_draw_icon(state, x + (size - inkcell_fb_icon_box(state, scale)) / 2, content_y,
@@ -207,13 +208,13 @@ bool inkcell_fb_list_has_cards(const struct inkcell_fb_list *list) {
  */
 static int inkcell_fb_list_card_pad(const struct inkcell_backend_fb_state *state) {
     const int edge = inkcell_fb_edge(state);
-    int pad = ((int)inkcell_fb_metrics(state)->card_pad * state->scale) / 2;
+    int pad = inkcell_scale_px((int)inkcell_fb_metrics(state)->card_pad, state->scale) / 2;
     if (pad < edge) {
         pad = edge;
     }
     const int label = inkcell_theme_type_scale(state->theme, INKCELL_TYPE_LABEL, state->scale);
     const int spare = inkcell_fb_line_adv(state, state->scale) -
-                      (int)inkcell_fb_font(state)->height * label - edge;
+                      inkcell_scale_px((int)inkcell_fb_font(state)->height, label) - edge;
     if (pad > spare) {
         pad = spare;
     }
@@ -296,7 +297,7 @@ static void inkcell_fb_list_cards(const struct inkcell_backend_fb_state *state,
        pixels low and clip the ascenders of the row it opens with. */
     /* Where the first run's fill starts, displaced with the rows: the surfaces move with what
        stands on them, and the band is what keeps the moved edge inside the body. */
-    int top = list->track_y - state->scale + list->glide_dy;
+    int top = list->track_y - inkcell_step_px(state->scale) + list->glide_dy;
     for (uint32_t back = first; back < list->model.first; ++back) {
         top -= (int)inkcell_list_item_height(&list->model, back) * list->line;
     }
@@ -348,7 +349,7 @@ static void inkcell_fb_list_cards(const struct inkcell_backend_fb_state *state,
         int box_top = top;
         if (!cut_top) {
             box_top -= edge;
-            const int ceiling = list->track_y - state->scale - edge;
+            const int ceiling = list->track_y - inkcell_step_px(state->scale) - edge;
             if (box_top < ceiling) {
                 box_top = ceiling;
             }
@@ -562,7 +563,7 @@ bool inkcell_fb_list_band_begin(const struct inkcell_fb_list *list) {
     if (list == NULL || list->glide_state == NULL) {
         return false;
     }
-    const int top = list->track_y - list->glide_state->scale;
+    const int top = list->track_y - inkcell_step_px(list->glide_state->scale);
     inkcell_fb_shift_begin(list->glide_state, 0, top, top + list->band_h);
     return true;
 }
@@ -669,7 +670,7 @@ void inkcell_fb_list_glide(struct inkcell_backend_fb_state *state, struct inkcel
 
     /* The whole body is moving, so the whole body is this frame's to repaint - a partial redraw
        that took the window's word for what changed would leave the rows that slid. */
-    const int top = list->track_y - state->scale;
+    const int top = list->track_y - inkcell_step_px(state->scale);
     inkcell_fb_animation_damage(state, 0, top, (int)state->var.xres, list->track_h);
 }
 
@@ -701,7 +702,7 @@ void inkcell_fb_list_focus_row(const struct inkcell_backend_fb_state *state,
      * row the reader is looking at.
      */
     if (list->glide_state != NULL) {
-        const int band_top = list->track_y - state->scale;
+        const int band_top = list->track_y - inkcell_step_px(state->scale);
         const int band_bottom = band_top + list->band_h;
         const int top = (rect.y > band_top) ? rect.y : band_top;
         const int bottom = (rect.y + rect.h < band_bottom) ? rect.y + rect.h : band_bottom;
@@ -760,7 +761,7 @@ void inkcell_fb_list_row(const struct inkcell_backend_fb_state *state, struct in
        whose geometry disagrees with the one thing on the panel that shows where it is. The
        slotted item registers its own `fill_top`, which is this same number arrived at from the
        other side. */
-    inkcell_fb_list_focus_row(state, list, index, list->y - state->scale, height);
+    inkcell_fb_list_focus_row(state, list, index, list->y - inkcell_step_px(state->scale), height);
     list->y += height;
 }
 
@@ -819,14 +820,14 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state
      * centring the advance would seat the words low and leave the heading hanging off the card
      * above.
      */
-    const int step_top = list->y - state->scale;
+    const int step_top = list->y - inkcell_step_px(state->scale);
     const int step_h = (int)rows * list->line;
     int baseline =
         list->y + inkcell_fb_line_adv(state, state->scale) - inkcell_fb_line_adv(state, scale);
     if (inkcell_fb_list_has_cards(list)) {
         const int gap_top = step_top + inkcell_fb_list_card_pad(state);
         const int gap_bottom = step_top + step_h - inkcell_fb_edge(state);
-        const int cell = (int)inkcell_fb_font(state)->height * scale;
+        const int cell = inkcell_scale_px((int)inkcell_fb_font(state)->height, scale);
         baseline = gap_top + (gap_bottom - gap_top - cell) / 2;
     }
     /*
@@ -885,7 +886,7 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state
          * name - and the two readings are the same one, which is why this takes the kind rather
          * than a flag. The disc wears the heading's own tone, exactly as a row's does.
          */
-        const int gutter = list->line - state->scale;
+        const int gutter = list->line - inkcell_step_px(state->scale);
         if (inkcell_fb_list_has_cards(list)) {
             /*
              * Sized to the heading's own words, not to the break it stands in, and centred in
@@ -911,7 +912,7 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state
             const int inset = inkcell_fb_space(state, INKCELL_SPACE_SM);
             const int gap_top = step_top + inkcell_fb_list_card_pad(state);
             const int gap_h = step_top + step_h - inkcell_fb_edge(state) - gap_top;
-            const int cell = (int)inkcell_fb_font(state)->height * scale;
+            const int cell = inkcell_scale_px((int)inkcell_fb_font(state)->height, scale);
             const int room = gap_h - 2 * inset;
             int size = cell + cell / 2;
             if (size > room) {

@@ -178,7 +178,7 @@ struct inkcell_fb_grid inkcell_fb_grid_begin(const struct inkcell_backend_fb_sta
      */
     const int used = (int)cols * grid.tile_w + (int)(cols - 1U) * grid.gap;
     grid.origin_x = box.x + (box.w > used ? (box.w - used) / 2 : 0);
-    grid.origin_y = layout->body_y - state->scale;
+    grid.origin_y = layout->body_y - inkcell_step_px(state->scale);
     grid.x = grid.origin_x;
     grid.y = grid.origin_y;
 
@@ -312,13 +312,17 @@ static void inkcell_fb_tile_art(const struct inkcell_backend_fb_state *state,
             return;
         }
         int scale = INKCELL_FB_ICON_SCALE_MAX;
-        while (scale > 1 &&
-               (inkcell_fb_icon_drawn(state, scale) > room_w || glyph_h * scale > room_h)) {
-            --scale;
+        /* A whole step at a time. The scale has quarters in it now, and this loop could fit the
+           art a good deal closer by walking them - but a tile that shrinks by a quarter step is
+           a different tile, so stepping stays what it was and the finer fit is a change of its
+           own. */
+        while (scale > INKCELL_SCALE(1) && (inkcell_fb_icon_drawn(state, scale) > room_w ||
+                                            inkcell_scale_px(glyph_h, scale) > room_h)) {
+            scale -= INKCELL_SCALE(1);
         }
         inkcell_fb_draw_icon(state, x + (w - inkcell_fb_icon_box(state, scale)) / 2,
-                             y + (h - glyph_h * scale) / 2, tile->icon, scale, paint.ink,
-                             paint.fill);
+                             y + (h - inkcell_scale_px(glyph_h, scale)) / 2, tile->icon, scale,
+                             paint.ink, paint.fill);
         return;
     }
     case INKCELL_FB_TILE_ART_EMOJI: {
@@ -346,12 +350,12 @@ static void inkcell_fb_tile_art(const struct inkcell_backend_fb_state *state,
         }
         int scale = INKCELL_SCALE_MAX;
         while (scale > 1 && (inkcell_fb_text_width(state, tile->text, scale) > room_w ||
-                             glyph_h * scale > room_h)) {
+                             inkcell_scale_px(glyph_h, scale) > room_h)) {
             --scale;
         }
         inkcell_fb_draw_text(state, x + (w - inkcell_fb_text_width(state, tile->text, scale)) / 2,
-                             y + (h - glyph_h * scale) / 2, tile->text, scale, paint.ink,
-                             paint.fill);
+                             y + (h - inkcell_scale_px(glyph_h, scale)) / 2, tile->text, scale,
+                             paint.ink, paint.fill);
         return;
     }
     case INKCELL_FB_TILE_ART_NONE:
@@ -452,7 +456,7 @@ static void inkcell_fb_tile_badge(const struct inkcell_backend_fb_state *state,
     }
     const struct inkcell_fb_rect box = {
         .x = grid->x + grid->tile_w - width - pad, .y = grid->y + pad, .w = width, .h = height};
-    const int text_h = (int)inkcell_fb_font(state)->height * scale;
+    const int text_h = inkcell_scale_px((int)inkcell_fb_font(state)->height, scale);
     inkcell_fb_draw_badge(state, &box, box.y + (height - text_h) / 2, tile->badge,
                           tile->badge_family, scale);
 }

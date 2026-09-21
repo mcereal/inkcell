@@ -50,7 +50,8 @@
 #define INKCELL_FB_METER_PILL_PHASE 400
 
 int inkcell_fb_meter_thickness(const struct inkcell_backend_fb_state *state, int scale) {
-    const int thickness = (int)inkcell_fb_metrics(state)->meter_thickness * (scale > 0 ? scale : 1);
+    const int thickness =
+        inkcell_scale_px((int)inkcell_fb_metrics(state)->meter_thickness, scale > 0 ? scale : 1);
     return thickness > 1 ? thickness : 1;
 }
 
@@ -274,7 +275,7 @@ static void inkcell_fb_dial_label(const struct inkcell_backend_fb_state *state,
             continue;
         }
         const int width = inkcell_fb_text_width(state, dial->label, scale);
-        const int height = (int)inkcell_fb_font(state)->height * scale;
+        const int height = inkcell_scale_px((int)inkcell_fb_font(state)->height, scale);
         if (width > room || height > room) {
             continue;
         }
@@ -601,7 +602,7 @@ void inkcell_fb_draw_signal(const struct inkcell_backend_fb_state *state,
 /* ---- the sparkline ------------------------------------------------------------------------- */
 
 int inkcell_fb_sparkline_height(const struct inkcell_backend_fb_state *state, int scale) {
-    const int height = inkcell_fb_line_adv(state, scale) - scale;
+    const int height = inkcell_fb_line_adv(state, scale) - inkcell_step_px(scale);
     return height > 1 ? height : 1;
 }
 
@@ -615,7 +616,7 @@ int inkcell_fb_sparkline_height(const struct inkcell_backend_fb_state *state, in
  * rather than the same hairline beside larger type.
  */
 static int inkcell_fb_spark_stroke(int scale) {
-    const int stroke = (scale > 0 ? scale : 1) / 2;
+    const int stroke = inkcell_step_px(scale) / 2;
     return stroke > 1 ? stroke : 1;
 }
 
@@ -879,14 +880,14 @@ void inkcell_fb_draw_proportion(const struct inkcell_backend_fb_state *state,
  * on the panel.
  */
 static int inkcell_fb_chart_stroke(int scale) {
-    const int stroke = scale > 0 ? scale : 1;
+    const int stroke = inkcell_step_px(scale);
     return stroke > 2 ? stroke : 2;
 }
 
 /* The hairline the axis and the threshold rules are drawn at: a mark rather than a reading, so
    it is as thin as this panel can draw and still be seen. */
 static int inkcell_fb_chart_rule(int scale) {
-    const int rule = (scale > 0 ? scale : 1) / 2;
+    const int rule = inkcell_step_px(scale) / 2;
     return rule > 1 ? rule : 1;
 }
 

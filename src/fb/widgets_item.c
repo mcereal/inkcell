@@ -68,19 +68,19 @@ inkcell_fb_item_measure(const struct inkcell_backend_fb_state *state,
     g.fill_x = box.x;
     g.fill_w = box.w;
     g.text_right = box.text_right;
-    g.slot_h = list->line - scale;
+    g.slot_h = list->line - inkcell_step_px(scale);
 
     if (g.rows >= 2U) {
         /* Two rows set closer together than two items are: the supporting line sits a scale
            above where a second row would put it, and the space that frees becomes the gap to
            the next item. */
-        g.supp_y = list->y + list->line - scale;
+        g.supp_y = list->y + list->line - inkcell_step_px(scale);
         g.fill_top = g.head_y - inkcell_fb_space(state, INKCELL_SPACE_XS);
         g.fill_h = (int)g.rows * list->line - inkcell_fb_space(state, INKCELL_SPACE_MD);
         g.head_slot_top = g.fill_top;
         g.supp_slot_top = g.supp_y - inkcell_fb_space(state, INKCELL_SPACE_XS);
     } else {
-        g.fill_top = g.head_y - scale;
+        g.fill_top = g.head_y - inkcell_step_px(scale);
         g.fill_h = list->line;
         g.head_slot_top = g.fill_top;
         g.supp_slot_top = g.fill_top;
@@ -106,8 +106,9 @@ inkcell_fb_item_measure(const struct inkcell_backend_fb_state *state,
      * showed; the rule it breaks is the one stated on INKCELL_FB_LEADING_ICON directly below, and
      * `ui_capture_a_section_starts_every_row_in_one_column` is what holds it now.
      */
-    g.lead_size =
-        item->leading.kind == INKCELL_FB_LEADING_TONAL_SLOT ? list->line - scale : g.fill_h - scale;
+    g.lead_size = item->leading.kind == INKCELL_FB_LEADING_TONAL_SLOT
+                      ? list->line - inkcell_step_px(scale)
+                      : g.fill_h - inkcell_step_px(scale);
     /*
      * A step on the panel gives back the hairline each card beside it spends into it, and what
      * may actually be *drawn* in its leading slot follows from what is left.
@@ -200,7 +201,8 @@ inkcell_fb_item_measure(const struct inkcell_backend_fb_state *state,
         /* On the supporting line's geometry: a second line set closer to its headline than two
            rows would be, which is what keeps the bar reading as part of the row above it rather
            than as something floating between two rows. */
-        g.bar_y = g.supp_y + ((int)inkcell_fb_font(state)->height * scale - g.bar_h) / 2;
+        g.bar_y =
+            g.supp_y + (inkcell_scale_px((int)inkcell_fb_font(state)->height, scale) - g.bar_h) / 2;
         const int bottom = g.bar_y + g.bar_h + inkcell_fb_space(state, INKCELL_SPACE_XS);
         if (bottom - g.fill_top > g.fill_h) {
             g.fill_h = bottom - g.fill_top;
@@ -770,8 +772,9 @@ void inkcell_fb_list_item(struct inkcell_backend_fb_state *state, struct inkcell
                 inkcell_fb_tone_color(state, edge_family != INKCELL_FAMILY_COUNT
                                                  ? item->tone
                                                  : INKCELL_TONE_PRIMARY));
-            inkcell_fb_fill_round_rect(state, row_x + scale, g.fill_top, row_w - scale, g.fill_h,
-                                       radius, inkcell_fb_color(state, INKCELL_COLOR_SURFACE_SEL));
+            inkcell_fb_fill_round_rect(state, row_x + inkcell_step_px(scale), g.fill_top,
+                                       row_w - inkcell_step_px(scale), g.fill_h, radius,
+                                       inkcell_fb_color(state, INKCELL_COLOR_SURFACE_SEL));
         } else {
             inkcell_fb_fill_round_rect(state, row_x, g.fill_top, row_w, g.fill_h, radius,
                                        inkcell_fb_color(state, INKCELL_COLOR_SURFACE_SEL));

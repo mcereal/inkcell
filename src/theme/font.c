@@ -84,10 +84,11 @@ int inkcell_font_advance(const struct inkcell_font *font, int scale) {
        see `nominal`. `width` is the answer for a face that has not got one. */
     if (font->nominal > 0U && font->master_scale > 0U) {
         const int advance =
-            (int)font->nominal * scale / (int)font->master_scale + (int)font->advance_gap * scale;
+            (int)font->nominal * scale / ((int)font->master_scale * INKCELL_SCALE_UNIT) +
+            inkcell_scale_px((int)font->advance_gap, scale);
         return advance > 0 ? advance : 1;
     }
-    return (int)font->width * scale + (int)font->advance_gap * scale;
+    return inkcell_scale_px((int)font->width + (int)font->advance_gap, scale);
 }
 
 /*
@@ -117,7 +118,8 @@ int inkcell_font_advance_cp(const struct inkcell_font *font, uint32_t codepoint,
         return inkcell_font_advance(font, scale);
     }
     const int per_px = font->master_scale > 0U ? (int)font->master_scale : 1;
-    const int advance = units * scale / per_px + (int)font->advance_gap * scale;
+    const int advance = units * scale / (per_px * INKCELL_SCALE_UNIT) +
+                        inkcell_scale_px((int)font->advance_gap, scale);
     return advance > 0 ? advance : 1;
 }
 
@@ -126,7 +128,7 @@ int inkcell_font_line(const struct inkcell_font *font, int scale) {
     if (font == NULL || scale <= 0) {
         return 1;
     }
-    return (int)font->height * scale + (int)font->line_gap * scale;
+    return inkcell_scale_px((int)font->height + (int)font->line_gap, scale);
 }
 
 /*
@@ -139,9 +141,9 @@ int inkcell_font_line(const struct inkcell_font *font, int scale) {
 /*
  * The capitals' height in pixels, from the master rows they occupy.
  *
- * The cell is `master_h - master_top` master rows and is drawn `height * scale` pixels tall, so
- * a cap is that many pixels per master row times the rows it stands. For 5x7 the arithmetic
- * cancels back to `height * scale`, which is what it always was.
+ * The cell is `master_h - master_top` master rows and is drawn inkcell_scale_px(height, scale)
+ * pixels tall, so a cap is that many pixels per master row times the rows it stands. For 5x7 the
+ * arithmetic cancels back to the cell height, which is what it always was.
  */
 int inkcell_font_cap(const struct inkcell_font *font, int scale) {
     font = font_or_default(font);
@@ -150,9 +152,10 @@ int inkcell_font_cap(const struct inkcell_font *font, int scale) {
     }
     const int cell_rows = (int)font->master_h - (int)font->master_top;
     if (cell_rows <= 0 || font->cap_rows == 0U) {
-        return (int)font->height * scale;
+        return inkcell_scale_px((int)font->height, scale);
     }
-    const int cap = (int)font->cap_rows * (int)font->height * scale / cell_rows;
+    const int cap =
+        (int)font->cap_rows * (int)font->height * scale / (cell_rows * INKCELL_SCALE_UNIT);
     return cap > 0 ? cap : 1;
 }
 

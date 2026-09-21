@@ -64,7 +64,7 @@ static void fab_caption(const struct inkcell_backend_fb_state *state,
                         enum gallery_str_id caption) {
     const int scale = layout->small;
     const char *text = gallery_text(caption);
-    const int text_h = (int)inkcell_fb_font(state)->height * scale;
+    const int text_h = inkcell_scale_px((int)inkcell_fb_font(state)->height, scale);
     inkcell_fb_draw_text(
         state,
         box->x - inkcell_fb_char_adv(state, scale) - inkcell_fb_text_width(state, text, scale),

@@ -328,7 +328,7 @@ uint32_t inkcell_fb_bubble_rows(const struct inkcell_backend_fb_state *state,
 void inkcell_fb_draw_separator(const struct inkcell_backend_fb_state *state, int y,
                                const char *label, enum inkcell_tone tone) {
     const int adv = inkcell_fb_char_adv(state, state->scale);
-    const int rule_y = y + ((int)inkcell_fb_font(state)->height * state->scale) / 2;
+    const int rule_y = y + inkcell_scale_px((int)inkcell_fb_font(state)->height, state->scale) / 2;
     const int left = inkcell_fb_margin(state);
     const int right = (int)state->var.xres - left;
 
@@ -386,7 +386,7 @@ void inkcell_fb_draw_bubble(const struct inkcell_backend_fb_state *state,
     const int box_x = bubble->outbound ? (int)state->var.xres - inkcell_fb_margin(state) - box_w
                                        : inkcell_fb_margin(state);
     const uint32_t box_rows = metrics.rows - (inkcell_fb_bubble_has(bubble->separator) ? 1U : 0U);
-    const int box_h = (int)box_rows * layout->line - scale;
+    const int box_h = (int)box_rows * layout->line - inkcell_step_px(scale);
 
     const struct inkcell_paint paint = inkcell_fb_bubble_paint(state, bubble);
     const struct inkcell_rgb fill = paint.fill;
@@ -404,12 +404,14 @@ void inkcell_fb_draw_bubble(const struct inkcell_backend_fb_state *state,
      */
     const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_MD);
     if (bubble->selected) {
-        inkcell_fb_fill_round_rect(state, box_x, y - scale, box_w, box_h, radius,
+        inkcell_fb_fill_round_rect(state, box_x, y - inkcell_step_px(scale), box_w, box_h, radius,
                                    inkcell_fb_color(state, INKCELL_COLOR_PRIMARY));
     }
-    const int fill_x = (bubble->selected && !bubble->outbound) ? box_x + scale : box_x;
-    const int fill_w = bubble->selected ? box_w - scale : box_w;
-    inkcell_fb_fill_round_rect(state, fill_x, y - scale, fill_w, box_h, radius, fill);
+    const int fill_x =
+        (bubble->selected && !bubble->outbound) ? box_x + inkcell_step_px(scale) : box_x;
+    const int fill_w = bubble->selected ? box_w - inkcell_step_px(scale) : box_w;
+    inkcell_fb_fill_round_rect(state, fill_x, y - inkcell_step_px(scale), fill_w, box_h, radius,
+                               fill);
 
     const int text_x = box_x + pad;
     const struct inkcell_rgb body = paint.ink;
@@ -444,8 +446,8 @@ void inkcell_fb_draw_bubble(const struct inkcell_backend_fb_state *state,
      * "this is being cited" - the same job the accent edge does on a list row.
      */
     if (metrics.quote_width > 0U) {
-        const int bar_w = scale;
-        inkcell_fb_fill_rect(state, text_x, y, bar_w, layout->line - scale,
+        const int bar_w = inkcell_step_px(scale);
+        inkcell_fb_fill_rect(state, text_x, y, bar_w, layout->line - inkcell_step_px(scale),
                              inkcell_fb_tone_color(state, INKCELL_TONE_DIM));
         struct inkcell_line quote;
         inkcell_line_reset(&quote);

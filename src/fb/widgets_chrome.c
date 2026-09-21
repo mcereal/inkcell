@@ -79,7 +79,10 @@ void inkcell_fb_draw_nav_bar(const struct inkcell_backend_fb_state *state,
                              struct inkcell_fb_layout *layout, const struct inkcell_fb_chip *tabs,
                              size_t count, size_t active) {
     const int small = layout->small;
-    const int y = inkcell_fb_gutter(state) + small;
+    /* A step's worth of air over the tabs, at the chrome scale. One *step*, not one scale: the
+       two were the same number while a scale was a whole multiplier, and adding the scale itself
+       to a pixel gutter was the same arithmetic by accident. */
+    const int y = inkcell_fb_gutter(state) + inkcell_scale_px(1, small);
     const int bar_h = y + inkcell_fb_line_adv(state, small);
     const int width = (int)state->var.xres;
 
@@ -179,9 +182,9 @@ void inkcell_fb_draw_banner(const struct inkcell_backend_fb_state *state,
      */
     const int font_h = (int)inkcell_fb_font(state)->height;
     const int head_top = top + pad_y;
-    const int head_h = font_h * scale;
+    const int head_h = inkcell_scale_px(font_h, scale);
     const int sup_gap = inkcell_fb_space_at(state, INKCELL_SPACE_XS, small);
-    const int sup_h = font_h * small;
+    const int sup_h = inkcell_scale_px(font_h, small);
     const int gap = inkcell_fb_space(state, INKCELL_SPACE_SM);
 
     /*
@@ -301,7 +304,8 @@ void inkcell_fb_draw_action_bar(const struct inkcell_backend_fb_state *state,
                          inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
     inkcell_fb_draw_rule(state, 0, top, width, small, INKCELL_COLOR_RULE_STRONG);
 
-    const int keys_y = top + inkcell_fb_space_at(state, INKCELL_SPACE_SM, small) + small;
+    const int keys_y =
+        top + inkcell_fb_space_at(state, INKCELL_SPACE_SM, small) + inkcell_step_px(small);
     const int gap = inkcell_fb_space_at(state, INKCELL_SPACE_MD, small);
     const int right = width - inkcell_fb_gutter(state);
     int x = inkcell_fb_gutter(state);
@@ -318,7 +322,7 @@ void inkcell_fb_draw_action_bar(const struct inkcell_backend_fb_state *state,
 
         const struct inkcell_fb_button key = {
             .rect = {.x = x,
-                     .y = keys_y - small,
+                     .y = keys_y - inkcell_step_px(small),
                      .w = cap_w,
                      .h = inkcell_fb_line_adv(state, small)},
             .label = cap,
@@ -346,7 +350,7 @@ void inkcell_fb_draw_action_bar(const struct inkcell_backend_fb_state *state,
     inkcell_str_copy(status, sizeof status, bar->status);
     inkcell_fb_fit(status, inkcell_fb_cols(state, small));
     inkcell_fb_draw_text(state, inkcell_fb_margin(state),
-                         keys_y - small + inkcell_fb_line_adv(state, small) +
+                         keys_y - inkcell_step_px(small) + inkcell_fb_line_adv(state, small) +
                              inkcell_fb_space_at(state, INKCELL_SPACE_XS, small),
                          status, small, inkcell_fb_tone_color(state, bar->status_tone),
                          inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
@@ -412,7 +416,7 @@ int inkcell_fb_app_bar_height(const struct inkcell_backend_fb_state *state,
      */
     int height = 0;
     if (trail_count > 0U) {
-        height += (int)inkcell_fb_font(state)->height * layout->small +
+        height += inkcell_scale_px((int)inkcell_fb_font(state)->height, layout->small) +
                   inkcell_fb_space_at(state, INKCELL_SPACE_XS, layout->small);
     }
     height += inkcell_fb_line_adv(state, inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE));
@@ -458,7 +462,7 @@ void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state,
            carries the gap between two lines of running text, and the trail is not running text
            - it is a caption sitting on the title. Spending the advance here cost a body row on
            every screen with a trail, which is a row of content for a gap nobody sees. */
-        y += (int)inkcell_fb_font(state)->height * small +
+        y += inkcell_scale_px((int)inkcell_fb_font(state)->height, small) +
              inkcell_fb_space_at(state, INKCELL_SPACE_XS, small);
     }
 
@@ -483,13 +487,14 @@ void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state,
     if (badge_w > 0) {
         /* Centred on the title's glyph body rather than on its line advance: the advance
            carries the gap accents hang in, and counting it would sit the capsule low. */
-        const int title_h = (int)inkcell_fb_font(state)->height * scale;
-        const int badge_h = (int)inkcell_fb_font(state)->height * small;
+        const int title_h = inkcell_scale_px((int)inkcell_fb_font(state)->height, scale);
+        const int badge_h = inkcell_scale_px((int)inkcell_fb_font(state)->height, small);
         const int text_y = y + (title_h - badge_h) / 2;
         const struct inkcell_fb_rect box = {.x = right - badge_w,
-                                            .y = text_y - small,
+                                            .y = text_y - inkcell_step_px(small),
                                             .w = badge_w,
-                                            .h = inkcell_fb_line_adv(state, small) - small};
+                                            .h = inkcell_fb_line_adv(state, small) -
+                                                 inkcell_step_px(small)};
         inkcell_fb_draw_badge(state, &box, text_y, bar->badge, bar->badge_family, small);
         right -= badge_w + inkcell_fb_char_adv(state, small);
     }
@@ -603,7 +608,7 @@ static int inkcell_fb_fab_scale(const struct inkcell_backend_fb_state *state,
            one heading a step above INKCELL_TYPE_TITLE. Unclamped for that same reason: a theme
            already at the top of the range gets a symbol the font registry resamples rather than
            one the type scale flattened back into the body. */
-        return inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE) + 1;
+        return inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE) + INKCELL_SCALE(1);
     case INKCELL_FB_FAB_MD:
     default:
         return inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE);
@@ -612,7 +617,7 @@ static int inkcell_fb_fab_scale(const struct inkcell_backend_fb_state *state,
 
 static int inkcell_fb_fab_label_scale(const struct inkcell_backend_fb_state *state,
                                       enum inkcell_fb_fab_size size) {
-    const int scale = inkcell_fb_fab_scale(state, size) - 1;
+    const int scale = inkcell_fb_fab_scale(state, size) - INKCELL_SCALE(1);
     return scale < INKCELL_SCALE_MIN ? INKCELL_SCALE_MIN : scale;
 }
 
@@ -847,7 +852,7 @@ struct inkcell_fb_rect inkcell_fb_draw_fab(struct inkcell_backend_fb_state *stat
     /* The symbol and the verb sit on one text line, centred in the box the way a button centres
        its own content - so the symbol walks to the middle of the disc as the verb goes, rather
        than staying put while the container shrinks past it. */
-    const int text_h = (int)inkcell_fb_font(state)->height * m.scale;
+    const int text_h = inkcell_scale_px((int)inkcell_fb_font(state)->height, m.scale);
     const int content_w = m.diameter - 2 * m.pad + (width - m.diameter);
     const int x = box.x + (box.w - content_w) / 2;
     const int y = box.y + (box.h - text_h) / 2;
@@ -864,7 +869,8 @@ struct inkcell_fb_rect inkcell_fb_draw_fab(struct inkcell_backend_fb_state *stat
         const struct inkcell_rgb ink =
             inkcell_fb_fade(paint.paint.ink, paint.paint.fill, INKCELL_ANIM_ONE - shown);
         const int label_y =
-            box.y + (box.h - (int)inkcell_fb_font(state)->height * m.label_scale) / 2;
+            box.y +
+            (box.h - inkcell_scale_px((int)inkcell_fb_font(state)->height, m.label_scale)) / 2;
         inkcell_fb_draw_text(state, x + inkcell_fb_icon_box(state, m.scale) + m.gap, label_y,
                              fab->label, m.label_scale, ink, paint.paint.fill);
     }

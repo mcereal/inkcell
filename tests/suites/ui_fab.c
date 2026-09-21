@@ -36,7 +36,7 @@
 static struct inkcell_capture *fab_open(struct inkcell_backend_fb_state **state, uint32_t width,
                                         uint32_t height) {
     struct inkcell_capture *capture = NULL;
-    if (inkcell_capture_open(&capture, width, height, 4) < 0) {
+    if (inkcell_capture_open(&capture, width, height, INKCELL_SCALE(4)) < 0) {
         return NULL;
     }
     *state = inkcell_capture_state(capture);

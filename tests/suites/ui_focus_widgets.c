@@ -53,7 +53,7 @@ struct focus_harness {
  */
 static bool focus_harness_open(struct focus_harness *h, uint32_t width, uint32_t height) {
     h->capture = NULL;
-    if (inkcell_capture_open(&h->capture, width, height, 2) < 0) {
+    if (inkcell_capture_open(&h->capture, width, height, INKCELL_SCALE(2)) < 0) {
         return false;
     }
     h->state = inkcell_capture_state(h->capture);
@@ -293,9 +293,9 @@ INKCELL_TEST_CASE(focus_widgets_the_backend_hands_back_the_map_the_frame_built, 
        NULL rather than as an empty map: a caller that got one of those would be told the frame
        had drawn nothing reachable, which is a different claim. */
     struct inkcell_capture *bare = NULL;
-    INKCELL_TEST_FAIL_IF(
-        inkcell_capture_open(&bare, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT, 2) < 0,
-        "the bare capture should open");
+    INKCELL_TEST_FAIL_IF(inkcell_capture_open(&bare, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT,
+                                              INKCELL_SCALE(2)) < 0,
+                         "the bare capture should open");
     INKCELL_TEST_FAIL_IF_CLEANUP(backend->focus_map(inkcell_capture_state(bare), NULL) != NULL,
                                  inkcell_capture_close(bare),
                                  "a backend nobody handed a map to should answer NULL");
@@ -543,7 +543,7 @@ INKCELL_TEST_CASE(focus_widgets_a_box_off_the_panel_is_not_registered, unit) {
 
     const struct inkcell_fb_button below = {.rect = {10, (int)INKCELL_CAPTURE_HEIGHT + 20, 40, 20},
                                             .label = "x",
-                                            .scale = 2,
+                                            .scale = INKCELL_SCALE(2),
                                             .focus_id = W_ID_BUTTON};
     inkcell_fb_draw_button(h.state, &below);
     INKCELL_TEST_FAIL_IF_CLEANUP(h.map.count != 0U, focus_harness_close(&h),
@@ -551,8 +551,10 @@ INKCELL_TEST_CASE(focus_widgets_a_box_off_the_panel_is_not_registered, unit) {
 
     /* Half on is still on: a row cut by the edge of the body is a row the reader can see and
        press, and refusing it would be the same mistake from the other end. */
-    const struct inkcell_fb_button half = {
-        .rect = {-20, 10, 40, 20}, .label = "x", .scale = 2, .focus_id = W_ID_BUTTON + 1U};
+    const struct inkcell_fb_button half = {.rect = {-20, 10, 40, 20},
+                                           .label = "x",
+                                           .scale = INKCELL_SCALE(2),
+                                           .focus_id = W_ID_BUTTON + 1U};
     inkcell_fb_draw_button(h.state, &half);
     INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_focus_has(&h.map, W_ID_BUTTON + 1U),
                                  focus_harness_close(&h),
@@ -586,13 +588,14 @@ INKCELL_TEST_CASE(focus_widgets_register_nothing_without_a_map, unit) {
 
     /* And a widget given a map but no id is the same answer from the other side. */
     inkcell_fb_set_focus_map(h.state, &h.map);
-    const struct inkcell_fb_button anonymous = {.rect = {10, 10, 40, 20}, .label = "x", .scale = 2};
+    const struct inkcell_fb_button anonymous = {
+        .rect = {10, 10, 40, 20}, .label = "x", .scale = INKCELL_SCALE(2)};
     inkcell_fb_draw_button(h.state, &anonymous);
     INKCELL_TEST_FAIL_IF_CLEANUP(h.map.count != 0U, focus_harness_close(&h),
                                  "a button with no id is not a place to stand");
 
     const struct inkcell_fb_button named = {
-        .rect = {10, 10, 40, 20}, .label = "x", .scale = 2, .focus_id = W_ID_BUTTON};
+        .rect = {10, 10, 40, 20}, .label = "x", .scale = INKCELL_SCALE(2), .focus_id = W_ID_BUTTON};
     inkcell_fb_draw_button(h.state, &named);
     struct inkcell_focus_rect rect = {0, 0, 0, 0};
     INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_focus_rect_of(&h.map, W_ID_BUTTON, &rect),

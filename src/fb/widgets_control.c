@@ -163,7 +163,7 @@ void inkcell_fb_selection_size(const struct inkcell_backend_fb_state *state, int
  * is the whole of what can be read anyway.
  */
 static int inkcell_fb_icon_scale_within(const struct inkcell_backend_fb_state *state, int box) {
-    for (int scale = state->scale; scale > 0; --scale) {
+    for (int scale = state->scale; scale > 0; scale -= INKCELL_SCALE(1)) {
         if (inkcell_fb_icon_drawn(state, scale) <= box) {
             return scale;
         }
@@ -277,10 +277,11 @@ void inkcell_fb_draw_selection(struct inkcell_backend_fb_state *state,
     if (icon_scale <= 0) {
         return;
     }
-    inkcell_fb_draw_icon(state, sel->rect.x + (side - inkcell_fb_icon_box(state, icon_scale)) / 2,
-                         sel->rect.y +
-                             (side - (int)inkcell_fb_font(state)->height * icon_scale) / 2,
-                         INKCELL_ICON_CHECK, icon_scale, on_paint.ink, mark);
+    inkcell_fb_draw_icon(
+        state, sel->rect.x + (side - inkcell_fb_icon_box(state, icon_scale)) / 2,
+        sel->rect.y +
+            (side - inkcell_scale_px((int)inkcell_fb_font(state)->height, icon_scale)) / 2,
+        INKCELL_ICON_CHECK, icon_scale, on_paint.ink, mark);
 }
 
 /* ---- the segmented button ------------------------------------------------------------------ */
@@ -406,7 +407,7 @@ static int inkcell_fb_text_field_box_h(const struct inkcell_backend_fb_state *st
                                        const struct inkcell_fb_layout *layout,
                                        const struct inkcell_fb_text_field *field) {
     const uint32_t lines = field->lines > 0U ? field->lines : 1U;
-    return (int)lines * layout->line + state->scale;
+    return (int)lines * layout->line + inkcell_step_px(state->scale);
 }
 
 /* The label's line, and the counter's. Both are chrome: they report on the field rather than
@@ -436,7 +437,7 @@ int inkcell_fb_text_field_height(const struct inkcell_backend_fb_state *state,
     }
     return inkcell_fb_text_field_label_h(state, layout, field) +
            inkcell_fb_text_field_box_h(state, layout, field) +
-           inkcell_fb_text_field_counter_h(state, layout, field) + state->scale;
+           inkcell_fb_text_field_counter_h(state, layout, field) + inkcell_step_px(state->scale);
 }
 
 void inkcell_fb_draw_text_field(const struct inkcell_backend_fb_state *state,
@@ -491,8 +492,8 @@ void inkcell_fb_draw_text_field(const struct inkcell_backend_fb_state *state,
     }
     /* The value sits a scale down from the box's own top edge, which is the inset every other
        container here gives its contents. */
-    inkcell_fb_draw_wrapped(state, top + scale, tail, (size_t)layout->body_w, (int)lines,
-                            inkcell_fb_tone_color(state, INKCELL_TONE_STRONG),
+    inkcell_fb_draw_wrapped(state, top + inkcell_step_px(scale), tail, (size_t)layout->body_w,
+                            (int)lines, inkcell_fb_tone_color(state, INKCELL_TONE_STRONG),
                             inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
     top += box_h;
 
@@ -507,5 +508,5 @@ void inkcell_fb_draw_text_field(const struct inkcell_backend_fb_state *state,
         top += inkcell_fb_text_field_counter_h(state, layout, field);
     }
 
-    *y = top + scale;
+    *y = top + inkcell_step_px(scale);
 }

@@ -434,7 +434,7 @@ INKCELL_TEST_CASE(ui_theme_states_its_geometry, unit) {
     const int scale = inkcell_theme_scale(shaped);
     const struct inkcell_metrics *shaped_metrics = inkcell_theme_metrics(shaped);
     for (int shape = INKCELL_SHAPE_NONE; shape < INKCELL_SHAPE_FULL; ++shape) {
-        const int want = (int)shaped_metrics->shape[shape] * scale;
+        const int want = inkcell_scale_px((int)shaped_metrics->shape[shape], scale);
         INKCELL_TEST_FAIL_IF(inkcell_theme_radius(shaped, (enum inkcell_shape)shape, scale) != want,
                              "a shape's radius is not its step count times the glyph scale");
     }
@@ -518,14 +518,65 @@ INKCELL_TEST_CASE(ui_theme_states_its_type_scale, unit) {
     /* Out of range answers the body scale rather than reading past the table, and NULL is the
        default theme as everywhere else in this header. */
     const struct inkcell_theme *theme = inkcell_theme_default();
-    const int body = inkcell_theme_type_scale(theme, INKCELL_TYPE_BODY, 4);
-    INKCELL_TEST_FAIL_IF(inkcell_theme_type_scale(theme, (enum inkcell_type) - 1, 4) != body,
-                         "a negative type role read something");
-    INKCELL_TEST_FAIL_IF(inkcell_theme_type_scale(theme, INKCELL_TYPE_COUNT, 4) != body,
+    const int body = inkcell_theme_type_scale(theme, INKCELL_TYPE_BODY, INKCELL_SCALE(4));
+    INKCELL_TEST_FAIL_IF(
+        inkcell_theme_type_scale(theme, (enum inkcell_type) - 1, INKCELL_SCALE(4)) != body,
+        "a negative type role read something");
+    INKCELL_TEST_FAIL_IF(inkcell_theme_type_scale(theme, INKCELL_TYPE_COUNT, INKCELL_SCALE(4)) !=
+                             body,
                          "a type role past the end read something");
-    INKCELL_TEST_FAIL_IF(inkcell_theme_type_scale(NULL, INKCELL_TYPE_TITLE, 4) !=
-                             inkcell_theme_type_scale(theme, INKCELL_TYPE_TITLE, 4),
+    INKCELL_TEST_FAIL_IF(inkcell_theme_type_scale(NULL, INKCELL_TYPE_TITLE, INKCELL_SCALE(4)) !=
+                             inkcell_theme_type_scale(theme, INKCELL_TYPE_TITLE, INKCELL_SCALE(4)),
                          "a NULL theme did not fall back to the default");
+    record_success(test_name);
+}
+
+/*
+ * The room between two whole steps, which is what the scale unit bought.
+ *
+ * The type scale had three roles because five sizes is all a whole multiplier over [2, 6] can
+ * name, and a vocabulary with more words than sizes is a vocabulary of synonyms. That argument
+ * is the thing this case exists to keep from coming back by accident: if INKCELL_SCALE_UNIT is
+ * ever quietly returned to 1, the roles a later commit adds all collapse onto five sizes and
+ * nothing else in the suite notices, because every page still renders and every ordering still
+ * holds. Counting the distinct sizes is the only assertion that catches it.
+ *
+ * Seventeen is not a target, it is what quarters of a step work out to; the threshold below is
+ * Material's fifteen roles, which is the vocabulary this range has to be able to carry.
+ */
+INKCELL_TEST_CASE(ui_theme_type_scale_has_room_between_steps, unit) {
+    const struct inkcell_font *font = inkcell_theme_font(inkcell_theme_default());
+
+    INKCELL_TEST_FAIL_IF(INKCELL_SCALE_UNIT < 2,
+                         "a scale unit of one is a whole multiplier and has no room in it");
+
+    /* Every size the range can actually be drawn at, counted by the cap height rather than by
+       the scale: two scales a pixel apart that rasterise to the same capitals are one size as
+       far as a reader is concerned, and it is the reader the vocabulary is for. */
+    int distinct = 0;
+    int previous = -1;
+    for (int scale = INKCELL_SCALE_MIN; scale <= INKCELL_SCALE_MAX; ++scale) {
+        const int cap = inkcell_font_cap(font, scale);
+        INKCELL_TEST_FAIL_IF(cap < previous, "a larger scale drew shorter capitals");
+        if (cap != previous) {
+            ++distinct;
+            previous = cap;
+        }
+    }
+    INKCELL_TEST_FAIL_IF(distinct < (int)INKCELL_TYPE_COUNT,
+                         "the range cannot draw one size per type role");
+    INKCELL_TEST_FAIL_IF(distinct < 15,
+                         "the range has no room for a Material-sized set of type roles");
+
+    /* And the half step is a real size, not the whole step it rounds to - which is the property
+       a role placed between the body and the title depends on. */
+    const int body = INKCELL_SCALE(4);
+    const int half = body + INKCELL_SCALE(1) / 2;
+    const int whole = body + INKCELL_SCALE(1);
+    INKCELL_TEST_FAIL_IF(inkcell_font_line(font, half) <= inkcell_font_line(font, body),
+                         "half a step above the body is the body");
+    INKCELL_TEST_FAIL_IF(inkcell_font_line(font, half) >= inkcell_font_line(font, whole),
+                         "half a step above the body is a whole step");
     record_success(test_name);
 }
 
@@ -744,9 +795,10 @@ INKCELL_TEST_CASE(ui_theme_fonts_measure, unit) {
                              "a font asks for a sampling this layer does not have");
 
         /* Advances have to grow with the multiplier, or every measurement above breaks. */
-        INKCELL_TEST_FAIL_IF(inkcell_font_advance(font, 2) <= inkcell_font_advance(font, 1),
+        INKCELL_TEST_FAIL_IF(inkcell_font_advance(font, INKCELL_SCALE(2)) <=
+                                 inkcell_font_advance(font, INKCELL_SCALE(1)),
                              "the character advance does not grow with the scale");
-        INKCELL_TEST_FAIL_IF(inkcell_font_line(font, 1) < (int)font->height,
+        INKCELL_TEST_FAIL_IF(inkcell_font_line(font, INKCELL_SCALE(1)) < (int)font->height,
                              "the line advance does not clear the cell");
 
         /* A glyph the font has, and one nothing has: both are drawable, one is the tofu. */

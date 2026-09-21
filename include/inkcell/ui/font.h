@@ -41,7 +41,65 @@
 extern "C" {
 #endif
 
-/* The largest *cell* this layer will render, in pixels at scale 1. Buffers and bounds sized
+/*
+ * The unit a scale is stated in: how many scale units make one whole glyph step.
+ *
+ * A scale was a whole multiplier over the font's cell once, and the type scale was three roles
+ * because that is all a whole multiplier can say. On this panel the usable range is [2, 6], so
+ * a type scale held in whole steps has five sizes in it - and a vocabulary with more roles than
+ * that is a set of synonyms, which is exactly why INKCELL_TYPE_COUNT was three.
+ *
+ * So a scale is now counted in *quarters* of a step. Nothing about the rendering needed to
+ * change for it: a glyph is coverage stored at a master four times the cell it is drawn in and
+ * resampled bilinearly into whatever box is asked for, so the sizes between the old whole steps
+ * were always drawable - there was simply no way to name one. INKCELL_SCALE(n) is the old
+ * multiplier n, so a theme, a widget or a test that meant "four" says INKCELL_SCALE(4) and gets
+ * the pixels it always got.
+ *
+ * Four rather than two or eight. Two is not enough to place Material's roles between the body
+ * and the smallest label without two of them landing together; eight buys sizes a 3.2" panel
+ * cannot tell apart, and every metric derived from a scale - a radius, a gap, a card's inset -
+ * is an integer divide by this, so a needlessly fine unit is needlessly lossy arithmetic.
+ *
+ * Everything measured *from* a scale divides by this on the way to pixels. That is the one rule
+ * to keep in mind when adding a metric: a scale is not a pixel count and never was, but the
+ * factor between them used to be 1.
+ */
+#define INKCELL_SCALE_UNIT 4
+
+/* A whole glyph step, in scale units - what a scale written before the unit existed meant. */
+#define INKCELL_SCALE(steps) ((steps) * INKCELL_SCALE_UNIT)
+
+/*
+ * `steps` whole glyph steps, in pixels, at a scale stated in units.
+ *
+ * The one conversion every metric derived from a scale makes, in one place so that the divide
+ * cannot be forgotten at a call site - which would read as a plausible number four times too
+ * large. Rounded down, and never to nothing where something was asked for: a gap a theme stated
+ * is a gap, and a hairline rounded away is a hairline somebody removed.
+ */
+static inline int inkcell_scale_px(int steps, int scale) {
+    if (steps <= 0 || scale <= 0) {
+        return 0;
+    }
+    const int px = steps * scale / INKCELL_SCALE_UNIT;
+    return px > 0 ? px : 1;
+}
+
+/*
+ * One whole step, in pixels.
+ *
+ * The most common conversion in the drawing code, and the one that used to need no conversion
+ * at all: the hairline inset a row fill stands off by, the lift a baseline takes over a
+ * highlight, the pixel a keycap is shrunk by. Every one of those was spelled `scale`, because
+ * while a scale was a whole multiplier the step and the scale were the same number. They are
+ * not any more, and a bare scale in a pixel expression is now four times what it used to be.
+ */
+static inline int inkcell_step_px(int scale) {
+    return inkcell_scale_px(1, scale);
+}
+
+/* The largest *cell* this layer will render, in pixels per whole step. Buffers and bounds sized
    off these are the reason a font cannot simply declare any size it likes; raise them when a
    font needs it. */
 #define INKCELL_GLYPH_MAX_WIDTH 8
@@ -80,15 +138,17 @@ struct inkcell_glyph {
 /*
  * A bitmap font as the UI sees it.
  *
- * `advance_gap` and `line_gap` are in pixels *per scale step*, so a font keeps its proportions
+ * `advance_gap` and `line_gap` are in pixels *per whole step*, so a font keeps its proportions
  * when the glyph multiplier changes: the 5x7 font asks for one column of gap and two rows,
- * which at scale 4 is the 4 px and 8 px the Brick's panel has always drawn.
+ * which at INKCELL_SCALE(4) is the 4 px and 8 px the Brick's panel has always drawn. Every
+ * field here counting pixels counts them per whole step, not per scale unit - the conversion
+ * is inkcell_scale_px() and it happens once, in the accessors below.
  */
 struct inkcell_font {
     const char *id;   /* what a theme names it by */
     const char *name; /* what a menu would show */
     /*
-     * The *nominal* advance, in pixels at scale 1.
+     * The *nominal* advance, in pixels per whole step.
      *
      * For a monospace face this is the advance, full stop: every cell is this wide and
      * inkcell_font_advance() is exact. For a proportional one it is the width the layout
@@ -101,7 +161,7 @@ struct inkcell_font {
     /*
      * The same nominal advance, in master columns - which is where the precision is.
      *
-     * `width` is pixels at scale 1, and at that size a proportional face's average advance is
+     * `width` is pixels per whole step, and at that size a proportional face's average advance is
      * about four pixels: rounding it there throws away a quarter of it before the scale is
      * applied, which at the body scale is three pixels of every cell and at an icon's scale is
      * twenty. Stating it in master units and dividing at the end keeps it exact.
@@ -110,13 +170,13 @@ struct inkcell_font {
      * font and anything written before this field.
      */
     uint8_t nominal;
-    uint8_t height; /* cell height in pixels at scale 1 */
+    uint8_t height; /* cell height in pixels per whole step */
     uint8_t advance_gap;
     uint8_t line_gap;
     uint8_t master_w; /* coverage master width; the cell width when the font is pixel art */
     uint8_t master_h; /* coverage master height, overhang rows included */
     /*
-     * Master units to one pixel at scale 1 - the resolution the coverage is stored at, relative
+     * Master units to one pixel per whole step - the resolution the coverage is stored at, relative
      * to the size the cell is drawn.
      *
      * A per-glyph advance is stored in master columns, and this is what turns one into pixels:

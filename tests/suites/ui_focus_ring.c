@@ -41,7 +41,8 @@ struct ring_harness {
  */
 static bool ring_open(struct ring_harness *h) {
     h->capture = NULL;
-    if (inkcell_capture_open(&h->capture, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT, 4) < 0) {
+    if (inkcell_capture_open(&h->capture, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT,
+                             INKCELL_SCALE(4)) < 0) {
         return false;
     }
     h->state = inkcell_capture_state(h->capture);
@@ -282,7 +283,7 @@ INKCELL_TEST_CASE(focus_ring_takes_the_shape_the_component_drew, unit) {
     const struct inkcell_fb_button pill = {.rect = {40, 40, 200, 40},
                                            .label = "chip",
                                            .shape = INKCELL_SHAPE_FULL,
-                                           .scale = 2,
+                                           .scale = INKCELL_SCALE(2),
                                            .focus_id = RING_ID_LEFT};
     inkcell_fb_draw_button(h.state, &pill);
     /* Half the shorter side: what a fill resolves "as round as it goes" to, so what the map

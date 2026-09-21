@@ -58,12 +58,12 @@
  * "the last one wins" is a rule a reader has to know, and a macro argument is not.
  */
 #define INKCELL_METRICS_SCRIM_FIELDS(scrim)                                                        \
-    .margin = 16U, .scale = 4U, .bubble_width_pct = 75U,                                           \
+    .margin = 16U, .scale = INKCELL_SCALE(4), .bubble_width_pct = 75U,                             \
     .type_offset =                                                                                 \
         {                                                                                          \
-            [INKCELL_TYPE_TITLE] = 1,                                                              \
+            [INKCELL_TYPE_TITLE] = INKCELL_SCALE(1),                                               \
             [INKCELL_TYPE_BODY] = 0,                                                               \
-            [INKCELL_TYPE_LABEL] = -1,                                                             \
+            [INKCELL_TYPE_LABEL] = -INKCELL_SCALE(1),                                              \
     }, /* A title is heavier as well as larger, and a label is heavier *instead* of                \
           larger: section headings and chrome are a step down in size, which on its own            \
           reads as text that got smaller rather than as a heading. */                              \
@@ -862,7 +862,7 @@ int inkcell_theme_radius(const struct inkcell_theme *theme, enum inkcell_shape s
     if ((int)shape < 0 || (int)shape >= (int)INKCELL_SHAPE_FULL) {
         return 0;
     }
-    return (int)theme->metrics.shape[shape] * scale;
+    return inkcell_scale_px((int)theme->metrics.shape[shape], scale);
 }
 
 enum inkcell_weight inkcell_theme_type_weight(const struct inkcell_theme *theme,
@@ -905,7 +905,7 @@ int inkcell_theme_space(const struct inkcell_theme *theme, enum inkcell_space sp
         return 0;
     }
     scale = inkcell_theme_clamp_scale(theme, scale);
-    const int pixels = (halves * scale) / 2;
+    const int pixels = (halves * scale) / (2 * INKCELL_SCALE_UNIT);
     /* A theme that asked for a gap gets at least a pixel of one. Rounding a half-step down to
        nothing at a small scale is how an inset silently stops existing on exactly the themes
        that most need it to. */

@@ -59,9 +59,13 @@ static int inkcell_fb_keyboard_cell_h(const struct inkcell_backend_fb_state *sta
  */
 static int inkcell_fb_keyboard_key_scale(const struct inkcell_backend_fb_state *state, int cell_h) {
     const int scale = state->scale;
-    const int step = inkcell_fb_line_adv(state, 1);
+    /* The room one whole step costs, and the count of them the key has room for - converted
+       back into a scale at the end. The division has to be in whole steps: a key grown by a
+       quarter step is a keycap a hair different from its neighbour rather than a size up. */
+    const int step = inkcell_fb_line_adv(state, INKCELL_SCALE(1));
     int key_scale =
-        (step > 0) ? (cell_h - 2 * inkcell_fb_space(state, INKCELL_SPACE_MD)) / step : scale;
+        (step > 0) ? INKCELL_SCALE((cell_h - 2 * inkcell_fb_space(state, INKCELL_SPACE_MD)) / step)
+                   : scale;
     const int key_scale_max = (scale * 2 < INKCELL_SCALE_MAX) ? scale * 2 : INKCELL_SCALE_MAX;
     if (key_scale < scale) {
         key_scale = scale;
@@ -146,8 +150,8 @@ void inkcell_fb_draw_keyboard(const struct inkcell_backend_fb_state *state,
             const struct inkcell_fb_button button = {
                 .rect = {.x = margin + (int)col * cell_w,
                          .y = top,
-                         .w = cell_w - scale,
-                         .h = cell_h - scale},
+                         .w = cell_w - inkcell_step_px(scale),
+                         .h = cell_h - inkcell_step_px(scale)},
                 .label = key,
                 .selected = (kb->row == row && kb->col == col),
                 .variant = INKCELL_FB_BUTTON_TEXT,
@@ -170,8 +174,8 @@ void inkcell_fb_draw_keyboard(const struct inkcell_backend_fb_state *state,
         const struct inkcell_fb_button button = {
             .rect = {.x = margin + (int)col * action_w,
                      .y = top,
-                     .w = action_w - scale,
-                     .h = cell_h - scale},
+                     .w = action_w - inkcell_step_px(scale),
+                     .h = cell_h - inkcell_step_px(scale)},
             .icon = icon,
             .label = (icon == INKCELL_ICON_NONE)
                          ? inkcell_keyboard_action_label(kb, keyboard->layout, action)

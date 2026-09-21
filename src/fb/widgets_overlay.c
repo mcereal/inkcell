@@ -68,7 +68,7 @@ void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state,
        is measured in the same units as what it holds, so a theme asking for bigger text gets a
        proportionally roomier bar rather than a tighter one. */
     const int pad_x = adv;
-    const int pad_y = scale * 2;
+    const int pad_y = inkcell_scale_px(2, scale);
 
     const int room = (int)state->var.xres - 2 * margin - 2 * pad_x;
     if (room < adv || line <= 0) {
@@ -253,7 +253,7 @@ inkcell_fb_dialog_measure(const struct inkcell_backend_fb_state *state,
     m.pad = inkcell_fb_margin(state);
     m.edge = inkcell_fb_edge(state);
     m.adv = inkcell_fb_char_adv(state, m.scale);
-    m.gap = m.scale * 2;
+    m.gap = inkcell_scale_px(2, m.scale);
 
     /* The panel's own text column, which is narrower than the body's - a dialog is inset from
        the screen and its words are inset again from its edge. */
@@ -269,7 +269,7 @@ inkcell_fb_dialog_measure(const struct inkcell_backend_fb_state *state,
     m.has_headline = dialog->headline != NULL && dialog->headline[0] != '\0';
     /* A little more than a line: the headline and the paragraph under it are the same glyph
        size, so the gap is the only thing distinguishing a question from its explanation. */
-    m.head_h = m.has_headline ? m.line + m.scale : 0;
+    m.head_h = m.has_headline ? m.line + inkcell_step_px(m.scale) : 0;
     m.button_h = m.line + inkcell_fb_space(state, INKCELL_SPACE_MD);
 
     /*

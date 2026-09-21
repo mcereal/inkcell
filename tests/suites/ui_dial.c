@@ -29,7 +29,7 @@ struct dial_page {
 
 static bool dial_open(struct dial_page *page) {
     page->capture = NULL;
-    if (inkcell_capture_open(&page->capture, DIAL_SIDE, DIAL_SIDE, 4) < 0) {
+    if (inkcell_capture_open(&page->capture, DIAL_SIDE, DIAL_SIDE, INKCELL_SCALE(4)) < 0) {
         return false;
     }
     page->state = inkcell_capture_state(page->capture);

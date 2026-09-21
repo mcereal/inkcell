@@ -36,7 +36,7 @@
  * derived from it, so a second scale is what catches a widget that stated a pixel count
  * instead - and a third would catch the same bug a third time for a third of the manifest.
  */
-static const int k_scales[] = {3, 4};
+static const int k_scales[] = {INKCELL_SCALE(3), INKCELL_SCALE(4)};
 
 struct gallery_page {
     const char *scene;
@@ -235,7 +235,9 @@ int main(int argc, char **argv) {
         } else if (strcmp(arg, "--theme") == 0 && has_value) {
             only_theme = argv[++i];
         } else if (strcmp(arg, "--scale") == 0 && has_value) {
-            only_scale = atoi(argv[++i]);
+            /* In whole steps, like <PREFIX>_FB_SCALE: the manifest states a scale in units,
+               but the flag is what somebody types to re-render one row of the sheet. */
+            only_scale = INKCELL_SCALE(atoi(argv[++i]));
         } else if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
             gallery_usage(stdout);
             return 0;

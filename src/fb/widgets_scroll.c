@@ -206,7 +206,8 @@ static int inkcell_fb_large_title_collapsed(const struct inkcell_backend_fb_stat
 static int inkcell_fb_large_title_line(const struct inkcell_backend_fb_state *state) {
     /* One step above the title role, which is the size the whole shape is *for*: a heading
        that is merely the title size on its own row is a title with a gap over it. */
-    return inkcell_fb_line_adv(state, inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE) + 1);
+    return inkcell_fb_line_adv(state,
+                               inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE) + INKCELL_SCALE(1));
 }
 
 int inkcell_fb_large_title_travel(const struct inkcell_backend_fb_state *state) {
@@ -252,7 +253,7 @@ void inkcell_fb_draw_large_title(const struct inkcell_backend_fb_state *state,
     const int margin = inkcell_fb_margin(state);
     const int small = inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL);
     const int title_scale = inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE);
-    const int large_scale = title_scale + 1;
+    const int large_scale = title_scale + INKCELL_SCALE(1);
     const struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_BG);
 
     /* The bar's own ground, so the two titles have something honest to fade against - a fade
@@ -269,12 +270,13 @@ void inkcell_fb_draw_large_title(const struct inkcell_backend_fb_state *state,
      */
     const int badge_w = inkcell_fb_badge_width(state, bar->badge, small);
     if (badge_w > 0) {
-        const int badge_h = (int)inkcell_fb_font(state)->height * small;
+        const int badge_h = inkcell_scale_px((int)inkcell_fb_font(state)->height, small);
         const int text_y = layout->body_y + (collapsed_h - badge_h) / 2;
         const struct inkcell_fb_rect box = {.x = right - badge_w,
-                                            .y = text_y - small,
+                                            .y = text_y - inkcell_step_px(small),
                                             .w = badge_w,
-                                            .h = inkcell_fb_line_adv(state, small) - small};
+                                            .h = inkcell_fb_line_adv(state, small) -
+                                                 inkcell_step_px(small)};
         inkcell_fb_draw_badge(state, &box, text_y, bar->badge, bar->badge_family, small);
         right -= badge_w + inkcell_fb_char_adv(state, small);
     }
