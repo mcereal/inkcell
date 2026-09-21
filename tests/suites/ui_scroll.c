@@ -105,8 +105,7 @@ INKCELL_TEST_CASE(scroll_eases_to_where_a_press_sent_it, unit) {
     struct inkcell_scroll s = scroll_open();
     inkcell_scroll_by(&s, 120, 0U);
 
-    INKCELL_TEST_FAIL_IF(inkcell_scroll_offset(&s, 0U) != 0,
-                         "it should start where it was");
+    INKCELL_TEST_FAIL_IF(inkcell_scroll_offset(&s, 0U) != 0, "it should start where it was");
     const int32_t midway = inkcell_scroll_offset(&s, 40U);
     INKCELL_TEST_FAIL_IF(midway <= 0 || midway >= 120, "and be on its way part way through");
     INKCELL_TEST_FAIL_IF(!inkcell_scroll_active(&s, 40U), "and owe another frame while it is");

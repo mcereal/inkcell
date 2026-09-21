@@ -206,8 +206,8 @@ void inkcell_scroll_release(struct inkcell_scroll *scroll, uint64_t now_ms);
  * bottom edge of a window looks like the last row of the list whether or not it is, and a
  * line's worth of the next row is what says there is more.
  */
-bool inkcell_scroll_reveal(struct inkcell_scroll *scroll, int32_t top, int32_t height,
-                           int32_t pad, uint64_t now_ms);
+bool inkcell_scroll_reveal(struct inkcell_scroll *scroll, int32_t top, int32_t height, int32_t pad,
+                           uint64_t now_ms);
 
 /*
  * The rubber band: `over` pixels of push, as pixels of give.

@@ -176,7 +176,8 @@ void inkcell_fb_draw_scroll_rail(const struct inkcell_backend_fb_state *state,
                                inkcell_fb_tone_color(state, INKCELL_TONE_DIM));
 }
 
-/* ---- the collapsing app bar ------------------------------------------------------------------- */
+/* ---- the collapsing app bar -------------------------------------------------------------------
+ */
 
 /* A colour mixed `progress` of the way towards another, in permille. What a cross-fade is on a
    panel with no alpha: text is drawn as coverage against a stated ground, so ink moved towards
@@ -306,8 +307,7 @@ void inkcell_fb_draw_large_title(const struct inkcell_backend_fb_state *state,
             inkcell_text_cell_truncate(fitted, cells - 1U);
         }
         inkcell_fb_draw_text_weight(state, text_x, layout->body_y, fitted, title_scale,
-                                    inkcell_fb_type_weight(state, INKCELL_TYPE_TITLE), ink,
-                                    ground);
+                                    inkcell_fb_type_weight(state, INKCELL_TYPE_TITLE), ink, ground);
     }
 
     /*
@@ -320,18 +320,16 @@ void inkcell_fb_draw_large_title(const struct inkcell_backend_fb_state *state,
      */
     if (extra > 0 && bar->title != NULL) {
         const int y = layout->body_y + collapsed_h + extra - large_line;
-        const struct inkcell_rgb ink = inkcell_fb_fade(
-            inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY), ground, progress);
+        const struct inkcell_rgb ink =
+            inkcell_fb_fade(inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY), ground, progress);
         int large_right = (int)state->var.xres - margin;
         if (bar->detail != NULL && bar->detail[0] != '\0') {
-            const struct inkcell_rgb dim = inkcell_fb_fade(
-                inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM), ground, progress);
+            const struct inkcell_rgb dim =
+                inkcell_fb_fade(inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM), ground, progress);
             const int w = inkcell_fb_text_width(state, bar->detail, small);
-            const int lift = (inkcell_fb_line_adv(state, large_scale) -
-                              inkcell_fb_line_adv(state, small)) /
-                             2;
-            inkcell_fb_draw_text(state, large_right - w, y + lift, bar->detail, small, dim,
-                                 ground);
+            const int lift =
+                (inkcell_fb_line_adv(state, large_scale) - inkcell_fb_line_adv(state, small)) / 2;
+            inkcell_fb_draw_text(state, large_right - w, y + lift, bar->detail, small, dim, ground);
             large_right -= w + inkcell_fb_space(state, INKCELL_SPACE_SM);
         }
         char fitted[INKCELL_LINE_MAX];
@@ -344,8 +342,7 @@ void inkcell_fb_draw_large_title(const struct inkcell_backend_fb_state *state,
             inkcell_text_cell_truncate(fitted, cells - 1U);
         }
         inkcell_fb_draw_text_weight(state, margin, y, fitted, large_scale,
-                                    inkcell_fb_type_weight(state, INKCELL_TYPE_TITLE), ink,
-                                    ground);
+                                    inkcell_fb_type_weight(state, INKCELL_TYPE_TITLE), ink, ground);
     }
 
     /*
@@ -359,8 +356,8 @@ void inkcell_fb_draw_large_title(const struct inkcell_backend_fb_state *state,
      * never had one.
      */
     if (progress > 0) {
-        const struct inkcell_rgb rule = inkcell_fb_fade(
-            inkcell_fb_color(state, INKCELL_COLOR_RULE), ground, INKCELL_ANIM_ONE - progress);
+        const struct inkcell_rgb rule = inkcell_fb_fade(inkcell_fb_color(state, INKCELL_COLOR_RULE),
+                                                        ground, INKCELL_ANIM_ONE - progress);
         inkcell_fb_fill_rect(state, 0, layout->body_y + height - inkcell_fb_rule_height(state, 1),
                              (int)state->var.xres, inkcell_fb_rule_height(state, 1), rule);
     }

@@ -75,8 +75,7 @@ int32_t inkcell_scroll_max(const struct inkcell_scroll *scroll) {
  * hundred, which is what makes the two feel like the same list.
  */
 static int32_t inkcell_scroll_give(const struct inkcell_scroll *scroll) {
-    const int32_t dim =
-        scroll->viewport * INKCELL_SCROLL_OVER_NUM / INKCELL_SCROLL_OVER_DEN;
+    const int32_t dim = scroll->viewport * INKCELL_SCROLL_OVER_NUM / INKCELL_SCROLL_OVER_DEN;
     return dim > 0 ? dim : 0;
 }
 
@@ -212,8 +211,8 @@ void inkcell_scroll_to(struct inkcell_scroll *scroll, int32_t offset, uint64_t n
     if (scroll == NULL) {
         return;
     }
-    inkcell_scroll_aim(scroll, inkcell_scroll_clamp(offset, 0, inkcell_scroll_max(scroll)),
-                       now_ms, INKCELL_SCROLL_MOTION_MS);
+    inkcell_scroll_aim(scroll, inkcell_scroll_clamp(offset, 0, inkcell_scroll_max(scroll)), now_ms,
+                       INKCELL_SCROLL_MOTION_MS);
 }
 
 void inkcell_scroll_place(struct inkcell_scroll *scroll, int32_t offset) {
@@ -238,8 +237,8 @@ void inkcell_scroll_release(struct inkcell_scroll *scroll, uint64_t now_ms) {
                        INKCELL_SCROLL_SPRING_MS);
 }
 
-bool inkcell_scroll_reveal(struct inkcell_scroll *scroll, int32_t top, int32_t height,
-                           int32_t pad, uint64_t now_ms) {
+bool inkcell_scroll_reveal(struct inkcell_scroll *scroll, int32_t top, int32_t height, int32_t pad,
+                           uint64_t now_ms) {
     if (scroll == NULL || scroll->viewport <= 0) {
         return false;
     }
