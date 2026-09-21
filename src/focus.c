@@ -345,6 +345,75 @@ uint32_t inkcell_focus_find_wrapping(const struct inkcell_focus_map *map, uint32
     return best_id;
 }
 
+/*
+ * The item `id` is, within a run that holds it - or false when no run does.
+ *
+ * A run is a half-open range of ids and nothing else, so this is a bounds check rather than a
+ * lookup: `base` is item 0 and the last item is `base + count - 1`. A run with no items holds
+ * nothing, and one based at INKCELL_FOCUS_NONE is a run whose first item is the id meaning
+ * "nothing", which is a caller mistake rather than a range.
+ */
+static bool focus_run_index(const struct inkcell_focus_run *run, uint32_t id, uint32_t *index) {
+    if (run == NULL || run->count == 0U || run->base == INKCELL_FOCUS_NONE || id < run->base) {
+        return false;
+    }
+    const uint32_t offset = id - run->base;
+    if (offset >= run->count) {
+        return false;
+    }
+    *index = offset;
+    return true;
+}
+
+/* Whether item `index` of this run is somewhere a cursor can be. Every item, unless the run
+   named the ones that are not. */
+static bool focus_run_stands(const struct inkcell_focus_run *run, uint32_t index) {
+    return run->focusable == NULL || run->focusable[index] != 0U;
+}
+
+uint32_t inkcell_focus_step(const struct inkcell_focus_map *map, uint32_t id,
+                            enum inkcell_focus_dir dir, const struct inkcell_focus_run *runs,
+                            size_t run_count) {
+    /*
+     * A run that can still move wins, and only for the direction it runs in.
+     *
+     * Before the geometry rather than after it, which is the whole of what this function adds:
+     * at the last *visible* row of a long list the geometry has an answer - whatever is drawn
+     * below the list - and taking it would walk the cursor out at item ten of four hundred.
+     * The run knows the list goes on; the map cannot.
+     */
+    if (runs != NULL && (dir == INKCELL_FOCUS_UP || dir == INKCELL_FOCUS_DOWN)) {
+        for (size_t i = 0U; i < run_count; ++i) {
+            uint32_t index = 0U;
+            if (!focus_run_index(&runs[i], id, &index)) {
+                continue;
+            }
+            uint32_t step = index;
+            /* Past the labels, which is what makes this one press rather than two: a list's
+               subheaders take an item index and are not places to stand, so the next *item* and
+               the next thing a cursor can be on are not always the same number. */
+            while (dir == INKCELL_FOCUS_DOWN && step + 1U < runs[i].count) {
+                step += 1U;
+                if (focus_run_stands(&runs[i], step)) {
+                    return runs[i].base + step;
+                }
+            }
+            while (dir == INKCELL_FOCUS_UP && step > 0U) {
+                step -= 1U;
+                if (focus_run_stands(&runs[i], step)) {
+                    return runs[i].base + step;
+                }
+            }
+            /* Nothing left in the run that way - the end of it, or nothing but labels between
+               here and the end. The press means leaving, which is a question about what is
+               drawn and therefore the finder's. Stop looking through the runs: an id is in one
+               of them at most. */
+            break;
+        }
+    }
+    return inkcell_focus_find(map, id, dir);
+}
+
 uint32_t inkcell_focus_first(const struct inkcell_focus_map *map) {
     if (map == NULL || map->items == NULL) {
         return INKCELL_FOCUS_NONE;

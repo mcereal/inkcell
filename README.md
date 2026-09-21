@@ -45,7 +45,10 @@ These are authoring rules — breaking one compiles and looks fine.
   (`inkcell_fb_set_focus_map()`), gives things ids, and holds one id rather than a map of
   itself. A screen keeping a cursor *index* instead is a screen that will eventually walk onto
   the verb a card dropped for want of room, because an index cannot tell what came out on the
-  panel and a registered rectangle is nothing but that. One ring is then drawn over the lot
+  panel and a registered rectangle is nothing but that. What is *not* drawn - the three hundred
+  rows of a list that is longer than its window - is a `struct inkcell_focus_run`, two numbers
+  the screen already has, and `inkcell_focus_step()` answers a press against both halves at
+  once. One ring is then drawn over the lot
   (`inkcell_fb_draw_focus_ring()`), and because it is one object rather than a property of each
   component it can do the thing none of them can: slide from the box the cursor left to the one
   it arrived at, taking that box's own shape as it lands.

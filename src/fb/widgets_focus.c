@@ -103,6 +103,24 @@ static void focus_ring_aim(struct inkcell_backend_fb_state *state, uint32_t id,
 
     int from_radius = 0;
     const struct inkcell_focus_rect from = focus_ring_now(ring, state->now_ms, &from_radius);
+    /*
+     * A journey with no distance in it is not a journey.
+     *
+     * The case is a list that scrolled: the press moved the cursor to the next item, the window
+     * moved with it, and the row under the cursor came out in exactly the place the last one
+     * was. The id changed and the box did not, so there is nothing to travel - and a ring that
+     * started a transition here would spend a motion's worth of frames interpolating between
+     * two identical rectangles and asking to be redrawn for every one of them.
+     */
+    if (focus_ring_same(from, target) && from_radius == radius) {
+        ring->id = id;
+        ring->from = target;
+        ring->to = target;
+        ring->from_radius = radius;
+        ring->to_radius = radius;
+        inkcell_anim_set(&ring->travel, INKCELL_ANIM_ONE);
+        return;
+    }
     ring->id = id;
     ring->from = from;
     ring->from_radius = from_radius;

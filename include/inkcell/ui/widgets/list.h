@@ -220,14 +220,24 @@ struct inkcell_fb_list inkcell_fb_list_begin_visible(const struct inkcell_fb_lay
  * stating plainly: pressing down on the last visible row finds *nothing*, because there is
  * nothing drawn down there.
  *
- * That press is a scroll, and a scroll is this list's word rather than the focus map's - the
- * window arithmetic in struct inkcell_list is what knows there are four hundred more items. So
- * a screen holding a list moves its own cursor first and asks the finder only when the cursor
- * cannot move: at the true ends of the list, which is where leaving it is what the press means.
- * See include/inkcell/ui/focus.h, which argues the same division from the other side.
+ * That press is a scroll, and what answers it is `inkcell_focus_step()` rather than
+ * `inkcell_focus_find()`: the screen hands the press a `struct inkcell_focus_run` - this base
+ * and how many items there are in total - and the run answers for the part of the list that is
+ * not on the panel while the map answers for the part that is. At the true ends of the list the
+ * run has nowhere to go and the geometry decides, which is where leaving the list is what the
+ * press means.
+ *
+ * The run is two numbers rather than this struct because a press happens between frames, when
+ * no `struct inkcell_fb_list` exists - and because those two numbers are the whole of what the
+ * press needs to know. See include/inkcell/ui/focus.h.
  *
  * The subheaders and notes between rows register nothing: they are labels, not places to
- * stand, so their item indices are simply absent from the map and a press cannot land on one.
+ * stand, so their item indices are simply absent from the map and a press cannot land on one -
+ * on this frame. They are still item indices, though, so a run over a list that has them must
+ * say which of its items are labels (`focusable` on struct inkcell_focus_run), or a press will
+ * step onto a heading and the reader will have to press again to get past it. Not being
+ * registered is what a label and a row scrolled off the panel have in common, and only one of
+ * them is somewhere to put a cursor.
  */
 void inkcell_fb_list_focus(struct inkcell_fb_list *list, uint32_t base);
 

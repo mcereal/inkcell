@@ -58,22 +58,27 @@
  * panel anywhere near it (tests/suites/ui_focus.c). Nothing here includes a framebuffer header,
  * allocates, or keeps a pointer past the call it was made in.
  *
- * What this does not replace
- * --------------------------
- * A scrolling list is *one* focusable, not one per row. `struct inkcell_list` already owns the
- * window arithmetic and the row cursor, and it owns them over rows that are not on the panel,
- * which is precisely what a map of drawn rectangles cannot see. Register the list's box, let
- * inkcell_list move inside it, and let this decide when the cursor *leaves* it - which is the
- * same division Android makes at a ListView and tvOS at a collection view. Registering a rect
- * per visible row is the other legitimate reading, and it is the right one for a short list
- * that never scrolls; what does not work is registering rows and then being surprised that
- * pressing down at the last visible one finds nothing, because there is nothing drawn down
- * there. That press is a scroll, and a scroll is the list's word, not this file's.
+ * The half of a screen that is not on the panel
+ * ---------------------------------------------
+ * A map holds what was drawn, which is the whole of its honesty and also its one blind spot: a
+ * list four hundred items long shows ten of them, and the other three hundred and ninety are
+ * not boxes anywhere. Pressing down on the last visible row therefore finds nothing, and
+ * "nothing" is the wrong answer - that press is a scroll.
+ *
+ * So a run says what the map cannot: **these ids are a sequence, and it is longer than what you
+ * can see**. `inkcell_focus_step()` takes the runs with the press and answers for both halves
+ * of the screen at once, which is what lets a screen hold one id whether the thing under the
+ * cursor is a chip, a card's verb, or item 287 of a list that is mostly somewhere else.
+ *
+ * `struct inkcell_list` keeps the window arithmetic and is still what decides which rows a
+ * frame draws; a run is the same list seen from the press rather than from the draw, and it is
+ * two numbers because two numbers is all that is knowable between frames.
  */
 
 #include "inkcell/ui/key.h"
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 /*
@@ -266,6 +271,84 @@ uint32_t inkcell_focus_find(const struct inkcell_focus_map *map, uint32_t id,
  */
 uint32_t inkcell_focus_find_wrapping(const struct inkcell_focus_map *map, uint32_t id,
                                      enum inkcell_focus_dir dir);
+
+/*
+ * A sequence of ids that is longer than the part of it on the panel: a scrolling list.
+ *
+ * `base` is item 0's id and item `n` is `base + n`, which is what inkcell_fb_list_focus()
+ * registers its rows as. `count` is every item, drawn or not - the number the screen has and
+ * the map does not.
+ *
+ * Vertical, because that is what a window in this toolkit scrolls: `struct inkcell_list` is a
+ * column, so a run steps on up and down and says nothing about left and right. A row of chips
+ * too wide for the panel would want the same idea sideways, and does not exist here; when it
+ * does, this grows an axis rather than a second function.
+ */
+struct inkcell_focus_run {
+    uint32_t base;
+    uint32_t count;
+    /*
+     * One byte per item, non-zero where the item is a place to stand. NULL is a run whose every
+     * item is one, which is what a plain list of rows passes.
+     *
+     * It is here because an id in a run is not always a box. A list's subheaders and notes take
+     * an item index like any other row and register nothing - they are labels - so the
+     * sequence a run describes has gaps in it, and a step that walked into one would put the
+     * cursor on a heading: the ring would vanish for a frame and the reader would have to press
+     * again to get past it. The map cannot see the difference, because a label and a row that
+     * has scrolled off are both simply not registered.
+     *
+     * A borrowed array of one byte per item is the shape this toolkit already asks for when a
+     * screen has something to say per item - see `heights` and `cards` on
+     * inkcell_fb_list_begin_cards(). It is borrowed for the call and not retained.
+     *
+     * **A list with a subheader or a note in it needs this.** Leaving it NULL there is the one
+     * way to use a run wrongly, and what it costs is a press at every group boundary.
+     */
+    const uint8_t *focusable;
+};
+
+/*
+ * The press, answered against the whole screen: what is drawn, and what is only known about.
+ *
+ * This is the one call a screen makes on a d-pad press. It resolves in two moves, and the order
+ * is the point:
+ *
+ *   1. **A run that can still move wins.** The cursor is inside a list and there is another
+ *      item that way, so the answer is that item - whether or not it is on the panel. A screen
+ *      that took the geometry first would walk out of a four-hundred-item list onto the button
+ *      below it at item ten, because the button is the only thing drawn down there.
+ *   2. **Otherwise the geometry answers**, exactly as `inkcell_focus_find()` does. At the true
+ *      ends of a list that is where leaving it is what the press means, and everywhere else it
+ *      is the whole of what a press means.
+ *
+ * An id in a run that is *not* registered still steps, which is the one place this parts
+ * company with the finder: a cursor whose row has scrolled out of the window is still a cursor
+ * in that list, and the press that brings it back is the same press as any other. Which is also
+ * why a run has to say where its *labels* are - see `focusable` above: not being registered is
+ * what a row off the panel and a subheader have in common, and only one of them is somewhere to
+ * put a cursor.
+ *
+ * `runs` may be NULL with `run_count` 0, which makes this `inkcell_focus_find()` with more
+ * words. A screen with one list passes one run:
+ *
+ *     const struct inkcell_focus_run runs[] = {{.base = ID_ROWS, .count = screen->count}};
+ *     enum inkcell_focus_dir dir;
+ *     if (inkcell_focus_dir_for_key(key, &dir)) {
+ *         const uint32_t next = inkcell_focus_step(&map, screen->focus, dir, runs, 1U);
+ *         if (next != INKCELL_FOCUS_NONE) {
+ *             screen->focus = next;
+ *         }
+ *     }
+ *
+ * The map it is asked about is the one the *last frame* filled, which is the frame the reader
+ * is looking at when they press. That is also why a run is two numbers rather than a list: no
+ * `struct inkcell_fb_list` exists between frames, and the two things a press needs to know
+ * about a list - where its ids start and how many there are - are both facts the screen has.
+ */
+uint32_t inkcell_focus_step(const struct inkcell_focus_map *map, uint32_t id,
+                            enum inkcell_focus_dir dir, const struct inkcell_focus_run *runs,
+                            size_t run_count);
 
 /*
  * Where a screen with no cursor yet starts: the top-most registered rectangle, and the
