@@ -7,8 +7,7 @@
  */
 
 /*
- * Not public API. include/inkcell/ui/fb.h is; inkcell_fb_widgets.h is the umbrella over this file
- * and its siblings, and nothing outside src/ui/backends/ should include either.
+ * inkcell/ui/widgets.h is the umbrella over this file and its siblings; include either.
  */
 
 #include "inkcell/ui/fb_draw.h"

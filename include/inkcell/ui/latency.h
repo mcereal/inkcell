@@ -119,7 +119,7 @@ void inkcell_latency_event(uint64_t event_us);
 void inkcell_latency_press(void);
 
 /*
- * Whether that press changed the frame, which is inkcell_store_handle_key()'s own return value.
+ * Whether that press changed the frame, which is the application's key handler's own return value.
  *
  * With it, the candidate becomes the press a frame is charged with - the *oldest* one not yet
  * answered, because several presses coalesce into one snapshot and so into one frame, and the

@@ -19,8 +19,7 @@
  * typed and the inkcell_fb_draw_text_field() holding it - because a keyboard's *frame* is about
  * what the text is for, which is the half the model deliberately does not know either.
  *
- * Not public API. include/inkcell/ui/fb.h is; inkcell/ui/widgets.h is the umbrella over this
- * file and its siblings.
+ * inkcell/ui/widgets.h is the umbrella over this file and its siblings; include either.
  */
 
 #include "inkcell/ui/fb_draw.h"

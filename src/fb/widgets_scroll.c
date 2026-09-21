@@ -99,7 +99,7 @@ void inkcell_fb_draw_scroll_rail(const struct inkcell_backend_fb_state *state,
     }
 
     /*
-     * Sized and placed exactly as the list's rail is - see inkcell_fb_list_rail(). A quarter
+     * Sized and placed exactly as the list's rail is - see inkcell_fb_draw_list_rail(). A quarter
      * margin wide, centred in the strip outside the widest thing the content can draw, so the
      * two rails are the same mark in the same place and a screen that has one of each does not
      * look like a screen with two different scrollbars.

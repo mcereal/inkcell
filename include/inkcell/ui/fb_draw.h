@@ -6,7 +6,7 @@
  *
  * The layering an inkcell application stacks on top of this is:
  *
- *   inkcell_fb_draw.c     pixels, glyphs, rows, the palette and the page geometry   (this header)
+ *   src/fb/fb_draw.c     pixels, glyphs, rows, the palette and the page geometry   (this header)
  *   widgets_*     the components screens are assembled from (inkcell/ui/widgets.h is the umbrella)
  *   <app>         one renderer per screen, drawn out of whatever the app calls a snapshot
  *   fb.c          opening /dev/fb0, the page flip, the backend vtable
@@ -16,7 +16,7 @@
  * inkcell writes the screens and nothing else, so the toolkit they are written against is the
  * library's surface rather than a private detail of it.
  *
- * Only inkcell_fb_draw.c's own primitives live here, plus the geometry every layer above states in
+ * Only src/fb/fb_draw.c's own primitives live here, plus the geometry every layer above states in
  * - a rect, a row box, a layout. Anything that composes several of them into a thing with a name -
  * a button, a list, a field row - belongs in a header under inkcell/ui/widgets/ instead.
  *
@@ -154,7 +154,7 @@ struct inkcell_fb_focus_ring {
 };
 
 /* A box in pixels. The geometry vocabulary every layer above shares: a component is handed
-   one, or measures one, and inkcell_fb_draw.c's primitives take it apart again. */
+   one, or measures one, and src/fb/fb_draw.c's primitives take it apart again. */
 struct inkcell_fb_rect {
     int x, y, w, h;
 };
@@ -726,8 +726,9 @@ struct inkcell_fb_layout {
      */
     int nav_y;
     /*
-     * Whether there is a screen behind this one to go back to, from inkcell_action_bar_goes_
-     * back() - the top app bar's leading slot.
+     * Whether there is a screen behind this one to go back to - the top app bar's leading slot.
+     * Read off the action bar by the application; see inkcell/ui/actions.h for why the question
+     * is not one inkcell can answer.
      *
      * Here rather than on `struct inkcell_fb_app_bar` because a screen renderer is the wrong place
      * to be asked: it is a fact about the nav, the tables in src/ui/tables/actions.c already decide
@@ -748,7 +749,7 @@ void inkcell_fb_animation_damage(struct inkcell_backend_fb_state *state, int x, 
 
 void inkcell_fb_glyph_cache_free(struct inkcell_backend_fb_state *state);
 
-/* ---- inkcell_fb_draw.c: the drawing toolkit
+/* ---- src/fb/fb_draw.c: the drawing toolkit
  * ------------------------------------------------------ */
 
 /*
@@ -1021,9 +1022,6 @@ void inkcell_fb_fit(char *line, size_t cols);
 void inkcell_fb_format_age(uint32_t last_heard, char *out, size_t out_len);
 void inkcell_fb_format_clock(uint32_t rx_time, char *out, size_t out_len);
 size_t inkcell_fb_width(const char *line);
-
-/* ---- inkcell_fb_map.c
- * ----------------------------------------------------------------------------- */
 
 /* ---- the application behind the frame ---------------------------------------------------- */
 

@@ -4,7 +4,7 @@
  * The chrome: the navigation bar, the action bar, the app bar and its trail, the empty state
  * under it, the hairline, and the banner and progress bar that drop in below the title.
  *
- * The bars are strips of inkcell_fb_widgets_button.h's shapes given a place on the panel - which is
+ * The bars are strips of inkcell/ui/widgets/button.h's shapes given a place on the panel - which is
  * the whole of the split: what a chip looks like is one question, and whether it belongs at the top
  * of the screen or the bottom is another.
  */
@@ -109,7 +109,7 @@ void inkcell_fb_draw_nav_bar(const struct inkcell_backend_fb_state *state,
 
 /*
  * Its key in the animation table, from the far end of the range where no screen's own id lands
- * - the same reasoning as INKCELL_FB_ANIM_ID_SNACKBAR, and the same neighbourhood.
+ * - the same reasoning as INKCELL_FB_OVERLAY_ID_SNACKBAR, and the same neighbourhood.
  */
 #define INKCELL_FB_ANIM_ID_PROGRESS 0xFFFFFF03U
 
@@ -410,9 +410,9 @@ int inkcell_fb_app_bar_height(const struct inkcell_backend_fb_state *state,
      * Written out rather than shared with the drawing path because sharing it would mean the
      * draw calling this and then re-deriving `y` from it, which is the arithmetic in a different
      * arrangement rather than in one place. Two expressions for one height is a real risk and
-     * the test below the fold is what holds them together: inkcell_fb_map's body is measured from
-     * this and drawn under a bar laid out by that, so any disagreement puts the map's ground a few
-     * pixels off its own heading, where it is visible in a capture.
+     * the test below the fold is what holds them together: a screen that places things at
+     * coordinates measures its body from this and draws under a bar laid out by that, so any
+     * disagreement puts its ground a few pixels off its own heading, where a capture shows it.
      */
     int height = 0;
     if (trail_count > 0U) {
@@ -468,8 +468,8 @@ void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state,
 
     /*
      * The leading affordance: what B does, said by the chrome rather than only by the keycap
-     * at the bottom of the panel. layout->back is the action bar's own answer (see
-     * inkcell_action_bar_goes_back), so the arrow and the keycap cannot disagree.
+     * at the bottom of the panel. layout->back is read off the action bar by the application,
+     * so the arrow and the keycap cannot disagree.
      */
     if (layout->back) {
         inkcell_fb_draw_icon(state, margin, y, INKCELL_ICON_BACK, scale,

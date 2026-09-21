@@ -2,7 +2,7 @@
 
 /*
  * The list window and its furniture - and the disc, which a card heading draws here and a row's
- * leading slot draws in inkcell_fb_widgets_item.c, and which is therefore neither's.
+ * leading slot draws in src/fb/widgets_item.c, and which is therefore neither's.
  */
 
 #include "inkcell/ui/widgets/list.h"
@@ -417,7 +417,7 @@ static void inkcell_fb_list_cards(const struct inkcell_backend_fb_state *state,
 
 /*
  * The scroll rail beside a window of items. Drawn once per list, by the first row that draws -
- * see inkcell_fb_widgets.h.
+ * see inkcell/ui/widgets.h.
  *
  * It stands in inkcell_fb_rail_gutter()'s strip, which every list has already been measured to
  * leave clear - so it is beside the content rather than over it, on a flat list and on a column of

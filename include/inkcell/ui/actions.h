@@ -13,9 +13,9 @@
  *
  * So the answer is the same one the colours, the icons and the shapes got: a screen names a
  * *token*, and a table answers. Here the token is a (button, verb) pair, the table is
- * inkcell_actions_for(), and the drawing - keycaps, elision, where the bar sits - belongs to
+ * the application's own table, and the drawing - keycaps, elision, where the bar sits - belongs to
  * whichever backend is up. See inkcell_fb_draw_action_bar() in
- * src/ui/backends/inkcell_fb_widgets.h.
+ * inkcell/ui/widgets.h.
  *
  * This lives in include/inkcell/ui/ rather than beside the framebuffer backend because it is not
  * a drawing concern at all: which buttons mean something in a given state is a fact about the
@@ -53,7 +53,8 @@ enum inkcell_button {
      * wherever it is offered, which is why it gets a cap of its own rather than sharing A with
      * whatever the screen underneath does.
      *
-     * It is offered only where there is something to explain - inkcell_help_topic() decides,
+     * It is offered only where there is something to explain - the application's help table
+     * decides,
      * and the press reads the same answer - because a keycap that sometimes does nothing is
      * the thing this bar exists to avoid.
      */
@@ -108,7 +109,8 @@ const char *inkcell_button_cap(enum inkcell_button button);
 
 /*
  * One press and what it does. Named for the button rather than for the bar because `struct
- * inkcell_action` is already taken, and by a different sense of the word: nav.h's is a request
+ * `mesh_ui_action` is already taken in the application this came out of, and by a different
+ * sense of the word: its nav.h's is a request
  * the UI raises for the app to carry out, and this is a *label on a key*.
  */
 struct inkcell_button_action {
@@ -138,18 +140,17 @@ struct inkcell_action_bar {
  */
 
 /*
- * Whether this bar offers a way back to the screen behind - what the top app bar's leading slot
- * draws, and the one question about a bar that something other than the bar asks.
+ * Whether a bar offers a way back is deliberately *not* asked here.
  *
- * It is answered from the table rather than by the screen renderers because the tables are
- * already the place that decides it, and a second opinion is how a screen that grows a press
- * ends up with two places to remember it.
+ * It is the one question about a bar that something other than the bar asks - the top app bar's
+ * leading slot draws an arrow from the answer - but answering it means recognising a verb, and
+ * which verb means "leave" is a row in the application's own catalog rather than anything
+ * inkcell ships. B is not always the way out: it discards a section's pending edits, deletes a
+ * character on the keyboard and cancels a picker, and none of those three is a screen leaving.
  *
- * Reading it off the bar also makes it exactly as conditional as the press is, which a flag on
- * a screen would not be. A settings section with edits pending offers B as *discard*, not as
- * back, and it is right that no arrow appears there: B does not leave that screen, and an arrow
- * saying it does would be the chrome disagreeing with the keys.
+ * So the application answers it from its own table and carries the answer on the layout as
+ * `back` - see struct inkcell_fb_layout. Reading it off the bar rather than off a flag on the
+ * screen is what makes the arrow exactly as conditional as the press is.
  */
-bool inkcell_action_bar_goes_back(const struct inkcell_action_bar *bar);
 
 #endif /* INKCELL_ACTIONS_H */

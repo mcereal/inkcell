@@ -11,8 +11,7 @@
  */
 
 /*
- * Not public API. include/inkcell/ui/fb.h is; inkcell_fb_widgets.h is the umbrella over this file
- * and its siblings, and nothing outside src/ui/backends/ should include either.
+ * inkcell/ui/widgets.h is the umbrella over this file and its siblings; include either.
  */
 
 #include "inkcell/ui/fb_draw.h"
@@ -46,9 +45,10 @@
  * been laid out by then - a list that counted rows into the footer's room would have its last
  * row painted over by the keycaps. The bar itself is then drawn at `footer_y`.
  *
- * `back` is inkcell_action_bar_goes_back()'s answer, carried on the layout because the top app
- * bar's leading slot and the bottom action bar must not form two opinions about whether B
- * leaves - see the field's own note on struct inkcell_fb_layout.
+ * `back` is the application's answer to whether its bar offers a way out, carried on the
+ * layout because the top app bar's leading slot and the bottom action bar must not form two
+ * opinions about whether B leaves - see the field's own note on struct inkcell_fb_layout, and
+ * inkcell/ui/actions.h for why the question is the application's.
  *
  * `rows` is recomputed by each piece of chrome that consumes body rows, so it is always the
  * count against the body's *real* top, never a deduction from this one.

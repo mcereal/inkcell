@@ -14,8 +14,7 @@
  */
 
 /*
- * Not public API. include/inkcell/ui/fb.h is; inkcell_fb_widgets.h is the umbrella over this file
- * and its siblings, and nothing outside src/ui/backends/ should include either.
+ * inkcell/ui/widgets.h is the umbrella over this file and its siblings; include either.
  */
 
 #include "inkcell/ui/fb_draw.h"
@@ -263,7 +262,7 @@ int inkcell_fb_draw_chip_strip(const struct inkcell_backend_fb_state *state, int
  * on it are a pair the theme was validated as a pair. It follows that anything a badge does
  * not shout is a badge that should not be there: a state every row is in is a column of colour
  * reporting nothing, and on two of the themes here it collides with the row that has something
- * to say. See inkcell_fb_render_devices().
+ * to say.
  */
 
 /* What the capsule takes, its padding included and with no gap after it. Zero for empty text,

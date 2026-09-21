@@ -10,8 +10,7 @@
  */
 
 /*
- * Not public API. include/inkcell/ui/fb.h is; inkcell_fb_widgets.h is the umbrella over this file
- * and its siblings, and nothing outside src/ui/backends/ should include either.
+ * inkcell/ui/widgets.h is the umbrella over this file and its siblings; include either.
  */
 
 #include "inkcell/ui/fb_draw.h"
@@ -32,7 +31,8 @@
  * transition for free.
  *
  * `id` must be stable for as long as the control is on screen and unique within the frame -
- * inkcell_setting_field is exactly such a key, which is what the Settings rows use. An `id` of
+ * An application's settings-field enum is exactly such a key, which is what its Settings rows
+ * use. An `id` of
  * 0 means "no identity": the switch draws correctly, just without ever animating.
  *
  * Geometry is derived from the glyph metrics, so the control grows and shrinks with the
@@ -119,7 +119,7 @@ void inkcell_fb_draw_switch(struct inkcell_backend_fb_state *state,
  * tab's FLAG rows - the ten bits of a position packet's `position_flags` - are a set of
  * booleans held in one word, which is the checkbox's own sentence arriving from a direction
  * nobody was watching: the rows are not a list that can arm more than one entry, they are one
- * value that has more than one bit. A screen names INKCELL_SETTING_FLAG and gets a square.
+ * value that has more than one bit. A screen names its flag kind and gets a square.
  */
 enum inkcell_fb_selection_shape {
     /* A square: any number of these may be on, and this one's state says nothing about its

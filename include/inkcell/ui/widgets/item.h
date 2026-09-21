@@ -13,8 +13,7 @@
  */
 
 /*
- * Not public API. include/inkcell/ui/fb.h is; inkcell_fb_widgets.h is the umbrella over this file
- * and its siblings, and nothing outside src/ui/backends/ should include either.
+ * inkcell/ui/widgets.h is the umbrella over this file and its siblings; include either.
  */
 
 #include "inkcell/ui/fb_draw.h"
@@ -224,11 +223,11 @@ struct inkcell_fb_list_item {
     /*
      * Whether the label column is the row's quiet tier.
      *
-     * A label and the value beside it are two tiers of one row, and until now they were one
-     * string: inkcell_fb_item_headline() pasted the column, the marker gutter and the value
-     * together and the row drew the result in a single colour - so on every fact this client
-     * states, the question and the answer were typographically identical and a card of them read as
-     * a block of text with no way into it. That is the bubble's trailing run one component over,
+     * A label and the value beside it are two tiers of one row, and they used to be one string:
+     * the headline pasted the column, the marker gutter and the value together and the row drew
+     * the result in a single colour - so on every fact a screen states, the question and the
+     * answer were typographically identical and a card of them read as a block of text with no
+     * way into it. That is the bubble's trailing run one component over,
      * and it is fixed the same way: the pieces are drawn as pieces, so each can take its own
      * ink.
      *
