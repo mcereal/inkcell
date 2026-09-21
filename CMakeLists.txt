@@ -112,6 +112,9 @@ add_library(inkcell STATIC
     src/fb/widgets_meter.c
     src/fb/widgets_scroll.c
     src/fb/widgets_overlay.c
+    # the window backend: the same frame, uploaded to a texture instead of copied to a panel.
+    # Always compiled; without SDL2 it is the refusing stub at the top of the file.
+    src/sdl/sdl.c
     # the catalog mechanism and inkcell's own twenty-three strings
     src/i18n/strings.c
     # the one leaf left here: a QR matrix is bits to draw, so it is the toolkit's. The clock,
@@ -132,6 +135,38 @@ target_include_directories(inkcell PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/fb)
 # inkwell's include path to use this. CMake still propagates the *link* requirement, which a
 # static library does need.
 target_link_libraries(inkcell PRIVATE inkcell_options inkwell::inkwell)
+
+# SDL2, for the window backend - optional by *presence*, the same arrangement inkwell has for
+# Mbed TLS. `INKCELL_HAVE_SDL` is what src/sdl/sdl.c switches on, and without the library that
+# file compiles to a backend which reports itself unavailable and refuses to init, so a plain
+# clone is still a complete, buildable, testable inkcell. INKCELL_WITH_SDL=OFF forces it off on
+# a machine that has SDL2 but is building for one that does not.
+#
+# PUBLIC on the definition, not on the link: the definition reaches inkcell's own tests, which
+# need to know whether there is a backend to exercise, while nothing in a *consumer's* include
+# path names an SDL type - include/inkcell/ui/sdl.h is deliberately free of SDL.h, exactly as
+# inkcell/ui/fb.h is of <linux/fb.h>. See scripts/check-platform.py.
+option(INKCELL_WITH_SDL "Build the SDL window backend when SDL2 is present" ON)
+if(INKCELL_WITH_SDL)
+    find_package(SDL2 QUIET)
+    if(NOT SDL2_FOUND)
+        find_package(PkgConfig QUIET)
+        if(PkgConfig_FOUND)
+            pkg_check_modules(SDL2 QUIET IMPORTED_TARGET sdl2)
+            if(SDL2_FOUND)
+                add_library(SDL2::SDL2 ALIAS PkgConfig::SDL2)
+            endif()
+        endif()
+    endif()
+endif()
+if(INKCELL_WITH_SDL AND SDL2_FOUND)
+    target_compile_definitions(inkcell PUBLIC INKCELL_HAVE_SDL)
+    target_link_libraries(inkcell PUBLIC SDL2::SDL2)
+    message(STATUS "inkcell: SDL window backend enabled")
+else()
+    message(STATUS
+        "inkcell: no SDL2, so inkcell/ui/sdl.h reports the window backend unavailable")
+endif()
 
 add_library(inkcell::inkcell ALIAS inkcell)
 

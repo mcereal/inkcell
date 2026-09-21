@@ -26,6 +26,12 @@ jobs:
           - name: asan+ubsan (clang)
             cc: clang
             args: "-DINKCELL_ENABLE_ASAN=ON -DINKCELL_ENABLE_UBSAN=ON"
+          # The claim that SDL2 is optional is worth nothing if nobody builds without it. This
+          # is the job that would have caught an #include or a symbol that quietly became
+          # compulsory - the same reason inkwell has a job that builds with no Mbed TLS.
+          - name: no SDL (gcc)
+            cc: gcc
+            args: "-DINKCELL_WITH_SDL=OFF"
     steps:
       # inkwell is a submodule and inkcell does not build without it; the default checkout
       # leaves a gitlink and an empty directory, which fails at the add_subdirectory().
@@ -35,9 +41,13 @@ jobs:
 
       # libclang-rt-18-dev is the one that is easy to miss: Ubuntu's clang package does not pull
       # the sanitizer runtimes in, and without them the link fails looking for
-      # libclang_rt.asan-x86_64.a rather than at anything to do with this code.
+      # libclang_rt.asan-x86_64.a rather than at anything to do with this code. libsdl2-dev is
+      # what decides whether the window backend is built at all, and its suite runs against
+      # SDL's "dummy" video driver - so it needs the library and not a display.
       - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y ninja-build clang libclang-rt-18-dev
+        run: >
+          sudo apt-get update &&
+          sudo apt-get install -y ninja-build clang libclang-rt-18-dev libsdl2-dev
 
       - name: Configure
         env:
