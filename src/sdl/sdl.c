@@ -154,6 +154,7 @@ static size_t inkcell_sdl_upload_damage(struct inkcell_sdl_panel *panel, bool fo
                                                  INKCELL_SDL_MAX_RECTS);
 
     size_t written = 0U;
+    bool failed = false;
     for (size_t i = 0U; i < count; ++i) {
         const SDL_Rect rect = {
             .x = damage[i].x,
@@ -164,10 +165,22 @@ static size_t inkcell_sdl_upload_damage(struct inkcell_sdl_panel *panel, bool fo
         const uint8_t *const origin = frame + (size_t)rect.y * stride + (size_t)rect.x * bpp;
         if (SDL_UpdateTexture(panel->texture, &rect, origin, (int)stride) != 0) {
             inkwell_log_warn("ui", "SDL_UpdateTexture failed: %s", SDL_GetError());
+            failed = true;
             continue;
         }
         written += (size_t)rect.w * (size_t)rect.h * bpp;
     }
+    /*
+     * Whether the comparison may be trusted next frame.
+     *
+     * inkcell_fb_damage_rects() brought `previous` up to date for every row it reported, which
+     * is a statement that those pixels are on the panel. For a rectangle whose upload failed
+     * that is not true, and nothing would ever correct it: a frame drawing the same thing again
+     * produces no damage, so the stale region would sit there for the rest of the run. Dropping
+     * the comparison costs one whole upload on the next frame and is the only answer that
+     * recovers on its own.
+     */
+    panel->frame_valid = !failed;
     return written;
 }
 
@@ -186,8 +199,8 @@ static void inkcell_backend_sdl_present(void *state_ptr, const void *snapshot, v
     inkcell_latency_frame_begin();
 
     inkcell_fb_render(state, snapshot);
+    /* ...which also decides whether the next frame may trust the comparison: see the end of it. */
     const size_t written = inkcell_sdl_upload_damage(panel, !panel->frame_valid);
-    panel->frame_valid = true;
 
     inkcell_latency_frame_drawn(written);
     if (written > 0U) {
@@ -418,10 +431,12 @@ bool inkcell_backend_sdl_is_available(void) {
     if (SDL_WasInit(SDL_INIT_VIDEO) != 0U) {
         return true;
     }
-    if (SDL_VideoInit(NULL) != 0) {
+    /* The subsystem calls rather than SDL_VideoInit()/SDL_VideoQuit(): those bypass the
+       reference count, so a probe made while the host had video up would take it down. */
+    if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0) {
         return false;
     }
-    SDL_VideoQuit();
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
     return true;
 }
 
@@ -438,8 +453,17 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
     panel->timer_fd = -1;
     struct inkcell_draw_state *const state = &panel->state;
 
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        inkwell_log_warn("ui", "SDL_Init failed: %s", SDL_GetError());
+    /*
+     * The video subsystem, and nothing else.
+     *
+     * SDL_Init()/SDL_Quit() would be the obvious pair and the wrong one for a library: SDL_Quit
+     * tears down *every* subsystem in the process, so an application that had opened audio, a
+     * pad or a second window would lose it when this backend's window closed. The subsystem
+     * calls are reference counted by SDL, so starting video here and stopping it in shutdown()
+     * leaves whatever the host started exactly as it was.
+     */
+    if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0) {
+        inkwell_log_warn("ui", "SDL_InitSubSystem(VIDEO) failed: %s", SDL_GetError());
         return -ENODEV;
     }
 
@@ -452,7 +476,7 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
                                      (int)height, SDL_WINDOW_RESIZABLE);
     if (panel->window == NULL) {
         inkwell_log_warn("ui", "SDL_CreateWindow failed: %s", SDL_GetError());
-        SDL_Quit();
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
         return -ENODEV;
     }
 
@@ -479,7 +503,7 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
     if (panel->renderer == NULL) {
         inkwell_log_warn("ui", "SDL_CreateRenderer failed: %s", SDL_GetError());
         SDL_DestroyWindow(panel->window);
-        SDL_Quit();
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
         return -ENODEV;
     }
     /* A logical size is what lets the window be resized without the UI being re-measured: the
@@ -501,7 +525,7 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
         inkwell_log_warn("ui", "SDL_CreateTexture failed: %s", SDL_GetError());
         SDL_DestroyRenderer(panel->renderer);
         SDL_DestroyWindow(panel->window);
-        SDL_Quit();
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
         return -ENODEV;
     }
 
@@ -516,7 +540,7 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
         SDL_DestroyTexture(panel->texture);
         SDL_DestroyRenderer(panel->renderer);
         SDL_DestroyWindow(panel->window);
-        SDL_Quit();
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
         return -ENOMEM;
     }
 
@@ -574,7 +598,7 @@ static void inkcell_backend_sdl_shutdown(void *state_ptr, void *userdata) {
         SDL_DestroyWindow(panel->window);
         panel->window = NULL;
     }
-    SDL_Quit();
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }
 
 static bool inkcell_backend_sdl_animating(void *state_ptr, void *userdata) {

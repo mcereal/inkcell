@@ -200,3 +200,48 @@ INKCELL_TEST_CASE(damage_rects_refuse_to_forget_what_they_cannot_report, unit) {
     }
     record_success(test_name);
 }
+
+/*
+ * A rectangle names pixels, and a stride may hold bytes that are not any.
+ *
+ * The two halves of one mistake, and the reason it is a mistake here and not in the copy
+ * above: inkcell_fb_copy_damage() writes bytes into a destination that has the padding, so
+ * sending it is harmless; a rectangle is a coordinate on a panel, and a coordinate past its
+ * width is one nothing can accept. A presenter handed such a rectangle does not clip it - it
+ * refuses the upload, and the whole frame is lost rather than a few padding bytes.
+ */
+INKCELL_TEST_CASE(damage_rects_stop_at_the_last_pixel, unit) {
+    uint8_t previous[DAMAGE_PAGE] = {0};
+    uint8_t frame[DAMAGE_PAGE];
+    uint8_t mapping[DAMAGE_PAGE];
+    memset(frame, 0x31, sizeof frame);
+    struct inkcell_draw_state state = damage_state(mapping, sizeof mapping);
+
+    /* A forced frame's span is the whole stride, padding included - the case that would
+       otherwise report four pixels across a surface three pixels wide. */
+    struct inkcell_fb_damage_rect rects[4];
+    const size_t count = inkcell_fb_damage_rects(&state, frame, previous, true, rects, 4U);
+    INKCELL_TEST_FAIL_IF(count != 1U, "a forced frame is one band over every row");
+    INKCELL_TEST_FAIL_IF(rects[0].x != 0 || rects[0].right != (int)state.surface.width,
+                         "a rectangle must stop at the surface's last pixel, not its stride");
+    record_success(test_name);
+}
+
+/* ...and a row whose only difference is in that padding has nothing to report at all. */
+INKCELL_TEST_CASE(damage_rects_ignore_a_change_only_in_the_padding, unit) {
+    uint8_t previous[DAMAGE_PAGE];
+    uint8_t frame[DAMAGE_PAGE];
+    uint8_t mapping[DAMAGE_PAGE];
+    memset(frame, 0x31, sizeof frame);
+    memset(previous, 0x31, sizeof previous);
+    struct inkcell_draw_state state = damage_state(mapping, sizeof mapping);
+
+    /* Byte 12 of row 0: past the third pixel, inside the four bytes of padding. */
+    frame[12] ^= 1U;
+    struct inkcell_fb_damage_rect rects[4];
+    INKCELL_TEST_FAIL_IF(inkcell_fb_damage_rects(&state, frame, previous, false, rects, 4U) != 0U,
+                         "a difference confined to the padding is not a rectangle");
+    INKCELL_TEST_FAIL_IF(previous[12] != frame[12],
+                         "...but is still consumed, or it is rescanned for the rest of the run");
+    record_success(test_name);
+}

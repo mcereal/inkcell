@@ -164,8 +164,32 @@ size_t inkcell_fb_damage_rects(struct inkcell_draw_state *state, const uint8_t *
         const size_t offset = (size_t)y * stride;
         memcpy(previous + offset + first, frame + offset + first, end - first);
 
-        const int x = (int)(first / bpp);
-        const int right = (int)((end + bpp - 1U) / bpp);
+        /*
+         * Pixels, and only the pixels a surface actually has.
+         *
+         * A stride may carry padding past the last pixel of every row, and the span above is
+         * in bytes: a forced frame's span is the whole stride, so without this a 3-pixel row
+         * in a 16-byte stride reports a rectangle four pixels wide. A copy can write those
+         * bytes - the mapping has them - but a rectangle is addressed in pixels and there is
+         * nothing at that coordinate to address, so a presenter handed one refuses the upload
+         * outright and the frame is lost rather than clipped.
+         *
+         * The padding is still brought up to date above. It is only never *reported*, which
+         * is the same distinction: it is part of the buffer and not part of the panel.
+         */
+        const int width = (int)state->surface.width;
+        int x = (int)(first / bpp);
+        int right = (int)((end + bpp - 1U) / bpp);
+        if (right > width) {
+            right = width;
+        }
+        /* Nothing displayable changed in this row - the difference was all in its padding. It
+           is consumed and not reported, and it does not extend a band either: a band it grew
+           would drag the rows around it into an upload that shows nothing. */
+        if (x >= right) {
+            in_run = false;
+            continue;
+        }
         if (!in_run && count < max) {
             out[count++] = (struct inkcell_fb_damage_rect){
                 .x = x, .y = (int)y, .right = right, .bottom = (int)y + 1, .valid = true};
