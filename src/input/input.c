@@ -3,6 +3,7 @@
 #include "inkcell/ui/input.h"
 
 #include "inkcell/i18n/strings.h"
+#include "inkcell/ui/input_codes.h"
 #include "inkcell/ui/input_profile.h"
 #include "inkcell/ui/latency.h"
 #include "inkwell/base/array.h"
@@ -10,19 +11,25 @@
 #include "inkwell/base/ioctl.h"
 #include "inkwell/base/log.h"
 #include "inkwell/base/text.h"
+#include "inkwell/runtime/loop.h"
+#include "inkwell/runtime/timer.h"
 
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
-#include <linux/input.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/epoll.h>
-#include <sys/ioctl.h>
-#include <sys/timerfd.h>
 #include <time.h>
 #include <unistd.h>
+
+/* evdev - the devices themselves - is Linux's. Everything else in this file is the mapping from
+   a code to a key, the repeat and the quit keys, which a window backend on any host drives with
+   the same codes; see inkcell/ui/input_codes.h. */
+#if defined(__linux__)
+#include <linux/input.h>
+#include <sys/ioctl.h>
+#endif
 
 /* Standard evdev codes. The Brick's gamepad device ("TRIMUI Player1") reports the face and
    system buttons through the usual BTN_ space and the d-pad as ABS_HAT0X/Y. Which BTN_ code is
@@ -183,7 +190,7 @@ static bool inkcell_input_repeat_owns(const struct inkcell_input *input, uint16_
 }
 
 /* One-shot each time rather than an interval timer, because the delay changes as the hold
-   ramps up. An all-zero it_value disarms, which is exactly what a released key wants. */
+   ramps up. A zero delay disarms, which is exactly what a released key wants. */
 static void inkcell_input_repeat_schedule(struct inkcell_input *input) {
     if (input->repeat_timer_fd <= 0) {
         return;
@@ -193,12 +200,9 @@ static void inkcell_input_repeat_schedule(struct inkcell_input *input) {
                                 ? 0U
                                 : inkcell_input_repeat_delay_ms(input->repeat_count);
 
-    struct itimerspec spec;
-    memset(&spec, 0, sizeof spec);
-    spec.it_value.tv_sec = (time_t)(ms / 1000U);
-    spec.it_value.tv_nsec = (long)(ms % 1000U) * 1000000L;
-    if (timerfd_settime(input->repeat_timer_fd, 0, &spec, NULL) < 0) {
-        inkwell_log_warn("input", "key repeat timerfd_settime failed: %s", strerror(errno));
+    const int armed = inkwell_timer_arm_once(input->repeat_timer_fd, ms);
+    if (armed < 0) {
+        inkwell_log_warn("input", "arming the key repeat timer failed: %s", strerror(-armed));
     }
 }
 
@@ -265,16 +269,11 @@ enum inkcell_key inkcell_input_repeat_key(const struct inkcell_input *input) {
 
 static int inkcell_input_repeat_callback(int fd, uint32_t events, void *userdata) {
     struct inkcell_input *input = (struct inkcell_input *)userdata;
-    if (input == NULL || (events & EPOLLIN) == 0U) {
+    if (input == NULL || (events & INKWELL_LOOP_IN) == 0U) {
         return 0;
     }
 
-    uint64_t expirations = 0U;
-    ssize_t bytes;
-    do {
-        bytes = read(fd, &expirations, sizeof expirations);
-    } while (bytes < 0 && errno == EINTR);
-
+    (void)inkwell_timer_read(fd);
     inkcell_input_repeat_tick(input);
     return 0;
 }
@@ -558,17 +557,18 @@ void inkcell_input_handle_device_event(struct inkcell_input *input, int source_f
     }
 }
 
+#if defined(__linux__)
 static int inkcell_input_event_callback(int fd, uint32_t events, void *userdata) {
     struct inkcell_input *input = (struct inkcell_input *)userdata;
     if (input == NULL) {
         return 0;
     }
 
-    /* Hang-up is how an unplugged device says goodbye, and it comes with no EPOLLIN. */
-    if ((events & (EPOLLHUP | EPOLLERR)) != 0U) {
+    /* Hang-up is how an unplugged device says goodbye, and it comes with nothing to read. */
+    if ((events & (INKWELL_LOOP_HUP | INKWELL_LOOP_ERR)) != 0U) {
         inkcell_input_device_lost(input, fd);
     }
-    if ((events & EPOLLIN) == 0U) {
+    if ((events & INKWELL_LOOP_IN) == 0U) {
         return 0;
     }
 
@@ -615,6 +615,8 @@ static int inkcell_input_event_callback(int fd, uint32_t events, void *userdata)
     return 0;
 }
 
+#endif
+
 /* One bit of an EVIOCGBIT bitmap, bounds-checked so a short map answers false rather than
    reading past itself. */
 static bool inkcell_input_bit_set(const unsigned long *bits, size_t words, unsigned int code) {
@@ -635,12 +637,14 @@ static bool inkcell_input_bit_set(const unsigned long *bits, size_t words, unsig
  * know the request simply leaves the client as it was, and the probe declines to count a press
  * whose stamp is not on its own clock.
  */
+#if defined(__linux__)
 static void inkcell_input_use_monotonic_stamps(int fd, const char *path) {
     const int clockid = CLOCK_MONOTONIC;
     if (ioctl(fd, inkwell_ioctl_request_of(EVIOCSCLOCKID), &clockid) < 0) {
         inkwell_log_debug("input", "%s keeps wall-clock event stamps: %s", path, strerror(errno));
     }
 }
+#endif
 
 bool inkcell_input_reads_code(uint16_t code) {
     return inkcell_input_map_key(code) != INKCELL_KEY_NONE || inkcell_input_is_quit_key(code);
@@ -711,6 +715,7 @@ bool inkcell_input_device_wanted(const unsigned long *key_bits, size_t key_words
     return !keys_known && !axes_known;
 }
 
+#if defined(__linux__)
 static bool inkcell_input_device_is_useful(int fd, const char *path) {
     unsigned long keys[INKCELL_INPUT_BIT_WORDS(KEY_MAX + 1U)];
     unsigned long axes[INKCELL_INPUT_BIT_WORDS(ABS_MAX + 1U)];
@@ -746,14 +751,15 @@ static void inkcell_input_device_name(int fd, char *out, size_t out_len) {
     }
     out[out_len - 1U] = '\0';
 }
+#endif
 
 /* Repeat is a convenience, so a host without a spare fd loses hold-to-scroll and keeps every
    press working, rather than failing the client's startup. */
 static void inkcell_input_setup_repeat_timer(struct inkcell_input *input,
                                              const struct inkcell_input_host *host) {
-    const int fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+    const int fd = inkwell_timer_open();
     if (fd < 0) {
-        inkwell_log_warn("input", "key repeat timerfd_create failed: %s", strerror(errno));
+        inkwell_log_warn("input", "creating the key repeat timer failed: %s", strerror(-fd));
         return;
     }
 
@@ -780,6 +786,12 @@ int inkcell_input_init(struct inkcell_input *input, const struct inkcell_input_h
     inkcell_input_load_key_repeat();
     inkcell_input_setup_repeat_timer(input, host);
 
+#if !defined(__linux__)
+    /* No evdev here. A window backend on this host delivers its keys through
+       inkcell_input_handle_event(), and every one of them is still a press. */
+    inkwell_log_debug("input", "No evdev on this host; keys arrive from the window, if any");
+    return 0;
+#else
     size_t skipped = 0U;
     for (unsigned int index = 0; index < INKCELL_INPUT_SCAN_NODES; ++index) {
         if (input->count >= INKCELL_INPUT_MAX_DEVICES) {
@@ -836,6 +848,7 @@ int inkcell_input_init(struct inkcell_input *input, const struct inkcell_input_h
     }
 
     return (int)input->count;
+#endif
 }
 
 void inkcell_input_shutdown(struct inkcell_input *input) {

@@ -61,8 +61,8 @@ INKCELL_TEST_CASE(sdl_without_the_library_refuses_rather_than_pretends, unit) {
 
 #else /* INKCELL_HAVE_SDL */
 
+#include "inkcell/ui/input_codes.h"
 #include <SDL.h>
-#include <linux/input-event-codes.h>
 
 #define SDL_TEST_WIDTH 64U
 #define SDL_TEST_HEIGHT 32U

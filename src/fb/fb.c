@@ -18,6 +18,67 @@
 #include "inkwell/base/time.h"
 
 #include <errno.h>
+
+#if !defined(__linux__)
+
+/*
+ * No framebuffer device on this host.
+ *
+ * fbdev is Linux's, and a host without it - macOS, as a development machine - runs the UI through
+ * the window backend instead. The entry points still exist and refuse, as the SDL backend's do in a
+ * build without SDL2, so an application asks inkcell_backend_fb_is_available() and moves on
+ * rather than carrying an #ifdef of its own.
+ */
+
+bool inkcell_backend_fb_is_available(void) {
+    return false;
+}
+
+static int inkcell_backend_fb_init(void **state_out, void *userdata) {
+    (void)state_out;
+    (void)userdata;
+    return -ENOTSUP;
+}
+
+/*
+ * The three that are about the drawing state rather than the device, and so still answer: the
+ * off-screen capture presents through this vtable with a state of its own, and asks them. The
+ * state is the first member of the Linux panel, which is why these read it directly where the
+ * Linux versions go through inkcell_fb_panel_of().
+ */
+static bool inkcell_backend_fb_animating(void *state_ptr, void *userdata) {
+    (void)userdata;
+    const struct inkcell_draw_state *state = (const struct inkcell_draw_state *)state_ptr;
+    return state != NULL && inkcell_fb_state_animating(state);
+}
+
+static uint32_t inkcell_backend_fb_page_rows(void *state_ptr, void *userdata) {
+    (void)userdata;
+    const struct inkcell_draw_state *state = (const struct inkcell_draw_state *)state_ptr;
+    return state != NULL ? state->page_rows : 0U;
+}
+
+static const struct inkcell_focus_map *inkcell_backend_fb_focus_map(void *state_ptr,
+                                                                    void *userdata) {
+    (void)userdata;
+    const struct inkcell_draw_state *state = (const struct inkcell_draw_state *)state_ptr;
+    return state != NULL ? state->focus : NULL;
+}
+
+static const struct inkcell_backend k_fb_backend = {
+    .name = "fb",
+    .init = inkcell_backend_fb_init,
+    .animating = inkcell_backend_fb_animating,
+    .page_rows = inkcell_backend_fb_page_rows,
+    .focus_map = inkcell_backend_fb_focus_map,
+};
+
+const struct inkcell_backend *inkcell_backend_fb(void) {
+    return &k_fb_backend;
+}
+
+#else /* __linux__ */
+
 #include <fcntl.h>
 #include <linux/fb.h>
 #include <stdlib.h>
@@ -291,3 +352,5 @@ bool inkcell_backend_fb_is_available(void) {
 const struct inkcell_backend *inkcell_backend_fb(void) {
     return &k_fb_backend;
 }
+
+#endif /* __linux__ */

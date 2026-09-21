@@ -39,8 +39,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define RGB(rr, gg, bb)                                                                            \
-    { .r = (rr), .g = (gg), .b = (bb) }
+#define RGB(rr, gg, bb) {.r = (rr), .g = (gg), .b = (bb)}
 
 /*
  * The metrics the Brick's panel was tuned for. A theme that wants a different look overrides
@@ -99,8 +98,7 @@
 
 /* The default metrics: Material's 32% scrim, which is the figure every platform has settled
    on. */
-#define INKCELL_METRICS_DEFAULT                                                                    \
-    { INKCELL_METRICS_SCRIM_FIELDS(32U) }
+#define INKCELL_METRICS_DEFAULT {INKCELL_METRICS_SCRIM_FIELDS(32U)}
 
 static const struct inkcell_theme
     k_themes[] =

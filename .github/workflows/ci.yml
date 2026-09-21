@@ -84,6 +84,36 @@ jobs:
           path: build/gallery/*.png
           if-no-files-found: ignore
 
+  # macOS is a development host, not a target: the fb backend and evdev compile to refusals there
+  # and the window is how the UI is seen. The golden sheet is the same sheet, so this job is also
+  # what says the rasteriser draws the same pixels under a second libc and a second compiler.
+  macos:
+    name: debug (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # A venv for the Mbed TLS generator under inkwell, because Homebrew's Python refuses a
+      # --user install (PEP 668), and passed by path because CMake otherwise finds that one first.
+      - name: Install build tools
+        run: |
+          brew install ninja sdl2
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install jinja2 jsonschema
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          -DPython3_EXECUTABLE="$RUNNER_TEMP/venv/bin/python3"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
   format:
     name: clang-format
     runs-on: ubuntu-latest
