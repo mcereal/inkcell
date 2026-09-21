@@ -298,8 +298,7 @@ static struct inkcell_fb_card_fit inkcell_fb_card_clip(const struct inkcell_fb_c
 }
 
 void inkcell_fb_card_begin(struct inkcell_fb_card *card, enum inkcell_fb_card_variant variant,
-                           enum inkcell_icon icon, enum inkcell_str_id heading,
-                           enum inkcell_tone tone) {
+                           enum inkcell_icon icon, inkcell_str_id heading, enum inkcell_tone tone) {
     if (card == NULL) {
         return;
     }
@@ -327,7 +326,7 @@ static struct inkcell_fb_card_row *inkcell_fb_card_next_row(struct inkcell_fb_ca
 }
 
 void inkcell_fb_card_row_text(struct inkcell_fb_card *card, enum inkcell_tone tone,
-                              enum inkcell_str_id label, const char *value) {
+                              inkcell_str_id label, const char *value) {
     struct inkcell_fb_card_row *row =
         inkcell_fb_card_next_row(card, INKCELL_FB_CARD_ROW_FIELD, tone);
     if (row == NULL) {
@@ -344,8 +343,8 @@ void inkcell_fb_card_row_text(struct inkcell_fb_card *card, enum inkcell_tone to
     inkwell_text_sanitise_str(value, row->value, sizeof row->value);
 }
 
-void inkcell_fb_card_row(struct inkcell_fb_card *card, enum inkcell_tone tone,
-                         enum inkcell_str_id label, enum inkcell_str_id value, ...) {
+void inkcell_fb_card_row(struct inkcell_fb_card *card, enum inkcell_tone tone, inkcell_str_id label,
+                         inkcell_str_id value, ...) {
     char text[INKCELL_LINE_MAX];
     va_list args;
     va_start(args, value);
@@ -355,7 +354,7 @@ void inkcell_fb_card_row(struct inkcell_fb_card *card, enum inkcell_tone tone,
 }
 
 void inkcell_fb_card_meter(struct inkcell_fb_card *card, enum inkcell_tone tone,
-                           enum inkcell_str_id label, int32_t value, struct inkcell_scale scale,
+                           inkcell_str_id label, int32_t value, struct inkcell_scale scale,
                            const struct inkcell_band *band, uint32_t id) {
     struct inkcell_fb_card_row *row =
         inkcell_fb_card_next_row(card, INKCELL_FB_CARD_ROW_METER, tone);
@@ -375,7 +374,7 @@ void inkcell_fb_card_meter(struct inkcell_fb_card *card, enum inkcell_tone tone,
 }
 
 void inkcell_fb_card_proportion(struct inkcell_fb_card *card, enum inkcell_tone tone,
-                                enum inkcell_str_id label, const uint32_t *values, uint32_t count) {
+                                inkcell_str_id label, const uint32_t *values, uint32_t count) {
     if (values == NULL || count < 2U || count > INKCELL_PROPORTION_PARTS) {
         return;
     }
@@ -414,8 +413,7 @@ void inkcell_fb_card_note(struct inkcell_fb_card *card, enum inkcell_tone tone, 
     inkwell_text_sanitise_str(text, row->value, sizeof row->value);
 }
 
-void inkcell_fb_card_action(struct inkcell_fb_card *card, enum inkcell_str_id label,
-                            bool selected) {
+void inkcell_fb_card_action(struct inkcell_fb_card *card, inkcell_str_id label, bool selected) {
     if (card == NULL || card->action_count >= INKCELL_FB_CARD_ACTIONS_MAX ||
         label == INKCELL_STR_NONE) {
         return;

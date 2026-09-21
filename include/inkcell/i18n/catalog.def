@@ -2,10 +2,10 @@
  * inkcell's own catalog: the words the toolkit itself puts on a panel.
  *
  * This file is included more than once, with the two macros defined differently each time -
- * once to build `enum inkcell_str_id`, once to build the English table, once to build the id
- * names. That is why it has no include guard and why it is not a .h: `make format` would reflow
- * the table into something no translator could scan, and there is nothing here for clang-format
- * to be right about.
+ * once to build the ids, once to build the English table, once to build the id names. That is
+ * why it has no include guard and why it is not a .h: `make format` would reflow the table into
+ * something no translator could scan, and there is nothing here for clang-format to be right
+ * about.
  *
  *   INKCELL_STR_ENTRY(ID, "text")
  *   INKCELL_STR_PLURAL_ENTRY(ID, "one", "other")   -> INKCELL_STR_ID_ONE and INKCELL_STR_ID_OTHER

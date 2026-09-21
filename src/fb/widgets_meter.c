@@ -959,7 +959,7 @@ static void inkcell_fb_chart_legend(const struct inkcell_draw_state *state,
     const struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_BG);
 
     for (uint32_t i = 0U; i < chart->count && i < INKCELL_FB_CHART_LINES; ++i) {
-        const enum inkcell_str_id label = chart->lines[i].label;
+        const inkcell_str_id label = chart->lines[i].label;
         const char *value = chart->lines[i].value;
         /* A name, a reading, or both - and an entry with neither is a swatch standing for
            nothing, which is furniture. One line drawn alone is named by the screen's own title,

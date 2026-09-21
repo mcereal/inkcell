@@ -67,7 +67,7 @@ uint32_t inkcell_trend_span_ms(uint8_t span);
 
 /* What the strip calls it. A word rather than a formatted duration: these four are fixed, and
    the application's duration formatter answers about a measurement rather than about a choice. */
-enum inkcell_str_id inkcell_trend_span_label(uint8_t span);
+inkcell_str_id inkcell_trend_span_label(uint8_t span);
 
 /*
  * The next span along, `delta` steps from this one, wrapping at both ends.

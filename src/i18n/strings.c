@@ -236,10 +236,12 @@ void inkcell_i18n_init_with_preference(const char *id) {
 
 /* ---- lookup -------------------------------------------------------------------------------- */
 
-const char *inkcell_str_in(const struct inkcell_i18n_locale *locale, enum inkcell_str_id id) {
-    /* Through int rather than compared as an enum: C is free to give an enum with no negative
-       members an unsigned type, and "id < 0" on one of those is a warning, not a bounds check. */
-    const int index = (int)id;
+const char *inkcell_str_in(const struct inkcell_i18n_locale *locale, inkcell_str_id id) {
+    /* Against the catalog in force rather than against INKCELL_STR_COUNT: an application's half
+       of the catalog continues past that, and how far is a runtime fact about what was
+       registered. A negative id is checked for the same reason any index is - inkcell_str_id is
+       a signed index, not an enumeration whose members a compiler could vouch for. */
+    const int index = id;
     if (index < 0 || index >= (int)cat_count()) {
         return "";
     }
@@ -250,28 +252,27 @@ const char *inkcell_str_in(const struct inkcell_i18n_locale *locale, enum inkcel
     return english != NULL ? english : "";
 }
 
-const char *inkcell_str(enum inkcell_str_id id) {
+const char *inkcell_str(inkcell_str_id id) {
     return inkcell_str_in(inkcell_i18n_locale(), id);
 }
 
-const char *inkcell_str_id_name(enum inkcell_str_id id) {
-    const int index = (int)id;
-    return (index >= 0 && index < (int)cat_count()) ? cat_id_names()[index] : NULL;
+const char *inkcell_str_id_name(inkcell_str_id id) {
+    return (id >= 0 && id < (int)cat_count()) ? cat_id_names()[id] : NULL;
 }
 
 /* Which of a plural entry's forms `count` takes, clamped so a locale whose rule outgrows
    INKCELL_STR_PLURAL_FORMS cannot walk off the end of the entry. */
-static enum inkcell_str_id plural_pick(enum inkcell_str_id one_form, uint32_t count) {
+static inkcell_str_id plural_pick(inkcell_str_id one_form, uint32_t count) {
     const struct inkcell_i18n_locale *locale = inkcell_i18n_locale();
     uint8_t form = locale->plural_form != NULL ? locale->plural_form(count) : plural_english(count);
     if (form >= INKCELL_STR_PLURAL_FORMS) {
         form = INKCELL_STR_PLURAL_FORMS - 1U;
     }
-    const int picked = (int)one_form + (int)form;
-    return picked < (int)cat_count() ? (enum inkcell_str_id)picked : one_form;
+    const int picked = one_form + (int)form;
+    return picked < (int)cat_count() ? picked : one_form;
 }
 
-const char *inkcell_str_plural(enum inkcell_str_id one_form, uint32_t count) {
+const char *inkcell_str_plural(inkcell_str_id one_form, uint32_t count) {
     return inkcell_str(plural_pick(one_form, count));
 }
 
@@ -289,7 +290,7 @@ const char *inkcell_str_plural(enum inkcell_str_id one_form, uint32_t count) {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-nonliteral"
 #endif
-int inkcell_str_vformat(char *out, size_t out_len, enum inkcell_str_id id, va_list args) {
+int inkcell_str_vformat(char *out, size_t out_len, inkcell_str_id id, va_list args) {
     if (out == NULL || out_len == 0U) {
         return 0;
     }
@@ -299,7 +300,7 @@ int inkcell_str_vformat(char *out, size_t out_len, enum inkcell_str_id id, va_li
 #pragma GCC diagnostic pop
 #endif
 
-int inkcell_str_format(char *out, size_t out_len, enum inkcell_str_id id, ...) {
+int inkcell_str_format(char *out, size_t out_len, inkcell_str_id id, ...) {
     va_list args;
     va_start(args, id);
     const int written = inkcell_str_vformat(out, out_len, id, args);
@@ -307,8 +308,8 @@ int inkcell_str_format(char *out, size_t out_len, enum inkcell_str_id id, ...) {
     return written;
 }
 
-int inkcell_str_format_plural(char *out, size_t out_len, enum inkcell_str_id one_form,
-                              uint32_t count, ...) {
+int inkcell_str_format_plural(char *out, size_t out_len, inkcell_str_id one_form, uint32_t count,
+                              ...) {
     va_list args;
     va_start(args, count);
     const int written = inkcell_str_vformat(out, out_len, plural_pick(one_form, count), args);

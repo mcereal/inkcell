@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # The files whose strings reach a screen. A file not listed here is not exempt from the rule;
 # it is a file with no user-facing text in it, and adding text to one means adding it here.
 #
-# inkcell's list is short by construction: a widget takes an `enum inkcell_str_id` and the words
+# inkcell's list is short by construction: a widget takes an `inkcell_str_id` and the words
 # belong to whatever application installed a catalog, so a string literal in one of these is
 # almost always a mistake rather than a judgement call. An application built on inkcell wants its
 # own copy of this check over its own screens.

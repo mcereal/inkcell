@@ -211,19 +211,18 @@ struct inkcell_fb_card {
    weights a card is asking for is a decision about the column it sits in and not a property of the
    card on its own. */
 void inkcell_fb_card_begin(struct inkcell_fb_card *card, enum inkcell_fb_card_variant variant,
-                           enum inkcell_icon icon, enum inkcell_str_id heading,
-                           enum inkcell_tone tone);
+                           enum inkcell_icon icon, inkcell_str_id heading, enum inkcell_tone tone);
 
 /* A label and a value formatted from the catalog, which is the shape most rows have. */
-void inkcell_fb_card_row(struct inkcell_fb_card *card, enum inkcell_tone tone,
-                         enum inkcell_str_id label, enum inkcell_str_id value, ...);
+void inkcell_fb_card_row(struct inkcell_fb_card *card, enum inkcell_tone tone, inkcell_str_id label,
+                         inkcell_str_id value, ...);
 
 /* The same row for a value that is already text - a device name, an age, a percentage a caller
    has formatted. It exists so no "%s" pass-through ends up in the catalog, where it would be a
    line for a translator to wonder about - the same split a caller makes between a catalog
    row and one it has already formatted. */
 void inkcell_fb_card_row_text(struct inkcell_fb_card *card, enum inkcell_tone tone,
-                              enum inkcell_str_id label, const char *value);
+                              inkcell_str_id label, const char *value);
 
 /* A sentence, wrapped across the card's whole width with no label column. What the radio said
    about itself goes here: a firmware sentence in the value gutter is three words and a cut. */
@@ -252,7 +251,7 @@ void inkcell_fb_card_note(struct inkcell_fb_card *card, enum inkcell_tone tone, 
  * saying one thing twice.
  */
 void inkcell_fb_card_meter(struct inkcell_fb_card *card, enum inkcell_tone tone,
-                           enum inkcell_str_id label, int32_t value, struct inkcell_scale scale,
+                           inkcell_str_id label, int32_t value, struct inkcell_scale scale,
                            const struct inkcell_band *band, uint32_t id);
 
 /*
@@ -272,7 +271,7 @@ void inkcell_fb_card_meter(struct inkcell_fb_card *card, enum inkcell_tone tone,
  * goes under the airtime figures, and a label here would be naming the subject a third time.
  */
 void inkcell_fb_card_proportion(struct inkcell_fb_card *card, enum inkcell_tone tone,
-                                enum inkcell_str_id label, const uint32_t *values, uint32_t count);
+                                inkcell_str_id label, const uint32_t *values, uint32_t count);
 
 /*
  * A verb, as a button on the card's heading line. Declared left to right: the first call is the
@@ -284,7 +283,7 @@ void inkcell_fb_card_proportion(struct inkcell_fb_card *card, enum inkcell_tone 
  * A card carries the whole verb and nothing about the press: which button runs it is the action
  * bar's business, and a keycap drawn twice on one frame is a screen disagreeing with itself.
  */
-void inkcell_fb_card_action(struct inkcell_fb_card *card, enum inkcell_str_id label, bool selected);
+void inkcell_fb_card_action(struct inkcell_fb_card *card, inkcell_str_id label, bool selected);
 
 /* Whether anything was added. A card with no rows is not drawn, so a screen can build one
    unconditionally and let it disappear when the radio has reported nothing. A card with verbs

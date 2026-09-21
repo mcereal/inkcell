@@ -60,11 +60,11 @@ void gallery_scene_chrome(struct inkcell_draw_state *state) {
                           gallery_text(GALLERY_STR_EMPTY_NOTHING));
 
     static const struct inkcell_button_action k_items[] = {
-        {INKCELL_BUTTON_A, (enum inkcell_str_id)GALLERY_STR_ACT_OPEN},
-        {INKCELL_BUTTON_B, (enum inkcell_str_id)GALLERY_STR_ACT_BACK},
-        {INKCELL_BUTTON_X, (enum inkcell_str_id)GALLERY_STR_ACT_DELETE},
-        {INKCELL_BUTTON_Y, (enum inkcell_str_id)GALLERY_STR_ACT_RETRY},
-        {INKCELL_BUTTON_SELECT, (enum inkcell_str_id)GALLERY_STR_ACT_DISMISS},
+        {INKCELL_BUTTON_A, (inkcell_str_id)GALLERY_STR_ACT_OPEN},
+        {INKCELL_BUTTON_B, (inkcell_str_id)GALLERY_STR_ACT_BACK},
+        {INKCELL_BUTTON_X, (inkcell_str_id)GALLERY_STR_ACT_DELETE},
+        {INKCELL_BUTTON_Y, (inkcell_str_id)GALLERY_STR_ACT_RETRY},
+        {INKCELL_BUTTON_SELECT, (inkcell_str_id)GALLERY_STR_ACT_DISMISS},
     };
     const struct inkcell_fb_action_bar action = {
         .items = k_items,

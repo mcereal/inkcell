@@ -556,7 +556,7 @@ struct inkcell_fb_chart_line {
     /* What the legend calls it. INKCELL_STR_NONE draws the line and names it nowhere, which is
        honest only when there is exactly one line - with two it is the picture asking the reader
        to guess. */
-    enum inkcell_str_id label;
+    inkcell_str_id label;
     /*
      * Where this line has got to, already formatted in the reading's own units, or NULL.
      *
@@ -644,7 +644,7 @@ struct inkcell_fb_chart {
      * the only thing that knows whether a line came out - and it is a string id, because it is a
      * sentence about the picture and this file does not hold sentences.
      */
-    enum inkcell_str_id empty;
+    inkcell_str_id empty;
     /*
      * The same window as a list of figures rather than as a plot, newest first - the chart's
      * other face, and what Y turns it into on a node's chart.

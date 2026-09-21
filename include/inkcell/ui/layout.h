@@ -76,7 +76,7 @@ void inkcell_line_vprintf(struct inkcell_line *line, const char *fmt, va_list ar
  * with no %-specifier are better appended as inkcell_line_printf(line, "%s", inkcell_str(id)) -
  * that keeps the compiler's format check where there is something to check.
  */
-void inkcell_line_str(struct inkcell_line *line, enum inkcell_str_id id, ...);
+void inkcell_line_str(struct inkcell_line *line, inkcell_str_id id, ...);
 
 /*
  * Append `text` occupying exactly `cols` cells: clipped if it is wider, space-padded if it is
