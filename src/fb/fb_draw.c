@@ -2272,6 +2272,77 @@ void inkcell_fb_clear(const struct inkcell_backend_fb_state *state, struct inkce
     inkcell_fb_fill_rect(state, 0, 0, (int)state->var.xres, (int)state->var.yres, color);
 }
 
+/*
+ * ---- the scrim --------------------------------------------------------------------------------
+ *
+ * What is already on the panel, moved a fraction of the way towards one colour. See
+ * inkcell_fb_scrim_rect() in the header for what it is for.
+ *
+ * Two things about the implementation are worth stating, because both are the difference
+ * between a scrim that is free and one that costs a frame.
+ *
+ * **It clips itself, once, rather than per pixel.** inkcell_fb_blend_pixel() above deliberately
+ * clips each pixel because the shapes that reach it touch a few dozen; this touches every pixel
+ * of a region the size of the body, and clipping each of those separately is the whole of the
+ * cost. So the box goes through inkcell_fb_clip_box() once and the loop runs inside the answer.
+ *
+ * **It remembers the last pixel it converted.** A round trip through decompose_color() and
+ * compose_color() is a dozen shifts and multiplies, and the region under a dialog is mostly
+ * flat: a body is a ground with rows of the same fill on it, so the same packed value arrives
+ * thousands of times in a row. One slot of memo turns almost all of them into a compare. It is
+ * one slot rather than a table because the runs are *contiguous* - what makes a body cheap is
+ * not that it has few colours but that it changes colour rarely - and a table would be a cache
+ * that has to be sized and invalidated for no further gain.
+ */
+void inkcell_fb_scrim_rect(const struct inkcell_backend_fb_state *state, struct inkcell_fb_rect box,
+                           struct inkcell_rgb color, int percent) {
+    if (state == NULL || percent <= 0 || box.w <= 0 || box.h <= 0) {
+        return;
+    }
+    if (percent > 100) {
+        percent = 100;
+    }
+    struct inkcell_fb_clipped_box clipped;
+    if (!inkcell_fb_clip_box(state, box.x, box.y, box.w, box.h, &clipped)) {
+        return;
+    }
+
+    const size_t bpp = state->bytes_per_pixel;
+    const size_t stride = state->fix.line_length;
+    /* The mix is stated in AA steps rather than in percent so it runs through the same
+       inkcell_fb_mix_channel() every anti-aliased edge does - one rounding rule for the whole
+       backend, rather than a second one that disagrees at the halves. */
+    const int coverage = (percent * INKCELL_FB_AA_STEPS + 50) / 100;
+    bool memo_valid = false;
+    uint32_t memo_in = 0U;
+    uint32_t memo_out = 0U;
+
+    uint8_t *row = state->inkcell_fb_ptr + (size_t)clipped.y * stride + (size_t)clipped.x * bpp;
+    for (int r = 0; r < clipped.h; ++r, row += stride) {
+        if ((size_t)(row - state->inkcell_fb_ptr) + (size_t)clipped.w * bpp >
+            state->inkcell_fb_size) {
+            return;
+        }
+        uint8_t *px = row;
+        for (int c = 0; c < clipped.w; ++c, px += bpp) {
+            const uint32_t packed = inkcell_fb_load_pixel(px, bpp);
+            if (memo_valid && packed == memo_in) {
+                inkcell_fb_store_span(px, 1, memo_out, bpp);
+                continue;
+            }
+            const struct inkcell_rgb ground = decompose_color(state, packed);
+            const uint32_t mixed =
+                compose_color(state, inkcell_fb_mix_channel(ground.r, color.r, coverage),
+                              inkcell_fb_mix_channel(ground.g, color.g, coverage),
+                              inkcell_fb_mix_channel(ground.b, color.b, coverage));
+            inkcell_fb_store_span(px, 1, mixed, bpp);
+            memo_in = packed;
+            memo_out = mixed;
+            memo_valid = true;
+        }
+    }
+}
+
 /* Columns of text that fit between the margins at this scale. */
 size_t inkcell_fb_cols(const struct inkcell_backend_fb_state *state, int scale) {
     const int usable = (int)state->var.xres - 2 * inkcell_fb_margin(state);

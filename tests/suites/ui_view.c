@@ -75,16 +75,14 @@ static bool view_marked(struct view_harness *h, int x, int y) {
         return false;
     }
     const size_t bytes = INKCELL_FB_BGRA_BYTES;
-    const uint8_t *ground =
-        pixels + (size_t)(height - 1U) * stride + (size_t)(width - 1U) * bytes;
+    const uint8_t *ground = pixels + (size_t)(height - 1U) * stride + (size_t)(width - 1U) * bytes;
     const uint8_t *px = pixels + (size_t)y * stride + (size_t)x * bytes;
     return memcmp(px, ground, bytes) != 0;
 }
 
 /* One opaque square in the body's ink, at whatever coordinates the caller is testing. */
 static void view_mark(struct view_harness *h, int x, int y, int w, int wh) {
-    inkcell_fb_fill_rect(h->state, x, y, w, wh,
-                         inkcell_fb_color(h->state, INKCELL_COLOR_TEXT));
+    inkcell_fb_fill_rect(h->state, x, y, w, wh, inkcell_fb_color(h->state, INKCELL_COLOR_TEXT));
 }
 
 /* A view moves what is drawn in it, and the offset is the content's rather than the box's. */

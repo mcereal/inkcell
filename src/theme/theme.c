@@ -51,43 +51,56 @@
  * a row highlight a thousand pixels wide and forty tall is not a rounded rectangle, it is a
  * rectangle somebody sanded. Two steps is where the eye starts reading a shape with ends.
  */
-#define INKCELL_METRICS_DEFAULT                                                                    \
-    {                                                                                              \
-        .margin = 16U, .scale = 4U, .bubble_width_pct = 75U,                                       \
-        .type_offset =                                                                             \
+/*
+ * Taken as a parameter rather than restated in the table, so a theme that wants a deeper dim
+ * says one number instead of a copy of everything above it. A second initializer for the same
+ * member would have done it in fewer characters and is what -Woverride-init exists to catch:
+ * "the last one wins" is a rule a reader has to know, and a macro argument is not.
+ */
+#define INKCELL_METRICS_SCRIM_FIELDS(scrim)                                                        \
+    .margin = 16U, .scale = 4U, .bubble_width_pct = 75U,                                           \
+    .type_offset =                                                                                 \
+        {                                                                                          \
+            [INKCELL_TYPE_TITLE] = 1,                                                              \
+            [INKCELL_TYPE_BODY] = 0,                                                               \
+            [INKCELL_TYPE_LABEL] = -1,                                                             \
+    }, /* A title is heavier as well as larger, and a label is heavier *instead* of                \
+          larger: section headings and chrome are a step down in size, which on its own            \
+          reads as text that got smaller rather than as a heading. */                              \
+        .type_weight =                                                                             \
             {                                                                                      \
-                [INKCELL_TYPE_TITLE] = 1,                                                          \
-                [INKCELL_TYPE_BODY] = 0,                                                           \
-                [INKCELL_TYPE_LABEL] = -1,                                                         \
-            }, /* A title is heavier as well as larger, and a label is heavier *instead* of        \
-                  larger: section headings and chrome are a step down in size, which on its own    \
-                  reads as text that got smaller rather than as a heading. */                      \
-            .type_weight =                                                                         \
-                {                                                                                  \
-                    [INKCELL_TYPE_TITLE] = INKCELL_WEIGHT_STRONG,                                  \
-                    [INKCELL_TYPE_BODY] = INKCELL_WEIGHT_REGULAR,                                  \
-                    [INKCELL_TYPE_LABEL] = INKCELL_WEIGHT_STRONG,                                  \
-                },                                                                                 \
-        .space =                                                                                   \
-            {                                                                                      \
-                [INKCELL_SPACE_NONE] = 0U, [INKCELL_SPACE_XS] = 1U, [INKCELL_SPACE_SM] = 2U,       \
-                [INKCELL_SPACE_MD] = 4U,   [INKCELL_SPACE_LG] = 6U,                                \
-            },                                                                                     \
-        .field_label_cols = 20U, .narrow_cols = 40U, .card_pad = 2U, .meter_thickness = 1U,        \
-        .motion_ms =                                                                               \
-            {                                                                                      \
-                [INKCELL_MOTION_SHORT] = 140U,                                                     \
-                [INKCELL_MOTION_MEDIUM] = 220U,                                                    \
-                [INKCELL_MOTION_LONG] = 320U,                                                      \
-                [INKCELL_MOTION_LOOP] = 1400U,                                                     \
-            },                                                                                     \
-        .shape = {                                                                                 \
+                [INKCELL_TYPE_TITLE] = INKCELL_WEIGHT_STRONG,                                      \
+                [INKCELL_TYPE_BODY] = INKCELL_WEIGHT_REGULAR,                                      \
+                [INKCELL_TYPE_LABEL] = INKCELL_WEIGHT_STRONG,                                      \
+    },                                                                                             \
+    .space =                                                                                       \
+        {                                                                                          \
+            [INKCELL_SPACE_NONE] = 0U, [INKCELL_SPACE_XS] = 1U, [INKCELL_SPACE_SM] = 2U,           \
+            [INKCELL_SPACE_MD] = 4U,   [INKCELL_SPACE_LG] = 6U,                                    \
+    },                                                                                             \
+    .field_label_cols = 20U, .narrow_cols = 40U, .card_pad = 2U, .meter_thickness = 1U,            \
+    .motion_ms =                                                                                   \
+        {                                                                                          \
+            [INKCELL_MOTION_SHORT] = 140U,                                                         \
+            [INKCELL_MOTION_MEDIUM] = 220U,                                                        \
+            [INKCELL_MOTION_LONG] = 320U,                                                          \
+            [INKCELL_MOTION_LOOP] = 1400U,                                                         \
+    },                                                                                             \
+    .shape =                                                                                       \
+        {                                                                                          \
             [INKCELL_SHAPE_NONE] = 0U,                                                             \
             [INKCELL_SHAPE_SM] = 2U,                                                               \
             [INKCELL_SHAPE_MD] = 3U,                                                               \
             [INKCELL_SHAPE_LG] = 4U,                                                               \
-        },                                                                                         \
-    }
+    }, /* Material's 32%, which is the figure every platform has converged on: enough              \
+          that the eye stops reading the body, little enough that it can still see what            \
+          the question is about, and a palette that needs more says so. */                         \
+        .scrim_pct = (scrim)
+
+/* The default metrics: Material's 32% scrim, which is the figure every platform has settled
+   on. */
+#define INKCELL_METRICS_DEFAULT                                                                    \
+    { INKCELL_METRICS_SCRIM_FIELDS(32U) }
 
 static const struct inkcell_theme
     k_themes[] =
@@ -173,6 +186,10 @@ static const struct inkcell_theme
                            scanners refuse an inverted code outright. */
                         [INKCELL_COLOR_CODE] = RGB(0, 0, 0),
                         [INKCELL_COLOR_CODE_GROUND] = RGB(255, 255, 255),
+                        /* The scrim, and the one colour here that a dark theme can state
+                           plainly: away from the content is towards black, and the content
+                           over it is already light. */
+                        [INKCELL_COLOR_SCRIM] = RGB(0, 0, 0),
                     },
                 /* Bright tints for a dark ground: the initials over them are the ground colour, so
                    a tint has to carry the contrast the way the accent fill does. */
@@ -276,6 +293,11 @@ static const struct inkcell_theme
                         [INKCELL_COLOR_METER_TRACK] = RGB(214, 218, 225),
                         [INKCELL_COLOR_CODE] = RGB(0, 0, 0),
                         [INKCELL_COLOR_CODE_GROUND] = RGB(255, 255, 255),
+                        /* Towards black rather than towards this theme's own paper. A light
+                           theme scrimmed towards its ground would dim the body to the exact
+                           colour of the panel over it, which is an eraser rather than a
+                           scrim. */
+                        [INKCELL_COLOR_SCRIM] = RGB(0, 0, 0),
                     },
                 /* The dark half of each hue, because here the initials are the paper ground. */
                 .avatars =
@@ -375,6 +397,10 @@ static const struct inkcell_theme
                         [INKCELL_COLOR_METER_TRACK] = RGB(96, 96, 96),
                         [INKCELL_COLOR_CODE] = RGB(0, 0, 0),
                         [INKCELL_COLOR_CODE_GROUND] = RGB(255, 255, 255),
+                        /* Black, and taken much further than the others at `scrim_pct`: on a
+                           palette where the body and the panel over it are both at maximum
+                           contrast, a gentle dim separates nothing. */
+                        [INKCELL_COLOR_SCRIM] = RGB(0, 0, 0),
                     },
                 /* Two, not six. A palette of hues is exactly what this theme exists to do without,
                    so an avatar here is the yellow or the white and the initials carry the rest. */
@@ -397,7 +423,11 @@ static const struct inkcell_theme
                         RGB(150, 150, 150),
                         RGB(86, 86, 86),
                     },
-                .metrics = INKCELL_METRICS_DEFAULT,
+                /* A deeper scrim than the rest. This palette puts the body and the panel over
+                   it both at very nearly maximum contrast, so a third of the way towards black
+                   leaves two white-on-black surfaces separated by almost nothing - the dim has
+                   to be most of the way for a modal here to read as a modal. */
+                .metrics = {INKCELL_METRICS_SCRIM_FIELDS(62U)},
             },
             {
                 .id = "colorblind",
@@ -470,6 +500,7 @@ static const struct inkcell_theme
                         [INKCELL_COLOR_METER_TRACK] = RGB(44, 51, 62),
                         [INKCELL_COLOR_CODE] = RGB(0, 0, 0),
                         [INKCELL_COLOR_CODE_GROUND] = RGB(255, 255, 255),
+                        [INKCELL_COLOR_SCRIM] = RGB(0, 0, 0),
                     },
                 /* The Okabe-Ito set again, this time as fills. They are the six that stay separable
                    under every common dichromacy, which is the only reason to spend six on avatars
@@ -1094,6 +1125,16 @@ bool inkcell_theme_validate(const struct inkcell_theme *theme, char *reason, siz
         if (reason != NULL) {
             snprintf(reason, reason_len, "bubble width %u%% is not a fraction of the body",
                      theme->metrics.bubble_width_pct);
+        }
+        return false;
+    }
+    /* A scrim is a mix and a mix is a fraction; 0 is the legal theme with no scrim at all, and
+       100 is the one where the body disappears entirely under the modal - still a mix, and
+       still a choice a palette is entitled to make. Past that it is not one. */
+    if (theme->metrics.scrim_pct > 100U) {
+        if (reason != NULL) {
+            snprintf(reason, reason_len, "scrim %u%% is not a fraction of the way towards it",
+                     theme->metrics.scrim_pct);
         }
         return false;
     }

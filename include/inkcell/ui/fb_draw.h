@@ -681,6 +681,31 @@ struct inkcell_wrap_metric inkcell_fb_wrap_metric(struct inkcell_fb_wrap_ctx *ct
                                                   int scale);
 int inkcell_fb_line_adv(const struct inkcell_backend_fb_state *state, int scale);
 void inkcell_fb_clear(const struct inkcell_backend_fb_state *state, struct inkcell_rgb color);
+
+/*
+ * Mixes everything already drawn inside `box` `percent` of the way towards `color`.
+ *
+ * The scrim, and the one drawing call here that *reads* the panel over a whole region rather
+ * than writing to it. Every other primitive composes a colour and puts it down; this one takes
+ * what is there and moves it, which is the only way to dim a frame on a panel with no alpha
+ * layer to lay over it. See INKCELL_COLOR_SCRIM.
+ *
+ * What it buys is what a scrim is for: the body under a modal stays *itself*, dimmed - the
+ * columns and the shapes are still there and the reader can still see what the question is
+ * about. A flat fill over the same region would be a second screen, and a modal that replaced
+ * the screen it was asked about is a modal answering a different question by the time it is
+ * read. That is the compromise the dialog has been making since it was written, and it is why
+ * it fills the body rather than floating over it.
+ *
+ * `percent` of 0 draws nothing at all, so a scrim easing in from nothing costs nothing on the
+ * frame before it starts. 100 is a flat fill and is reached by arithmetic rather than by a
+ * special case.
+ *
+ * It goes through the view stack and the clip like everything else, so a scrim inside a view
+ * dims that view's window and nothing outside it.
+ */
+void inkcell_fb_scrim_rect(const struct inkcell_backend_fb_state *state, struct inkcell_fb_rect box,
+                           struct inkcell_rgb color, int percent);
 size_t inkcell_fb_cols(const struct inkcell_backend_fb_state *state, int scale);
 /*
  * Text and one glyph of it, in `ink` over `ground`.

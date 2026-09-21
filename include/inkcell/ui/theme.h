@@ -204,6 +204,24 @@ enum inkcell_color {
      */
     INKCELL_COLOR_CODE,
     INKCELL_COLOR_CODE_GROUND,
+    /*
+     * The scrim: what the frame behind a modal is mixed towards.
+     *
+     * The surface tiers a few roles up carry the note that this panel has no alpha to raise a
+     * thing with, so distance is spent on the fill instead. That is true of anything *drawn* -
+     * the display engine composites fb0 against its own layer, so there is nothing behind the
+     * page to blend with. It was read for years as "and therefore there is no scrim", which
+     * does not follow: a scrim does not blend against what is behind the page, it blends
+     * against what is already *on* it, and the frame under a dialog was drawn by us, into our
+     * own buffer, a few microseconds earlier. inkcell_fb_scrim_rect() reads it back and mixes.
+     *
+     * A role rather than "darken by a third", because which way is *away* is a fact about the
+     * palette. A dark theme scrims towards black and a light one very nearly does too - what a
+     * light theme must not do is scrim towards its own ground, which would make the dimmed
+     * content and the panel behind it the same colour and turn the scrim into an eraser. How
+     * far it goes is `scrim_pct` on the metrics, so a palette can say both halves.
+     */
+    INKCELL_COLOR_SCRIM,
     INKCELL_COLOR_COUNT
 };
 
@@ -559,6 +577,21 @@ struct inkcell_metrics {
        through inkcell_theme_radius(), which does the multiply and handles the pill. All zeroes
        is a legal, entirely square theme. */
     uint8_t shape[INKCELL_SHAPE_FULL];
+    /*
+     * How far towards INKCELL_COLOR_SCRIM the frame behind a modal is taken, as a percentage.
+     *
+     * A percentage rather than a colour because the scrim is a *mix* and the thing it is mixed
+     * with is whatever happened to be on the panel - which is the point of it: the shapes and
+     * the columns under a dialog stay legible as shapes and columns, dimmed, so the reader can
+     * still see what the question is about. A flat fill over them would be a second screen.
+     *
+     * Material asks for 32%; a theme built for legibility rather than for looks wants more,
+     * because on that palette the content under the scrim and the panel over it are both
+     * near-maximum contrast and a gentle dim does not separate them. 0 is a legal theme with
+     * no scrim at all, and the overlays still work - what is lost is the dimming, not the
+     * modal.
+     */
+    uint8_t scrim_pct;
 };
 
 struct inkcell_theme {
