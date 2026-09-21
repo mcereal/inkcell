@@ -222,6 +222,163 @@ void inkcell_fb_draw_action_bar(const struct inkcell_backend_fb_state *state,
                                 const struct inkcell_fb_layout *layout,
                                 const struct inkcell_fb_action_bar *bar);
 
+/* ---- the floating action button ---------------------------------------------------------------
+ *
+ * The one thing on a screen worth doing, as a shape rather than as a row: compose a message,
+ * add a node, start a scan.
+ *
+ * Every verb here has been a keycap or a list row, and both of those are the *same weight* as
+ * everything beside them. A keycap row says what the four buttons do, in priority order, and
+ * the screen's own reason for existing is one of four things printed at the smallest size on
+ * the panel; a list row that starts something looks exactly like the rows that merely report
+ * something. Neither has a way to say "this one". That is the whole of what this shape is for,
+ * and it is why Material gives it a container of its own and a corner of the frame to stand in.
+ *
+ * Why it is chrome rather than a button. include/inkcell/ui/widgets/button.h opens by saying
+ * that nothing in it knows where on the panel it is being drawn, and that is exactly what a FAB
+ * has to know: it is anchored to the body's trailing bottom corner, it keeps the panel's own
+ * margin from the edge, and it has to clear an action bar that is drawn after it. A component
+ * placed by the frame belongs with the frame - which is the same argument the banner and the
+ * progress bar are here under.
+ *
+ * It does not consume body rows, so `layout` is const. That is the progress bar's rule for the
+ * same reason: a screen whose content reflowed when its primary action appeared would be moving
+ * the thing the action is about. What a screen owes it instead is *clearance* - see
+ * inkcell_fb_fab_clearance() - so that the last row of a list can still be scrolled out from
+ * under it.
+ *
+ * What it is filled with. A FAB elsewhere floats on a shadow, and this panel has no alpha to
+ * cast one with - the same fact the surface tiers carry. So the fill is the whole cue, which is
+ * the snackbar's answer one component over: it is the only saturated container on the body, and
+ * it takes a *family* rather than a tone because it fills something and a fill travels with the
+ * ink the theme was validated against. INKCELL_SHAPE_FULL rather than a rounded square, because
+ * the circle is what makes the extended form read as the same object grown sideways rather than
+ * as a second control.
+ */
+
+/*
+ * How much of the frame it takes.
+ *
+ * Three, and the axis that changes is the *room around the symbol* rather than the symbol
+ * itself at the first step - which is Material's own scale: a small and a regular FAB carry the
+ * same icon in different amounts of container, and only the large one draws a bigger symbol.
+ * Each size names one entry of the spacing scale, so a theme that asks for a roomier layout
+ * gets a roomier FAB without any of these being a number.
+ */
+enum inkcell_fb_fab_size {
+    /* What a screen with one obvious verb wants, and the zero value for the reason
+       INKCELL_FAMILY_PRIMARY is: a FAB declared with nothing said about its size is the
+       ordinary one, not the smallest one. */
+    INKCELL_FB_FAB_MD = 0,
+    /* Beside content that is already busy: a mark rather than a target. */
+    INKCELL_FB_FAB_SM,
+    /* A screen whose whole purpose is the one action - an empty state with a way out of it.
+       The one size that draws its symbol bigger as well as its container. */
+    INKCELL_FB_FAB_LG,
+};
+
+struct inkcell_fb_fab {
+    /*
+     * The symbol. Required: a FAB is a picture first - it is the one control on the frame that
+     * has no room for a word at rest - so one with nothing to put in its disc draws nothing at
+     * all rather than an empty circle.
+     */
+    enum inkcell_icon icon;
+    /*
+     * The verb beside it, for the extended form. NULL for the plain disc.
+     *
+     * It stays here while the FAB collapses, and that is deliberate rather than an oversight:
+     * `extended` going false is the *start* of a journey the widget then has to finish, and a
+     * caller that took the words away on the same frame would leave it collapsing around a
+     * label that is no longer there. It is the layer's rule in miniature - the app keeps
+     * describing the content until the travel has finished - see include/inkcell/ui/overlay.h.
+     */
+    const char *label;
+    /*
+     * Whether the verb is showing *now*.
+     *
+     * The extended FAB's one behaviour everywhere it exists: it carries its word while the body
+     * is at the top and shrinks to its symbol once the reader has started scrolling, because by
+     * then they have read it. A screen sets this from its own scroll - `inkcell_scroll_offset()
+     * <= 0` is the usual answer - and the widget eases the container between the two widths and
+     * cross-fades the label, exactly as the collapsing app bar eases between its two headings.
+     *
+     * Ignored when there is no label, and overruled when the body cannot spare the width: a
+     * verb that does not fit is a FAB without a verb, not a FAB running off the panel. That is
+     * the chip strip's elision rule applied to a component with one label instead of five.
+     */
+    bool extended;
+    /* What it is tinted with. Zero is INKCELL_FAMILY_PRIMARY, which is what a primary action
+       wants; a FAB that destroys something names the error family and gets the pair the theme
+       checked against it. */
+    enum inkcell_family family;
+    enum inkcell_fb_fab_size size;
+    bool selected; /* the cursor is on it */
+    /*
+     * Identity for the collapse, in the animation table on the state - the switch's `id` and
+     * not a focus id, because the two spaces are unrelated. 0 means "no identity": the FAB
+     * draws correctly at whichever width `extended` asks for, and simply never eases between
+     * them.
+     */
+    uint32_t id;
+    /* What the d-pad calls it, or INKCELL_FOCUS_NONE. Registered as the pill it was actually
+       filled as, so a ring that lands here takes the FAB's own curve. */
+    uint32_t focus_id;
+};
+
+/*
+ * Where it rests: the box it is drawn in once it has finished extending or collapsing.
+ *
+ * A *resting* box rather than this frame's, because the width is mid-flight for as long as the
+ * collapse lasts and nothing a screen does with this wants a number that moves - a first paint
+ * adopts its target without animating, so on the frame that matters the two are the same.
+ *
+ * Stated here rather than derived by whoever wants it, which is inkcell_fb_chip_box()'s rule one
+ * component over: a box worked out twice is a box that will one day be two boxes, and the second
+ * of them would be an invisible rectangle the cursor sits on beside the disc it is supposed to
+ * be on.
+ *
+ * A zero-width box is a frame with no room for one - a panel too short between its chrome and
+ * its footer - and is what inkcell_fb_draw_fab() draws and registers nothing for.
+ */
+struct inkcell_fb_rect inkcell_fb_fab_box(const struct inkcell_backend_fb_state *state,
+                                          const struct inkcell_fb_layout *layout,
+                                          const struct inkcell_fb_fab *fab);
+
+/*
+ * The room at the foot of the body a FAB is standing in: what a scrolling body adds to its
+ * content height so its last row can be scrolled out from under it.
+ *
+ * The other half of "it does not consume body rows". Nothing reflows when a FAB appears, so the
+ * cost is paid at the *end* of the content instead - which is what every phone list does under
+ * one, and the only arrangement in which the last item is reachable.
+ *
+ * Zero when there is no room for a FAB at all, so a caller adds it without testing first.
+ */
+int inkcell_fb_fab_clearance(const struct inkcell_backend_fb_state *state,
+                             const struct inkcell_fb_layout *layout,
+                             const struct inkcell_fb_fab *fab);
+
+/*
+ * Draws it, easing the container towards the width `extended` asks for, and hands back the box
+ * it came out as - a zero-width one when there was no room and nothing was drawn.
+ *
+ * *This* box rather than the resting one above, and the difference is the whole reason both
+ * exist: what a screen wants before it draws is where the FAB will settle, and what it wants
+ * afterwards is where the FAB is *now*. A menu hung off a FAB is the case that cannot use the
+ * other one - INKCELL_OVERLAY_ANCHOR lines a panel up with the control it came out of, and a
+ * panel anchored to a resting box would sit beside a container that is still half extended.
+ *
+ * Mutable state, like every animated component here: where the collapse has got to lives in the
+ * animation table, keyed by `fab->id`.
+ *
+ * Drawn after the body and before the action bar - it floats over the screen's content and
+ * under the frame's own chrome, which is the order those two sentences are true in.
+ */
+struct inkcell_fb_rect inkcell_fb_draw_fab(struct inkcell_backend_fb_state *state,
+                                           const struct inkcell_fb_layout *layout,
+                                           const struct inkcell_fb_fab *fab);
+
 /* ---- the top app bar ------------------------------------------------------------------------
  *
  * The heading a screen opens with: where you are, how to get out, and one fact about the whole

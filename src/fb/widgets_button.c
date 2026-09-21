@@ -16,17 +16,11 @@
  * One table rather than a chain of ifs at the draw site, because the point of a variant is
  * that its two colours travel together: every pair below is one inkcell_theme_validate()
  * holds to 4.5:1, and splitting them across branches is how a label ends up on a fill nothing
- * checked it against. `has_fill` false means the button draws no ground of its own and the
- * caller's idle tone is the ink.
+ * checked it against. The struct is in the header - see there for why a second component asks
+ * this directly rather than by drawing a button.
  */
-struct inkcell_fb_button_paint {
-    bool has_fill;
-    struct inkcell_paint paint;
-};
-
-static struct inkcell_fb_button_paint
-inkcell_fb_button_paint(const struct inkcell_backend_fb_state *state,
-                        const struct inkcell_fb_button *button) {
+struct inkcell_fb_button_paint inkcell_fb_button_paint(const struct inkcell_backend_fb_state *state,
+                                                       const struct inkcell_fb_button *button) {
     const bool selected = button->selected;
     switch (button->variant) {
     case INKCELL_FB_BUTTON_FILLED:

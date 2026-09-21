@@ -583,6 +583,23 @@ struct inkcell_paint inkcell_fb_paint(const struct inkcell_backend_fb_state *sta
 struct inkcell_rgb inkcell_fb_state_layer(const struct inkcell_backend_fb_state *state,
                                           enum inkcell_color fill, enum inkcell_color ink,
                                           enum inkcell_state ui_state);
+
+/*
+ * `ink` mixed `progress` of the way towards `ground`, in permille: a cross-fade, on a panel
+ * that has no alpha to do one with.
+ *
+ * Text here is drawn as *coverage* blended against a stated ground, so ink moved towards that
+ * ground is a partly faded glyph - drawn by the same blend that anti-aliases its edges, which
+ * is why nothing about this is a trick. INKCELL_ANIM_ONE is gone entirely and 0 is untouched.
+ *
+ * It is a lookup rather than a widget's own arithmetic for the reason the colour roles are:
+ * the collapsing app bar cross-fades its two titles, a FAB cross-fades the label it is
+ * collapsing away from, and two components mixing their own channels are two components that
+ * will one day round a fade differently. `ground` is what is actually behind the glyph - a fade
+ * towards a colour that is not what is there is a glyph with a halo.
+ */
+struct inkcell_rgb inkcell_fb_fade(struct inkcell_rgb ink, struct inkcell_rgb ground,
+                                   int32_t progress);
 /* Pixels between the panel edge and the body. */
 int inkcell_fb_margin(const struct inkcell_backend_fb_state *state);
 

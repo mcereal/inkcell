@@ -583,6 +583,28 @@ struct inkcell_rgb inkcell_fb_state_layer(const struct inkcell_backend_fb_state 
                                      ui_state);
 }
 
+/* One channel of the mix. Integer, and towards the ground rather than by an alpha, for the
+   reason the whole of this file is: the same arithmetic on every host that draws it. */
+static uint8_t inkcell_fb_fade_channel(uint8_t from, uint8_t to, int32_t progress) {
+    const int32_t span = (int32_t)to - (int32_t)from;
+    return (uint8_t)((int32_t)from + (span * progress) / INKCELL_ANIM_ONE);
+}
+
+struct inkcell_rgb inkcell_fb_fade(struct inkcell_rgb ink, struct inkcell_rgb ground,
+                                   int32_t progress) {
+    if (progress <= 0) {
+        return ink;
+    }
+    if (progress >= INKCELL_ANIM_ONE) {
+        return ground;
+    }
+    return (struct inkcell_rgb){
+        .r = inkcell_fb_fade_channel(ink.r, ground.r, progress),
+        .g = inkcell_fb_fade_channel(ink.g, ground.g, progress),
+        .b = inkcell_fb_fade_channel(ink.b, ground.b, progress),
+    };
+}
+
 const struct inkcell_metrics *inkcell_fb_metrics(const struct inkcell_backend_fb_state *state) {
     return inkcell_theme_metrics(state != NULL ? state->theme : NULL);
 }

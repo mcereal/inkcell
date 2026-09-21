@@ -31,6 +31,7 @@ enum {
     W_ID_ROW = 1000,
     W_ID_DIALOG = 300,
     W_ID_BUTTON = 400,
+    W_ID_FAB = 500,
     /* A layer id rather than a focus id: the two spaces are unrelated, and a dialog on a
        layer needs one of each. */
     W_ID_DIALOG_LAYER = 9000,
@@ -426,6 +427,59 @@ INKCELL_TEST_CASE(focus_widgets_register_nothing_without_a_map, unit) {
     INKCELL_TEST_FAIL_IF_CLEANUP(rect.x != 10 || rect.y != 10 || rect.w != 40 || rect.h != 20,
                                  focus_harness_close(&h),
                                  "the box registered should be the box it was drawn in");
+    focus_harness_close(&h);
+    record_success(test_name);
+}
+
+/* ---- the floating action button ---------------------------------------------------------- */
+
+/*
+ * The FAB is the one component whose registered box is a function of *time* - it eases between
+ * two widths as its label collapses away - so "what was drawn is what can be reached" has a
+ * second thing to mean here: not only the box it chose, but the box it chose *this frame*. A
+ * cursor resting on the resting box while the container is still half extended is a ring beside
+ * a pill rather than on it.
+ */
+INKCELL_TEST_CASE(focus_widgets_fab_registers_where_it_is_now, unit) {
+    struct focus_harness h;
+    INKCELL_TEST_FAIL_IF(!focus_harness_open(&h, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT),
+                         "the capture should open");
+
+    const struct inkcell_fb_layout layout = inkcell_fb_layout_begin(h.state, true, false);
+    struct inkcell_fb_fab fab = {.icon = INKCELL_ICON_COMPOSE,
+                                 .label = "Compose",
+                                 .extended = true,
+                                 .id = 4243U,
+                                 .focus_id = W_ID_FAB};
+
+    const struct inkcell_fb_rect drawn = inkcell_fb_draw_fab(h.state, &layout, &fab);
+    struct inkcell_focus_rect rect = {0, 0, 0, 0};
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_focus_rect_of(&h.map, W_ID_FAB, &rect),
+                                 focus_harness_close(&h), "a named FAB should be registered");
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        rect.x != drawn.x || rect.y != drawn.y || rect.w != drawn.w || rect.h != drawn.h,
+        focus_harness_close(&h), "the box registered should be the box it was drawn in");
+
+    /* Half way back to a disc: still one box, and still the one on the panel. */
+    fab.extended = false;
+    inkcell_fb_draw_fab(h.state, &layout, &fab);
+    inkcell_capture_advance(h.capture, 40U);
+    inkcell_focus_begin(&h.map, h.storage, FOCUS_W_STORAGE);
+    const struct inkcell_fb_rect midway = inkcell_fb_draw_fab(h.state, &layout, &fab);
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_focus_rect_of(&h.map, W_ID_FAB, &rect),
+                                 focus_harness_close(&h),
+                                 "a FAB mid-collapse is still a place to stand");
+    INKCELL_TEST_FAIL_IF_CLEANUP(rect.w != midway.w, focus_harness_close(&h),
+                                 "and the box it registers is the width it came out as");
+
+    /* A FAB with no id registers nothing, which is the opt-out every widget here has. */
+    inkcell_focus_begin(&h.map, h.storage, FOCUS_W_STORAGE);
+    struct inkcell_fb_fab anonymous = fab;
+    anonymous.focus_id = INKCELL_FOCUS_NONE;
+    inkcell_fb_draw_fab(h.state, &layout, &anonymous);
+    INKCELL_TEST_FAIL_IF_CLEANUP(h.map.count != 0U, focus_harness_close(&h),
+                                 "a FAB with no id is not a place to stand");
+
     focus_harness_close(&h);
     record_success(test_name);
 }

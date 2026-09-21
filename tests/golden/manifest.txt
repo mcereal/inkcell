@@ -168,3 +168,11 @@ glide contrast 3 1024x768 e6daa7690be7b10a
 glide contrast 4 1024x768 94c88a9e43891135
 glide colorblind 3 1024x768 a818c09b91f7b757
 glide colorblind 4 1024x768 2f3866189d5d26a9
+fab dark 3 1024x768 9effc5222323b837
+fab dark 4 1024x768 10301283096430a0
+fab light 3 1024x768 d1eeaecfb5667308
+fab light 4 1024x768 821c73d0be79e521
+fab contrast 3 1024x768 91ee76a1e50736df
+fab contrast 4 1024x768 062a120c279643bf
+fab colorblind 3 1024x768 080de514331d5dbe
+fab colorblind 4 1024x768 8e11680dc7f459ec

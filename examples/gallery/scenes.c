@@ -71,6 +71,14 @@ static const struct gallery_scene k_scenes[] = {
      * list is moving rather than sitting is the half-row the body cuts at its top edge.
      */
     {"glide", gallery_scene_glide, 54U},
+    /*
+     * The FAB, with one of its specimens caught half way back to a disc. Under a third of the
+     * exit token, for the focus ring's reason: the curve is an ease-out, so most of the ground
+     * is covered early and a picture taken at the halfway point is of a pill that has nearly
+     * finished shrinking. The page's other five are at rest - the scene starts that one's
+     * collapse inside the first frame, which is what leaves anything to photograph at all.
+     */
+    {"fab", gallery_scene_fab, 40U},
 };
 
 const struct gallery_scene *gallery_scenes(size_t *count) {
