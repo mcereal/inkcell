@@ -161,7 +161,7 @@ INKCELL_TEST_CASE(fab_drops_a_verb_it_cannot_hold, unit) {
     record_success(test_name);
 }
 
-INKCELL_TEST_CASE(fab_never_leaves_the_panel_on_a_verb_that_grew, unit) {
+INKCELL_TEST_CASE(fab_never_grows_to_lose_a_verb, unit) {
     struct inkcell_backend_fb_state *state = NULL;
     struct inkcell_capture *capture = fab_open(&state, FAB_NARROW_WIDTH, INKCELL_CAPTURE_HEIGHT);
     INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
@@ -175,23 +175,23 @@ INKCELL_TEST_CASE(fab_never_leaves_the_panel_on_a_verb_that_grew, unit) {
                                  "a verb this frame can hold should be out");
 
     /*
-     * The same FAB handed a verb the frame cannot hold. It stops fitting on the very frame its
-     * collapse begins, and a collapse begins at the width it was already at - so this is the
-     * one frame on which the eased width is wider than the room, and the FAB must still be on
-     * the panel rather than off it until the next one.
+     * The same FAB, handed a verb the frame cannot hold.
+     *
+     * The animation carries a fraction, so a FAB sitting at ONE against a much wider endpoint
+     * would spend that fraction on the new number: the first frame of the collapse would be the
+     * pill *growing* to fill the body before it shrank, through widths nothing was ever drawn
+     * at. There is nothing honest to travel through - the pill on the panel was holding a
+     * different verb - so it is its disc on the frame the verb stops fitting.
      */
     fab.label = "Start a new message to somebody far away";
     const struct inkcell_fb_rect caught = inkcell_fb_draw_fab(state, &layout, &fab);
-    INKCELL_TEST_FAIL_IF_CLEANUP(caught.w <= 0, inkcell_capture_close(capture),
-                                 "it should not blink off the panel to lose a label");
+    INKCELL_TEST_FAIL_IF_CLEANUP(caught.w > settled.w, inkcell_capture_close(capture),
+                                 "losing a verb should never make it wider than it just was");
+    INKCELL_TEST_FAIL_IF_CLEANUP(caught.w != caught.h, inkcell_capture_close(capture),
+                                 "it is the disc the verb no longer fits beside");
     INKCELL_TEST_FAIL_IF_CLEANUP(caught.x < inkcell_fb_margin(state),
                                  inkcell_capture_close(capture),
-                                 "and it should not reach past the margin to keep one");
-
-    inkcell_capture_advance(capture, 4000U);
-    const struct inkcell_fb_rect arrived = inkcell_fb_draw_fab(state, &layout, &fab);
-    INKCELL_TEST_FAIL_IF_CLEANUP(arrived.w != arrived.h, inkcell_capture_close(capture),
-                                 "and it finishes as the disc the verb no longer fits beside");
+                                 "and it never reaches past the margin to keep one");
 
     inkcell_capture_close(capture);
     record_success(test_name);
@@ -292,6 +292,60 @@ INKCELL_TEST_CASE(fab_draws_nothing_it_has_no_room_for, unit) {
     INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_draw_fab(state, &roomy, &blank).w != 0,
                                  inkcell_capture_close(capture),
                                  "a FAB with no symbol is not a FAB");
+
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
+/*
+ * A frame drawn under a clip band - a list repainting its own rows and nothing else - rejects
+ * everything outside the band twice over: inkcell_fb_clip_box() clips the fills and
+ * inkcell_fb_copy_damage() skips the rows on the way to the panel. A control that moves is the
+ * one thing that knows it moved, so it says so, and a FAB that did not would simply freeze
+ * mid-collapse beside a scrolling list until something unrelated redrew the screen.
+ *
+ * The span has to cover the rows the FAB *vacates* as well as the box it came out as, which is
+ * the half a fixed-size control never has to think about.
+ */
+INKCELL_TEST_CASE(fab_declares_the_rows_it_is_moving_through, unit) {
+    struct inkcell_backend_fb_state *state = NULL;
+    struct inkcell_capture *capture =
+        fab_open(&state, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+
+    const struct inkcell_fb_layout layout = inkcell_fb_layout_begin(state, true, false);
+    struct inkcell_fb_fab fab = {
+        .icon = INKCELL_ICON_COMPOSE, .label = "Compose", .extended = true, .id = FAB_ANIM_ID};
+
+    /* A frame at a time, opened the way the backend opens one: inkcell_fb_app_frame_begin() is
+       what clears last frame's moving parts, and a case that drew twice into one span would be
+       asserting against a union rather than against what this frame said. */
+    inkcell_fb_app_frame_begin(state);
+    const struct inkcell_fb_rect pill = inkcell_fb_draw_fab(state, &layout, &fab);
+    INKCELL_TEST_FAIL_IF_CLEANUP(!state->animation_damage.valid, inkcell_capture_close(capture),
+                                 "a FAB should say where it is moving before it draws");
+    /* Whole containment, because that is what the clip's exemption asks for: a box straddling
+       the damage and the band is not this widget's and is clipped as it always was. */
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        state->animation_damage.x > pill.x || state->animation_damage.right < pill.x + pill.w ||
+            state->animation_damage.y > pill.y || state->animation_damage.bottom < pill.y + pill.h,
+        inkcell_capture_close(capture), "the span should contain the box it drew");
+
+    /* The frame that observes the change starts the transition; the one after it is where the
+       container has actually moved. */
+    fab.extended = false;
+    inkcell_fb_app_frame_begin(state);
+    (void)inkcell_fb_draw_fab(state, &layout, &fab);
+    inkcell_capture_advance(capture, 40U);
+    inkcell_fb_app_frame_begin(state);
+    const struct inkcell_fb_rect midway = inkcell_fb_draw_fab(state, &layout, &fab);
+    INKCELL_TEST_FAIL_IF_CLEANUP(midway.w >= pill.w, inkcell_capture_close(capture),
+                                 "the collapse should be under way");
+    /* The rows it left behind, which are outside the box it is drawing now - and the reason the
+       span is the widest it could be standing anywhere in rather than where it is. */
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        state->animation_damage.x > pill.x || state->animation_damage.right < pill.x + pill.w,
+        inkcell_capture_close(capture), "and still contain the width it is vacating");
 
     inkcell_capture_close(capture);
     record_success(test_name);

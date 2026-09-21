@@ -675,7 +675,7 @@ inkcell_fb_fab_measure(const struct inkcell_backend_fb_state *state,
     /* Measured, never counted: a verb is words, and on the proportional face two of the same
        length are not the same width. */
     m.label_w = has_label ? inkcell_fb_text_width(state, fab->label, m.label_scale) : 0;
-    m.extended = has_label ? m.diameter + m.gap + m.label_w : m.diameter;
+    const int wanted = has_label ? m.diameter + m.gap + m.label_w : m.diameter;
 
     const int margin = inkcell_fb_margin(state);
     m.right = (int)state->var.xres - margin;
@@ -690,7 +690,22 @@ inkcell_fb_fab_measure(const struct inkcell_backend_fb_state *state,
     /* The verb is shown only while the frame can hold the whole of it. A label that does not
        fit is a FAB without a label, not a FAB running off the panel - the chip strip's elision,
        with one label instead of five. */
-    m.fits = has_label && m.extended <= m.room;
+    m.fits = has_label && wanted <= m.room;
+    /*
+     * And a verb that cannot be shown moves the *endpoint*, not merely the target.
+     *
+     * The animation carries a fraction rather than a width, so the two ends have to be the two
+     * ends the FAB is actually travelling between. Handed a longer verb than the frame can
+     * hold, a FAB extended at ONE would spend that fraction against a `wanted` several hundred
+     * pixels wider - so the first frame of the collapse would be a pill *growing* to fill the
+     * body before it shrank, through widths nothing was ever drawn at.
+     *
+     * There is nothing honest to travel through there: the pill on the panel was holding a
+     * different verb, and the new one has no pill. So the FAB is its disc on the frame the verb
+     * stops fitting, which is the snackbar's rule for a notice replacing another - a different
+     * thing arrives rather than the old one changing its words.
+     */
+    m.extended = m.fits ? wanted : m.diameter;
     return m;
 }
 
@@ -698,12 +713,9 @@ inkcell_fb_fab_measure(const struct inkcell_backend_fb_state *state,
  * The box at a width, which is the one place the anchoring is written down: against the trailing
  * edge and against the bottom, so a FAB that grows a label grows leftwards and stays put.
  *
- * The width is *clamped* to the room rather than refused, and only a disc that cannot fit at all
- * answers with nothing. The difference is a frame nobody would think to look for: a FAB extended
- * and fitting, handed a longer verb, stops fitting on the very frame its collapse begins - and
- * the collapse begins at the width it was already at. Refusing that would take the FAB off the
- * panel for a frame and put it back mid-shrink, which is the one thing worse than a verb that
- * did not fit.
+ * Only a disc the frame cannot hold at all answers with nothing. Every width the caller can
+ * reach is between the two endpoints inkcell_fb_fab_measure() settled, and neither of those is
+ * wider than the room - which is what that function's note about the endpoint is for.
  */
 static struct inkcell_fb_rect inkcell_fb_fab_rect(const struct inkcell_fb_fab_metrics *m,
                                                   const struct inkcell_fb_layout *layout,
@@ -711,9 +723,6 @@ static struct inkcell_fb_rect inkcell_fb_fab_rect(const struct inkcell_fb_fab_me
     const struct inkcell_fb_rect none = {0, 0, 0, 0};
     if (m->diameter <= 0 || m->diameter > m->room || m->bottom - m->diameter < layout->body_y) {
         return none; /* a frame with nowhere to put one - see inkcell_fb_fab_box() */
-    }
-    if (width > m->room) {
-        width = m->room;
     }
     return (struct inkcell_fb_rect){
         .x = m->right - width, .y = m->bottom - m->diameter, .w = width, .h = m->diameter};
@@ -727,7 +736,10 @@ struct inkcell_fb_rect inkcell_fb_fab_box(const struct inkcell_backend_fb_state 
         return none;
     }
     const struct inkcell_fb_fab_metrics m = inkcell_fb_fab_measure(state, layout, fab);
-    return inkcell_fb_fab_rect(&m, layout, (fab->extended && m.fits) ? m.extended : m.diameter);
+    /* No test against `fits` here: a verb that does not fit has already left `extended` sitting
+       on the diameter, which is the whole point of settling the endpoint rather than the
+       target. */
+    return inkcell_fb_fab_rect(&m, layout, fab->extended ? m.extended : m.diameter);
 }
 
 int inkcell_fb_fab_clearance(const struct inkcell_backend_fb_state *state,
@@ -788,6 +800,28 @@ struct inkcell_fb_rect inkcell_fb_draw_fab(struct inkcell_backend_fb_state *stat
        what colour it came out. With its shape, so a ring that lands here is the curve the FAB
        was filled with. */
     inkcell_fb_focus_register_shaped(state, fab->focus_id, &box, INKCELL_SHAPE_FULL);
+
+    /*
+     * Where it is moving, said before it draws - the switch's rule, and every other component
+     * here that animates.
+     *
+     * Without it a frame drawn under a clip band rejects the FAB twice over: the band clips its
+     * fills, and inkcell_fb_copy_damage() skips its rows on the way to the panel. A list
+     * repainting its own rows is exactly such a frame, so a FAB extending beside one would
+     * freeze until something unrelated redrew the whole screen.
+     *
+     * The span is the *widest it could be standing anywhere in*, not the box it came out as,
+     * and that is the half a fixed-size control does not have to think about. A FAB is a
+     * container whose width moves: the rows it vacates as it collapses have to be redrawn and
+     * copied too, and they are not inside the box it is drawing now. There is nowhere to
+     * remember last frame's box - a screen may have more than one of these - so the answer is
+     * derived rather than stored: it travels along one row band with its trailing edge pinned,
+     * so every width it has ever had here is inside the room, and the room is a number the
+     * geometry already knows.
+     */
+    const int pad = inkcell_fb_space_at(state, INKCELL_SPACE_XS, m.scale);
+    inkcell_fb_animation_damage(state, m.right - m.room - pad, box.y - pad, m.room + 2 * pad,
+                                box.h + 2 * pad);
 
     inkcell_fb_fill_round_rect(state, box.x, box.y, box.w, box.h,
                                inkcell_fb_radius(state, INKCELL_SHAPE_FULL), paint.paint.fill);
