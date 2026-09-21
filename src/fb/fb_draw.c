@@ -756,7 +756,7 @@ void inkcell_fb_state_apply_theme_from_env(struct inkcell_draw_state *state) {
     const struct inkcell_theme *theme = inkcell_theme_from_env();
     /* A scale named in the environment outlives a theme switch: it is an explicit choice about
        this panel, where a theme's own scale is only that theme's default. */
-    state->scale_pinned = inkwell_env_get("INKCELL_FB_SCALE") != NULL;
+    state->scale_pinned = inkwell_env_get("FB_SCALE") != NULL;
     /*
      * The knob stays in *whole* steps, where the scale it sets is in units.
      *
@@ -765,7 +765,7 @@ void inkcell_fb_state_apply_theme_from_env(struct inkcell_draw_state *state) {
      * one. Reading it in units would quietly halve every existing invocation, so the conversion
      * happens here - the one place the outside world states a scale.
      */
-    const int steps = (int)inkwell_env_int("INKCELL_FB_SCALE", INKCELL_SCALE_MIN / INKCELL_SCALE_UNIT,
+    const int steps = (int)inkwell_env_int("FB_SCALE", INKCELL_SCALE_MIN / INKCELL_SCALE_UNIT,
                                            INKCELL_SCALE_MAX / INKCELL_SCALE_UNIT, 0);
     const int scale = steps > 0 ? INKCELL_SCALE(steps) : inkcell_theme_scale(theme);
     inkcell_fb_state_set_theme(state, theme, scale);
