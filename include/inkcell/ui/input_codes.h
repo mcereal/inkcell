@@ -41,6 +41,7 @@
 #define KEY_SPACE 57
 #define KEY_F1 59
 #define KEY_F2 60
+#define KEY_F12 88
 #define KEY_UP 103
 #define KEY_PAGEUP 104
 #define KEY_LEFT 105
@@ -77,8 +78,10 @@
 #define BTN_DPAD_RIGHT 0x223
 #endif
 
-/* Absolute axes: the two analogue triggers and the d-pad hat. */
-#ifndef ABS_Z
+/* Absolute axes: a stick, the two analogue triggers and the d-pad hat. */
+#ifndef ABS_X
+#define ABS_X 0x00
+#define ABS_Y 0x01
 #define ABS_Z 0x02
 #define ABS_RZ 0x05
 #define ABS_HAT0X 0x10
