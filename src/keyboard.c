@@ -185,6 +185,27 @@ const char *inkcell_keyboard_cell(const struct inkcell_keyboard *kb,
     return scratch;
 }
 
+enum inkcell_kb_layer_dest
+inkcell_keyboard_layer_dest(const struct inkcell_keyboard *kb,
+                            const struct inkcell_keyboard_layout *layout) {
+    if (kb == NULL) {
+        return INKCELL_KB_DEST_LAYER;
+    }
+    const unsigned pages = (layout != NULL) ? layout->pages : 0U;
+    if (kb->layer == INKCELL_KB_SYMBOLS) {
+        /* A layout with no emoji pages wraps from here straight back to the letters, so the key
+           promises the letters rather than a layer that is not in the ring. */
+        return (pages > 0U) ? INKCELL_KB_DEST_EMOJI : INKCELL_KB_DEST_LAYER;
+    }
+    if (kb->layer != INKCELL_KB_EMOJI) {
+        return INKCELL_KB_DEST_LAYER;
+    }
+    /* The last page is the end of the ring: from there the key goes back to the letters, which
+       is what stops three presses in a row landing on a key that promises the same thing. */
+    return (keyboard_page(kb, layout) + 1U < pages) ? INKCELL_KB_DEST_EMOJI_MORE
+                                                    : INKCELL_KB_DEST_LAYER;
+}
+
 const char *inkcell_keyboard_action_label(const struct inkcell_keyboard *kb,
                                           const struct inkcell_keyboard_layout *layout,
                                           enum inkcell_kb_action action) {
@@ -194,27 +215,31 @@ const char *inkcell_keyboard_action_label(const struct inkcell_keyboard *kb,
          * The key names where it *goes*, which is the only thing about a layer key worth
          * drawing - and with the emoji pages in the same ring, the pages have to name themselves
          * apart or three presses in a row land on a key that says the same thing.
+         *
+         * The emoji destinations are the two with no word of their own, and what they get here
+         * is what a backend with no symbols would have to fall back to. The fb backend draws
+         * INKCELL_ICON_EMOJI over them instead, the way it draws a rune over "space" and "del".
          */
         if (kb == NULL) {
             return inkcell_str(INKCELL_STR_KEY_LAYER_LOWER);
         }
-        const unsigned pages = (layout != NULL) ? layout->pages : 0U;
+        switch (inkcell_keyboard_layer_dest(kb, layout)) {
+        case INKCELL_KB_DEST_EMOJI:
+            return inkcell_str(INKCELL_STR_KEY_LAYER_EMOJI);
+        case INKCELL_KB_DEST_EMOJI_MORE:
+            return inkcell_str(INKCELL_STR_KEY_LAYER_EMOJI_MORE);
+        default:
+            break;
+        }
         switch (kb->layer) {
         case INKCELL_KB_LOWER:
             return inkcell_str(INKCELL_STR_KEY_LAYER_UPPER);
         case INKCELL_KB_UPPER:
             return inkcell_str(INKCELL_STR_KEY_LAYER_SYMBOLS);
-        case INKCELL_KB_SYMBOLS:
-            /* A layout with no emoji pages wraps from here straight back to the letters, so the
-               key has to say so rather than promise a layer that is not in the ring. */
-            return (pages > 0U) ? inkcell_str(INKCELL_STR_KEY_LAYER_EMOJI)
-                                : inkcell_str(INKCELL_STR_KEY_LAYER_LOWER);
         default:
             break;
         }
-        return (keyboard_page(kb, layout) + 1U < pages)
-                   ? inkcell_str(INKCELL_STR_KEY_LAYER_EMOJI_MORE)
-                   : inkcell_str(INKCELL_STR_KEY_LAYER_LOWER);
+        return inkcell_str(INKCELL_STR_KEY_LAYER_LOWER);
     }
     case INKCELL_KB_ACTION_SPACE:
         return inkcell_str(INKCELL_STR_KEY_SPACE);

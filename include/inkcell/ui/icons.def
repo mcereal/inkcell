@@ -99,9 +99,19 @@ INKCELL_ICON_ENTRY(LINK,      "link")
 
 /* ---- the keyboard's action row --------------------------------------------------------------- */
 
-INKCELL_ICON_ENTRY(SEND,      "send")
-INKCELL_ICON_ENTRY(BACKSPACE, "backspace")
-INKCELL_ICON_ENTRY(SPACE,     "space_bar")
+INKCELL_ICON_ENTRY(SEND,       "send")
+INKCELL_ICON_ENTRY(BACKSPACE,  "backspace")
+INKCELL_ICON_ENTRY(SPACE,      "space_bar")
+/* The layer key, on the destinations that have no word. Three of the four panels are their own
+   keycap - "abc", "ABC", "#+=" - and the emoji layer's name is a face: it was drawn ":)" and
+   ":)>", which is punctuation standing in for a picture, unreadable until it has been learnt
+   and a translator's problem the moment it is anything else. The same mistake as the bubble's
+   "ok" and "..", fixed the same way.
+   MORE is the press that steps to *another* page of them rather than entering the layer, which
+   is what stops three presses in a row landing on a key that looks the same. Its mark over the
+   same face says "and more of these", which is the one thing that separates the two jobs. */
+INKCELL_ICON_ENTRY(EMOJI,      "mood")
+INKCELL_ICON_ENTRY(EMOJI_MORE, "add_reaction")
 
 /* ---- what a settings row is about ------------------------------------------------------------
  *

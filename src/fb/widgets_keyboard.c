@@ -73,11 +73,16 @@ static int inkcell_fb_keyboard_key_scale(const struct inkcell_backend_fb_state *
 }
 
 /*
- * The symbol on one action key, and INKCELL_ICON_NONE for the one that keeps its word.
+ * The symbol on one action key, and INKCELL_ICON_NONE for the presses that keep a word.
  *
- * The layer key is that one: what it says - "ABC", "abc", "#+=" - *is* the layer it goes to,
- * and no symbol carries that. The submit key's symbol is the application's and arrives on the
- * struct; the other three are the same verb in every program that has a keyboard.
+ * The layer key is where both cases live. Three of its destinations *are* their own keycap -
+ * "ABC", "abc", "#+=" - and no symbol carries a layer better than the layer's own letters do.
+ * The emoji pages are the other half: a set of faces has no name to put on a keycap, and what
+ * stood there instead was ":)" and ":)>", two cells of punctuation drawn at keycap size in the
+ * font the letters are set in. A face is what that key means, so a face is what it draws.
+ *
+ * The submit key's symbol is the application's and arrives on the struct; the other three are
+ * the same verb in every program that has a keyboard.
  */
 static enum inkcell_icon inkcell_fb_keyboard_action_icon(const struct inkcell_fb_keyboard *kb,
                                                          enum inkcell_kb_action action) {
@@ -91,6 +96,15 @@ static enum inkcell_icon inkcell_fb_keyboard_action_icon(const struct inkcell_fb
     case INKCELL_KB_ACTION_SUBMIT:
         return kb->submit_icon;
     case INKCELL_KB_ACTION_LAYER:
+        switch (inkcell_keyboard_layer_dest(kb->keyboard, kb->layout)) {
+        case INKCELL_KB_DEST_EMOJI:
+            return INKCELL_ICON_EMOJI;
+        case INKCELL_KB_DEST_EMOJI_MORE:
+            return INKCELL_ICON_EMOJI_MORE;
+        case INKCELL_KB_DEST_LAYER:
+        default:
+            return INKCELL_ICON_NONE;
+        }
     default:
         return INKCELL_ICON_NONE;
     }

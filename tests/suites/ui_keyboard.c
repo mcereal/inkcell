@@ -158,6 +158,8 @@ INKCELL_TEST_CASE(keyboard_ring_skips_an_absent_emoji_layer, unit) {
     const char *const label = inkcell_keyboard_action_label(&kb, &layout, INKCELL_KB_ACTION_LAYER);
     INKCELL_TEST_FAIL_IF(strcmp(label, inkcell_str(INKCELL_STR_KEY_LAYER_LOWER)) != 0,
                          "with no emoji pages the layer key should promise the letters back");
+    INKCELL_TEST_FAIL_IF(inkcell_keyboard_layer_dest(&kb, &layout) != INKCELL_KB_DEST_LAYER,
+                         "a key that goes back to the letters is not a key that offers a face");
 }
 
 /* The last page's layer key says "back to letters" rather than "another page": three presses in
@@ -175,12 +177,13 @@ INKCELL_TEST_CASE(keyboard_layer_key_names_where_it_goes, unit) {
         uint8_t layer;
         uint8_t page;
         enum inkcell_str_id expect;
+        enum inkcell_kb_layer_dest dest;
     } const cases[] = {
-        {INKCELL_KB_LOWER, 0U, INKCELL_STR_KEY_LAYER_UPPER},
-        {INKCELL_KB_UPPER, 0U, INKCELL_STR_KEY_LAYER_SYMBOLS},
-        {INKCELL_KB_SYMBOLS, 0U, INKCELL_STR_KEY_LAYER_EMOJI},
-        {INKCELL_KB_EMOJI, 0U, INKCELL_STR_KEY_LAYER_EMOJI_MORE},
-        {INKCELL_KB_EMOJI, 1U, INKCELL_STR_KEY_LAYER_LOWER},
+        {INKCELL_KB_LOWER, 0U, INKCELL_STR_KEY_LAYER_UPPER, INKCELL_KB_DEST_LAYER},
+        {INKCELL_KB_UPPER, 0U, INKCELL_STR_KEY_LAYER_SYMBOLS, INKCELL_KB_DEST_LAYER},
+        {INKCELL_KB_SYMBOLS, 0U, INKCELL_STR_KEY_LAYER_EMOJI, INKCELL_KB_DEST_EMOJI},
+        {INKCELL_KB_EMOJI, 0U, INKCELL_STR_KEY_LAYER_EMOJI_MORE, INKCELL_KB_DEST_EMOJI_MORE},
+        {INKCELL_KB_EMOJI, 1U, INKCELL_STR_KEY_LAYER_LOWER, INKCELL_KB_DEST_LAYER},
     };
     for (size_t i = 0U; i < sizeof cases / sizeof cases[0]; ++i) {
         kb.layer = cases[i].layer;
@@ -191,6 +194,11 @@ INKCELL_TEST_CASE(keyboard_layer_key_names_where_it_goes, unit) {
         snprintf(message, sizeof message, "layer %u page %u names the wrong destination",
                  cases[i].layer, cases[i].page);
         INKCELL_TEST_FAIL_IF(strcmp(label, inkcell_str(cases[i].expect)) != 0, message);
+        /* And the same answer as a fact rather than as a word, which is what a backend with
+           sprites draws the key from: the two must not be able to disagree. */
+        snprintf(message, sizeof message, "layer %u page %u offers the wrong symbol",
+                 cases[i].layer, cases[i].page);
+        INKCELL_TEST_FAIL_IF(inkcell_keyboard_layer_dest(&kb, &layout) != cases[i].dest, message);
     }
 }
 
