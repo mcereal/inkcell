@@ -171,13 +171,17 @@ const uint8_t *inkcell_capture_pixels(const struct inkcell_capture *capture, uin
     return capture->state.surface.pixels;
 }
 
-/* One channel of a packed pixel, widened back to eight bits: the high bits repeated into the low
-   ones, so a 5-bit channel at full reads 255 rather than 248. */
+/* One channel of a packed pixel, brought back to eight bits. A narrow channel is widened with its
+   high bits repeated into the low ones, so a 5-bit channel at full reads 255 rather than 248; a
+   wide one (10 bits of XRGB2101010) keeps its top eight, which is where the renderer put them. */
 static uint8_t inkcell_surface_channel(uint32_t word, struct inkcell_channel channel) {
-    if (channel.length == 0U || channel.length > 8U) {
+    if (channel.length == 0U || channel.length > 16U || channel.offset >= 32U) {
         return 0U;
     }
     const uint32_t value = (word >> channel.offset) & ((1U << channel.length) - 1U);
+    if (channel.length >= 8U) {
+        return (uint8_t)(value >> (channel.length - 8U));
+    }
     uint32_t wide = value << (8U - channel.length);
     for (uint32_t filled = channel.length; filled < 8U; filled += channel.length) {
         wide |= (uint32_t)(wide >> filled);
@@ -215,6 +219,15 @@ static void inkcell_surface_rgb(const struct inkcell_surface *surface, const uin
 int inkcell_surface_write_ppm(const struct inkcell_surface *surface, const char *path) {
     if (surface == NULL || path == NULL || surface->pixels == NULL || surface->width == 0U ||
         surface->height == 0U || surface->bytes_per_pixel == 0U || surface->bytes_per_pixel > 4U) {
+        return -EINVAL;
+    }
+    /* Every byte the rows below read has to be inside `size`. A surface is allowed to be shorter
+       than its geometry - the renderer clips to what is there - and a writer that trusted width,
+       height and stride alone would read past the end of it. */
+    const size_t row_bytes = (size_t)surface->width * surface->bytes_per_pixel;
+    if (surface->stride < row_bytes ||
+        (size_t)(surface->height - 1U) > (SIZE_MAX - row_bytes) / surface->stride ||
+        (size_t)(surface->height - 1U) * surface->stride + row_bytes > surface->size) {
         return -EINVAL;
     }
 

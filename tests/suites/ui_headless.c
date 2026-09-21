@@ -17,6 +17,7 @@
 #include "inkcell/ui/headless.h"
 #include "inkcell/ui/key.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -156,6 +157,55 @@ INKCELL_TEST_CASE(surface_ppm_reads_a_described_format_through_its_channels, uni
                      data[len - 2U] == 0x00U && data[len - 1U] == 0x00U;
     free(data);
     INKCELL_TEST_FAIL_IF(!red, "full red in RGB565 must read as 255, 0, 0");
+    record_success(test_name);
+}
+
+/* A 10-bit channel (XRGB2101010) keeps its top eight bits rather than reading as nothing. */
+INKCELL_TEST_CASE(surface_ppm_reads_a_channel_wider_than_eight_bits, unit) {
+    const uint32_t word = 0x3FFU << 20; /* full red */
+    uint8_t pixels[4];
+    memcpy(pixels, &word, sizeof word);
+    const struct inkcell_surface surface = {
+        .pixels = pixels,
+        .size = sizeof pixels,
+        .width = 1U,
+        .height = 1U,
+        .stride = 4U,
+        .bytes_per_pixel = 4U,
+        .format = {.r = {20U, 10U}, .g = {10U, 10U}, .b = {0U, 10U}, .bits_per_pixel = 32U},
+    };
+
+    char path[256];
+    headless_test_path(path, sizeof path);
+    INKCELL_TEST_FAIL_IF(inkcell_surface_write_ppm(&surface, path) != 0, "the write must succeed");
+    size_t len = 0U;
+    uint8_t *data = headless_test_slurp(path, &len);
+    unlink(path);
+
+    const bool red = data != NULL && len >= 3U && data[len - 3U] == 0xFFU &&
+                     data[len - 2U] == 0x00U && data[len - 1U] == 0x00U;
+    free(data);
+    INKCELL_TEST_FAIL_IF(!red, "full red in a 10-bit channel must read as 255, 0, 0");
+    record_success(test_name);
+}
+
+/* A surface shorter than its geometry is refused, not read past. */
+INKCELL_TEST_CASE(surface_ppm_refuses_a_surface_shorter_than_its_rows, unit) {
+    uint8_t pixels[4U * 4U] = {0};
+    const struct inkcell_surface surface = {
+        .pixels = pixels,
+        .size = sizeof pixels,
+        .width = 4U,
+        .height = 2U, /* two rows of 16 bytes, in 16 */
+        .stride = 16U,
+        .bytes_per_pixel = 4U,
+        .format = {.bits_per_pixel = 32U},
+    };
+    char path[256];
+    headless_test_path(path, sizeof path);
+    const int written = inkcell_surface_write_ppm(&surface, path);
+    unlink(path);
+    INKCELL_TEST_FAIL_IF(written != -EINVAL, "a short surface must be refused");
     record_success(test_name);
 }
 

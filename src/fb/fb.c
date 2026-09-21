@@ -361,9 +361,11 @@ static bool inkcell_backend_fb_frame(void *state_ptr, void *userdata, struct ink
         return false;
     }
     *out = panel->state.surface;
-    out->size = (size_t)out->stride * out->height;
+    /* The draw buffer is exactly one page; the mapping keeps the length it was mapped with, which
+       may be less than the geometry says and is what a reader has to stay inside. */
     if (panel->draw_buffer != NULL) {
         out->pixels = panel->draw_buffer;
+        out->size = (size_t)out->stride * out->height;
     }
     return true;
 }
