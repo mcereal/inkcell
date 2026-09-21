@@ -274,6 +274,17 @@ static uint32_t inkcell_backend_fb_page_rows(void *state_ptr, void *userdata) {
     return state_ptr != NULL ? ((const struct inkcell_backend_fb_state *)state_ptr)->page_rows : 0U;
 }
 
+/*
+ * What the last frame registered, which is whatever the application pushed in and the
+ * components filled. Held rather than copied: it is rebuilt every frame and read before the
+ * next one, so the pointer on the state is the answer.
+ */
+static const struct inkcell_focus_map *inkcell_backend_fb_focus_map(void *state_ptr,
+                                                                    void *userdata) {
+    (void)userdata;
+    return state_ptr != NULL ? ((const struct inkcell_backend_fb_state *)state_ptr)->focus : NULL;
+}
+
 static const struct inkcell_backend k_fb_backend = {
     .name = "fb",
     .init = inkcell_backend_fb_init,
@@ -281,6 +292,7 @@ static const struct inkcell_backend k_fb_backend = {
     .present = inkcell_backend_fb_present,
     .animating = inkcell_backend_fb_animating,
     .page_rows = inkcell_backend_fb_page_rows,
+    .focus_map = inkcell_backend_fb_focus_map,
 };
 
 bool inkcell_backend_fb_is_available(void) {
