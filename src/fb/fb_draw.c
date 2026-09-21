@@ -14,8 +14,8 @@
 #include "inkcell/i18n/strings.h"
 #include "inkcell/ui/emoji.h"
 #include "inkcell/ui/icon.h"
-#include "inkcell/utils/text.h"
-#include "inkcell/utils/time.h"
+#include "inkwell/base/text.h"
+#include "inkwell/base/time.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -2528,7 +2528,7 @@ void inkcell_fb_format_age(uint32_t last_heard, char *out, size_t out_len) {
         snprintf(out, out_len, "%s", inkcell_str(INKCELL_STR_COMMON_UNKNOWN_SHORT));
         return;
     }
-    const uint32_t now = inkcell_time_wall_s();
+    const uint32_t now = inkwell_time_wall_s();
     if (now == 0U || now < last_heard) {
         snprintf(out, out_len, "%s", inkcell_str(INKCELL_STR_TIME_NOW));
         return;

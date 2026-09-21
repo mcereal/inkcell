@@ -1,7 +1,7 @@
 #include "inkcell/ui/emoji.h"
 
 #include "inkcell/ui/font5x7.h"
-#include "inkcell/utils/text.h"
+#include "inkwell/base/text.h"
 
 #include <string.h>
 
@@ -168,7 +168,7 @@ struct inkcell_text_cell inkcell_text_cell_next(const char *text) {
     size_t count = 0;
     size_t offset = 0;
     while (count < EMOJI_MAX_LOOKAHEAD) {
-        const size_t step = inkcell_text_utf8_next(&text[offset], &codepoints[count]);
+        const size_t step = inkwell_text_utf8_next(&text[offset], &codepoints[count]);
         if (step == 0U) {
             break;
         }

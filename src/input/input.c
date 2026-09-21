@@ -5,11 +5,11 @@
 #include "inkcell/i18n/strings.h"
 #include "inkcell/ui/input_profile.h"
 #include "inkcell/ui/latency.h"
-#include "inkcell/utils/array.h"
-#include "inkcell/utils/env.h"
-#include "inkcell/utils/ioctl.h"
-#include "inkcell/utils/log.h"
-#include "inkcell/utils/text.h"
+#include "inkwell/base/array.h"
+#include "inkwell/base/env.h"
+#include "inkwell/base/ioctl.h"
+#include "inkwell/base/log.h"
+#include "inkwell/base/text.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -69,7 +69,7 @@ static void inkcell_input_load_quit_keys(void) {
     }
     s_quit_keys_loaded = true;
 
-    const char *override = inkcell_env_get("QUIT_KEYS");
+    const char *override = inkwell_env_get("QUIT_KEYS");
     if (override != NULL && override[0] != '\0') {
         const char *cursor = override;
         while (*cursor != '\0' && s_quit_key_count < INKCELL_INPUT_MAX_QUIT_KEYS) {
@@ -89,15 +89,15 @@ static void inkcell_input_load_quit_keys(void) {
 
         if (s_quit_key_count > 0U) {
             s_quit_hint_is_key_code = true;
-            inkcell_log_info("input", "Quit keys overridden by <PREFIX>_QUIT_KEYS (%zu codes)",
+            inkwell_log_info("input", "Quit keys overridden by <PREFIX>_QUIT_KEYS (%zu codes)",
                              s_quit_key_count);
             return;
         }
-        inkcell_log_warn("input", "<PREFIX>_QUIT_KEYS='%s' parsed to nothing; using defaults",
+        inkwell_log_warn("input", "<PREFIX>_QUIT_KEYS='%s' parsed to nothing; using defaults",
                          override);
     }
 
-    for (size_t i = 0; i < INKCELL_ARRAY_LEN(k_default_quit_keys); ++i) {
+    for (size_t i = 0; i < INKWELL_ARRAY_LEN(k_default_quit_keys); ++i) {
         s_quit_keys[s_quit_key_count++] = k_default_quit_keys[i];
     }
     s_quit_hint_is_key_code = false;
@@ -132,10 +132,10 @@ static void inkcell_input_load_key_repeat(void) {
     s_repeat_loaded = true;
     /* Tunable on-device from launch.sh, the same escape hatch <PREFIX>_QUIT_KEYS is; a delay
        of 0 turns hold-to-scroll off and restores one row per press. */
-    s_repeat_delay_ms = (unsigned int)inkcell_env_int("KEY_REPEAT_DELAY_MS", 0, 5000,
+    s_repeat_delay_ms = (unsigned int)inkwell_env_int("KEY_REPEAT_DELAY_MS", 0, 5000,
                                                       INKCELL_INPUT_REPEAT_DELAY_MS);
     s_repeat_interval_ms =
-        (unsigned int)inkcell_env_int("KEY_REPEAT_MS", 10, 2000, INKCELL_INPUT_REPEAT_MS);
+        (unsigned int)inkwell_env_int("KEY_REPEAT_MS", 10, 2000, INKCELL_INPUT_REPEAT_MS);
 }
 
 void inkcell_input_reload_key_repeat(void) {
@@ -198,7 +198,7 @@ static void inkcell_input_repeat_schedule(struct inkcell_input *input) {
     spec.it_value.tv_sec = (time_t)(ms / 1000U);
     spec.it_value.tv_nsec = (long)(ms % 1000U) * 1000000L;
     if (timerfd_settime(input->repeat_timer_fd, 0, &spec, NULL) < 0) {
-        inkcell_log_warn("input", "key repeat timerfd_settime failed: %s", strerror(errno));
+        inkwell_log_warn("input", "key repeat timerfd_settime failed: %s", strerror(errno));
     }
 }
 
@@ -312,7 +312,7 @@ const char *inkcell_input_quit_hint(void) {
         inkcell_str_format(s_quit_hint, sizeof s_quit_hint, INKCELL_STR_HINT_QUIT_KEY_CODE,
                            s_quit_keys[0]);
     } else {
-        inkcell_str_copy(s_quit_hint, sizeof s_quit_hint, inkcell_str(INKCELL_STR_HINT_QUIT_MENU));
+        inkwell_str_copy(s_quit_hint, sizeof s_quit_hint, inkcell_str(INKCELL_STR_HINT_QUIT_MENU));
     }
     return s_quit_hint;
 }
@@ -462,7 +462,7 @@ void inkcell_input_handle_device_event(struct inkcell_input *input, int source_f
         }
         if (value == 1) {
             if (inkcell_input_is_quit_key(code)) {
-                inkcell_log_info("input", "Quit key %u pressed; stopping", (unsigned)code);
+                inkwell_log_info("input", "Quit key %u pressed; stopping", (unsigned)code);
                 input->stopping = true;
                 if (input->host.request_stop != NULL) {
                     input->host.request_stop(input->host.ctx);
@@ -471,7 +471,7 @@ void inkcell_input_handle_device_event(struct inkcell_input *input, int source_f
             }
             /* Logged at debug so a device run reveals the real button codes in
                MeshClient.txt, which is how <PREFIX>_QUIT_KEYS gets tuned. */
-            inkcell_log_debug("input", "key code %u pressed", (unsigned)code);
+            inkwell_log_debug("input", "key code %u pressed", (unsigned)code);
         } else if (value != 2) {
             return;
         }
@@ -566,7 +566,7 @@ static int inkcell_input_event_callback(int fd, uint32_t events, void *userdata)
             if (errno == EINTR) {
                 continue;
             }
-            inkcell_log_warn("input", "read from input fd %d failed: %s", fd, strerror(errno));
+            inkwell_log_warn("input", "read from input fd %d failed: %s", fd, strerror(errno));
             inkcell_input_device_lost(input, fd);
             break;
         }
@@ -621,8 +621,8 @@ static bool inkcell_input_bit_set(const unsigned long *bits, size_t words, unsig
  */
 static void inkcell_input_use_monotonic_stamps(int fd, const char *path) {
     const int clockid = CLOCK_MONOTONIC;
-    if (ioctl(fd, inkcell_ioctl_request_of(EVIOCSCLOCKID), &clockid) < 0) {
-        inkcell_log_debug("input", "%s keeps wall-clock event stamps: %s", path, strerror(errno));
+    if (ioctl(fd, inkwell_ioctl_request_of(EVIOCSCLOCKID), &clockid) < 0) {
+        inkwell_log_debug("input", "%s keeps wall-clock event stamps: %s", path, strerror(errno));
     }
 }
 
@@ -702,15 +702,15 @@ static bool inkcell_input_device_is_useful(int fd, const char *path) {
     memset(axes, 0, sizeof axes);
 
     const bool keys_known =
-        ioctl(fd, inkcell_ioctl_request_of(EVIOCGBIT(EV_KEY, sizeof keys)), keys) >= 0;
+        ioctl(fd, inkwell_ioctl_request_of(EVIOCGBIT(EV_KEY, sizeof keys)), keys) >= 0;
     const bool axes_known =
-        ioctl(fd, inkcell_ioctl_request_of(EVIOCGBIT(EV_ABS, sizeof axes)), axes) >= 0;
+        ioctl(fd, inkwell_ioctl_request_of(EVIOCGBIT(EV_ABS, sizeof axes)), axes) >= 0;
     if (!keys_known && !axes_known) {
-        inkcell_log_debug("input", "%s cannot say what it reports; watching it anyway", path);
+        inkwell_log_debug("input", "%s cannot say what it reports; watching it anyway", path);
     }
 
-    return inkcell_input_device_wanted(keys_known ? keys : NULL, INKCELL_ARRAY_LEN(keys),
-                                       axes_known ? axes : NULL, INKCELL_ARRAY_LEN(axes));
+    return inkcell_input_device_wanted(keys_known ? keys : NULL, INKWELL_ARRAY_LEN(keys),
+                                       axes_known ? axes : NULL, INKWELL_ARRAY_LEN(axes));
 }
 
 /*
@@ -725,7 +725,7 @@ static void inkcell_input_device_name(int fd, char *out, size_t out_len) {
         return;
     }
     out[0] = '\0';
-    if (ioctl(fd, inkcell_ioctl_request_of(EVIOCGNAME(out_len)), out) < 0) {
+    if (ioctl(fd, inkwell_ioctl_request_of(EVIOCGNAME(out_len)), out) < 0) {
         out[0] = '\0';
     }
     out[out_len - 1U] = '\0';
@@ -737,13 +737,13 @@ static void inkcell_input_setup_repeat_timer(struct inkcell_input *input,
                                              const struct inkcell_input_host *host) {
     const int fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
     if (fd < 0) {
-        inkcell_log_warn("input", "key repeat timerfd_create failed: %s", strerror(errno));
+        inkwell_log_warn("input", "key repeat timerfd_create failed: %s", strerror(errno));
         return;
     }
 
     const int add_result = host->add_fd(host->ctx, fd, inkcell_input_repeat_callback, input);
     if (add_result < 0) {
-        inkcell_log_warn("input", "Failed to watch the key repeat timer: %d", add_result);
+        inkwell_log_warn("input", "Failed to watch the key repeat timer: %d", add_result);
         close(fd);
         return;
     }
@@ -767,7 +767,7 @@ int inkcell_input_init(struct inkcell_input *input, const struct inkcell_input_h
     size_t skipped = 0U;
     for (unsigned int index = 0; index < INKCELL_INPUT_SCAN_NODES; ++index) {
         if (input->count >= INKCELL_INPUT_MAX_DEVICES) {
-            inkcell_log_warn("input", "Watching %u devices already; not looking past event%u",
+            inkwell_log_warn("input", "Watching %u devices already; not looking past event%u",
                              (unsigned)INKCELL_INPUT_MAX_DEVICES, index);
             break;
         }
@@ -783,7 +783,7 @@ int inkcell_input_init(struct inkcell_input *input, const struct inkcell_input_h
         char name[64];
         inkcell_input_device_name(fd, name, sizeof name);
         if (!inkcell_input_device_is_useful(fd, path)) {
-            inkcell_log_debug("input", "Skipping %s (%s): nothing this client reads", path, name);
+            inkwell_log_debug("input", "Skipping %s (%s): nothing this client reads", path, name);
             close(fd);
             ++skipped;
             continue;
@@ -791,13 +791,13 @@ int inkcell_input_init(struct inkcell_input *input, const struct inkcell_input_h
 
         const int add_result = host->add_fd(host->ctx, fd, inkcell_input_event_callback, input);
         if (add_result < 0) {
-            inkcell_log_warn("input", "Failed to watch %s: %d", path, add_result);
+            inkwell_log_warn("input", "Failed to watch %s: %d", path, add_result);
             close(fd);
             continue;
         }
 
         inkcell_input_use_monotonic_stamps(fd, path);
-        inkcell_log_debug("input", "Watching %s (%s)", path, name);
+        inkwell_log_debug("input", "Watching %s (%s)", path, name);
         input->fds[input->count++] = fd;
     }
 
@@ -806,16 +806,16 @@ int inkcell_input_init(struct inkcell_input *input, const struct inkcell_input_h
            where everything was *skipped* is the other case, and worth telling apart: it means
            nodes were readable and none of them reported a button this profile knows. */
         if (skipped > 0U) {
-            inkcell_log_warn(
+            inkwell_log_warn(
                 "input",
                 "None of %zu readable input device(s) report a button this client maps; "
                 "check <PREFIX>_INPUT_PROFILE",
                 skipped);
         }
-        inkcell_log_warn("input",
+        inkwell_log_warn("input",
                          "No readable /dev/input devices; buttons will not quit the client");
     } else {
-        inkcell_log_info("input", "Watching %zu input device(s); %s", input->count,
+        inkwell_log_info("input", "Watching %zu input device(s); %s", input->count,
                          inkcell_input_quit_hint());
     }
 

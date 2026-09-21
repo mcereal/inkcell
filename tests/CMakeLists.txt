@@ -32,7 +32,7 @@ add_executable(inkcell_tests
 )
 
 target_include_directories(inkcell_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(inkcell_tests PRIVATE inkcell inkcell_options)
+target_link_libraries(inkcell_tests PRIVATE inkcell inkwell::inkwell inkcell_options)
 
 add_test(NAME inkcell_unit COMMAND inkcell_tests)
 set_tests_properties(inkcell_unit PROPERTIES LABELS unit)

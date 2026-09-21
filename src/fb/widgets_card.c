@@ -11,7 +11,7 @@
 #include "inkcell/i18n/strings.h"
 #include "inkcell/ui/emoji.h"
 #include "inkcell/ui/layout.h"
-#include "inkcell/utils/text.h"
+#include "inkwell/base/text.h"
 
 #include <stdarg.h>
 #include <string.h>
@@ -308,7 +308,7 @@ void inkcell_fb_card_begin(struct inkcell_fb_card *card, enum inkcell_fb_card_va
     card->tone = tone;
     if (heading != INKCELL_STR_NONE) {
         card->icon = icon;
-        inkcell_text_sanitise_str(inkcell_str(heading), card->heading, sizeof card->heading);
+        inkwell_text_sanitise_str(inkcell_str(heading), card->heading, sizeof card->heading);
     }
 }
 
@@ -335,13 +335,13 @@ void inkcell_fb_card_row_text(struct inkcell_fb_card *card, enum inkcell_tone to
     }
     /*
      * Sanitised rather than copied: both of these are drawn, so a fixed buffer has to be cut on
-     * a character and not on a byte - inkcell_str_copy() would leave the tail of a multi-byte
+     * a character and not on a byte - inkwell_str_copy() would leave the tail of a multi-byte
      * sequence behind and the font would draw the pieces. It also folds control bytes away,
      * which matters for one row in particular: what the radio last said about itself arrives
      * off the air, and this is the last place before it becomes glyphs.
      */
-    inkcell_text_sanitise_str(inkcell_str(label), row->label, sizeof row->label);
-    inkcell_text_sanitise_str(value, row->value, sizeof row->value);
+    inkwell_text_sanitise_str(inkcell_str(label), row->label, sizeof row->label);
+    inkwell_text_sanitise_str(value, row->value, sizeof row->value);
 }
 
 void inkcell_fb_card_row(struct inkcell_fb_card *card, enum inkcell_tone tone,
@@ -363,7 +363,7 @@ void inkcell_fb_card_meter(struct inkcell_fb_card *card, enum inkcell_tone tone,
         return;
     }
     if (label != INKCELL_STR_NONE) {
-        inkcell_text_sanitise_str(inkcell_str(label), row->label, sizeof row->label);
+        inkwell_text_sanitise_str(inkcell_str(label), row->label, sizeof row->label);
     }
     row->meter_value = value;
     row->meter_scale = scale;
@@ -394,7 +394,7 @@ void inkcell_fb_card_proportion(struct inkcell_fb_card *card, enum inkcell_tone 
         return;
     }
     if (label != INKCELL_STR_NONE) {
-        inkcell_text_sanitise_str(inkcell_str(label), row->label, sizeof row->label);
+        inkwell_text_sanitise_str(inkcell_str(label), row->label, sizeof row->label);
     }
     for (uint32_t i = 0; i < count; ++i) {
         row->parts[i] = values[i];
@@ -411,7 +411,7 @@ void inkcell_fb_card_note(struct inkcell_fb_card *card, enum inkcell_tone tone, 
     if (row == NULL) {
         return;
     }
-    inkcell_text_sanitise_str(text, row->value, sizeof row->value);
+    inkwell_text_sanitise_str(text, row->value, sizeof row->value);
 }
 
 void inkcell_fb_card_action(struct inkcell_fb_card *card, enum inkcell_str_id label,
@@ -422,7 +422,7 @@ void inkcell_fb_card_action(struct inkcell_fb_card *card, enum inkcell_str_id la
     }
     struct inkcell_fb_card_action *action = &card->actions[card->action_count++];
     memset(action, 0, sizeof *action);
-    inkcell_text_sanitise_str(inkcell_str(label), action->label, sizeof action->label);
+    inkwell_text_sanitise_str(inkcell_str(label), action->label, sizeof action->label);
     action->selected = selected;
 }
 

@@ -1,0 +1,3 @@
+[submodule "third_party/inkwell"]
+	path = third_party/inkwell
+	url = https://github.com/mcereal/inkwell

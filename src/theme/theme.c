@@ -32,8 +32,8 @@
 
 #include "inkcell/ui/theme.h"
 
-#include "inkcell/utils/env.h"
-#include "inkcell/utils/log.h"
+#include "inkwell/base/env.h"
+#include "inkwell/base/log.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -561,7 +561,7 @@ const struct inkcell_theme *inkcell_theme_by_id(const char *id) {
 }
 
 const struct inkcell_theme *inkcell_theme_env(void) {
-    const char *name = inkcell_env_get("THEME");
+    const char *name = inkwell_env_get("THEME");
     if (name == NULL || name[0] == '\0') {
         return NULL;
     }
@@ -569,7 +569,7 @@ const struct inkcell_theme *inkcell_theme_env(void) {
     if (theme == NULL) {
         /* Warned rather than refused: a typo in an environment variable should not leave a
            handheld with no UI. Warned once per call site, and there are two. */
-        inkcell_log_warn("ui", "Unknown <PREFIX>_THEME '%s'; using '%s'", name,
+        inkwell_log_warn("ui", "Unknown <PREFIX>_THEME '%s'; using '%s'", name,
                          inkcell_theme_default()->id);
         return NULL;
     }

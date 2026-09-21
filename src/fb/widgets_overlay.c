@@ -12,7 +12,7 @@
 #include "inkcell/ui/anim.h"
 #include "inkcell/ui/emoji.h"
 #include "inkcell/ui/layout.h"
-#include "inkcell/utils/text.h"
+#include "inkwell/base/text.h"
 
 #include <string.h>
 
@@ -52,7 +52,7 @@ void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state,
          * looking like the first one never left. A notice replacing another is the one case
          * where a layer should be interrupted rather than re-aimed.
          */
-        (void)inkcell_str_copy(state->snackbar, sizeof state->snackbar, text);
+        (void)inkwell_str_copy(state->snackbar, sizeof state->snackbar, text);
         state->snackbar_until_ms = bar->until_ms;
         inkcell_fb_overlay_drop(state, INKCELL_FB_OVERLAY_ID_SNACKBAR);
     }
@@ -185,7 +185,7 @@ void inkcell_fb_draw_snackbar(struct inkcell_backend_fb_state *state,
  */
 static void inkcell_fb_fit_text(const struct inkcell_backend_fb_state *state, const char *src,
                                 int scale, int max_w, char *out, size_t out_len) {
-    inkcell_str_copy(out, out_len, src != NULL ? src : "");
+    inkwell_str_copy(out, out_len, src != NULL ? src : "");
     while (inkcell_fb_text_width(state, out, scale) > max_w) {
         const size_t cells = inkcell_text_cells(out);
         if (cells <= 1U) {
@@ -209,7 +209,7 @@ static void inkcell_fb_fit_text(const struct inkcell_backend_fb_state *state, co
 static void inkcell_fb_fit_button_label(const struct inkcell_backend_fb_state *state,
                                         enum inkcell_icon icon, const char *src, int scale,
                                         int max_w, char *out, size_t out_len) {
-    inkcell_str_copy(out, out_len, src != NULL ? src : "");
+    inkwell_str_copy(out, out_len, src != NULL ? src : "");
     while (inkcell_fb_button_width(state, icon, out, scale) > max_w) {
         const size_t cells = inkcell_text_cells(out);
         if (cells <= 1U) {

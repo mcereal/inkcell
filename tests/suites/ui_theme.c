@@ -20,7 +20,7 @@
 #include "inkcell/ui/fb_capture.h"
 #include "inkcell/ui/font.h"
 #include "inkcell/ui/theme.h"
-#include "inkcell/utils/env.h"
+#include "inkwell/base/env.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -718,31 +718,31 @@ INKCELL_TEST_CASE(ui_theme_resolves_ids_and_the_environment, unit) {
        choice is the user's to make rather than the environment's. */
     char saved[64];
     saved[0] = '\0';
-    const char *const previous = inkcell_env_get("THEME");
+    const char *const previous = inkwell_env_get("THEME");
     const bool had_env = (previous != NULL);
     if (had_env) {
         snprintf(saved, sizeof saved, "%s", previous);
     }
 
-    (void)unsetenv("INKCELL_THEME");
+    (void)unsetenv("INKWELL_THEME");
     INKCELL_TEST_FAIL_IF(inkcell_theme_env() != NULL, "an unset <PREFIX>_THEME named a theme");
     INKCELL_TEST_FAIL_IF(inkcell_theme_from_env() != inkcell_theme_default(),
                          "an unset <PREFIX>_THEME did not fall back to the default");
 
-    (void)setenv("INKCELL_THEME", "light", 1);
+    (void)setenv("INKWELL_THEME", "light", 1);
     INKCELL_TEST_FAIL_IF(inkcell_theme_env() != inkcell_theme_by_id("light"),
                          "<PREFIX>_THEME did not name its theme");
 
     /* A typo must not leave a handheld with no UI, and must not read as a deliberate pin. */
-    (void)setenv("INKCELL_THEME", "not-a-theme", 1);
+    (void)setenv("INKWELL_THEME", "not-a-theme", 1);
     INKCELL_TEST_FAIL_IF(inkcell_theme_env() != NULL, "an unknown <PREFIX>_THEME named a theme");
     INKCELL_TEST_FAIL_IF(inkcell_theme_from_env() != inkcell_theme_default(),
                          "an unknown <PREFIX>_THEME did not fall back to the default");
 
     if (had_env) {
-        (void)setenv("INKCELL_THEME", saved, 1);
+        (void)setenv("INKWELL_THEME", saved, 1);
     } else {
-        (void)unsetenv("INKCELL_THEME");
+        (void)unsetenv("INKWELL_THEME");
     }
     record_success(test_name);
 }
@@ -922,42 +922,42 @@ INKCELL_TEST_CASE(ui_theme_fonts_cap_height, unit) {
  * The prefix is the whole of how a knob is spelled, so a name that carries one already reads a
  * variable nobody sets.
  *
- * Worth a case of its own because nothing else catches it: inkcell_env_get("INKCELL_FB_SCALE") and
- * inkcell_env_get("INKCELL_FB_SCALE") both compile, both return NULL on a machine that has
+ * Worth a case of its own because nothing else catches it: inkwell_env_get("INKCELL_FB_SCALE") and
+ * inkwell_env_get("INKCELL_FB_SCALE") both compile, both return NULL on a machine that has
  * neither set, and the second is wrong on every machine that has the first. The extraction
  * introduced exactly this bug once, mechanically, in fb.c.
  */
 INKCELL_TEST_CASE(ui_env_prefix_is_applied_once, unit) {
-    const char *const original = inkcell_env_prefix();
+    const char *const original = inkwell_env_prefix();
     char saved[32];
     snprintf(saved, sizeof saved, "%s", original != NULL ? original : "INKCELL");
 
-    inkcell_env_set_prefix("TESTPREFIX");
-    INKCELL_TEST_FAIL_IF_CLEANUP(strcmp(inkcell_env_prefix(), "TESTPREFIX") != 0,
-                                 inkcell_env_set_prefix(saved), "the prefix did not take");
+    inkwell_env_set_prefix("TESTPREFIX");
+    INKCELL_TEST_FAIL_IF_CLEANUP(strcmp(inkwell_env_prefix(), "TESTPREFIX") != 0,
+                                 inkwell_env_set_prefix(saved), "the prefix did not take");
 
     (void)setenv("TESTPREFIX_KNOB", "yes", 1);
-    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_env_bool("KNOB", NULL, false),
-                                 inkcell_env_set_prefix(saved),
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkwell_env_bool("KNOB", NULL, false),
+                                 inkwell_env_set_prefix(saved),
                                  "a suffix did not resolve under the prefix");
 
     /* The bug: a name that already carries the prefix must not resolve. */
     (void)setenv("TESTPREFIX_TESTPREFIX_KNOB", "yes", 1);
-    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_env_get("KNOB") == NULL, inkcell_env_set_prefix(saved),
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkwell_env_get("KNOB") == NULL, inkwell_env_set_prefix(saved),
                                  "the knob went missing");
     INKCELL_TEST_FAIL_IF_CLEANUP(
-        strcmp(inkcell_env_get("TESTPREFIX_KNOB"), "yes") != 0, inkcell_env_set_prefix(saved),
+        strcmp(inkwell_env_get("TESTPREFIX_KNOB"), "yes") != 0, inkwell_env_set_prefix(saved),
         "a prefixed name resolved to something other than the doubly-prefixed variable");
 
     (void)unsetenv("TESTPREFIX_KNOB");
     (void)unsetenv("TESTPREFIX_TESTPREFIX_KNOB");
 
     /* An empty prefix restores the default rather than reading bare names. */
-    inkcell_env_set_prefix("");
-    INKCELL_TEST_FAIL_IF_CLEANUP(strcmp(inkcell_env_prefix(), "INKCELL") != 0,
-                                 inkcell_env_set_prefix(saved),
+    inkwell_env_set_prefix("");
+    INKCELL_TEST_FAIL_IF_CLEANUP(strcmp(inkwell_env_prefix(), "INKWELL") != 0,
+                                 inkwell_env_set_prefix(saved),
                                  "an empty prefix did not restore the default");
 
-    inkcell_env_set_prefix(saved);
+    inkwell_env_set_prefix(saved);
     record_success(test_name);
 }

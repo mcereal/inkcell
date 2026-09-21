@@ -15,7 +15,7 @@
 
 #include "inkcell/i18n/strings.h"
 #include "inkcell/ui/emoji.h"
-#include "inkcell/utils/text.h"
+#include "inkwell/base/text.h"
 
 /* ---- the frame ------------------------------------------------------------------------------ */
 
@@ -347,7 +347,7 @@ void inkcell_fb_draw_action_bar(const struct inkcell_backend_fb_state *state,
        a status line is a transport state and a radio's advertised name, and a name is only
        bounded by what the radio says it is called. */
     char status[INKCELL_LINE_MAX];
-    inkcell_str_copy(status, sizeof status, bar->status);
+    inkwell_str_copy(status, sizeof status, bar->status);
     inkcell_fb_fit(status, inkcell_fb_cols(state, small));
     inkcell_fb_draw_text(state, inkcell_fb_margin(state),
                          keys_y - inkcell_step_px(small) + inkcell_fb_line_adv(state, small) +

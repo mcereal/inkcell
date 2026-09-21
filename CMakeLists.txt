@@ -16,6 +16,13 @@ else()
     set(INKCELL_IS_TOP_LEVEL OFF)
 endif()
 
+# inkwell is the layer below: the loop, the clock, the log, the codecs. A parent that has
+# already brought its own copy in wins, so an application pins one inkwell for the whole tree
+# rather than building this submodule's as a second target with the same name.
+if(NOT TARGET inkwell)
+    add_subdirectory(third_party/inkwell)
+endif()
+
 option(INKCELL_BUILD_TESTS "Build inkcell's own test binary" ${INKCELL_IS_TOP_LEVEL})
 option(INKCELL_BUILD_EXAMPLES "Build the component gallery" ${INKCELL_IS_TOP_LEVEL})
 option(INKCELL_ENABLE_ASAN "Enable AddressSanitizer" OFF)
@@ -104,12 +111,9 @@ add_library(inkcell STATIC
     src/fb/widgets_overlay.c
     # the catalog mechanism and inkcell's own twenty-three strings
     src/i18n/strings.c
-    # the leaves: no inkcell header above them includes one of these back
-    src/utils/text.c
-    src/utils/time.c
-    src/utils/env.c
-    src/utils/log.c
-    src/utils/file.c
+    # the one leaf left here: a QR matrix is bits to draw, so it is the toolkit's. The clock,
+    # the log, the environment knobs, the whole-file read and the UTF-8 helpers went to inkwell,
+    # which is where they always belonged - none of them was ever about drawing.
     src/utils/qr.c
 )
 
@@ -121,7 +125,10 @@ target_include_directories(inkcell PUBLIC
 # that several files share (src/fb/list_internal.h) is included by its neighbours and is not
 # part of the surface.
 target_include_directories(inkcell PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/fb)
-target_link_libraries(inkcell PRIVATE inkcell_options)
+# PRIVATE: no inkcell public header includes an inkwell one, so a consumer does not need
+# inkwell's include path to use this. CMake still propagates the *link* requirement, which a
+# static library does need.
+target_link_libraries(inkcell PRIVATE inkcell_options inkwell::inkwell)
 add_library(inkcell::inkcell ALIAS inkcell)
 
 if(INKCELL_BUILD_EXAMPLES)

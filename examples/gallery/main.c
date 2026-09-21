@@ -21,7 +21,7 @@
 #include "gallery.h"
 
 #include "inkcell/ui/fb_capture.h"
-#include "inkcell/utils/env.h"
+#include "inkwell/base/env.h"
 
 #include <errno.h>
 #include <stdbool.h>
@@ -252,7 +252,7 @@ int main(int argc, char **argv) {
      * The four things the README says an application pushes in, done here for real. The prefix
      * comes first because everything else reads the environment through it.
      */
-    inkcell_env_set_prefix("INKCELL_GALLERY");
+    inkwell_env_set_prefix("INKCELL_GALLERY");
     gallery_i18n_install();
     inkcell_i18n_init();
     /* And then pinned, because a manifest rendered in the host's language is a manifest that

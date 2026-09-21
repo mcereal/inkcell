@@ -14,8 +14,8 @@
 
 #include "inkcell/i18n/strings.h"
 
-#include "inkcell/utils/env.h"
-#include "inkcell/utils/log.h"
+#include "inkwell/base/env.h"
+#include "inkwell/base/log.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -112,7 +112,7 @@ void inkcell_i18n_set_catalog(const struct inkcell_i18n_catalog *catalog) {
         /* A catalog that does not cover inkcell's own ids would leave a widget looking up a
            label past the end of the table. Refusing is the only safe answer, and the library's
            own catalog is a working fallback. */
-        inkcell_log_warn("i18n", "Ignoring a catalog that does not cover inkcell's own %u ids",
+        inkwell_log_warn("i18n", "Ignoring a catalog that does not cover inkcell's own %u ids",
                          (unsigned)INKCELL_STR_COUNT);
         return;
     }
@@ -196,13 +196,13 @@ void inkcell_i18n_init(void) {
      * the system locale - which on a handheld is not something a user can set. The POSIX
      * variables follow in the order POSIX gives them.
      *
-     * The first is read through inkcell_env_get(), which puts the application's prefix on it;
+     * The first is read through inkwell_env_get(), which puts the application's prefix on it;
      * the rest are read raw, because LC_ALL is LC_ALL on every machine and prefixing it would
      * be inventing a variable nobody sets.
      */
     static const char *const k_env[] = {"LC_ALL", "LC_MESSAGES", "LANG"};
     for (size_t i = 0; i < 1U + sizeof k_env / sizeof k_env[0]; ++i) {
-        const char *value = (i == 0U) ? inkcell_env_get("LANG") : getenv(k_env[i - 1U]);
+        const char *value = (i == 0U) ? inkwell_env_get("LANG") : getenv(k_env[i - 1U]);
         if (value == NULL || value[0] == '\0') {
             continue;
         }
@@ -223,7 +223,7 @@ void inkcell_i18n_init(void) {
 }
 
 bool inkcell_i18n_is_overridden(void) {
-    const char *tag = inkcell_env_get("LANG");
+    const char *tag = inkwell_env_get("LANG");
     return tag != NULL && tag[0] != '\0' && strcmp(tag, "C") != 0 && strcmp(tag, "POSIX") != 0;
 }
 

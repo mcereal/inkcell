@@ -29,4 +29,7 @@ add_executable(inkcell_gallery
 # Its own directory, so that catalog.def and gallery.h are found the way an application finds
 # its own headers rather than through inkcell's include path.
 target_include_directories(inkcell_gallery PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(inkcell_gallery PRIVATE inkcell::inkcell inkcell_options)
+# inkwell directly as well as through inkcell: the gallery sets the environment prefix and
+# reads the theme knob itself, and inkcell links inkwell PRIVATE so its include path does not
+# come along for free.
+target_link_libraries(inkcell_gallery PRIVATE inkcell::inkcell inkwell::inkwell inkcell_options)
