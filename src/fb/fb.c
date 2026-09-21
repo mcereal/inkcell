@@ -65,12 +65,23 @@ static const struct inkcell_focus_map *inkcell_backend_fb_focus_map(void *state_
     return state != NULL ? state->focus : NULL;
 }
 
+static bool inkcell_backend_fb_frame(void *state_ptr, void *userdata, struct inkcell_surface *out) {
+    (void)userdata;
+    const struct inkcell_draw_state *state = (const struct inkcell_draw_state *)state_ptr;
+    if (state == NULL || out == NULL || state->surface.pixels == NULL) {
+        return false;
+    }
+    *out = state->surface;
+    return true;
+}
+
 static const struct inkcell_backend k_fb_backend = {
     .name = "fb",
     .init = inkcell_backend_fb_init,
     .animating = inkcell_backend_fb_animating,
     .page_rows = inkcell_backend_fb_page_rows,
     .focus_map = inkcell_backend_fb_focus_map,
+    .frame = inkcell_backend_fb_frame,
 };
 
 const struct inkcell_backend *inkcell_backend_fb(void) {
@@ -111,6 +122,8 @@ struct inkcell_fb_panel {
     uint8_t *previous_frame;
     bool frame_valid;
     bool pan_failed_logged;
+    /* Whether page 0 holds a frame yet, for frame() on a panel drawn directly. */
+    bool presented;
 };
 
 static struct inkcell_fb_panel *inkcell_fb_panel_of(void *state_ptr) {
@@ -296,6 +309,7 @@ static void inkcell_backend_fb_present(void *state_ptr, const void *snapshot, vo
             written *= 2U;
         }
     }
+    panel->presented = true;
     inkcell_latency_frame_drawn(written);
     if (written > 0U) {
         inkcell_fb_show_page0(panel);
@@ -335,6 +349,27 @@ static const struct inkcell_focus_map *inkcell_backend_fb_focus_map(void *state_
     return panel != NULL ? panel->state.focus : NULL;
 }
 
+/*
+ * The frame as drawn, which is the draw buffer when there is one: page 0 holds the same pixels,
+ * but it is a device mapping, and reading one back is the slow path the buffer exists to avoid.
+ * Without a buffer the frame was drawn straight into page 0, and page 0 is the answer.
+ */
+static bool inkcell_backend_fb_frame(void *state_ptr, void *userdata, struct inkcell_surface *out) {
+    (void)userdata;
+    struct inkcell_fb_panel *panel = inkcell_fb_panel_of(state_ptr);
+    if (panel == NULL || out == NULL || !panel->presented || panel->state.surface.pixels == NULL) {
+        return false;
+    }
+    *out = panel->state.surface;
+    /* The draw buffer is exactly one page; the mapping keeps the length it was mapped with, which
+       may be less than the geometry says and is what a reader has to stay inside. */
+    if (panel->draw_buffer != NULL) {
+        out->pixels = panel->draw_buffer;
+        out->size = (size_t)out->stride * out->height;
+    }
+    return true;
+}
+
 static const struct inkcell_backend k_fb_backend = {
     .name = "fb",
     .init = inkcell_backend_fb_init,
@@ -343,6 +378,7 @@ static const struct inkcell_backend k_fb_backend = {
     .animating = inkcell_backend_fb_animating,
     .page_rows = inkcell_backend_fb_page_rows,
     .focus_map = inkcell_backend_fb_focus_map,
+    .frame = inkcell_backend_fb_frame,
 };
 
 bool inkcell_backend_fb_is_available(void) {

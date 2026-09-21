@@ -13,6 +13,7 @@ set(INKCELL_TEST_SUITES
     suites/ui_focus_widgets.c
     suites/ui_frame.c
     suites/ui_grid.c
+    suites/ui_headless.c
     suites/ui_dial.c
     suites/ui_fab.c
     suites/ui_icon.c

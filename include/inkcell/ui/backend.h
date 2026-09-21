@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 struct inkcell_focus_map;
+struct inkcell_surface;
 
 #ifdef __cplusplus
 extern "C" {
@@ -49,6 +50,18 @@ struct inkcell_backend {
      * application that has not pushed a map, leaves the caller to whatever it did before.
      */
     const struct inkcell_focus_map *(*focus_map)(void *state, void *userdata);
+    /*
+     * The pixels of the last frame presented, described into `out`.
+     *
+     * What a driver asks for when it has pressed something and wants to see what came of it -
+     * the frame the backend drew, rather than a screenshot of whatever the display happens to
+     * be showing on top of it. The description points into the backend's own memory and is good
+     * until the next present(); inkcell_surface_write_ppm() is the usual next step.
+     *
+     * False when nothing has been presented yet. Optional: a backend that draws no pixels - a
+     * terminal, a stub - leaves it NULL, and there is no frame to ask for.
+     */
+    bool (*frame)(void *state, void *userdata, struct inkcell_surface *out);
 };
 
 #ifdef __cplusplus

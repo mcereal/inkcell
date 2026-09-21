@@ -25,6 +25,7 @@
 
 struct inkcell_capture;
 struct inkcell_draw_state;
+struct inkcell_surface;
 
 /*
  * Allocates an off-screen page. The theme is the one <PREFIX>_THEME names, as on the device;
@@ -100,5 +101,14 @@ const uint8_t *inkcell_capture_pixels(const struct inkcell_capture *capture, uin
  * Returns 0, or a negative errno.
  */
 int inkcell_capture_write_ppm(const struct inkcell_capture *capture, const char *path);
+
+/*
+ * Writes any surface as a binary PPM (P6), reading its pixels through its own format - so a
+ * frame a backend hands back from its `frame` hook (inkcell/ui/backend.h) is written the same
+ * way whether it came from a window, the headless backend or a Brick's fb0.
+ *
+ * Returns 0, or a negative errno.
+ */
+int inkcell_surface_write_ppm(const struct inkcell_surface *surface, const char *path);
 
 #endif /* INKCELL_BACKENDS_FB_CAPTURE_H */

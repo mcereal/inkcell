@@ -171,8 +171,63 @@ const uint8_t *inkcell_capture_pixels(const struct inkcell_capture *capture, uin
     return capture->state.surface.pixels;
 }
 
-int inkcell_capture_write_ppm(const struct inkcell_capture *capture, const char *path) {
-    if (capture == NULL || path == NULL) {
+/* One channel of a packed pixel, brought back to eight bits. A narrow channel is widened with its
+   high bits repeated into the low ones, so a 5-bit channel at full reads 255 rather than 248; a
+   wide one (10 bits of XRGB2101010) keeps its top eight, which is where the renderer put them. */
+static uint8_t inkcell_surface_channel(uint32_t word, struct inkcell_channel channel) {
+    if (channel.length == 0U || channel.length > 16U || channel.offset >= 32U) {
+        return 0U;
+    }
+    const uint32_t value = (word >> channel.offset) & ((1U << channel.length) - 1U);
+    if (channel.length >= 8U) {
+        return (uint8_t)(value >> (channel.length - 8U));
+    }
+    uint32_t wide = value << (8U - channel.length);
+    for (uint32_t filled = channel.length; filled < 8U; filled += channel.length) {
+        wide |= (uint32_t)(wide >> filled);
+    }
+    return (uint8_t)wide;
+}
+
+/*
+ * A pixel as R, G, B, read the way compose_color() in fb_draw.c wrote it: through the format's
+ * channels when it describes them, and by bit depth when it does not.
+ */
+static void inkcell_surface_rgb(const struct inkcell_surface *surface, const uint8_t *src,
+                                uint8_t rgb[3]) {
+    uint32_t word = 0U;
+    for (uint32_t i = 0U; i < surface->bytes_per_pixel && i < 4U; ++i) {
+        word |= (uint32_t)src[i] << (8U * i);
+    }
+    const struct inkcell_pixel_format *fmt = &surface->format;
+    if (fmt->r.length != 0U || fmt->g.length != 0U || fmt->b.length != 0U) {
+        rgb[0] = inkcell_surface_channel(word, fmt->r);
+        rgb[1] = inkcell_surface_channel(word, fmt->g);
+        rgb[2] = inkcell_surface_channel(word, fmt->b);
+    } else if (surface->bytes_per_pixel == 2U) {
+        rgb[0] = inkcell_surface_channel(word, (struct inkcell_channel){11U, 5U});
+        rgb[1] = inkcell_surface_channel(word, (struct inkcell_channel){5U, 6U});
+        rgb[2] = inkcell_surface_channel(word, (struct inkcell_channel){0U, 5U});
+    } else {
+        /* Little-endian 0xFFRRGGBB: B,G,R,X in memory. */
+        rgb[0] = (uint8_t)(word >> 16);
+        rgb[1] = (uint8_t)(word >> 8);
+        rgb[2] = (uint8_t)word;
+    }
+}
+
+int inkcell_surface_write_ppm(const struct inkcell_surface *surface, const char *path) {
+    if (surface == NULL || path == NULL || surface->pixels == NULL || surface->width == 0U ||
+        surface->height == 0U || surface->bytes_per_pixel == 0U || surface->bytes_per_pixel > 4U) {
+        return -EINVAL;
+    }
+    /* Every byte the rows below read has to be inside `size`. A surface is allowed to be shorter
+       than its geometry - the renderer clips to what is there - and a writer that trusted width,
+       height and stride alone would read past the end of it. */
+    const size_t row_bytes = (size_t)surface->width * surface->bytes_per_pixel;
+    if (surface->stride < row_bytes ||
+        (size_t)(surface->height - 1U) > (SIZE_MAX - row_bytes) / surface->stride ||
+        (size_t)(surface->height - 1U) * surface->stride + row_bytes > surface->size) {
         return -EINVAL;
     }
 
@@ -182,25 +237,21 @@ int inkcell_capture_write_ppm(const struct inkcell_capture *capture, const char 
     }
 
     int status = 0;
-    if (fprintf(file, "P6\n%u %u\n255\n", capture->width, capture->height) < 0) {
+    if (fprintf(file, "P6\n%u %u\n255\n", surface->width, surface->height) < 0) {
         status = -EIO;
     }
 
-    const size_t stride = capture->state.surface.stride;
-    uint8_t *row = status == 0 ? malloc((size_t)capture->width * 3U) : NULL;
+    uint8_t *row = status == 0 ? malloc((size_t)surface->width * 3U) : NULL;
     if (status == 0 && row == NULL) {
         status = -ENOMEM;
     }
 
-    for (uint32_t y = 0U; status == 0 && y < capture->height; ++y) {
-        const uint8_t *src = capture->state.surface.pixels + (size_t)y * stride;
-        for (uint32_t x = 0U; x < capture->width; ++x) {
-            /* Little-endian 0xFFRRGGBB: B,G,R,X in memory. */
-            row[x * 3U + 0U] = src[x * 4U + 2U];
-            row[x * 3U + 1U] = src[x * 4U + 1U];
-            row[x * 3U + 2U] = src[x * 4U + 0U];
+    for (uint32_t y = 0U; status == 0 && y < surface->height; ++y) {
+        const uint8_t *src = surface->pixels + (size_t)y * surface->stride;
+        for (uint32_t x = 0U; x < surface->width; ++x) {
+            inkcell_surface_rgb(surface, src + (size_t)x * surface->bytes_per_pixel, &row[x * 3U]);
         }
-        if (fwrite(row, 3U, capture->width, file) != capture->width) {
+        if (fwrite(row, 3U, surface->width, file) != surface->width) {
             status = -EIO;
         }
     }
@@ -210,4 +261,11 @@ int inkcell_capture_write_ppm(const struct inkcell_capture *capture, const char 
         status = -EIO;
     }
     return status;
+}
+
+int inkcell_capture_write_ppm(const struct inkcell_capture *capture, const char *path) {
+    if (capture == NULL || path == NULL) {
+        return -EINVAL;
+    }
+    return inkcell_surface_write_ppm(&capture->state.surface, path);
 }
