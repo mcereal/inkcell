@@ -206,6 +206,11 @@ void inkcell_focus_begin(struct inkcell_focus_map *map, struct inkcell_focus_ite
 }
 
 bool inkcell_focus_add(struct inkcell_focus_map *map, uint32_t id, int x, int y, int w, int h) {
+    return inkcell_focus_add_round(map, id, x, y, w, h, 0);
+}
+
+bool inkcell_focus_add_round(struct inkcell_focus_map *map, uint32_t id, int x, int y, int w, int h,
+                             int radius) {
     if (map == NULL || id == INKCELL_FOCUS_NONE || w <= 0 || h <= 0) {
         return false;
     }
@@ -223,8 +228,19 @@ bool inkcell_focus_add(struct inkcell_focus_map *map, uint32_t id, int x, int y,
     map->items[map->count].rect.y = y;
     map->items[map->count].rect.w = w;
     map->items[map->count].rect.h = h;
+    /* Clamped the way a fill clamps it, so what is recorded is the curve that was drawn rather
+       than the one that was asked for: "as round as it goes" is a request, and half the shorter
+       side is what it comes out as. */
+    const int shorter = (w < h) ? w : h;
+    map->items[map->count].radius =
+        (radius < 0) ? 0 : ((radius > shorter / 2) ? shorter / 2 : radius);
     map->count += 1U;
     return true;
+}
+
+int inkcell_focus_radius_of(const struct inkcell_focus_map *map, uint32_t id) {
+    const struct inkcell_focus_item *item = focus_item(map, id);
+    return (item != NULL) ? item->radius : 0;
 }
 
 bool inkcell_focus_has(const struct inkcell_focus_map *map, uint32_t id) {

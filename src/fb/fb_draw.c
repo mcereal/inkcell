@@ -83,12 +83,13 @@ bool inkcell_fb_state_animating(const struct inkcell_backend_fb_state *state) {
     if (state == NULL) {
         return false;
     }
-    /* The transition is asked about separately from the table because it is kept separately -
-       see `slide` on the state. A frame owes another one while either has somewhere to be.
-       An app still filling owes one for a reason that is not an animation at all: the next
-       piece is read on the next frame, so without this the fill would stop wherever the last
-       press left it. */
+    /* The transition and the focus ring are asked about separately from the table because they
+       are kept separately - see `slide` and `focus_ring` on the state. A frame owes another one
+       while either has somewhere to be. An app still filling owes one for a reason that is not an
+       animation at all: the next piece is read on the next frame, so without this the fill would
+       stop wherever the last press left it. */
     return inkcell_anim_active(&state->slide, state->now_ms) ||
+           inkcell_anim_active(&state->focus_ring.travel, state->now_ms) ||
            inkcell_anim_table_active(&state->anim, state->now_ms) || inkcell_fb_app_pending(state);
 }
 
@@ -227,8 +228,16 @@ void inkcell_fb_set_focus_map(struct inkcell_backend_fb_state *state,
  * take the state immutably stay that way. What is const here is the panel, and the panel is
  * exactly what this does not touch.
  */
-void inkcell_fb_focus_register(const struct inkcell_backend_fb_state *state, uint32_t id,
-                               const struct inkcell_fb_rect *rect) {
+/*
+ * The one place a component's geometry becomes something a d-pad can reach.
+ *
+ * Written through a const state deliberately: the map is the screen's, not the frame's, so
+ * registering into it does not make the frame mutable and the dozens of draw functions that
+ * take the state immutably stay that way. What is const here is the panel, and the panel is
+ * exactly what this does not touch.
+ */
+static void inkcell_fb_focus_put(const struct inkcell_backend_fb_state *state, uint32_t id,
+                                 const struct inkcell_fb_rect *rect, int radius) {
     if (state == NULL || state->focus == NULL || id == INKCELL_FOCUS_NONE || rect == NULL) {
         return;
     }
@@ -259,7 +268,24 @@ void inkcell_fb_focus_register(const struct inkcell_backend_fb_state *state, uin
         rect->y + rect->h <= 0) {
         return;
     }
-    (void)inkcell_focus_add(state->focus, id, rect->x, rect->y, rect->w, rect->h);
+    (void)inkcell_focus_add_round(state->focus, id, rect->x, rect->y, rect->w, rect->h, radius);
+}
+
+void inkcell_fb_focus_register(const struct inkcell_backend_fb_state *state, uint32_t id,
+                               const struct inkcell_fb_rect *rect) {
+    inkcell_fb_focus_put(state, id, rect, 0);
+}
+
+void inkcell_fb_focus_register_shaped(const struct inkcell_backend_fb_state *state, uint32_t id,
+                                      const struct inkcell_fb_rect *rect,
+                                      enum inkcell_shape shape) {
+    if (state == NULL || rect == NULL) {
+        return;
+    }
+    /* INKCELL_SHAPE_FULL asks for more radius than any box has and the fill clamps it to half
+       the shorter side; inkcell_focus_add_round() clamps the same way, so what lands in the map
+       is the curve that was drawn. */
+    inkcell_fb_focus_put(state, id, rect, inkcell_fb_radius(state, shape));
 }
 
 bool inkcell_fb_app_pending(const struct inkcell_backend_fb_state *state) {
@@ -333,6 +359,23 @@ void inkcell_fb_app_frame_begin(struct inkcell_backend_fb_state *state) {
        that a caller which renders without presenting - the capture harness - does not carry a
        rectangle from one page into the next. */
     state->animation_damage = (struct inkcell_fb_damage_rect){0};
+    /*
+     * With one exception, and it is the one thing a frame inherits from the last: wherever the
+     * focus ring painted.
+     *
+     * A ring is erased by whatever is under it being drawn again, and that happens before the
+     * ring is asked where it is going - so a ring that declared its old position at the point
+     * it moved would be declaring it a whole frame too late, after everything that could have
+     * repainted those rows had already been told they had not changed. Said here it is in
+     * place before the first fill. It is also the only way a ring that has *gone* is cleared
+     * up at all: there is no draw call left to say anything on that frame.
+     */
+    const struct inkcell_fb_damage_rect painted = state->focus_ring.drawn;
+    state->focus_ring.drawn = (struct inkcell_fb_damage_rect){0};
+    if (painted.valid) {
+        inkcell_fb_animation_damage(state, painted.x, painted.y, painted.right - painted.x,
+                                    painted.bottom - painted.y);
+    }
     if (state->app.frame_begin != NULL) {
         state->app.frame_begin(state->app.ctx);
     }

@@ -113,6 +113,32 @@ struct inkcell_fb_damage_rect {
     bool valid;
 };
 
+/*
+ * The focus ring's journey: the box it left, the box it is arriving at, and how far along it
+ * is. Drawn by inkcell_fb_draw_focus_ring(); see include/inkcell/ui/widgets/focus.h for what
+ * travels and why the ring is one thing rather than a property of each widget.
+ */
+struct inkcell_fb_focus_ring {
+    uint32_t id; /* what it is on, or arriving at; INKCELL_FOCUS_NONE for no ring */
+    struct inkcell_focus_rect from;
+    struct inkcell_focus_rect to;
+    int from_radius;
+    int to_radius;
+    struct inkcell_anim travel;
+    /*
+     * The box the ring actually painted last frame, padded by what it painted outside it.
+     *
+     * Kept because erasing a ring is not the ring's own work: what is under it belongs to
+     * whatever drew there, and that drawing happens *before* the ring is asked to move. So the
+     * box is carried to the next frame and declared as damage at inkcell_fb_app_frame_begin(),
+     * where it is in place before anything paints - which is the only point in a frame where
+     * saying "these rows changed" can still change what gets painted.
+     *
+     * `valid` false is a frame with no ring on it to erase.
+     */
+    struct inkcell_fb_damage_rect drawn;
+};
+
 struct inkcell_backend_fb_state {
     /* The body rows the last paged list was laid out in - what the app pages its content by,
        read back through the backend's page_rows() vtable entry. */
@@ -210,6 +236,19 @@ struct inkcell_backend_fb_state {
      */
     struct inkcell_anim slide;
     int slide_dir;
+    /*
+     * Where the focus ring is, and where it is going.
+     *
+     * Kept here rather than in the animation table for `slide`'s reason, one line up: that
+     * table is for widgets with nowhere of their own to keep a position, and a screen has one
+     * cursor. It also could not be kept there - a slot holds one scalar, and what travels here
+     * is a whole rectangle, from a box the cursor has *left* (so the id that would key it is
+     * already gone) to the one it is arriving at.
+     *
+     * `id` of INKCELL_FOCUS_NONE is a frame with no ring on it. See
+     * include/inkcell/ui/widgets/focus.h.
+     */
+    struct inkcell_fb_focus_ring focus_ring;
     /*
      * The frame's content transform: what inkcell_fb_shift_begin() has moved the body by, and the
      * band it is confined to while it is moved. See inkcell_fb_shift_begin().
@@ -756,6 +795,18 @@ void inkcell_fb_set_focus_map(struct inkcell_backend_fb_state *state,
  */
 void inkcell_fb_focus_register(const struct inkcell_backend_fb_state *state, uint32_t id,
                                const struct inkcell_fb_rect *rect);
+
+/*
+ * The same, for a box drawn with corners: `shape` is the one it was filled with.
+ *
+ * What the components call, because a component has a shape token in its hand at the moment it
+ * draws - a chip is a pill, a key is a rounded square - and the ring that lands on the box
+ * later has no way to find that out again. INKCELL_SHAPE_FULL is resolved here to the radius a
+ * fill would actually produce, so what is recorded is the curve on the panel rather than the
+ * request that made it.
+ */
+void inkcell_fb_focus_register_shaped(const struct inkcell_backend_fb_state *state, uint32_t id,
+                                      const struct inkcell_fb_rect *rect, enum inkcell_shape shape);
 
 /* Whether the app says it is owed another frame - what inkcell_fb_state_animating() adds to the
    animations when it decides whether one is due. */
