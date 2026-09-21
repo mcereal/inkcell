@@ -73,13 +73,11 @@ struct inkcell_fb_switch {
 };
 
 /* The size a switch wants at `scale`. Both out params may be NULL. */
-void inkcell_fb_switch_size(const struct inkcell_backend_fb_state *state, int scale, int *w,
-                            int *h);
+void inkcell_fb_switch_size(const struct inkcell_draw_state *state, int scale, int *w, int *h);
 
 /* Draws it, advancing the knob towards its target. Needs the mutable state: the animation it
    is stepping lives there. */
-void inkcell_fb_draw_switch(struct inkcell_backend_fb_state *state,
-                            const struct inkcell_fb_switch *sw);
+void inkcell_fb_draw_switch(struct inkcell_draw_state *state, const struct inkcell_fb_switch *sw);
 
 /* ---- the selection control ------------------------------------------------------------------
  *
@@ -144,12 +142,11 @@ struct inkcell_fb_selection {
 
 /* The size a selection control wants at `scale` - a square, so both out params get the same
    number. Both may be NULL. */
-void inkcell_fb_selection_size(const struct inkcell_backend_fb_state *state, int scale, int *w,
-                               int *h);
+void inkcell_fb_selection_size(const struct inkcell_draw_state *state, int scale, int *w, int *h);
 
 /* Draws it, growing the mark towards its target. Needs the mutable state: the animation it is
    stepping lives there, exactly as the switch's does. */
-void inkcell_fb_draw_selection(struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_selection(struct inkcell_draw_state *state,
                                const struct inkcell_fb_selection *sel);
 
 /* ---- the segmented button -------------------------------------------------------------------
@@ -203,13 +200,13 @@ struct inkcell_fb_segmented {
 
 /* The width the set wants at `scale`: every segment as wide as the widest label's button,
    because equal shares are what make it read as one control rather than as chips. */
-int inkcell_fb_segmented_width(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_segmented_width(const struct inkcell_draw_state *state,
                                const struct inkcell_fb_segmented *segmented, int scale);
 
 /* The height it wants at `scale` - the switch's, so the two controls sit the same distance off
    a row's top and bottom edges. `scale` here is the row's, not the segments': a control's labels
    may be chrome-sized without the control shrinking away from the switch above it. */
-int inkcell_fb_segmented_height(const struct inkcell_backend_fb_state *state, int scale);
+int inkcell_fb_segmented_height(const struct inkcell_draw_state *state, int scale);
 
 /*
  * Draws the set into `rect`, which is divided into `count` equal shares.
@@ -217,7 +214,7 @@ int inkcell_fb_segmented_height(const struct inkcell_backend_fb_state *state, in
  * `ground` is what the caller has filled behind it, on the same terms as a button's - the
  * container is an outline, so what shows through it is the caller's, not this component's.
  */
-void inkcell_fb_draw_segmented(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_segmented(const struct inkcell_draw_state *state,
                                const struct inkcell_fb_rect *rect,
                                const struct inkcell_fb_segmented *segmented, bool selected,
                                enum inkcell_color ground, int scale);
@@ -263,12 +260,12 @@ struct inkcell_fb_text_field {
 
 /* Pixels the field occupies, label and counter included - what a screen laying something out
    under it needs, and what inkcell_fb_draw_text_field() advances by. */
-int inkcell_fb_text_field_height(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_text_field_height(const struct inkcell_draw_state *state,
                                  const struct inkcell_fb_layout *layout,
                                  const struct inkcell_fb_text_field *field);
 
 /* Draws it with its top edge at `*y` and advances `*y` past it. */
-void inkcell_fb_draw_text_field(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_text_field(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_layout *layout, int *y,
                                 const struct inkcell_fb_text_field *field);
 

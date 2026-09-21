@@ -29,7 +29,7 @@
 
 struct glide_harness {
     struct inkcell_capture *capture;
-    struct inkcell_backend_fb_state *state;
+    struct inkcell_draw_state *state;
     struct inkcell_focus_item storage[GLIDE_STORAGE];
     struct inkcell_focus_map map;
 };

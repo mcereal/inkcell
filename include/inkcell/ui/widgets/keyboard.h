@@ -66,7 +66,7 @@ struct inkcell_fb_keyboard {
  * slack under the field above reads as the gap over a keyboard rather than as a keyboard that
  * stopped short.
  */
-void inkcell_fb_draw_keyboard(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_keyboard(const struct inkcell_draw_state *state,
                               const struct inkcell_fb_layout *layout, int *y,
                               const struct inkcell_fb_keyboard *keyboard);
 

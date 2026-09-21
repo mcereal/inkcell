@@ -235,7 +235,7 @@ struct inkcell_fb_grid {
  * `style` may be NULL, which is one column of square tiles with a one-line name under each -
  * in other words a list, drawn the long way round. The interesting default is `{.cols = 3}`.
  */
-struct inkcell_fb_grid inkcell_fb_grid_begin(const struct inkcell_backend_fb_state *state,
+struct inkcell_fb_grid inkcell_fb_grid_begin(const struct inkcell_draw_state *state,
                                              const struct inkcell_fb_layout *layout, uint32_t count,
                                              uint32_t cursor,
                                              const struct inkcell_fb_grid_style *style);
@@ -311,15 +311,14 @@ bool inkcell_fb_grid_is_cursor(const struct inkcell_fb_grid *grid, uint32_t inde
  * own into that box has put a tile on the panel the grid knows nothing about, and *what is
  * drawn is what can be reached* is a promise the screen then has to keep for it.
  */
-void inkcell_fb_grid_focus_tile(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_grid_focus_tile(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_grid *grid, uint32_t index);
 
 /* Draws the tile at the position the walk is on. The position came from the index rather than
    from an accumulated cursor, so a tile the screen chose not to draw costs the grid nothing -
    see inkcell_fb_grid_next(), and inkcell_fb_grid_run() for what a skipped slot owes the
    press. */
-void inkcell_fb_grid_tile(const struct inkcell_backend_fb_state *state,
-                          struct inkcell_fb_grid *grid, uint32_t index,
-                          const struct inkcell_fb_tile *tile);
+void inkcell_fb_grid_tile(const struct inkcell_draw_state *state, struct inkcell_fb_grid *grid,
+                          uint32_t index, const struct inkcell_fb_tile *tile);
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_GRID_H */

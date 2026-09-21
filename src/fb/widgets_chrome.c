@@ -19,7 +19,7 @@
 
 /* ---- the frame ------------------------------------------------------------------------------ */
 
-uint32_t inkcell_fb_layout_rows(const struct inkcell_backend_fb_state *state,
+uint32_t inkcell_fb_layout_rows(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_layout *layout) {
     if (layout->line <= 0) {
         return 0U;
@@ -31,7 +31,7 @@ uint32_t inkcell_fb_layout_rows(const struct inkcell_backend_fb_state *state,
     return remaining > 0 ? (uint32_t)(remaining / layout->line) : 0U;
 }
 
-struct inkcell_fb_layout inkcell_fb_layout_begin(const struct inkcell_backend_fb_state *state,
+struct inkcell_fb_layout inkcell_fb_layout_begin(const struct inkcell_draw_state *state,
                                                  bool footer, bool back) {
     struct inkcell_fb_layout layout = {0};
 
@@ -54,7 +54,7 @@ struct inkcell_fb_layout inkcell_fb_layout_begin(const struct inkcell_backend_fb
      * to be missing from the body's count from the start. Reserving it here and drawing the bar
      * at `footer_y` is what keeps a full list's last row off the keycaps.
      */
-    layout.footer_y = (int)state->var.yres;
+    layout.footer_y = inkcell_fb_panel_height(state);
     if (footer) {
         layout.footer_y -= inkcell_fb_action_bar_height(state, &layout);
         if (layout.footer_y < layout.body_y) {
@@ -66,7 +66,7 @@ struct inkcell_fb_layout inkcell_fb_layout_begin(const struct inkcell_backend_fb
     /* A character count at the body scale, and the pixel width that count is an estimate of.
        Both, because a proportional face makes them different questions - see `body_w`. */
     layout.cols = inkcell_fb_cols(state, state->scale);
-    layout.body_w = (int)state->var.xres - 2 * inkcell_fb_margin(state);
+    layout.body_w = inkcell_fb_panel_width(state) - 2 * inkcell_fb_margin(state);
     if (layout.body_w < 1) {
         layout.body_w = 1;
     }
@@ -75,7 +75,7 @@ struct inkcell_fb_layout inkcell_fb_layout_begin(const struct inkcell_backend_fb
 
 /* ---- the navigation bar --------------------------------------------------------------------- */
 
-void inkcell_fb_draw_nav_bar(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_nav_bar(const struct inkcell_draw_state *state,
                              struct inkcell_fb_layout *layout, const struct inkcell_fb_chip *tabs,
                              size_t count, size_t active) {
     const int small = layout->small;
@@ -84,7 +84,7 @@ void inkcell_fb_draw_nav_bar(const struct inkcell_backend_fb_state *state,
        to a pixel gutter was the same arithmetic by accident. */
     const int y = inkcell_fb_gutter(state) + inkcell_scale_px(1, small);
     const int bar_h = y + inkcell_fb_line_adv(state, small);
-    const int width = (int)state->var.xres;
+    const int width = inkcell_fb_panel_width(state);
 
     inkcell_fb_fill_rect(state, 0, 0, width, bar_h,
                          inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
@@ -121,11 +121,11 @@ void inkcell_fb_draw_nav_bar(const struct inkcell_backend_fb_state *state,
  * hairline has no such reason, and one scaled down with the tab labels is a bar nobody notices
  * on the screens it exists for.
  */
-static int inkcell_fb_progress_thickness(const struct inkcell_backend_fb_state *state) {
+static int inkcell_fb_progress_thickness(const struct inkcell_draw_state *state) {
     return inkcell_fb_meter_thickness(state, state->scale);
 }
 
-void inkcell_fb_draw_progress(struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_progress(struct inkcell_draw_state *state,
                               const struct inkcell_fb_layout *layout, bool busy) {
     if (state == NULL || layout == NULL || !busy) {
         return;
@@ -143,7 +143,7 @@ void inkcell_fb_draw_progress(struct inkcell_backend_fb_state *state,
      * mistake the tab strip made before it was given a surface of its own.
      */
     struct inkcell_fb_meter meter = {
-        .rect = {.x = 0, .y = layout->nav_y, .w = (int)state->var.xres, .h = height},
+        .rect = {.x = 0, .y = layout->nav_y, .w = inkcell_fb_panel_width(state), .h = height},
         .kind = INKCELL_FB_METER_INDETERMINATE,
         .tone = INKCELL_TONE_PRIMARY,
         .id = INKCELL_FB_ANIM_ID_PROGRESS,
@@ -153,7 +153,7 @@ void inkcell_fb_draw_progress(struct inkcell_backend_fb_state *state,
 
 /* ---- the banner ------------------------------------------------------------------------------ */
 
-void inkcell_fb_draw_banner(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_banner(const struct inkcell_draw_state *state,
                             struct inkcell_fb_layout *layout,
                             const struct inkcell_fb_banner *banner) {
     if (state == NULL || layout == NULL || banner == NULL || banner->text == NULL ||
@@ -169,7 +169,7 @@ void inkcell_fb_draw_banner(const struct inkcell_backend_fb_state *state,
     const int pad_x = inkcell_fb_space(state, INKCELL_SPACE_MD);
     const int pad_y = inkcell_fb_space(state, INKCELL_SPACE_SM);
     const int top = layout->body_y;
-    const int width = (int)state->var.xres - 2 * margin;
+    const int width = inkcell_fb_panel_width(state) - 2 * margin;
     if (width <= 2 * pad_x || adv <= 0 || layout->line <= 0) {
         return;
     }
@@ -270,7 +270,7 @@ void inkcell_fb_draw_banner(const struct inkcell_backend_fb_state *state,
 /* The cap's pill and the verb after it, with the half cell between them that every icon-plus-
    label pair in this file uses. Measured rather than assumed, because the pill's padding is
    the button's business (see INKCELL_FB_CHIP_PAD_STEPS). */
-static int inkcell_fb_action_width(const struct inkcell_backend_fb_state *state,
+static int inkcell_fb_action_width(const struct inkcell_draw_state *state,
                                    const struct inkcell_button_action *action, int scale) {
     const int adv = inkcell_fb_char_adv(state, scale);
     const char *label = inkcell_str(action->label);
@@ -279,7 +279,7 @@ static int inkcell_fb_action_width(const struct inkcell_backend_fb_state *state,
            adv / 2 + inkcell_fb_text_width(state, label, scale);
 }
 
-int inkcell_fb_action_bar_height(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_action_bar_height(const struct inkcell_draw_state *state,
                                  const struct inkcell_fb_layout *layout) {
     const int small = layout->small;
     /* The keycap row, the status line under it, and a margin below - the same margin the two
@@ -290,17 +290,17 @@ int inkcell_fb_action_bar_height(const struct inkcell_backend_fb_state *state,
            inkcell_fb_margin(state);
 }
 
-void inkcell_fb_draw_action_bar(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_action_bar(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_layout *layout,
                                 const struct inkcell_fb_action_bar *bar) {
     const int small = layout->small;
-    const int width = (int)state->var.xres;
+    const int width = inkcell_fb_panel_width(state);
     const int top = layout->footer_y;
 
     /* The mirror of the navigation bar: the same recessed tier, the same rule, on the other
        edge. Chrome that is a surface at the top and bare ground at the bottom reads as a frame
        with one side missing. */
-    inkcell_fb_fill_rect(state, 0, top, width, (int)state->var.yres - top,
+    inkcell_fb_fill_rect(state, 0, top, width, inkcell_fb_panel_height(state) - top,
                          inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
     inkcell_fb_draw_rule(state, 0, top, width, small, INKCELL_COLOR_RULE_STRONG);
 
@@ -361,7 +361,7 @@ void inkcell_fb_draw_action_bar(const struct inkcell_backend_fb_state *state,
 /* The trail, drawn left to right with a chevron between the levels, from `x`. Returns nothing:
    a trail that runs out of room stops, because the level nearest the title is the one worth
    keeping and it is drawn last. */
-static void inkcell_fb_draw_app_bar_trail(const struct inkcell_backend_fb_state *state,
+static void inkcell_fb_draw_app_bar_trail(const struct inkcell_draw_state *state,
                                           const struct inkcell_fb_app_bar *bar, int x, int y,
                                           int right, int scale) {
     const int adv = inkcell_fb_char_adv(state, scale);
@@ -402,7 +402,7 @@ static void inkcell_fb_draw_app_bar_trail(const struct inkcell_backend_fb_state 
     }
 }
 
-int inkcell_fb_app_bar_height(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_app_bar_height(const struct inkcell_draw_state *state,
                               const struct inkcell_fb_layout *layout, size_t trail_count) {
     /*
      * The same three terms inkcell_fb_draw_app_bar() advances `body_y` by, in the same order.
@@ -424,7 +424,7 @@ int inkcell_fb_app_bar_height(const struct inkcell_backend_fb_state *state,
     return height;
 }
 
-void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_app_bar(const struct inkcell_draw_state *state,
                              struct inkcell_fb_layout *layout,
                              const struct inkcell_fb_app_bar *bar) {
     /*
@@ -457,7 +457,8 @@ void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state,
      * panel to itself.
      */
     if (bar->trail_count > 0U) {
-        inkcell_fb_draw_app_bar_trail(state, bar, text_x, y, (int)state->var.xres - margin, small);
+        inkcell_fb_draw_app_bar_trail(state, bar, text_x, y, inkcell_fb_panel_width(state) - margin,
+                                      small);
         /* The glyph body and a hair, not the label scale's whole line advance. The advance
            carries the gap between two lines of running text, and the trail is not running text
            - it is a caption sitting on the title. Spending the advance here cost a body row on
@@ -482,7 +483,7 @@ void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state,
      * where it was neither countable nor a badge - a capsule cannot be spelled inside a
      * sentence.
      */
-    int right = (int)state->var.xres - margin;
+    int right = inkcell_fb_panel_width(state) - margin;
     const int badge_w = inkcell_fb_badge_width(state, bar->badge, small);
     if (badge_w > 0) {
         /* Centred on the title's glyph body rather than on its line advance: the advance
@@ -537,7 +538,7 @@ void inkcell_fb_draw_app_bar(const struct inkcell_backend_fb_state *state,
     }
 }
 
-void inkcell_fb_draw_empty(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_empty(const struct inkcell_draw_state *state,
                            const struct inkcell_fb_layout *layout, enum inkcell_icon icon,
                            const char *text) {
     int y = layout->body_y;
@@ -553,7 +554,7 @@ void inkcell_fb_draw_empty(const struct inkcell_backend_fb_state *state,
     const uint32_t cost = 4U; /* three rows for the symbol, one of air under it */
     if (inkcell_icon_is_valid(icon) && big <= INKCELL_FB_ICON_SCALE_MAX && rows > cost + 1U) {
         const int box = inkcell_fb_icon_box(state, big);
-        inkcell_fb_draw_icon(state, ((int)state->var.xres - box) / 2, y, icon, big,
+        inkcell_fb_draw_icon(state, (inkcell_fb_panel_width(state) - box) / 2, y, icon, big,
                              inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
                              inkcell_fb_color(state, INKCELL_COLOR_BG));
         y += (int)cost * layout->line;
@@ -569,12 +570,12 @@ void inkcell_fb_draw_empty(const struct inkcell_backend_fb_state *state,
                                            inkcell_fb_color(state, INKCELL_COLOR_BG));
 }
 
-int inkcell_fb_rule_height(const struct inkcell_backend_fb_state *state, int scale) {
+int inkcell_fb_rule_height(const struct inkcell_draw_state *state, int scale) {
     return inkcell_fb_space_at(state, INKCELL_SPACE_XS, scale);
 }
 
-void inkcell_fb_draw_rule(const struct inkcell_backend_fb_state *state, int x, int y, int w,
-                          int scale, enum inkcell_color role) {
+void inkcell_fb_draw_rule(const struct inkcell_draw_state *state, int x, int y, int w, int scale,
+                          enum inkcell_color role) {
     inkcell_fb_fill_rect(state, x, y, w, inkcell_fb_rule_height(state, scale),
                          inkcell_fb_color(state, role));
 }
@@ -598,7 +599,7 @@ void inkcell_fb_title_count(char *out, size_t out_len, const char *name, uint32_
  * a FAB has everywhere it exists: the picture is the control and the word is a gloss on it, and
  * a label set as large as the symbol makes the container a button with a big icon in it.
  */
-static int inkcell_fb_fab_scale(const struct inkcell_backend_fb_state *state,
+static int inkcell_fb_fab_scale(const struct inkcell_draw_state *state,
                                 enum inkcell_fb_fab_size size) {
     switch (size) {
     case INKCELL_FB_FAB_SM:
@@ -615,7 +616,7 @@ static int inkcell_fb_fab_scale(const struct inkcell_backend_fb_state *state,
     }
 }
 
-static int inkcell_fb_fab_label_scale(const struct inkcell_backend_fb_state *state,
+static int inkcell_fb_fab_label_scale(const struct inkcell_draw_state *state,
                                       enum inkcell_fb_fab_size size) {
     const int scale = inkcell_fb_fab_scale(state, size) - INKCELL_SCALE(1);
     return scale < INKCELL_SCALE_MIN ? INKCELL_SCALE_MIN : scale;
@@ -629,8 +630,8 @@ static int inkcell_fb_fab_label_scale(const struct inkcell_backend_fb_state *sta
  * of steps is what lets a theme with a denser layout have a denser FAB without this being a
  * number anywhere.
  */
-static int inkcell_fb_fab_pad(const struct inkcell_backend_fb_state *state,
-                              enum inkcell_fb_fab_size size, int scale) {
+static int inkcell_fb_fab_pad(const struct inkcell_draw_state *state, enum inkcell_fb_fab_size size,
+                              int scale) {
     switch (size) {
     case INKCELL_FB_FAB_SM:
         return inkcell_fb_space_at(state, INKCELL_SPACE_SM, scale);
@@ -664,9 +665,9 @@ struct inkcell_fb_fab_metrics {
     bool fits;    /* whether the extended form is one of the widths available */
 };
 
-static struct inkcell_fb_fab_metrics
-inkcell_fb_fab_measure(const struct inkcell_backend_fb_state *state,
-                       const struct inkcell_fb_layout *layout, const struct inkcell_fb_fab *fab) {
+static struct inkcell_fb_fab_metrics inkcell_fb_fab_measure(const struct inkcell_draw_state *state,
+                                                            const struct inkcell_fb_layout *layout,
+                                                            const struct inkcell_fb_fab *fab) {
     struct inkcell_fb_fab_metrics m = {0};
     m.scale = inkcell_fb_fab_scale(state, fab->size);
     m.label_scale = inkcell_fb_fab_label_scale(state, fab->size);
@@ -683,7 +684,7 @@ inkcell_fb_fab_measure(const struct inkcell_backend_fb_state *state,
     const int wanted = has_label ? m.diameter + m.gap + m.label_w : m.diameter;
 
     const int margin = inkcell_fb_margin(state);
-    m.right = (int)state->var.xres - margin;
+    m.right = inkcell_fb_panel_width(state) - margin;
     /*
      * A full margin clear of the footer rather than the half a card stops at, which is the
      * snackbar's rule and for its reason: a card is *in* the body and belongs against the body's
@@ -733,7 +734,7 @@ static struct inkcell_fb_rect inkcell_fb_fab_rect(const struct inkcell_fb_fab_me
         .x = m->right - width, .y = m->bottom - m->diameter, .w = width, .h = m->diameter};
 }
 
-struct inkcell_fb_rect inkcell_fb_fab_box(const struct inkcell_backend_fb_state *state,
+struct inkcell_fb_rect inkcell_fb_fab_box(const struct inkcell_draw_state *state,
                                           const struct inkcell_fb_layout *layout,
                                           const struct inkcell_fb_fab *fab) {
     const struct inkcell_fb_rect none = {0, 0, 0, 0};
@@ -747,7 +748,7 @@ struct inkcell_fb_rect inkcell_fb_fab_box(const struct inkcell_backend_fb_state 
     return inkcell_fb_fab_rect(&m, layout, fab->extended ? m.extended : m.diameter);
 }
 
-int inkcell_fb_fab_clearance(const struct inkcell_backend_fb_state *state,
+int inkcell_fb_fab_clearance(const struct inkcell_draw_state *state,
                              const struct inkcell_fb_layout *layout,
                              const struct inkcell_fb_fab *fab) {
     const struct inkcell_fb_rect box = inkcell_fb_fab_box(state, layout, fab);
@@ -756,7 +757,7 @@ int inkcell_fb_fab_clearance(const struct inkcell_backend_fb_state *state,
     return box.w > 0 ? layout->footer_y - box.y : 0;
 }
 
-struct inkcell_fb_rect inkcell_fb_draw_fab(struct inkcell_backend_fb_state *state,
+struct inkcell_fb_rect inkcell_fb_draw_fab(struct inkcell_draw_state *state,
                                            const struct inkcell_fb_layout *layout,
                                            const struct inkcell_fb_fab *fab) {
     const struct inkcell_fb_rect none = {0, 0, 0, 0};

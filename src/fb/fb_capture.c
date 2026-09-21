@@ -13,9 +13,9 @@
  * inkcell_capture_set_theme() overrides it - which is how one scene script renders the same
  * frames in four looks.
  *
- * The fabricated fb_var_screeninfo leaves every bitfield zero. compose_color() then takes its
- * 32 bpp path and packs 0xFFRRGGBB, which is what the Brick's fb0 actually holds - so a page
- * from here is interchangeable with a page dd'd off the device.
+ * The surface's pixel format leaves every channel zero. compose_color() then takes its 32 bpp
+ * path and packs 0xFFRRGGBB, which is what the Brick's fb0 actually holds - so a page from here
+ * is interchangeable with a page dd'd off the device.
  */
 
 #include "inkcell/ui/fb_draw.h"
@@ -29,7 +29,7 @@
 #include <string.h>
 
 struct inkcell_capture {
-    struct inkcell_backend_fb_state state;
+    struct inkcell_draw_state state;
     uint32_t width;
     uint32_t height;
 };
@@ -60,18 +60,16 @@ int inkcell_capture_open(struct inkcell_capture **out, uint32_t width, uint32_t 
     capture->width = width;
     capture->height = height;
 
-    struct inkcell_backend_fb_state *state = &capture->state;
-    state->inkcell_fb_fd = -1;
-    state->inkcell_fb_ptr = pixels;
-    state->inkcell_fb_size = page_bytes;
-    state->var.xres = width;
-    state->var.yres = height;
-    state->var.xres_virtual = width;
-    state->var.yres_virtual = height;
-    state->var.bits_per_pixel = 32U;
-    state->fix.line_length = (uint32_t)stride;
-    state->line_bytes = (uint32_t)stride;
-    state->bytes_per_pixel = 4U;
+    struct inkcell_draw_state *state = &capture->state;
+    state->surface = (struct inkcell_surface){
+        .pixels = pixels,
+        .size = page_bytes,
+        .width = width,
+        .height = height,
+        .stride = (uint32_t)stride,
+        .bytes_per_pixel = 4U,
+        .format = {.bits_per_pixel = 32U},
+    };
     inkcell_fb_state_set_theme(state, inkcell_theme_from_env(), scale);
     /* A scale the caller named is theirs to keep: a theme arriving later in a snapshot must
        not quietly swap it for that theme's default. 0 meant "the theme's own", which is not a
@@ -82,7 +80,7 @@ int inkcell_capture_open(struct inkcell_capture **out, uint32_t width, uint32_t 
     return 0;
 }
 
-struct inkcell_backend_fb_state *inkcell_capture_state(struct inkcell_capture *capture) {
+struct inkcell_draw_state *inkcell_capture_state(struct inkcell_capture *capture) {
     return capture == NULL ? NULL : &capture->state;
 }
 
@@ -92,7 +90,7 @@ void inkcell_capture_close(struct inkcell_capture *capture) {
     }
     inkcell_fb_set_app(&capture->state, NULL);
     inkcell_fb_glyph_cache_free(&capture->state);
-    free(capture->state.inkcell_fb_ptr);
+    free(capture->state.surface.pixels);
     free(capture);
 }
 
@@ -168,9 +166,9 @@ const uint8_t *inkcell_capture_pixels(const struct inkcell_capture *capture, uin
         *height = capture->height;
     }
     if (stride != NULL) {
-        *stride = capture->state.fix.line_length;
+        *stride = capture->state.surface.stride;
     }
-    return capture->state.inkcell_fb_ptr;
+    return capture->state.surface.pixels;
 }
 
 int inkcell_capture_write_ppm(const struct inkcell_capture *capture, const char *path) {
@@ -188,14 +186,14 @@ int inkcell_capture_write_ppm(const struct inkcell_capture *capture, const char 
         status = -EIO;
     }
 
-    const size_t stride = capture->state.fix.line_length;
+    const size_t stride = capture->state.surface.stride;
     uint8_t *row = status == 0 ? malloc((size_t)capture->width * 3U) : NULL;
     if (status == 0 && row == NULL) {
         status = -ENOMEM;
     }
 
     for (uint32_t y = 0U; status == 0 && y < capture->height; ++y) {
-        const uint8_t *src = capture->state.inkcell_fb_ptr + (size_t)y * stride;
+        const uint8_t *src = capture->state.surface.pixels + (size_t)y * stride;
         for (uint32_t x = 0U; x < capture->width; ++x) {
             /* Little-endian 0xFFRRGGBB: B,G,R,X in memory. */
             row[x * 3U + 0U] = src[x * 4U + 2U];

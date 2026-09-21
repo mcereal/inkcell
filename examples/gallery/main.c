@@ -68,8 +68,7 @@ static uint64_t gallery_digest(const uint8_t *pixels, uint32_t width, uint32_t h
     return hash;
 }
 
-static void gallery_render(struct inkcell_backend_fb_state *state, const void *snapshot,
-                           void *ctx) {
+static void gallery_render(struct inkcell_draw_state *state, const void *snapshot, void *ctx) {
     (void)ctx;
     const struct gallery_scene *scene = snapshot;
     scene->render(state);
@@ -87,7 +86,7 @@ static int gallery_page(const struct gallery_scene *scene, const struct inkcell_
     /* After the theme, which carries a scale of its own and would otherwise win. */
     inkcell_capture_set_scale(capture, scale);
 
-    struct inkcell_backend_fb_state *state = inkcell_capture_state(capture);
+    struct inkcell_draw_state *state = inkcell_capture_state(capture);
     inkcell_fb_set_app(state, &(struct inkcell_fb_app){.render = gallery_render});
     inkcell_fb_state_set_now(state, GALLERY_CLOCK_MS);
     inkcell_capture_render(capture, scene);

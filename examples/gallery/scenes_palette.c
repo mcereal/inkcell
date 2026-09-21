@@ -21,7 +21,7 @@
    ascender, a descender and a bowl in two glyphs. It is not prose and does not translate. */
 #define GALLERY_SPECIMEN "Ag"
 
-static void swatch(const struct inkcell_backend_fb_state *state, int x, int y, int w, int h,
+static void swatch(const struct inkcell_draw_state *state, int x, int y, int w, int h,
                    struct inkcell_rgb fill, struct inkcell_rgb ink, int scale) {
     inkcell_fb_fill_round_rect(state, x, y, w, h, inkcell_fb_radius(state, INKCELL_SHAPE_SM), fill);
     const int text_w = inkcell_fb_text_width(state, GALLERY_SPECIMEN, scale);
@@ -30,7 +30,7 @@ static void swatch(const struct inkcell_backend_fb_state *state, int x, int y, i
                          ink, fill);
 }
 
-void gallery_scene_palette(struct inkcell_backend_fb_state *state) {
+void gallery_scene_palette(struct inkcell_draw_state *state) {
     struct inkcell_fb_layout layout = gallery_frame(state, GALLERY_STR_HEAD_PALETTE, 4U);
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
     const int scale = layout.small;

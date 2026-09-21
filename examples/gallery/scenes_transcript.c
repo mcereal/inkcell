@@ -17,7 +17,7 @@
 
 #include "gallery.h"
 
-void gallery_scene_transcript(struct inkcell_backend_fb_state *state) {
+void gallery_scene_transcript(struct inkcell_draw_state *state) {
     struct inkcell_fb_layout layout = gallery_frame(state, GALLERY_STR_HEAD_TRANSCRIPT, 0U);
 
     const struct inkcell_fb_bubble bubbles[] = {

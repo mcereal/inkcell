@@ -16,7 +16,7 @@
 
 #include "inkcell/ui/actions.h"
 
-void gallery_scene_chrome(struct inkcell_backend_fb_state *state) {
+void gallery_scene_chrome(struct inkcell_draw_state *state) {
     inkcell_fb_clear(state, inkcell_fb_color(state, INKCELL_COLOR_BG));
     struct inkcell_fb_layout layout = inkcell_fb_layout_begin(state, true, true);
 

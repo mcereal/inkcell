@@ -22,7 +22,7 @@
 
 struct dial_page {
     struct inkcell_capture *capture;
-    struct inkcell_backend_fb_state *state;
+    struct inkcell_draw_state *state;
     const uint8_t *pixels;
     size_t stride;
 };

@@ -62,7 +62,7 @@ struct inkcell_fb_bubble_metrics {
  * its own words, so the measure and the draw have to agree to the pixel or a transcript paints
  * over itself. See `body_w` on struct inkcell_fb_layout.
  */
-static size_t inkcell_fb_bubble_max_width(const struct inkcell_backend_fb_state *state,
+static size_t inkcell_fb_bubble_max_width(const struct inkcell_draw_state *state,
                                           const struct inkcell_fb_layout *layout) {
     const size_t pct = inkcell_fb_metrics(state)->bubble_width_pct;
     const size_t body = layout->body_w > 0 ? (size_t)layout->body_w : 1U;
@@ -87,7 +87,7 @@ static bool inkcell_fb_bubble_has(const char *text) {
  * every theme had to state and match by eye against each other. The pairs it answers with are
  * the ones inkcell_theme_validate() already holds, selected included.
  */
-static struct inkcell_paint inkcell_fb_bubble_paint(const struct inkcell_backend_fb_state *state,
+static struct inkcell_paint inkcell_fb_bubble_paint(const struct inkcell_draw_state *state,
                                                     const struct inkcell_fb_bubble *bubble) {
     const enum inkcell_state ui_state =
         bubble->selected ? INKCELL_STATE_SELECTED : INKCELL_STATE_REST;
@@ -120,7 +120,7 @@ static struct inkcell_paint inkcell_fb_bubble_paint(const struct inkcell_backend
  * has taught everybody to read. It also keeps the mark inside a pairing the theme is already
  * validated on, instead of asking every palette for a sixth one.
  */
-static struct inkcell_rgb inkcell_fb_bubble_quiet(const struct inkcell_backend_fb_state *state,
+static struct inkcell_rgb inkcell_fb_bubble_quiet(const struct inkcell_draw_state *state,
                                                   const struct inkcell_fb_bubble *bubble,
                                                   struct inkcell_paint paint) {
     if (bubble->selected || bubble->failed) {
@@ -129,7 +129,7 @@ static struct inkcell_rgb inkcell_fb_bubble_quiet(const struct inkcell_backend_f
     return inkcell_fb_tone_color(state, INKCELL_TONE_DIM);
 }
 
-static void inkcell_fb_bubble_part_text(const struct inkcell_backend_fb_state *state,
+static void inkcell_fb_bubble_part_text(const struct inkcell_draw_state *state,
                                         struct inkcell_fb_bubble_part *parts, size_t *count,
                                         const char *text) {
     if (!inkcell_fb_bubble_has(text) || *count >= INKCELL_FB_BUBBLE_META_PARTS) {
@@ -141,7 +141,7 @@ static void inkcell_fb_bubble_part_text(const struct inkcell_backend_fb_state *s
     *count += 1U;
 }
 
-static void inkcell_fb_bubble_part_icon(const struct inkcell_backend_fb_state *state,
+static void inkcell_fb_bubble_part_icon(const struct inkcell_draw_state *state,
                                         struct inkcell_fb_bubble_part *parts, size_t *count,
                                         enum inkcell_icon icon) {
     if (!inkcell_icon_is_valid(icon) || *count >= INKCELL_FB_BUBBLE_META_PARTS) {
@@ -190,7 +190,7 @@ static size_t inkcell_fb_bubble_run_width(const struct inkcell_fb_bubble_part *p
  * rather than truncating, because half a clock is not a shorter clock. It bottoms out at
  * nothing, which is the honest answer for a bubble too narrow to say anything in the corner.
  */
-static size_t inkcell_fb_bubble_run(const struct inkcell_backend_fb_state *state,
+static size_t inkcell_fb_bubble_run(const struct inkcell_draw_state *state,
                                     const struct inkcell_fb_bubble_meta *meta, size_t budget,
                                     struct inkcell_fb_bubble_part *parts, size_t *count) {
     *count = 0U;
@@ -215,8 +215,8 @@ static size_t inkcell_fb_bubble_run(const struct inkcell_backend_fb_state *state
 }
 
 /* The widest and the last of the lines `text` wraps to at `max`, and how many there are. */
-static uint32_t inkcell_fb_bubble_wrap(const struct inkcell_backend_fb_state *state,
-                                       const char *text, size_t max, size_t *widest, size_t *last) {
+static uint32_t inkcell_fb_bubble_wrap(const struct inkcell_draw_state *state, const char *text,
+                                       size_t max, size_t *widest, size_t *last) {
     uint32_t lines = 0U;
     struct inkcell_fb_wrap_ctx wctx;
     const struct inkcell_wrap_metric metric = inkcell_fb_wrap_metric(&wctx, state, state->scale);
@@ -233,7 +233,7 @@ static uint32_t inkcell_fb_bubble_wrap(const struct inkcell_backend_fb_state *st
 }
 
 static struct inkcell_fb_bubble_metrics
-inkcell_fb_bubble_measure(const struct inkcell_backend_fb_state *state,
+inkcell_fb_bubble_measure(const struct inkcell_draw_state *state,
                           const struct inkcell_fb_layout *layout,
                           const struct inkcell_fb_bubble *bubble) {
     const size_t max = inkcell_fb_bubble_max_width(state, layout);
@@ -319,18 +319,18 @@ inkcell_fb_bubble_measure(const struct inkcell_backend_fb_state *state,
     return metrics;
 }
 
-uint32_t inkcell_fb_bubble_rows(const struct inkcell_backend_fb_state *state,
+uint32_t inkcell_fb_bubble_rows(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_layout *layout,
                                 const struct inkcell_fb_bubble *bubble) {
     return inkcell_fb_bubble_measure(state, layout, bubble).rows;
 }
 
-void inkcell_fb_draw_separator(const struct inkcell_backend_fb_state *state, int y,
-                               const char *label, enum inkcell_tone tone) {
+void inkcell_fb_draw_separator(const struct inkcell_draw_state *state, int y, const char *label,
+                               enum inkcell_tone tone) {
     const int adv = inkcell_fb_char_adv(state, state->scale);
     const int rule_y = y + inkcell_scale_px((int)inkcell_fb_font(state)->height, state->scale) / 2;
     const int left = inkcell_fb_margin(state);
-    const int right = (int)state->var.xres - left;
+    const int right = inkcell_fb_panel_width(state) - left;
 
     if (!inkcell_fb_bubble_has(label)) {
         inkcell_fb_draw_rule(state, left, rule_y, right - left, state->scale, INKCELL_COLOR_RULE);
@@ -350,8 +350,8 @@ void inkcell_fb_draw_separator(const struct inkcell_backend_fb_state *state, int
 
 /* Paints one block of wrapped text from `y` down, and reports where the next row starts. The
    walk the measure made, so the rows painted are the rows reserved. */
-static int inkcell_fb_bubble_draw_wrapped(const struct inkcell_backend_fb_state *state, int x,
-                                          int y, const char *text, size_t max, int line_h,
+static int inkcell_fb_bubble_draw_wrapped(const struct inkcell_draw_state *state, int x, int y,
+                                          const char *text, size_t max, int line_h,
                                           struct inkcell_rgb ink, struct inkcell_rgb fill) {
     struct inkcell_wrap wrap;
     struct inkcell_fb_wrap_ctx wctx;
@@ -364,7 +364,7 @@ static int inkcell_fb_bubble_draw_wrapped(const struct inkcell_backend_fb_state 
     return y;
 }
 
-void inkcell_fb_draw_bubble(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_bubble(const struct inkcell_draw_state *state,
                             const struct inkcell_fb_layout *layout, int y,
                             const struct inkcell_fb_bubble *bubble) {
     const struct inkcell_fb_bubble_metrics metrics =
@@ -383,8 +383,9 @@ void inkcell_fb_draw_bubble(const struct inkcell_backend_fb_state *state,
        separate messages rather than as one block. */
     const int pad = adv / 2 > 0 ? adv / 2 : 1;
     const int box_w = (int)metrics.width + 2 * pad;
-    const int box_x = bubble->outbound ? (int)state->var.xres - inkcell_fb_margin(state) - box_w
-                                       : inkcell_fb_margin(state);
+    const int box_x = bubble->outbound
+                          ? inkcell_fb_panel_width(state) - inkcell_fb_margin(state) - box_w
+                          : inkcell_fb_margin(state);
     const uint32_t box_rows = metrics.rows - (inkcell_fb_bubble_has(bubble->separator) ? 1U : 0U);
     const int box_h = (int)box_rows * layout->line - inkcell_step_px(scale);
 

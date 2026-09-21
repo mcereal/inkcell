@@ -9,7 +9,15 @@
  *   src/fb/fb_draw.c     pixels, glyphs, rows, the palette and the page geometry   (this header)
  *   widgets_*     the components screens are assembled from (inkcell/ui/widgets.h is the umbrella)
  *   <app>         one renderer per screen, drawn out of whatever the app calls a snapshot
- *   fb.c          opening /dev/fb0, the page flip, the backend vtable
+ *   fb.c          opening /dev/fb0, the page flip, the backend vtable *
+ * The bottom three of those rasterise into a buffer of pixels and are spelled `inkcell_fb_*`
+ * for it - `fb` meaning that buffer, not the device. The proof is that the capture harness has
+ * run every one of them against a malloc'd page since before there was a second backend. What
+ * they are handed is a `struct inkcell_draw_state`, which carries no prefix of theirs precisely
+ * because it is not theirs: it is the frame - the surface, the look, the clock, what is still
+ * moving - and the layer that *presents* that frame shares it with them. Only fb.c is the
+ * framebuffer, and only fb.c is named after one.
+
  *
  * Calls only ever go downward, so this header is what the layers above draw with and
  * inkcell/ui/widgets.h is the component set above it. Both are public: an application built on
@@ -37,7 +45,6 @@
 #include "inkcell/ui/layout.h"
 #include "inkcell/ui/theme.h"
 
-#include <linux/fb.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -45,7 +52,63 @@
 struct inkcell_fb_glyph_cache;
 struct inkcell_fb_thread_cache;
 struct inkcell_fb_render_cache;
-struct inkcell_backend_fb_state;
+struct inkcell_draw_state;
+
+/*
+ * ---- the surface ----
+ *
+ * How a channel sits inside a pixel: where its least significant bit is, and how many bits it
+ * gets. `length` of 0 is a channel the format does not carry, which is how a surface says it
+ * has no alpha.
+ *
+ * This is `struct fb_bitfield` with the framebuffer taken out of it. Naming the kernel's
+ * structure here is what used to drag <linux/fb.h> into this header - and so into every screen
+ * an application writes against it, on every platform, whether or not that platform has a
+ * framebuffer at all. What a channel *is* has nothing to do with Linux, so it is spelled here
+ * and fb.c converts on the way in. (`msb_right` is not carried: the kernel's own drivers leave
+ * it zero and nothing here has ever read it.)
+ */
+struct inkcell_channel {
+    uint8_t offset;
+    uint8_t length;
+};
+
+/*
+ * How a pixel is laid out in a surface's memory.
+ *
+ * An all-zero `r`, `g` and `b` means the format does not describe its channels, and the packing
+ * falls back to whatever `bits_per_pixel` implies - which is the case an off-screen page and
+ * the Brick's own fb0 are both in, and is why compose_color() has that branch at all.
+ */
+struct inkcell_pixel_format {
+    struct inkcell_channel r, g, b, a;
+    uint8_t bits_per_pixel;
+};
+
+/*
+ * The pixels a frame is drawn into, and the shape of them.
+ *
+ * Everything this drawing layer needs to put a pixel somewhere, and nothing about where those
+ * pixels then go. A device backend points it at an mmap of /dev/fb0, the capture harness points
+ * it at a malloc'd page, and something presenting through a window would point it at a locked
+ * texture: the renderer above cannot tell the three apart, which is the whole of what makes it
+ * a renderer rather than a framebuffer driver.
+ *
+ * `stride` is bytes from one row to the next and is not always `width * bytes_per_pixel` - a
+ * panel may pad its rows, and the arithmetic below goes through `stride` for exactly that
+ * reason. `size` is what `pixels` actually spans, and every write is bounds-checked against it
+ * rather than against the geometry, because a short mapping is a thing that happens and a
+ * geometry that disagrees with it is how you get a segfault instead of a clipped frame.
+ */
+struct inkcell_surface {
+    uint8_t *pixels;
+    size_t size;
+    uint32_t width;
+    uint32_t height;
+    uint32_t stride;
+    uint32_t bytes_per_pixel;
+    struct inkcell_pixel_format format;
+};
 
 /* How much of a notice fits. A snackbar is one line the reader is not expected to study. */
 #define INKCELL_FB_SNACKBAR_MAX 64U
@@ -88,7 +151,7 @@ enum inkcell_transition {
 struct inkcell_fb_app {
     void *ctx;
     /* Draws one whole frame. `snapshot` is the app's, passed through untouched. */
-    void (*render)(struct inkcell_backend_fb_state *state, const void *snapshot, void *ctx);
+    void (*render)(struct inkcell_draw_state *state, const void *snapshot, void *ctx);
     /* Whether the frame just drawn wanted something it did not have. */
     bool (*pending)(void *ctx);
     /* Clears that, once per frame before anything is drawn. */
@@ -99,13 +162,13 @@ struct inkcell_fb_app {
      * render, a geometry change. The app keeps running afterwards, so this frees caches and
      * nothing else.
      */
-    void (*drop_caches)(struct inkcell_backend_fb_state *state, void *ctx);
+    void (*drop_caches)(struct inkcell_draw_state *state, void *ctx);
     /*
      * Released when the backend shuts down, for good. Handed the state because what an app hung
      * off it is the app's to free - which is everything drop_caches() frees, and whatever else
      * the app opened.
      */
-    void (*close)(struct inkcell_backend_fb_state *state, void *ctx);
+    void (*close)(struct inkcell_draw_state *state, void *ctx);
 };
 
 struct inkcell_fb_damage_rect {
@@ -248,7 +311,7 @@ struct inkcell_fb_overlay_slot {
  * just been redrawn at a different size, and a layer that animated into that would be
  * announcing the theme change rather than itself.
  */
-void inkcell_fb_overlay_reset(struct inkcell_backend_fb_state *state);
+void inkcell_fb_overlay_reset(struct inkcell_draw_state *state);
 
 /*
  * Takes one layer off the frame at once, with no exit, so the next frame sees it arrive from
@@ -262,9 +325,29 @@ void inkcell_fb_overlay_reset(struct inkcell_backend_fb_state *state);
  *
  * A layer nothing is holding is unaffected, so this is safe to call on an id that is not up.
  */
-void inkcell_fb_overlay_drop(struct inkcell_backend_fb_state *state, uint32_t id);
+void inkcell_fb_overlay_drop(struct inkcell_draw_state *state, uint32_t id);
 
-struct inkcell_backend_fb_state {
+/*
+ * Everything one frame is drawn with.
+ *
+ * Four kinds of thing, and the split is worth naming because only the first is a backend's:
+ *
+ *   the surface   where the pixels go and how one is spelled
+ *   the look      the theme and the scale this run chose
+ *   the frame     the clock, what is still travelling, the view stack, the layers
+ *   the app       what renders, what it has memoised, and where a press lands
+ *
+ * The last three are the same whether the frame ends up on a panel, in a window or in a PNG, so
+ * they live here rather than in whichever backend happens to be open. What used to live here as
+ * well - a file descriptor, two `screeninfo` structures, the page buffers, the pan - was only
+ * ever the first kind in disguise, and is now `struct inkcell_fb_panel` in src/fb/fb.c, where a
+ * second backend's swapchain would sit beside it rather than on top of every screen.
+ *
+ * It is one flat structure rather than four nested ones on purpose: a renderer is handed one
+ * pointer and reaches for a margin, the clock and the focus map within a few lines of each
+ * other, and grouping them would buy a tidier declaration at the cost of every call site.
+ */
+struct inkcell_draw_state {
     /* The body rows the last paged list was laid out in - what the app pages its content by,
        read back through the backend's page_rows() vtable entry. */
     uint32_t page_rows;
@@ -293,17 +376,15 @@ struct inkcell_backend_fb_state {
     struct inkcell_fb_damage_rect clip;
     struct inkcell_fb_damage_rect animation_damage;
     bool thread_cache_disabled;
-    uint8_t *draw_buffer;
-    uint8_t *previous_frame;
-    bool frame_valid;
-    int inkcell_fb_fd;
-    uint8_t *inkcell_fb_ptr;
-    size_t inkcell_fb_size;
-    struct fb_fix_screeninfo fix;
-    struct fb_var_screeninfo var;
-    uint32_t line_bytes;
-    uint32_t bytes_per_pixel;
-    bool pan_failed_logged;
+    /*
+     * Where this frame's pixels go, and how one is spelled.
+     *
+     * The only part of this structure a backend owns, and the only part of it that changes when
+     * the frame is presented somewhere other than a panel. The file descriptor, the pages, the
+     * pan and the previous frame a damage comparison needs are *not* here: they are the device's
+     * business, they differ for every backend, and fb.c keeps its own next to this one.
+     */
+    struct inkcell_surface surface;
     /* What this frame is drawn with: the palette, the metrics and the font. Never NULL once
        inkcell_fb_state_set_theme() has run, and every accessor below falls back to the default
        anyway, so no drawing function guards it. */
@@ -415,17 +496,39 @@ struct inkcell_backend_fb_state {
 };
 
 /*
+ * How wide and how tall the surface this frame is being drawn into is, in pixels.
+ *
+ * Every layer above this one places its content against these two, and every one of them wants
+ * a signed number: a margin subtracted from a width is arithmetic that goes negative on a panel
+ * narrower than the margin, and an unsigned width would wrap it into an enormous positive
+ * instead of the negative a clip then throws away. So the cast happens once, here, rather than
+ * at the ~70 call sites that used to spell it out.
+ *
+ * They are accessors rather than fields a caller reads because the panel's geometry is the last
+ * thing a component should have to know the provenance of. A widget asking how wide the surface
+ * is has no business seeing that the answer arrived in an FBIOGET_VSCREENINFO - that is what
+ * this backend happens to be, not what a width *is*.
+ */
+static inline int inkcell_fb_panel_width(const struct inkcell_draw_state *state) {
+    return state == NULL ? 0 : (int)state->surface.width;
+}
+
+static inline int inkcell_fb_panel_height(const struct inkcell_draw_state *state) {
+    return state == NULL ? 0 : (int)state->surface.height;
+}
+
+/*
  * The clock for the next frame. Call before drawing it.
  *
  * Time never goes backwards here: a caller that hands over an earlier reading than the last is
  * ignored, because an animation window that starts in the future never finishes and the knob
  * would stick.
  */
-void inkcell_fb_state_set_now(struct inkcell_backend_fb_state *state, uint64_t now_ms);
+void inkcell_fb_state_set_now(struct inkcell_draw_state *state, uint64_t now_ms);
 
 /* Whether anything on the last frame is still moving, and so whether another frame is owed.
    What the controller's repaint timer asks. */
-bool inkcell_fb_state_animating(const struct inkcell_backend_fb_state *state);
+bool inkcell_fb_state_animating(const struct inkcell_draw_state *state);
 
 /*
  * Starts a screen travelling. The app calls this when the reader has moved somewhere new, which
@@ -435,8 +538,7 @@ bool inkcell_fb_state_animating(const struct inkcell_backend_fb_state *state);
  * press is a second screen arriving, not the first one changing its mind about where it was
  * going. INKCELL_TRANSITION_NONE does nothing, so an app may call this unconditionally.
  */
-void inkcell_fb_transition_begin(struct inkcell_backend_fb_state *state,
-                                 enum inkcell_transition move);
+void inkcell_fb_transition_begin(struct inkcell_draw_state *state, enum inkcell_transition move);
 
 /*
  * How far the arriving screen still has to travel: a positive offset for one coming in from the
@@ -444,7 +546,7 @@ void inkcell_fb_transition_begin(struct inkcell_backend_fb_state *state,
  *
  * Call once per frame, before inkcell_fb_shift_begin().
  */
-int inkcell_fb_transition_offset(struct inkcell_backend_fb_state *state);
+int inkcell_fb_transition_offset(struct inkcell_draw_state *state);
 
 /*
  * Slides everything drawn until inkcell_fb_shift_end() by `dx` pixels, clipped to rows [top,
@@ -467,8 +569,8 @@ int inkcell_fb_transition_offset(struct inkcell_backend_fb_state *state);
  * Not nestable, deliberately: there is one transform per frame and a second would be a second
  * opinion about where the body is.
  */
-void inkcell_fb_shift_begin(struct inkcell_backend_fb_state *state, int dx, int top, int bottom);
-void inkcell_fb_shift_end(struct inkcell_backend_fb_state *state);
+void inkcell_fb_shift_begin(struct inkcell_draw_state *state, int dx, int top, int bottom);
+void inkcell_fb_shift_end(struct inkcell_draw_state *state);
 
 /*
  * ---- the view stack ------------------------------------------------------------------------
@@ -519,9 +621,9 @@ void inkcell_fb_shift_end(struct inkcell_backend_fb_state *state);
  * contribute anyway. The one thing a caller must not do is pop a push that was refused, which
  * is what the `if` is for.
  */
-bool inkcell_fb_view_push(struct inkcell_backend_fb_state *state, struct inkcell_fb_rect box,
-                          int dx, int dy);
-void inkcell_fb_view_pop(struct inkcell_backend_fb_state *state);
+bool inkcell_fb_view_push(struct inkcell_draw_state *state, struct inkcell_fb_rect box, int dx,
+                          int dy);
+void inkcell_fb_view_pop(struct inkcell_draw_state *state);
 
 /*
  * The box the innermost view is cutting to, in panel coordinates, or the whole panel when none
@@ -532,7 +634,7 @@ void inkcell_fb_view_pop(struct inkcell_backend_fb_state *state);
  * one pixel at a time. It is the clip, not the content: a view translated by an offset reports
  * where its window is on the panel, not where its content thinks it is.
  */
-struct inkcell_fb_rect inkcell_fb_view_box(const struct inkcell_backend_fb_state *state);
+struct inkcell_fb_rect inkcell_fb_view_box(const struct inkcell_draw_state *state);
 
 /*
  * The same box in the *content's* coordinates: what a caller inside a view has to draw to fill
@@ -542,7 +644,7 @@ struct inkcell_fb_rect inkcell_fb_view_box(const struct inkcell_backend_fb_state
  * its own y, and what it wants to know is which of its rows land in the window - a question
  * asked in the coordinates the rows are in.
  */
-struct inkcell_fb_rect inkcell_fb_view_content_box(const struct inkcell_backend_fb_state *state);
+struct inkcell_fb_rect inkcell_fb_view_content_box(const struct inkcell_draw_state *state);
 
 /*
  * Adopts the theme named by `id`, when it is one this build knows and is not already drawing.
@@ -553,19 +655,19 @@ struct inkcell_fb_rect inkcell_fb_view_content_box(const struct inkcell_backend_
  * whatever it keeps settings in and pushes the id here on the next frame. The new theme brings
  * its own glyph scale unless the environment pinned one.
  */
-bool inkcell_fb_state_set_theme_by_id(struct inkcell_backend_fb_state *state, const char *id);
+bool inkcell_fb_state_set_theme_by_id(struct inkcell_draw_state *state, const char *id);
 
 /* Sets the theme and takes the scale from it. Pass 0 for `scale` to accept the theme's. */
-void inkcell_fb_state_set_theme(struct inkcell_backend_fb_state *state,
-                                const struct inkcell_theme *theme, int scale);
+void inkcell_fb_state_set_theme(struct inkcell_draw_state *state, const struct inkcell_theme *theme,
+                                int scale);
 
 /* ---- the theme, as the drawing layers ask for it ------------------------------------------ */
 
 /* A colour by role. This is the only way a colour enters the framebuffer layers. */
-struct inkcell_rgb inkcell_fb_color(const struct inkcell_backend_fb_state *state,
+struct inkcell_rgb inkcell_fb_color(const struct inkcell_draw_state *state,
                                     enum inkcell_color role);
 /* A colour by what the content means. What screens use; see enum inkcell_tone. */
-struct inkcell_rgb inkcell_fb_tone_color(const struct inkcell_backend_fb_state *state,
+struct inkcell_rgb inkcell_fb_tone_color(const struct inkcell_draw_state *state,
                                          enum inkcell_tone tone);
 /*
  * A fill and the ink that goes on it, for one family, one slot and one interaction state.
@@ -575,12 +677,12 @@ struct inkcell_rgb inkcell_fb_tone_color(const struct inkcell_backend_fb_state *
  * validated as a pair, and every component that picked them up separately - the button, the
  * switch, the chat bubble - is a component that could be handed a combination nothing checked.
  */
-struct inkcell_paint inkcell_fb_paint(const struct inkcell_backend_fb_state *state,
+struct inkcell_paint inkcell_fb_paint(const struct inkcell_draw_state *state,
                                       enum inkcell_family family, enum inkcell_slot slot,
                                       enum inkcell_state ui_state);
 /* A stated fill with a state layer over it, for the neutral surfaces - which have no family to
    ask, but are still drawn under a cursor. `ink` is what the layer mixes in. */
-struct inkcell_rgb inkcell_fb_state_layer(const struct inkcell_backend_fb_state *state,
+struct inkcell_rgb inkcell_fb_state_layer(const struct inkcell_draw_state *state,
                                           enum inkcell_color fill, enum inkcell_color ink,
                                           enum inkcell_state ui_state);
 
@@ -601,30 +703,30 @@ struct inkcell_rgb inkcell_fb_state_layer(const struct inkcell_backend_fb_state 
 struct inkcell_rgb inkcell_fb_fade(struct inkcell_rgb ink, struct inkcell_rgb ground,
                                    int32_t progress);
 /* Pixels between the panel edge and the body. */
-int inkcell_fb_margin(const struct inkcell_backend_fb_state *state);
+int inkcell_fb_margin(const struct inkcell_draw_state *state);
 
 /* How far towards INKCELL_COLOR_SCRIM a modal takes the frame behind it, as a percentage: the
    theme's metrics.scrim_pct. What inkcell_fb_scrim_rect() is handed by a layer easing one in. */
-int inkcell_fb_scrim_depth(const struct inkcell_backend_fb_state *state);
+int inkcell_fb_scrim_depth(const struct inkcell_draw_state *state);
 /* The corner radius for a kind of container, at the frame's own glyph scale. The only way a
    radius enters the framebuffer layers, for the reason inkcell_fb_color() is the only way a colour
    does; see enum inkcell_shape. */
-int inkcell_fb_radius(const struct inkcell_backend_fb_state *state, enum inkcell_shape shape);
+int inkcell_fb_radius(const struct inkcell_draw_state *state, enum inkcell_shape shape);
 
 /* The gap `space` asks for, in pixels, at the body scale. */
-int inkcell_fb_space(const struct inkcell_backend_fb_state *state, enum inkcell_space space);
+int inkcell_fb_space(const struct inkcell_draw_state *state, enum inkcell_space space);
 
 /* The same gap at an explicit glyph multiplier, for the widgets that are drawn at one that is
    not the body's - a rule under the tab strip, a switch on a chrome-scale row. A gap beside
    smaller text has to be smaller too, or the scale stops being a scale. */
-int inkcell_fb_space_at(const struct inkcell_backend_fb_state *state, enum inkcell_space space,
+int inkcell_fb_space_at(const struct inkcell_draw_state *state, enum inkcell_space space,
                         int scale);
 
 /* The glyph multiplier `type` is drawn at, given this state's body scale. */
-int inkcell_fb_type_scale(const struct inkcell_backend_fb_state *state, enum inkcell_type type);
+int inkcell_fb_type_scale(const struct inkcell_draw_state *state, enum inkcell_type type);
 /* The weight that role is set in, the theme's answer. A widget names the role; it never picks
    a weight. */
-enum inkcell_weight inkcell_fb_type_weight(const struct inkcell_backend_fb_state *state,
+enum inkcell_weight inkcell_fb_type_weight(const struct inkcell_draw_state *state,
                                            enum inkcell_type type);
 
 /*
@@ -635,15 +737,14 @@ enum inkcell_weight inkcell_fb_type_weight(const struct inkcell_backend_fb_state
  * far a panel is from the edge of the screen. A theme that asks for bigger text wants roomier
  * padding and the same inset; one that asks for a roomier margin wants the opposite.
  */
-int inkcell_fb_gutter(const struct inkcell_backend_fb_state *state);
+int inkcell_fb_gutter(const struct inkcell_draw_state *state);
 
 /* How long `motion` lasts on this state's theme, in milliseconds. The duration half of an
    animation; the curve is still named at the call site. */
-uint32_t inkcell_fb_motion(const struct inkcell_backend_fb_state *state,
-                           enum inkcell_motion motion);
+uint32_t inkcell_fb_motion(const struct inkcell_draw_state *state, enum inkcell_motion motion);
 /* The hairline thickness an edge is drawn at - a card's, a field's. One place, because an
    outline is two fills and both have to agree about how thick it is. */
-int inkcell_fb_edge(const struct inkcell_backend_fb_state *state);
+int inkcell_fb_edge(const struct inkcell_draw_state *state);
 
 /*
  * The strip kept clear at a list's trailing edge for its scroll rail.
@@ -658,7 +759,7 @@ int inkcell_fb_edge(const struct inkcell_backend_fb_state *state);
  * The half-margin, for inkcell_fb_gutter()'s reason: what it measures is clearance from the panel
  * edge, not room around text, so it tracks the body margin rather than the glyph scale.
  */
-int inkcell_fb_rail_gutter(const struct inkcell_backend_fb_state *state);
+int inkcell_fb_rail_gutter(const struct inkcell_draw_state *state);
 
 /*
  * Where a list's rows stand, horizontally. The one answer, asked by everything that draws one.
@@ -681,16 +782,16 @@ struct inkcell_fb_row_box {
     int text_x, text_right; /* where a row's content starts, and where it stops */
 };
 
-struct inkcell_fb_row_box inkcell_fb_row_box(const struct inkcell_backend_fb_state *state);
+struct inkcell_fb_row_box inkcell_fb_row_box(const struct inkcell_draw_state *state);
 
 /* Columns of a list row's text at `scale`: the box above, measured in cells. inkcell_fb_cols() is
    the panel's answer and is what a dialog or a wrapped empty state wants; a row inside a list has
    the rail's gutter taken off it, and measuring one with the other is how a value column comes
    to sit a cell wider than the row it is drawn in. */
-size_t inkcell_fb_row_cols(const struct inkcell_backend_fb_state *state, int scale);
+size_t inkcell_fb_row_cols(const struct inkcell_draw_state *state, int scale);
 
-const struct inkcell_metrics *inkcell_fb_metrics(const struct inkcell_backend_fb_state *state);
-const struct inkcell_font *inkcell_fb_font(const struct inkcell_backend_fb_state *state);
+const struct inkcell_metrics *inkcell_fb_metrics(const struct inkcell_draw_state *state);
+const struct inkcell_font *inkcell_fb_font(const struct inkcell_draw_state *state);
 
 /* Where the chrome ends and the body begins. Opened by inkcell_fb_layout_begin(), and moved
    down by each piece of chrome as it takes its room - see include/inkcell/ui/widgets/chrome.h. */
@@ -739,15 +840,33 @@ struct inkcell_fb_layout {
     bool back;
 };
 
-/* Copies changed row spans from ordinary RAM into page 0 and its display mirror.
-   Returns bytes written across both pages; force initializes pages owned by the launcher. */
-size_t inkcell_fb_copy_damage(struct inkcell_backend_fb_state *state, const uint8_t *frame,
-                              uint8_t *previous, bool force);
+/*
+ * Copies the rows that changed from a frame drawn in ordinary RAM into the surface, and returns
+ * how many bytes that took.
+ *
+ * The other half of drawing into a buffer rather than onto the panel. `frame` is the page just
+ * rendered and `previous` is the one before it, which this updates as it goes; a row that
+ * matches is skipped, and a row that does not is narrowed to the span that actually differs,
+ * rounded out to whole pixels because a stride may have padding in it.
+ *
+ * `force` writes everything, for the first frame of a run - where `previous` describes a page
+ * this process has never owned - and after anything that invalidates the comparison.
+ *
+ * `mirror` also writes the copy one page further on. That is the Brick's two-page workaround
+ * (see inkcell_backend_fb_present()) rather than a general idea, and it is a parameter instead
+ * of something read off the state because how many pages a surface has is a fact about whatever
+ * is presenting it. It is refused when the surface is not big enough for two.
+ *
+ * Public because the span arithmetic is not the framebuffer's: anything presenting a
+ * software-rendered frame - a texture upload, a remote panel - wants the same answer to the
+ * same question, and a private copy of it is a second copy to keep correct.
+ */
+size_t inkcell_fb_copy_damage(struct inkcell_draw_state *state, const uint8_t *frame,
+                              uint8_t *previous, bool force, bool mirror);
 
-void inkcell_fb_animation_damage(struct inkcell_backend_fb_state *state, int x, int y, int w,
-                                 int h);
+void inkcell_fb_animation_damage(struct inkcell_draw_state *state, int x, int y, int w, int h);
 
-void inkcell_fb_glyph_cache_free(struct inkcell_backend_fb_state *state);
+void inkcell_fb_glyph_cache_free(struct inkcell_draw_state *state);
 
 /* ---- src/fb/fb_draw.c: the drawing toolkit
  * ------------------------------------------------------ */
@@ -760,19 +879,16 @@ void inkcell_fb_glyph_cache_free(struct inkcell_backend_fb_state *state);
  * steps, and `text_width` is what a whole string actually draws, which is the one to measure a
  * coordinate with. See the note on inkcell_font's `width`.
  */
-int inkcell_fb_char_adv(const struct inkcell_backend_fb_state *state, int scale);
-int inkcell_fb_cell_adv(const struct inkcell_backend_fb_state *state, uint32_t codepoint,
-                        int scale);
-int inkcell_fb_text_width(const struct inkcell_backend_fb_state *state, const char *text,
-                          int scale);
+int inkcell_fb_char_adv(const struct inkcell_draw_state *state, int scale);
+int inkcell_fb_cell_adv(const struct inkcell_draw_state *state, uint32_t codepoint, int scale);
+int inkcell_fb_text_width(const struct inkcell_draw_state *state, const char *text, int scale);
 /* The same at a weight, because a heavier cut sets a little wider and a heading measured in the
    regular one would be a heading its own box clips. */
-int inkcell_fb_text_width_weight(const struct inkcell_backend_fb_state *state, const char *text,
+int inkcell_fb_text_width_weight(const struct inkcell_draw_state *state, const char *text,
                                  int scale, enum inkcell_weight weight);
 /* The same width, rounded up to whole nominal cells - for the layouts that still reserve
    space in columns. See the note on the implementation. */
-size_t inkcell_fb_text_cols(const struct inkcell_backend_fb_state *state, const char *text,
-                            int scale);
+size_t inkcell_fb_text_cols(const struct inkcell_draw_state *state, const char *text, int scale);
 
 /*
  * A wrap metric over this state's font, so a wrap budget can be stated in pixels.
@@ -785,14 +901,14 @@ size_t inkcell_fb_text_cols(const struct inkcell_backend_fb_state *state, const 
  *     inkcell_wrap_begin_measured(&wrap, text, width_in_pixels, &metric);
  */
 struct inkcell_fb_wrap_ctx {
-    const struct inkcell_backend_fb_state *state;
+    const struct inkcell_draw_state *state;
     int scale;
 };
 struct inkcell_wrap_metric inkcell_fb_wrap_metric(struct inkcell_fb_wrap_ctx *ctx,
-                                                  const struct inkcell_backend_fb_state *state,
+                                                  const struct inkcell_draw_state *state,
                                                   int scale);
-int inkcell_fb_line_adv(const struct inkcell_backend_fb_state *state, int scale);
-void inkcell_fb_clear(const struct inkcell_backend_fb_state *state, struct inkcell_rgb color);
+int inkcell_fb_line_adv(const struct inkcell_draw_state *state, int scale);
+void inkcell_fb_clear(const struct inkcell_draw_state *state, struct inkcell_rgb color);
 
 /*
  * Mixes everything already drawn inside `box` `percent` of the way towards `color`.
@@ -816,9 +932,9 @@ void inkcell_fb_clear(const struct inkcell_backend_fb_state *state, struct inkce
  * It goes through the view stack and the clip like everything else, so a scrim inside a view
  * dims that view's window and nothing outside it.
  */
-void inkcell_fb_scrim_rect(const struct inkcell_backend_fb_state *state, struct inkcell_fb_rect box,
+void inkcell_fb_scrim_rect(const struct inkcell_draw_state *state, struct inkcell_fb_rect box,
                            struct inkcell_rgb color, int percent);
-size_t inkcell_fb_cols(const struct inkcell_backend_fb_state *state, int scale);
+size_t inkcell_fb_cols(const struct inkcell_draw_state *state, int scale);
 /*
  * Text and one glyph of it, in `ink` over `ground`.
  *
@@ -829,9 +945,8 @@ size_t inkcell_fb_cols(const struct inkcell_backend_fb_state *state, int scale);
  * filled it with. Getting it wrong does not lose the text - it puts a faint halo of the wrong
  * colour around it.
  */
-void inkcell_fb_draw_glyph(const struct inkcell_backend_fb_state *state, int x, int y,
-                           uint32_t codepoint, int scale, struct inkcell_rgb ink,
-                           struct inkcell_rgb ground);
+void inkcell_fb_draw_glyph(const struct inkcell_draw_state *state, int x, int y, uint32_t codepoint,
+                           int scale, struct inkcell_rgb ink, struct inkcell_rgb ground);
 /* A whole row from the body margin, drawing its own cursor fill - so it knows its own ground
    and does not take one. */
 /*
@@ -849,33 +964,32 @@ void inkcell_fb_draw_glyph(const struct inkcell_backend_fb_state *state, int x, 
  * than a mask: text blended against the wrong ground keeps its shape and gains a faint halo of
  * the colour it was told about, which is the same fact inkcell_fb_draw_glyph() is documented on.
  */
-struct inkcell_rgb inkcell_fb_draw_row_fill_on(const struct inkcell_backend_fb_state *state, int y,
+struct inkcell_rgb inkcell_fb_draw_row_fill_on(const struct inkcell_draw_state *state, int y,
                                                uint32_t rows, bool selected,
                                                enum inkcell_color ground);
 
 /* The same on the panel's own background, which is every list that is not a column of cards. */
-struct inkcell_rgb inkcell_fb_draw_row_fill(const struct inkcell_backend_fb_state *state, int y,
+struct inkcell_rgb inkcell_fb_draw_row_fill(const struct inkcell_draw_state *state, int y,
                                             uint32_t rows, bool selected);
 
-void inkcell_fb_draw_row(const struct inkcell_backend_fb_state *state, int y, const char *text,
+void inkcell_fb_draw_row(const struct inkcell_draw_state *state, int y, const char *text,
                          struct inkcell_rgb color, bool selected);
-void inkcell_fb_draw_text(const struct inkcell_backend_fb_state *state, int x, int y,
-                          const char *text, int scale, struct inkcell_rgb ink,
-                          struct inkcell_rgb ground);
+void inkcell_fb_draw_text(const struct inkcell_draw_state *state, int x, int y, const char *text,
+                          int scale, struct inkcell_rgb ink, struct inkcell_rgb ground);
 /* The same at a weight. The plain form is INKCELL_WEIGHT_REGULAR, which is what body text and
    anything that has not asked for emphasis is set in. */
-void inkcell_fb_draw_text_weight(const struct inkcell_backend_fb_state *state, int x, int y,
+void inkcell_fb_draw_text_weight(const struct inkcell_draw_state *state, int x, int y,
                                  const char *text, int scale, enum inkcell_weight weight,
                                  struct inkcell_rgb ink, struct inkcell_rgb ground);
 /* The box an icon is drawn in: one text cell, so a row that puts one in front of its words is
    still measured in columns like every other row. */
-int inkcell_fb_icon_box(const struct inkcell_backend_fb_state *state, int scale);
+int inkcell_fb_icon_box(const struct inkcell_draw_state *state, int scale);
 /* What an icon is actually *drawn* at, which is a little wider than the cell it occupies - a
    symbol has to stand as tall as the capitals beside it, and the advance is narrower than the
    glyph body is tall. Beside inkcell_fb_icon_box() because it answers the other half of "how big is
    an icon": the cell is what the column arithmetic counts, this is what a component fitting one
    inside a box of its own - a checkbox's tick - has to measure against. */
-int inkcell_fb_icon_drawn(const struct inkcell_backend_fb_state *state, int scale);
+int inkcell_fb_icon_drawn(const struct inkcell_draw_state *state, int scale);
 /* The largest multiplier inkcell_fb_draw_icon() will draw at: everything in a row is drawn at the
    text's scale, and the empty state's symbol is the one thing bigger than that. */
 #define INKCELL_FB_ICON_SCALE_MAX (INKCELL_SCALE_MAX * 3)
@@ -885,7 +999,7 @@ int inkcell_fb_icon_drawn(const struct inkcell_backend_fb_state *state, int scal
  * it. Placed like a glyph: `x` is the cell's left edge and `y` the text baseline it lines up
  * with. INKCELL_ICON_NONE draws nothing, so a slot that is empty needs no test.
  */
-void inkcell_fb_draw_icon(const struct inkcell_backend_fb_state *state, int x, int y,
+void inkcell_fb_draw_icon(const struct inkcell_draw_state *state, int x, int y,
                           enum inkcell_icon icon, int scale, struct inkcell_rgb ink,
                           struct inkcell_rgb ground);
 
@@ -908,8 +1022,8 @@ void inkcell_fb_draw_icon(const struct inkcell_backend_fb_state *state, int x, i
  * around it. An emoji takes no ink and no ground: it carries its own colours and draws only
  * its opaque pixels, so whatever the caller has already filled shows through the margin.
  */
-void inkcell_fb_draw_emoji_box(const struct inkcell_backend_fb_state *state, int x, int top,
-                               int box, uint16_t sprite);
+void inkcell_fb_draw_emoji_box(const struct inkcell_draw_state *state, int x, int top, int box,
+                               uint16_t sprite);
 
 /* The box to ask inkcell_fb_draw_emoji_box() for when there is `box` pixels of room: the whole
    multiple of the sprite's own grid that fits, so every source pixel lands on a square of the same
@@ -922,7 +1036,7 @@ int inkcell_fb_emoji_box_fit(int box);
  * inkcell_wrap() with the font's own advances, so what they measure is what they draw; there is
  * no second wrapper in this file any more.
  */
-int inkcell_fb_draw_wrapped(const struct inkcell_backend_fb_state *state, int y, const char *text,
+int inkcell_fb_draw_wrapped(const struct inkcell_draw_state *state, int y, const char *text,
                             size_t width, int max_lines, struct inkcell_rgb color,
                             struct inkcell_rgb ground);
 /*
@@ -936,17 +1050,17 @@ int inkcell_fb_draw_wrapped(const struct inkcell_backend_fb_state *state, int y,
  * paragraph centred as a block is a block with one straight edge, and on a proportional face
  * two lines of the same character count are two different widths anyway.
  */
-int inkcell_fb_draw_wrapped_centered(const struct inkcell_backend_fb_state *state, int y,
+int inkcell_fb_draw_wrapped_centered(const struct inkcell_draw_state *state, int y,
                                      const char *text, size_t width, int max_lines,
                                      struct inkcell_rgb color, struct inkcell_rgb ground);
-int inkcell_fb_draw_wrapped_at(const struct inkcell_backend_fb_state *state, int x, int y,
+int inkcell_fb_draw_wrapped_at(const struct inkcell_draw_state *state, int x, int y,
                                const char *text, size_t width, int max_lines,
                                struct inkcell_rgb color, struct inkcell_rgb ground);
 
 /* How many lines `text` wraps to inside `width` pixels, at `scale`. */
-uint32_t inkcell_fb_wrapped_lines(const struct inkcell_backend_fb_state *state, const char *text,
+uint32_t inkcell_fb_wrapped_lines(const struct inkcell_draw_state *state, const char *text,
                                   size_t width, int scale);
-void inkcell_fb_fill_rect(const struct inkcell_backend_fb_state *state, int x, int y, int w, int h,
+void inkcell_fb_fill_rect(const struct inkcell_draw_state *state, int x, int y, int w, int h,
                           struct inkcell_rgb color);
 /*
  * A rectangle of BGRA pixels - what an image decoder produces - drawn at `x`, `y`.
@@ -955,7 +1069,7 @@ void inkcell_fb_fill_rect(const struct inkcell_backend_fb_state *state, int x, i
  * image. Clipped by the same rules every fill in this backend is, which is what puts a map tile
  * inside the map's own body rather than over the app bar above it.
  */
-void inkcell_fb_blit_bgra(const struct inkcell_backend_fb_state *state, int x, int y, int w, int h,
+void inkcell_fb_blit_bgra(const struct inkcell_draw_state *state, int x, int y, int w, int h,
                           const uint8_t *pixels, size_t stride);
 /*
  * The same box with its corners taken off, `radius` pixels each - the shape an avatar disc, a
@@ -969,8 +1083,8 @@ void inkcell_fb_blit_bgra(const struct inkcell_backend_fb_state *state, int x, i
  * about to be written over. Only edge pixels are read back and blended - the interior is one
  * bulk fill - so what the curve costs is its boundary rather than its area.
  */
-void inkcell_fb_fill_round_rect(const struct inkcell_backend_fb_state *state, int x, int y, int w,
-                                int h, int radius, struct inkcell_rgb color);
+void inkcell_fb_fill_round_rect(const struct inkcell_draw_state *state, int x, int y, int w, int h,
+                                int radius, struct inkcell_rgb color);
 
 /*
  * The same, with either end left square.
@@ -984,9 +1098,9 @@ void inkcell_fb_fill_round_rect(const struct inkcell_backend_fb_state *state, in
  * back to the straight middle, so the two are one fill and there is no seam where they met.
  * Both ends square is inkcell_fb_fill_rect(), which is what it calls.
  */
-void inkcell_fb_fill_round_rect_ends(const struct inkcell_backend_fb_state *state, int x, int y,
-                                     int w, int h, int radius, struct inkcell_rgb color,
-                                     bool round_top, bool round_bottom);
+void inkcell_fb_fill_round_rect_ends(const struct inkcell_draw_state *state, int x, int y, int w,
+                                     int h, int radius, struct inkcell_rgb color, bool round_top,
+                                     bool round_bottom);
 /*
  * The same shape as an outline of `thickness` pixels, drawn as one ring.
  *
@@ -999,7 +1113,7 @@ void inkcell_fb_fill_round_rect_ends(const struct inkcell_backend_fb_state *stat
  * This is what a focus ring, an outlined card, a checkbox and a segmented divider all want, and
  * it is the one of them that stays a hairline at any radius.
  */
-void inkcell_fb_stroke_round_rect(const struct inkcell_backend_fb_state *state, int x, int y, int w,
+void inkcell_fb_stroke_round_rect(const struct inkcell_draw_state *state, int x, int y, int w,
                                   int h, int radius, int thickness, struct inkcell_rgb color);
 
 /*
@@ -1015,7 +1129,7 @@ void inkcell_fb_stroke_round_rect(const struct inkcell_backend_fb_state *state, 
  * off a committed sine table rather than libm, so a picture of an arc is the same picture on
  * every host that renders it.
  */
-void inkcell_fb_stroke_arc(const struct inkcell_backend_fb_state *state, int cx, int cy, int radius,
+void inkcell_fb_stroke_arc(const struct inkcell_draw_state *state, int cx, int cy, int radius,
                            int thickness, int32_t start, int32_t sweep, struct inkcell_rgb color);
 
 void inkcell_fb_fit(char *line, size_t cols);
@@ -1026,7 +1140,7 @@ size_t inkcell_fb_width(const char *line);
 /* ---- the application behind the frame ---------------------------------------------------- */
 
 /* Installs what draws the frame. Pass NULL to remove one; the outgoing app's close() runs. */
-void inkcell_fb_set_app(struct inkcell_backend_fb_state *state, const struct inkcell_fb_app *app);
+void inkcell_fb_set_app(struct inkcell_draw_state *state, const struct inkcell_fb_app *app);
 
 /* ---- focus ------------------------------------------------------------------------------- */
 
@@ -1048,8 +1162,7 @@ void inkcell_fb_set_app(struct inkcell_backend_fb_state *state, const struct ink
  * inkcell_focus_begin() at the top of the render and read it after - anything registered against
  * the *previous* layout is a box that is no longer on the panel.
  */
-void inkcell_fb_set_focus_map(struct inkcell_backend_fb_state *state,
-                              struct inkcell_focus_map *map);
+void inkcell_fb_set_focus_map(struct inkcell_draw_state *state, struct inkcell_focus_map *map);
 
 /*
  * Registers `rect` under `id` in whatever map is set, and does nothing when none is or when the
@@ -1060,7 +1173,7 @@ void inkcell_fb_set_focus_map(struct inkcell_backend_fb_state *state,
  * what a renderer is handed; this keeps that true for the one fact about a frame that is not a
  * pixel.
  */
-void inkcell_fb_focus_register(const struct inkcell_backend_fb_state *state, uint32_t id,
+void inkcell_fb_focus_register(const struct inkcell_draw_state *state, uint32_t id,
                                const struct inkcell_fb_rect *rect);
 
 /*
@@ -1072,22 +1185,22 @@ void inkcell_fb_focus_register(const struct inkcell_backend_fb_state *state, uin
  * fill would actually produce, so what is recorded is the curve on the panel rather than the
  * request that made it.
  */
-void inkcell_fb_focus_register_shaped(const struct inkcell_backend_fb_state *state, uint32_t id,
+void inkcell_fb_focus_register_shaped(const struct inkcell_draw_state *state, uint32_t id,
                                       const struct inkcell_fb_rect *rect, enum inkcell_shape shape);
 
 /* Whether the app says it is owed another frame - what inkcell_fb_state_animating() adds to the
    animations when it decides whether one is due. */
-bool inkcell_fb_app_pending(const struct inkcell_backend_fb_state *state);
+bool inkcell_fb_app_pending(const struct inkcell_draw_state *state);
 
 /* Asks the app to drop whatever it has memoised on this state - what a geometry or mode change
    invalidates. A no-op when nothing installed an app, or when it keeps no caches. */
-void inkcell_fb_app_drop_caches(struct inkcell_backend_fb_state *state);
+void inkcell_fb_app_drop_caches(struct inkcell_draw_state *state);
 
 /* Clears that, before anything is drawn. Called once per frame by inkcell_fb_render(). */
-void inkcell_fb_app_frame_begin(struct inkcell_backend_fb_state *state);
+void inkcell_fb_app_frame_begin(struct inkcell_draw_state *state);
 
 /* Draws one whole frame, by handing `snapshot` to the installed app. A state with no app
    installed draws nothing, which leaves the cleared panel the present() is about to show. */
-void inkcell_fb_render(struct inkcell_backend_fb_state *state, const void *snapshot);
+void inkcell_fb_render(struct inkcell_draw_state *state, const void *snapshot);
 
 #endif /* INKCELL_UI_FB_DRAW_H */

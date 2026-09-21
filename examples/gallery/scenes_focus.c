@@ -61,7 +61,7 @@ enum focus_id {
  * reaches the map - which is why a chip, a card's verb and a key all arrive there having said
  * nothing about it. Returns the x past the key, so a row of them is a loop with no arithmetic.
  */
-static int focus_key(struct inkcell_backend_fb_state *state, uint32_t id, uint32_t selected,
+static int focus_key(struct inkcell_draw_state *state, uint32_t id, uint32_t selected,
                      struct inkcell_fb_rect rect, const char *label, int scale) {
     const struct inkcell_fb_button button = {
         .rect = rect,
@@ -82,8 +82,8 @@ static int focus_key(struct inkcell_backend_fb_state *state, uint32_t id, uint32
 /* One arm of a connector: `thick` wide, centred on `at`, running from `a` to `b` along the axis
    `vertical` names. Written once so that the three arms below are three calls and not three
    rectangles worked out by hand. */
-static void focus_segment(const struct inkcell_backend_fb_state *state, int at, int a, int b,
-                          int thick, bool vertical, struct inkcell_rgb ink) {
+static void focus_segment(const struct inkcell_draw_state *state, int at, int a, int b, int thick,
+                          bool vertical, struct inkcell_rgb ink) {
     const int lo = (a < b) ? a : b;
     const int span = ((a < b) ? b - a : a - b) + thick;
     if (vertical) {
@@ -93,7 +93,7 @@ static void focus_segment(const struct inkcell_backend_fb_state *state, int at, 
     }
 }
 
-static void focus_link(const struct inkcell_backend_fb_state *state, struct inkcell_focus_rect from,
+static void focus_link(const struct inkcell_draw_state *state, struct inkcell_focus_rect from,
                        struct inkcell_focus_rect to, bool vertical) {
     const struct inkcell_rgb ink = inkcell_fb_color(state, INKCELL_COLOR_PRIMARY);
     const int thick = inkcell_fb_space(state, INKCELL_SPACE_XS);
@@ -130,7 +130,7 @@ static void focus_link(const struct inkcell_backend_fb_state *state, struct inkc
  * caller to ask questions of.
  */
 static struct inkcell_fb_layout
-focus_screen(struct inkcell_backend_fb_state *state, enum gallery_str_id title, uint32_t selected,
+focus_screen(struct inkcell_draw_state *state, enum gallery_str_id title, uint32_t selected,
              struct inkcell_focus_map *out, struct inkcell_focus_item *storage, uint32_t capacity) {
     struct inkcell_fb_layout layout = gallery_frame(state, title, 0U);
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
@@ -211,7 +211,7 @@ focus_screen(struct inkcell_backend_fb_state *state, enum gallery_str_id title, 
     return layout;
 }
 
-void gallery_scene_focus(struct inkcell_backend_fb_state *state) {
+void gallery_scene_focus(struct inkcell_draw_state *state) {
     struct inkcell_focus_item storage[FOCUS_STORAGE];
     struct inkcell_focus_map map;
     struct inkcell_fb_layout layout =
@@ -265,8 +265,8 @@ void gallery_scene_focus(struct inkcell_backend_fb_state *state) {
  * not the component's - nothing outside this page draws them, and a screen that did would be
  * telling the reader where the cursor is not.
  */
-static void focus_ghost(const struct inkcell_backend_fb_state *state,
-                        const struct inkcell_focus_map *map, uint32_t id) {
+static void focus_ghost(const struct inkcell_draw_state *state, const struct inkcell_focus_map *map,
+                        uint32_t id) {
     struct inkcell_focus_rect box = {0, 0, 0, 0};
     if (!inkcell_focus_rect_of(map, id, &box)) {
         return;
@@ -278,7 +278,7 @@ static void focus_ghost(const struct inkcell_backend_fb_state *state,
                                  inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
 }
 
-void gallery_scene_focus_ring(struct inkcell_backend_fb_state *state) {
+void gallery_scene_focus_ring(struct inkcell_draw_state *state) {
     struct inkcell_focus_item storage[FOCUS_STORAGE];
     struct inkcell_focus_map map;
     struct inkcell_fb_layout layout = focus_screen(state, GALLERY_STR_HEAD_FOCUS_RING,

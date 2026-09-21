@@ -33,7 +33,7 @@
 #define GLIDE_ITEMS 40U
 #define GLIDE_ID 0x9100U
 
-void gallery_scene_glide(struct inkcell_backend_fb_state *state) {
+void gallery_scene_glide(struct inkcell_draw_state *state) {
     struct inkcell_fb_layout layout = gallery_frame(state, GALLERY_STR_HEAD_GLIDE, 1U);
     /*
      * The press this page is of happened *before* the first frame.

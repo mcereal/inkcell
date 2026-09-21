@@ -17,7 +17,7 @@
 
 #include "gallery.h"
 
-void gallery_scene_shapes(struct inkcell_backend_fb_state *state) {
+void gallery_scene_shapes(struct inkcell_draw_state *state) {
     struct inkcell_fb_layout layout = gallery_frame(state, GALLERY_STR_HEAD_SHAPES, 0U);
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
     const int gap = inkcell_fb_space(state, INKCELL_SPACE_SM);

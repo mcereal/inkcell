@@ -11,13 +11,13 @@
 
 #include "gallery.h"
 
-static int button_height(const struct inkcell_backend_fb_state *state, int scale) {
+static int button_height(const struct inkcell_draw_state *state, int scale) {
     return inkcell_fb_line_adv(state, scale) +
            2 * inkcell_fb_space_at(state, INKCELL_SPACE_SM, scale);
 }
 
 /* One row of the grid: the same variant and family, at rest and then selected. */
-static int button_row(const struct inkcell_backend_fb_state *state, int x, int y, int scale,
+static int button_row(const struct inkcell_draw_state *state, int x, int y, int scale,
                       enum inkcell_fb_button_variant variant, enum inkcell_family family,
                       enum gallery_str_id label, enum inkcell_icon icon) {
     const int h = button_height(state, scale);
@@ -47,7 +47,7 @@ static int button_row(const struct inkcell_backend_fb_state *state, int x, int y
     return y + h + gap;
 }
 
-void gallery_scene_buttons(struct inkcell_backend_fb_state *state) {
+void gallery_scene_buttons(struct inkcell_draw_state *state) {
     struct inkcell_fb_layout layout = gallery_frame(state, GALLERY_STR_HEAD_BUTTONS, 0U);
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
     const int scale = layout.small;

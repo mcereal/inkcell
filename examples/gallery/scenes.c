@@ -99,8 +99,8 @@ const struct gallery_scene *gallery_scenes(size_t *count) {
 /* ---- the frame --------------------------------------------------------------------------------
  */
 
-struct inkcell_fb_layout gallery_frame(struct inkcell_backend_fb_state *state,
-                                       enum gallery_str_id title, size_t tab) {
+struct inkcell_fb_layout gallery_frame(struct inkcell_draw_state *state, enum gallery_str_id title,
+                                       size_t tab) {
     inkcell_fb_clear(state, inkcell_fb_color(state, INKCELL_COLOR_BG));
 
     /* `true, true`: there is a keycap row at the bottom, so its room comes out of the body now;
@@ -121,7 +121,7 @@ struct inkcell_fb_layout gallery_frame(struct inkcell_backend_fb_state *state,
     return layout;
 }
 
-void gallery_footer(const struct inkcell_backend_fb_state *state,
+void gallery_footer(const struct inkcell_draw_state *state,
                     const struct inkcell_fb_layout *layout) {
     static const struct inkcell_button_action k_items[] = {
         {INKCELL_BUTTON_A, (enum inkcell_str_id)GALLERY_STR_ACT_SELECT},
@@ -135,8 +135,8 @@ void gallery_footer(const struct inkcell_backend_fb_state *state,
     inkcell_fb_draw_action_bar(state, layout, &bar);
 }
 
-int gallery_section(const struct inkcell_backend_fb_state *state,
-                    const struct inkcell_fb_layout *layout, int y, enum gallery_str_id title) {
+int gallery_section(const struct inkcell_draw_state *state, const struct inkcell_fb_layout *layout,
+                    int y, enum gallery_str_id title) {
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
     const int small = layout->small;
     inkcell_fb_draw_text_weight(state, box.text_x, y, gallery_text(title), small,

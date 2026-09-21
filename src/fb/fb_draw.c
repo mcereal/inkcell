@@ -40,7 +40,7 @@ struct inkcell_fb_glyph_cache {
                                           [INKCELL_FB_GLYPH_CACHE_WAYS];
 };
 
-void inkcell_fb_glyph_cache_free(struct inkcell_backend_fb_state *state) {
+void inkcell_fb_glyph_cache_free(struct inkcell_draw_state *state) {
     free(state->glyph_cache);
     state->glyph_cache = NULL;
 }
@@ -53,8 +53,8 @@ void inkcell_fb_glyph_cache_free(struct inkcell_backend_fb_state *state) {
  * They are trivial on purpose: the point is that there is exactly one path from "what does
  * this mean" to "which pixels", so a theme switch cannot leave a corner of the UI behind.
  */
-void inkcell_fb_state_set_theme(struct inkcell_backend_fb_state *state,
-                                const struct inkcell_theme *theme, int scale) {
+void inkcell_fb_state_set_theme(struct inkcell_draw_state *state, const struct inkcell_theme *theme,
+                                int scale) {
     if (state == NULL) {
         return;
     }
@@ -76,13 +76,13 @@ void inkcell_fb_state_set_theme(struct inkcell_backend_fb_state *state,
     state->slide_dir = 0;
 }
 
-void inkcell_fb_state_set_now(struct inkcell_backend_fb_state *state, uint64_t now_ms) {
+void inkcell_fb_state_set_now(struct inkcell_draw_state *state, uint64_t now_ms) {
     if (state != NULL && now_ms > state->now_ms) {
         state->now_ms = now_ms;
     }
 }
 
-bool inkcell_fb_state_animating(const struct inkcell_backend_fb_state *state) {
+bool inkcell_fb_state_animating(const struct inkcell_draw_state *state) {
     if (state == NULL) {
         return false;
     }
@@ -146,8 +146,7 @@ bool inkcell_fb_state_animating(const struct inkcell_backend_fb_state *state) {
  * A theme that asks for no motion gets none: inkcell_anim_to() with a zero duration puts the
  * value on its target, which lands the screen in place on the frame it arrives.
  */
-void inkcell_fb_transition_begin(struct inkcell_backend_fb_state *state,
-                                 enum inkcell_transition move) {
+void inkcell_fb_transition_begin(struct inkcell_draw_state *state, enum inkcell_transition move) {
     if (state == NULL || move == INKCELL_TRANSITION_NONE) {
         return;
     }
@@ -165,7 +164,7 @@ void inkcell_fb_transition_begin(struct inkcell_backend_fb_state *state,
                     inkcell_fb_motion(state, INKCELL_MOTION_MEDIUM), INKCELL_EASE_OUT);
 }
 
-int inkcell_fb_transition_offset(struct inkcell_backend_fb_state *state) {
+int inkcell_fb_transition_offset(struct inkcell_draw_state *state) {
     if (state == NULL || state->slide_dir == 0) {
         return 0;
     }
@@ -174,12 +173,12 @@ int inkcell_fb_transition_offset(struct inkcell_backend_fb_state *state) {
         state->slide_dir = 0;
         return 0;
     }
-    const int travel =
-        (int)state->var.xres * INKCELL_FB_TRANSITION_TRAVEL_NUM / INKCELL_FB_TRANSITION_TRAVEL_DEN;
+    const int travel = inkcell_fb_panel_width(state) * INKCELL_FB_TRANSITION_TRAVEL_NUM /
+                       INKCELL_FB_TRANSITION_TRAVEL_DEN;
     return state->slide_dir * (int)(((int64_t)remaining * travel) / INKCELL_ANIM_ONE);
 }
 
-void inkcell_fb_shift_begin(struct inkcell_backend_fb_state *state, int dx, int top, int bottom) {
+void inkcell_fb_shift_begin(struct inkcell_draw_state *state, int dx, int top, int bottom) {
     if (state == NULL || bottom <= top) {
         return;
     }
@@ -189,7 +188,7 @@ void inkcell_fb_shift_begin(struct inkcell_backend_fb_state *state, int dx, int 
     state->shift_active = true;
 }
 
-void inkcell_fb_shift_end(struct inkcell_backend_fb_state *state) {
+void inkcell_fb_shift_end(struct inkcell_draw_state *state) {
     if (state != NULL) {
         state->shift_active = false;
         state->shift_x = 0;
@@ -204,27 +203,27 @@ void inkcell_fb_shift_end(struct inkcell_backend_fb_state *state) {
  */
 
 /* The whole panel, as an entry: what the bottom of the stack is measured against. */
-static struct inkcell_fb_view inkcell_fb_view_panel(const struct inkcell_backend_fb_state *state) {
+static struct inkcell_fb_view inkcell_fb_view_panel(const struct inkcell_draw_state *state) {
     return (struct inkcell_fb_view){
         .dx = 0,
         .dy = 0,
         .x = 0,
         .y = 0,
-        .right = (int)state->var.xres,
-        .bottom = (int)state->var.yres,
+        .right = inkcell_fb_panel_width(state),
+        .bottom = inkcell_fb_panel_height(state),
     };
 }
 
 /* The entry in force, or the panel when nothing is pushed. */
-static struct inkcell_fb_view inkcell_fb_view_top(const struct inkcell_backend_fb_state *state) {
+static struct inkcell_fb_view inkcell_fb_view_top(const struct inkcell_draw_state *state) {
     if (state->views == 0U) {
         return inkcell_fb_view_panel(state);
     }
     return state->views_stack[state->views - 1U];
 }
 
-bool inkcell_fb_view_push(struct inkcell_backend_fb_state *state, struct inkcell_fb_rect box,
-                          int dx, int dy) {
+bool inkcell_fb_view_push(struct inkcell_draw_state *state, struct inkcell_fb_rect box, int dx,
+                          int dy) {
     if (state == NULL || state->views >= INKCELL_FB_VIEW_DEPTH) {
         return false;
     }
@@ -252,13 +251,13 @@ bool inkcell_fb_view_push(struct inkcell_backend_fb_state *state, struct inkcell
     return true;
 }
 
-void inkcell_fb_view_pop(struct inkcell_backend_fb_state *state) {
+void inkcell_fb_view_pop(struct inkcell_draw_state *state) {
     if (state != NULL && state->views > 0U) {
         state->views--;
     }
 }
 
-struct inkcell_fb_rect inkcell_fb_view_box(const struct inkcell_backend_fb_state *state) {
+struct inkcell_fb_rect inkcell_fb_view_box(const struct inkcell_draw_state *state) {
     if (state == NULL) {
         return (struct inkcell_fb_rect){0, 0, 0, 0};
     }
@@ -267,7 +266,7 @@ struct inkcell_fb_rect inkcell_fb_view_box(const struct inkcell_backend_fb_state
         .x = view.x, .y = view.y, .w = view.right - view.x, .h = view.bottom - view.y};
 }
 
-struct inkcell_fb_rect inkcell_fb_view_content_box(const struct inkcell_backend_fb_state *state) {
+struct inkcell_fb_rect inkcell_fb_view_content_box(const struct inkcell_draw_state *state) {
     if (state == NULL) {
         return (struct inkcell_fb_rect){0, 0, 0, 0};
     }
@@ -278,7 +277,7 @@ struct inkcell_fb_rect inkcell_fb_view_content_box(const struct inkcell_backend_
                                     .h = view.bottom - view.y};
 }
 
-bool inkcell_fb_state_set_theme_by_id(struct inkcell_backend_fb_state *state, const char *id) {
+bool inkcell_fb_state_set_theme_by_id(struct inkcell_draw_state *state, const char *id) {
     if (state == NULL || id == NULL || id[0] == '\0') {
         /* Nothing named one - the capture harness has no app behind it - so keep drawing with
            whatever this state was opened with. */
@@ -295,7 +294,7 @@ bool inkcell_fb_state_set_theme_by_id(struct inkcell_backend_fb_state *state, co
 
 /* ---- the application behind the frame ---------------------------------------------------- */
 
-void inkcell_fb_set_app(struct inkcell_backend_fb_state *state, const struct inkcell_fb_app *app) {
+void inkcell_fb_set_app(struct inkcell_draw_state *state, const struct inkcell_fb_app *app) {
     if (state == NULL) {
         return;
     }
@@ -309,8 +308,7 @@ void inkcell_fb_set_app(struct inkcell_backend_fb_state *state, const struct ink
     state->app = *app;
 }
 
-void inkcell_fb_set_focus_map(struct inkcell_backend_fb_state *state,
-                              struct inkcell_focus_map *map) {
+void inkcell_fb_set_focus_map(struct inkcell_draw_state *state, struct inkcell_focus_map *map) {
     if (state == NULL) {
         return;
     }
@@ -333,7 +331,7 @@ void inkcell_fb_set_focus_map(struct inkcell_backend_fb_state *state,
  * take the state immutably stay that way. What is const here is the panel, and the panel is
  * exactly what this does not touch.
  */
-static void inkcell_fb_focus_put(const struct inkcell_backend_fb_state *state, uint32_t id,
+static void inkcell_fb_focus_put(const struct inkcell_draw_state *state, uint32_t id,
                                  const struct inkcell_fb_rect *rect, int radius) {
     if (state == NULL || state->focus == NULL || id == INKCELL_FOCUS_NONE || rect == NULL) {
         return;
@@ -404,12 +402,12 @@ static void inkcell_fb_focus_put(const struct inkcell_backend_fb_state *state, u
     (void)inkcell_focus_add_round(state->focus, id, x, y, w, h, radius);
 }
 
-void inkcell_fb_focus_register(const struct inkcell_backend_fb_state *state, uint32_t id,
+void inkcell_fb_focus_register(const struct inkcell_draw_state *state, uint32_t id,
                                const struct inkcell_fb_rect *rect) {
     inkcell_fb_focus_put(state, id, rect, 0);
 }
 
-void inkcell_fb_focus_register_shaped(const struct inkcell_backend_fb_state *state, uint32_t id,
+void inkcell_fb_focus_register_shaped(const struct inkcell_draw_state *state, uint32_t id,
                                       const struct inkcell_fb_rect *rect,
                                       enum inkcell_shape shape) {
     if (state == NULL || rect == NULL) {
@@ -421,12 +419,11 @@ void inkcell_fb_focus_register_shaped(const struct inkcell_backend_fb_state *sta
     inkcell_fb_focus_put(state, id, rect, inkcell_fb_radius(state, shape));
 }
 
-bool inkcell_fb_app_pending(const struct inkcell_backend_fb_state *state) {
+bool inkcell_fb_app_pending(const struct inkcell_draw_state *state) {
     return state != NULL && state->app.pending != NULL && state->app.pending(state->app.ctx);
 }
 
-void inkcell_fb_animation_damage(struct inkcell_backend_fb_state *state, int x, int y, int w,
-                                 int h) {
+void inkcell_fb_animation_damage(struct inkcell_draw_state *state, int x, int y, int w, int h) {
     if (state == NULL || w <= 0 || h <= 0) {
         return;
     }
@@ -451,11 +448,11 @@ void inkcell_fb_animation_damage(struct inkcell_backend_fb_state *state, int x, 
     if (y < 0) {
         y = 0;
     }
-    if (right > (int)state->var.xres) {
-        right = (int)state->var.xres;
+    if (right > inkcell_fb_panel_width(state)) {
+        right = inkcell_fb_panel_width(state);
     }
-    if (bottom > (int)state->var.yres) {
-        bottom = (int)state->var.yres;
+    if (bottom > inkcell_fb_panel_height(state)) {
+        bottom = inkcell_fb_panel_height(state);
     }
     if (right <= x || bottom <= y) {
         return;
@@ -484,7 +481,7 @@ void inkcell_fb_animation_damage(struct inkcell_backend_fb_state *state, int x, 
     }
 }
 
-void inkcell_fb_app_frame_begin(struct inkcell_backend_fb_state *state) {
+void inkcell_fb_app_frame_begin(struct inkcell_draw_state *state) {
     if (state == NULL) {
         return;
     }
@@ -546,13 +543,13 @@ void inkcell_fb_app_frame_begin(struct inkcell_backend_fb_state *state) {
 
 /* Asks the app to drop whatever it has memoised on this state - what a geometry or mode change
    invalidates. A no-op when nothing installed an app, or when it keeps no caches. */
-void inkcell_fb_app_drop_caches(struct inkcell_backend_fb_state *state) {
+void inkcell_fb_app_drop_caches(struct inkcell_draw_state *state) {
     if (state != NULL && state->app.drop_caches != NULL) {
         state->app.drop_caches(state, state->app.ctx);
     }
 }
 
-void inkcell_fb_render(struct inkcell_backend_fb_state *state, const void *snapshot) {
+void inkcell_fb_render(struct inkcell_draw_state *state, const void *snapshot) {
     if (state == NULL || state->app.render == NULL) {
         return;
     }
@@ -560,23 +557,23 @@ void inkcell_fb_render(struct inkcell_backend_fb_state *state, const void *snaps
     state->app.render(state, snapshot, state->app.ctx);
 }
 
-struct inkcell_rgb inkcell_fb_color(const struct inkcell_backend_fb_state *state,
+struct inkcell_rgb inkcell_fb_color(const struct inkcell_draw_state *state,
                                     enum inkcell_color role) {
     return inkcell_theme_color(state != NULL ? state->theme : NULL, role);
 }
 
-struct inkcell_rgb inkcell_fb_tone_color(const struct inkcell_backend_fb_state *state,
+struct inkcell_rgb inkcell_fb_tone_color(const struct inkcell_draw_state *state,
                                          enum inkcell_tone tone) {
     return inkcell_theme_tone(state != NULL ? state->theme : NULL, tone);
 }
 
-struct inkcell_paint inkcell_fb_paint(const struct inkcell_backend_fb_state *state,
+struct inkcell_paint inkcell_fb_paint(const struct inkcell_draw_state *state,
                                       enum inkcell_family family, enum inkcell_slot slot,
                                       enum inkcell_state ui_state) {
     return inkcell_theme_paint(state != NULL ? state->theme : NULL, family, slot, ui_state);
 }
 
-struct inkcell_rgb inkcell_fb_state_layer(const struct inkcell_backend_fb_state *state,
+struct inkcell_rgb inkcell_fb_state_layer(const struct inkcell_draw_state *state,
                                           enum inkcell_color fill, enum inkcell_color ink,
                                           enum inkcell_state ui_state) {
     return inkcell_theme_state_layer(inkcell_fb_color(state, fill), inkcell_fb_color(state, ink),
@@ -605,64 +602,63 @@ struct inkcell_rgb inkcell_fb_fade(struct inkcell_rgb ink, struct inkcell_rgb gr
     };
 }
 
-const struct inkcell_metrics *inkcell_fb_metrics(const struct inkcell_backend_fb_state *state) {
+const struct inkcell_metrics *inkcell_fb_metrics(const struct inkcell_draw_state *state) {
     return inkcell_theme_metrics(state != NULL ? state->theme : NULL);
 }
 
-const struct inkcell_font *inkcell_fb_font(const struct inkcell_backend_fb_state *state) {
+const struct inkcell_font *inkcell_fb_font(const struct inkcell_draw_state *state) {
     return inkcell_theme_font(state != NULL ? state->theme : NULL);
 }
 
-int inkcell_fb_radius(const struct inkcell_backend_fb_state *state, enum inkcell_shape shape) {
+int inkcell_fb_radius(const struct inkcell_draw_state *state, enum inkcell_shape shape) {
     return inkcell_theme_radius(state->theme, shape, state->scale);
 }
 
-int inkcell_fb_space(const struct inkcell_backend_fb_state *state, enum inkcell_space space) {
+int inkcell_fb_space(const struct inkcell_draw_state *state, enum inkcell_space space) {
     return inkcell_theme_space(state->theme, space, state->scale);
 }
 
-int inkcell_fb_space_at(const struct inkcell_backend_fb_state *state, enum inkcell_space space,
+int inkcell_fb_space_at(const struct inkcell_draw_state *state, enum inkcell_space space,
                         int scale) {
     return inkcell_theme_space(state->theme, space, scale);
 }
 
-int inkcell_fb_type_scale(const struct inkcell_backend_fb_state *state, enum inkcell_type type) {
+int inkcell_fb_type_scale(const struct inkcell_draw_state *state, enum inkcell_type type) {
     return inkcell_theme_type_scale(state->theme, type, state->scale);
 }
 
-enum inkcell_weight inkcell_fb_type_weight(const struct inkcell_backend_fb_state *state,
+enum inkcell_weight inkcell_fb_type_weight(const struct inkcell_draw_state *state,
                                            enum inkcell_type type) {
     return inkcell_theme_type_weight(state->theme, type);
 }
 
-int inkcell_fb_gutter(const struct inkcell_backend_fb_state *state) {
+int inkcell_fb_gutter(const struct inkcell_draw_state *state) {
     const int margin = inkcell_fb_margin(state);
     return margin > 1 ? margin / 2 : margin;
 }
 
-uint32_t inkcell_fb_motion(const struct inkcell_backend_fb_state *state,
-                           enum inkcell_motion motion) {
+uint32_t inkcell_fb_motion(const struct inkcell_draw_state *state, enum inkcell_motion motion) {
     return inkcell_theme_motion(state->theme, motion);
 }
 
-int inkcell_fb_edge(const struct inkcell_backend_fb_state *state) {
+int inkcell_fb_edge(const struct inkcell_draw_state *state) {
     const int edge = inkcell_fb_space(state, INKCELL_SPACE_XS);
     return edge > 0 ? edge : 1;
 }
 
-int inkcell_fb_margin(const struct inkcell_backend_fb_state *state) {
+int inkcell_fb_margin(const struct inkcell_draw_state *state) {
     return (int)inkcell_fb_metrics(state)->margin;
 }
 
-int inkcell_fb_scrim_depth(const struct inkcell_backend_fb_state *state) {
+int inkcell_fb_scrim_depth(const struct inkcell_draw_state *state) {
     return (int)inkcell_fb_metrics(state)->scrim_pct;
 }
 
-int inkcell_fb_rail_gutter(const struct inkcell_backend_fb_state *state) {
+int inkcell_fb_rail_gutter(const struct inkcell_draw_state *state) {
     return inkcell_fb_gutter(state);
 }
 
-struct inkcell_fb_row_box inkcell_fb_row_box(const struct inkcell_backend_fb_state *state) {
+struct inkcell_fb_row_box inkcell_fb_row_box(const struct inkcell_draw_state *state) {
     const int gutter = inkcell_fb_gutter(state);
     /*
      * The row's own padding: how far its words sit inside its fill. Derived rather than stated,
@@ -673,7 +669,7 @@ struct inkcell_fb_row_box inkcell_fb_row_box(const struct inkcell_backend_fb_sta
     const int pad = inkcell_fb_margin(state) - gutter;
     struct inkcell_fb_row_box box;
     box.x = gutter;
-    box.w = (int)state->var.xres - 2 * gutter - inkcell_fb_rail_gutter(state);
+    box.w = inkcell_fb_panel_width(state) - 2 * gutter - inkcell_fb_rail_gutter(state);
     /* A panel too narrow to hold a padded row still has to hand back a box the fills and the
        measurements agree about: one pixel wide, with the text span collapsed onto it. Every
        caller that divides by a column width already guards its own division. */
@@ -689,8 +685,8 @@ struct inkcell_fb_row_box inkcell_fb_row_box(const struct inkcell_backend_fb_sta
     return box;
 }
 
-/* Scale an 8-bit channel into a framebuffer bitfield and shift it into place. */
-static inline uint32_t inkcell_fb_pack_channel(uint8_t value, const struct fb_bitfield *field) {
+/* Scale an 8-bit channel into the surface's own field width and shift it into place. */
+static inline uint32_t inkcell_fb_pack_channel(uint8_t value, const struct inkcell_channel *field) {
     if (field->length == 0U) {
         return 0U;
     }
@@ -706,22 +702,21 @@ static inline uint32_t inkcell_fb_pack_channel(uint8_t value, const struct fb_bi
  * black screen. Alpha is therefore always written as opaque, whether or not the driver reports a
  * transp bitfield: for 32 bpp every bit outside the colour channels is set.
  */
-static inline uint32_t compose_color(const struct inkcell_backend_fb_state *state, uint8_t r,
-                                     uint8_t g, uint8_t b) {
-    const struct fb_var_screeninfo *var = &state->var;
-    const bool has_fields =
-        var->red.length != 0U || var->green.length != 0U || var->blue.length != 0U;
+static inline uint32_t compose_color(const struct inkcell_draw_state *state, uint8_t r, uint8_t g,
+                                     uint8_t b) {
+    const struct inkcell_pixel_format *fmt = &state->surface.format;
+    const bool has_fields = fmt->r.length != 0U || fmt->g.length != 0U || fmt->b.length != 0U;
 
     uint32_t color;
     uint32_t color_mask;
     if (has_fields) {
-        color = inkcell_fb_pack_channel(r, &var->red) | inkcell_fb_pack_channel(g, &var->green) |
-                inkcell_fb_pack_channel(b, &var->blue);
-        color_mask = inkcell_fb_pack_channel(0xFFU, &var->red) |
-                     inkcell_fb_pack_channel(0xFFU, &var->green) |
-                     inkcell_fb_pack_channel(0xFFU, &var->blue);
+        color = inkcell_fb_pack_channel(r, &fmt->r) | inkcell_fb_pack_channel(g, &fmt->g) |
+                inkcell_fb_pack_channel(b, &fmt->b);
+        color_mask = inkcell_fb_pack_channel(0xFFU, &fmt->r) |
+                     inkcell_fb_pack_channel(0xFFU, &fmt->g) |
+                     inkcell_fb_pack_channel(0xFFU, &fmt->b);
     } else {
-        switch (var->bits_per_pixel) {
+        switch (fmt->bits_per_pixel) {
         case 32:
         case 24:
             color = ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
@@ -736,9 +731,9 @@ static inline uint32_t compose_color(const struct inkcell_backend_fb_state *stat
         }
     }
 
-    if (var->transp.length != 0U) {
-        color |= inkcell_fb_pack_channel(0xFFU, &var->transp);
-    } else if (var->bits_per_pixel == 32U) {
+    if (fmt->a.length != 0U) {
+        color |= inkcell_fb_pack_channel(0xFFU, &fmt->a);
+    } else if (fmt->bits_per_pixel == 32U) {
         color |= ~color_mask; /* opaque in whatever byte the colour channels leave free */
     }
     return color;
@@ -761,15 +756,15 @@ struct inkcell_fb_clipped_box {
 
 /* Whether a box lies entirely inside the region a widget said it was animating in this frame.
    False when nothing has been declared, which is every frame that has no motion on it. */
-static bool inkcell_fb_within_animation(const struct inkcell_backend_fb_state *state, int x, int y,
-                                        int w, int h) {
+static bool inkcell_fb_within_animation(const struct inkcell_draw_state *state, int x, int y, int w,
+                                        int h) {
     const struct inkcell_fb_damage_rect *damage = &state->animation_damage;
     return damage->valid && x >= damage->x && y >= damage->y && x + w <= damage->right &&
            y + h <= damage->bottom;
 }
 
-static bool inkcell_fb_clip_box(const struct inkcell_backend_fb_state *state, int x, int y, int w,
-                                int h, struct inkcell_fb_clipped_box *out) {
+static bool inkcell_fb_clip_box(const struct inkcell_draw_state *state, int x, int y, int w, int h,
+                                struct inkcell_fb_clipped_box *out) {
     int dx = 0;
     int dy = 0;
     /*
@@ -846,11 +841,11 @@ static bool inkcell_fb_clip_box(const struct inkcell_backend_fb_state *state, in
         dy -= y;
         y = 0;
     }
-    if (x + w > (int)state->var.xres) {
-        w = (int)state->var.xres - x;
+    if (x + w > inkcell_fb_panel_width(state)) {
+        w = inkcell_fb_panel_width(state) - x;
     }
-    if (y + h > (int)state->var.yres) {
-        h = (int)state->var.yres - y;
+    if (y + h > inkcell_fb_panel_height(state)) {
+        h = inkcell_fb_panel_height(state) - y;
     }
     if (w <= 0 || h <= 0) {
         return false;
@@ -958,8 +953,8 @@ static inline void inkcell_fb_store_span(uint8_t *row, int w, uint32_t packed, s
  * pixel: a full screen of text is ~200k scaled sub-pixels, and packing each one separately was
  * about a third of the frame.
  */
-static void inkcell_fb_fill_packed(const struct inkcell_backend_fb_state *state, int x, int y,
-                                   int w, int h, uint32_t packed) {
+static void inkcell_fb_fill_packed(const struct inkcell_draw_state *state, int x, int y, int w,
+                                   int h, uint32_t packed) {
     if (w <= 0 || h <= 0) {
         return;
     }
@@ -968,12 +963,12 @@ static void inkcell_fb_fill_packed(const struct inkcell_backend_fb_state *state,
         return;
     }
 
-    const size_t bpp = state->bytes_per_pixel;
-    const size_t stride = state->fix.line_length;
-    uint8_t *row = state->inkcell_fb_ptr + (size_t)box.y * stride + (size_t)box.x * bpp;
+    const size_t bpp = state->surface.bytes_per_pixel;
+    const size_t stride = state->surface.stride;
+    uint8_t *row = state->surface.pixels + (size_t)box.y * stride + (size_t)box.x * bpp;
 
     for (int r = 0; r < box.h; ++r, row += stride) {
-        if ((size_t)(row - state->inkcell_fb_ptr) + (size_t)box.w * bpp > state->inkcell_fb_size) {
+        if ((size_t)(row - state->surface.pixels) + (size_t)box.w * bpp > state->surface.size) {
             return;
         }
         inkcell_fb_store_span(row, box.w, packed, bpp);
@@ -990,7 +985,7 @@ static void inkcell_fb_fill_packed(const struct inkcell_backend_fb_state *state,
  * What made that hard was the ground. inkcell_fb_blend_table() needs to know what a glyph is
  * being drawn *over*, and a caller could tell it; a rounded rectangle crosses a row fill
  * halfway down and could not. The way out is that this backend does not draw onto the panel at
- * all - inkcell_backend_fb_present() points inkcell_fb_ptr at draw_buffer, ordinary RAM, for
+ * all - inkcell_backend_fb_present() points the surface at a draw buffer in ordinary RAM, for
  * the whole render and copies the result afterwards. So the ground is readable: it is the pixel
  * about to be written over, and decompose_color() is what reads it back.
  *
@@ -1029,7 +1024,8 @@ static inline uint8_t inkcell_fb_widen_channel(uint32_t value, uint32_t length) 
     return (uint8_t)(out >> (have - 8U));
 }
 
-static inline uint8_t inkcell_fb_unpack_channel(uint32_t packed, const struct fb_bitfield *field) {
+static inline uint8_t inkcell_fb_unpack_channel(uint32_t packed,
+                                                const struct inkcell_channel *field) {
     if (field->length == 0U) {
         return 0U;
     }
@@ -1039,19 +1035,18 @@ static inline uint8_t inkcell_fb_unpack_channel(uint32_t packed, const struct fb
 
 /* compose_color() read backwards. Every branch mirrors one up there; a format that function
    refuses comes back black, which is what it writes. */
-static inline struct inkcell_rgb decompose_color(const struct inkcell_backend_fb_state *state,
+static inline struct inkcell_rgb decompose_color(const struct inkcell_draw_state *state,
                                                  uint32_t packed) {
-    const struct fb_var_screeninfo *var = &state->var;
-    const bool has_fields =
-        var->red.length != 0U || var->green.length != 0U || var->blue.length != 0U;
+    const struct inkcell_pixel_format *fmt = &state->surface.format;
+    const bool has_fields = fmt->r.length != 0U || fmt->g.length != 0U || fmt->b.length != 0U;
     struct inkcell_rgb rgb = {0U, 0U, 0U};
     if (has_fields) {
-        rgb.r = inkcell_fb_unpack_channel(packed, &var->red);
-        rgb.g = inkcell_fb_unpack_channel(packed, &var->green);
-        rgb.b = inkcell_fb_unpack_channel(packed, &var->blue);
+        rgb.r = inkcell_fb_unpack_channel(packed, &fmt->r);
+        rgb.g = inkcell_fb_unpack_channel(packed, &fmt->g);
+        rgb.b = inkcell_fb_unpack_channel(packed, &fmt->b);
         return rgb;
     }
-    switch (var->bits_per_pixel) {
+    switch (fmt->bits_per_pixel) {
     case 32:
     case 24:
         rgb.r = (uint8_t)((packed >> 16) & 0xFFU);
@@ -1108,7 +1103,7 @@ static inline uint8_t inkcell_fb_mix_channel(uint8_t ground, uint8_t ink, int co
  * again on the edge pixels of a shape, which are the only pixels that reach here at all, and
  * it cannot be got wrong.
  */
-static void inkcell_fb_blend_pixel(const struct inkcell_backend_fb_state *state, int x, int y,
+static void inkcell_fb_blend_pixel(const struct inkcell_draw_state *state, int x, int y,
                                    struct inkcell_rgb color, int coverage) {
     if (coverage <= 0) {
         return;
@@ -1118,10 +1113,10 @@ static void inkcell_fb_blend_pixel(const struct inkcell_backend_fb_state *state,
         return;
     }
 
-    const size_t bpp = state->bytes_per_pixel;
-    const size_t stride = state->fix.line_length;
-    uint8_t *px = state->inkcell_fb_ptr + (size_t)box.y * stride + (size_t)box.x * bpp;
-    if ((size_t)(px - state->inkcell_fb_ptr) + bpp > state->inkcell_fb_size) {
+    const size_t bpp = state->surface.bytes_per_pixel;
+    const size_t stride = state->surface.stride;
+    uint8_t *px = state->surface.pixels + (size_t)box.y * stride + (size_t)box.x * bpp;
+    if ((size_t)(px - state->surface.pixels) + bpp > state->surface.size) {
         return;
     }
 
@@ -1223,8 +1218,8 @@ static int inkcell_fb_rrect_coverage(int px, int py, int x, int y, int w, int h,
  * agree by accident with a format that has a channel in the wrong place, and the Brick's own
  * fb0 is read out of the kernel at runtime like anybody else's.
  */
-static bool inkcell_fb_blit_is_direct(const struct inkcell_backend_fb_state *state) {
-    return state->bytes_per_pixel == 4U &&
+static bool inkcell_fb_blit_is_direct(const struct inkcell_draw_state *state) {
+    return state->surface.bytes_per_pixel == 4U &&
            compose_color(state, 0x12U, 0x34U, 0x56U) == 0xFF123456U &&
            compose_color(state, 0xA0U, 0xB0U, 0xC0U) == 0xFFA0B0C0U;
 }
@@ -1247,7 +1242,7 @@ static bool inkcell_fb_blit_is_direct(const struct inkcell_backend_fb_state *sta
  * with detail drawn through it. A photograph degenerates to a pack per pixel, so a caller with one
  * of those wants a direct-blit surface instead.
  */
-void inkcell_fb_blit_bgra(const struct inkcell_backend_fb_state *state, int x, int y, int w, int h,
+void inkcell_fb_blit_bgra(const struct inkcell_draw_state *state, int x, int y, int w, int h,
                           const uint8_t *pixels, size_t stride) {
     if (state == NULL || pixels == NULL || w <= 0 || h <= 0) {
         return;
@@ -1257,14 +1252,14 @@ void inkcell_fb_blit_bgra(const struct inkcell_backend_fb_state *state, int x, i
         return;
     }
 
-    const size_t bpp = state->bytes_per_pixel;
-    const size_t dst_stride = state->fix.line_length;
+    const size_t bpp = state->surface.bytes_per_pixel;
+    const size_t dst_stride = state->surface.stride;
     const bool direct = inkcell_fb_blit_is_direct(state);
-    uint8_t *dst = state->inkcell_fb_ptr + (size_t)box.y * dst_stride + (size_t)box.x * bpp;
+    uint8_t *dst = state->surface.pixels + (size_t)box.y * dst_stride + (size_t)box.x * bpp;
     const uint8_t *src = pixels + (size_t)box.dy * stride + (size_t)box.dx * INKCELL_FB_BGRA_BYTES;
 
     for (int row = 0; row < box.h; ++row, dst += dst_stride, src += stride) {
-        if ((size_t)(dst - state->inkcell_fb_ptr) + (size_t)box.w * bpp > state->inkcell_fb_size) {
+        if ((size_t)(dst - state->surface.pixels) + (size_t)box.w * bpp > state->surface.size) {
             return;
         }
         if (direct) {
@@ -1314,8 +1309,8 @@ void inkcell_fb_blit_bgra(const struct inkcell_backend_fb_state *state, int x, i
  */
 #define INKCELL_FB_BLEND_STEPS 32
 
-static void inkcell_fb_blend_table(const struct inkcell_backend_fb_state *state,
-                                   struct inkcell_rgb ink, struct inkcell_rgb ground,
+static void inkcell_fb_blend_table(const struct inkcell_draw_state *state, struct inkcell_rgb ink,
+                                   struct inkcell_rgb ground,
                                    uint32_t out[INKCELL_FB_BLEND_STEPS]) {
     for (int step = 0; step < INKCELL_FB_BLEND_STEPS; ++step) {
         const int32_t a = (int32_t)step * 255 / (INKCELL_FB_BLEND_STEPS - 1);
@@ -1328,12 +1323,11 @@ static void inkcell_fb_blend_table(const struct inkcell_backend_fb_state *state,
 
 /* Glyph metrics for a given multiplier. The gaps are the font's, not this file's: a taller
    font with a different line gap changes every measurement above without touching one. */
-int inkcell_fb_char_adv(const struct inkcell_backend_fb_state *state, int scale) {
+int inkcell_fb_char_adv(const struct inkcell_draw_state *state, int scale) {
     return inkcell_font_advance(inkcell_fb_font(state), scale);
 }
 
-int inkcell_fb_cell_adv(const struct inkcell_backend_fb_state *state, uint32_t codepoint,
-                        int scale) {
+int inkcell_fb_cell_adv(const struct inkcell_draw_state *state, uint32_t codepoint, int scale) {
     return inkcell_font_advance_cp(inkcell_fb_font(state), codepoint, scale);
 }
 
@@ -1350,12 +1344,11 @@ int inkcell_fb_cell_adv(const struct inkcell_backend_fb_state *state, uint32_t c
  * exactly as wide as it draws - including an emoji, which steps its own square box rather than
  * the face's advance, and a newline, which starts the width over.
  */
-int inkcell_fb_text_width(const struct inkcell_backend_fb_state *state, const char *text,
-                          int scale) {
+int inkcell_fb_text_width(const struct inkcell_draw_state *state, const char *text, int scale) {
     return inkcell_fb_text_width_weight(state, text, scale, INKCELL_WEIGHT_REGULAR);
 }
 
-int inkcell_fb_text_width_weight(const struct inkcell_backend_fb_state *state, const char *text,
+int inkcell_fb_text_width_weight(const struct inkcell_draw_state *state, const char *text,
                                  int scale, enum inkcell_weight weight) {
     if (text == NULL) {
         return 0;
@@ -1394,8 +1387,7 @@ int inkcell_fb_text_width_weight(const struct inkcell_backend_fb_state *state, c
  * Rounding up rather than to nearest, deliberately: reserving a cell too many costs a column
  * of blank, and reserving one too few clips a word.
  */
-size_t inkcell_fb_text_cols(const struct inkcell_backend_fb_state *state, const char *text,
-                            int scale) {
+size_t inkcell_fb_text_cols(const struct inkcell_draw_state *state, const char *text, int scale) {
     const int adv = inkcell_fb_char_adv(state, scale);
     if (text == NULL || adv <= 0) {
         return 0U;
@@ -1422,7 +1414,7 @@ static int inkcell_fb_wrap_cell(const struct inkcell_text_cell *cell, void *ctx)
 }
 
 struct inkcell_wrap_metric inkcell_fb_wrap_metric(struct inkcell_fb_wrap_ctx *ctx,
-                                                  const struct inkcell_backend_fb_state *state,
+                                                  const struct inkcell_draw_state *state,
                                                   int scale) {
     struct inkcell_wrap_metric metric = {NULL, NULL};
     if (ctx == NULL) {
@@ -1435,7 +1427,7 @@ struct inkcell_wrap_metric inkcell_fb_wrap_metric(struct inkcell_fb_wrap_ctx *ct
     return metric;
 }
 
-int inkcell_fb_line_adv(const struct inkcell_backend_fb_state *state, int scale) {
+int inkcell_fb_line_adv(const struct inkcell_draw_state *state, int scale) {
     return inkcell_font_line(inkcell_fb_font(state), scale);
 }
 
@@ -1525,7 +1517,7 @@ static int inkcell_fb_glyph_step(const uint8_t *row_lo, const uint8_t *row_hi,
  * upward, not a second pass, which is why the whole glyph is one box placed by its baseline
  * rather than a cell plus an accent stuck on top of it.
  */
-static void inkcell_fb_draw_glyph_ramp(const struct inkcell_backend_fb_state *state, int x, int y,
+static void inkcell_fb_draw_glyph_ramp(const struct inkcell_draw_state *state, int x, int y,
                                        uint32_t codepoint, int scale,
                                        const struct inkcell_font *font,
                                        const uint32_t blend[INKCELL_FB_BLEND_STEPS]) {
@@ -1623,25 +1615,24 @@ static void inkcell_fb_draw_glyph_ramp(const struct inkcell_backend_fb_state *st
     }
 }
 
-void inkcell_fb_draw_glyph(const struct inkcell_backend_fb_state *state, int x, int y,
-                           uint32_t codepoint, int scale, struct inkcell_rgb ink,
-                           struct inkcell_rgb ground) {
+void inkcell_fb_draw_glyph(const struct inkcell_draw_state *state, int x, int y, uint32_t codepoint,
+                           int scale, struct inkcell_rgb ink, struct inkcell_rgb ground) {
     uint32_t blend[INKCELL_FB_BLEND_STEPS];
     inkcell_fb_blend_table(state, ink, ground, blend);
     inkcell_fb_draw_glyph_ramp(state, x, y, codepoint, scale, inkcell_fb_font(state), blend);
 }
 
 /*
- * The emoji palette, packed into framebuffer pixels once.
+ * The emoji palette, packed into the surface's pixels once.
  *
- * compose_color() depends only on the mapping's pixel format, which never changes while fb0 is
- * open, so the 255 palette entries are packed on first use and reused. The signature guards the
- * case of a second open with a different format - the tests do exactly that.
+ * compose_color() depends only on the surface's pixel format, which never changes while a
+ * surface is open, so the 255 palette entries are packed on first use and reused. The signature
+ * guards the case of a second open with a different format - the tests do exactly that.
  */
-static uint64_t inkcell_fb_format_signature(const struct inkcell_backend_fb_state *state) {
-    const struct fb_var_screeninfo *var = &state->var;
-    uint64_t sig = var->bits_per_pixel;
-    const struct fb_bitfield *fields[4] = {&var->red, &var->green, &var->blue, &var->transp};
+static uint64_t inkcell_fb_format_signature(const struct inkcell_draw_state *state) {
+    const struct inkcell_pixel_format *fmt = &state->surface.format;
+    uint64_t sig = fmt->bits_per_pixel;
+    const struct inkcell_channel *fields[4] = {&fmt->r, &fmt->g, &fmt->b, &fmt->a};
     for (size_t i = 0; i < 4U; ++i) {
         sig = sig * 131U + fields[i]->offset;
         sig = sig * 131U + fields[i]->length;
@@ -1651,7 +1642,7 @@ static uint64_t inkcell_fb_format_signature(const struct inkcell_backend_fb_stat
 
 #define INKCELL_FB_EMOJI_PALETTE_SLOTS 256
 
-static const uint32_t *inkcell_fb_emoji_palette(const struct inkcell_backend_fb_state *state,
+static const uint32_t *inkcell_fb_emoji_palette(const struct inkcell_draw_state *state,
                                                 const bool **opaque_out) {
     static uint32_t packed[INKCELL_FB_EMOJI_PALETTE_SLOTS];
     static bool opaque[INKCELL_FB_EMOJI_PALETTE_SLOTS];
@@ -1718,8 +1709,8 @@ int inkcell_fb_emoji_box_fit(int box) {
  * Emoji carry no ink colour and take none. Their own is the point of having them: the red of a
  * flag and the yellow of a lightning bolt are most of what makes one recognisable at 20 px.
  */
-void inkcell_fb_draw_emoji_box(const struct inkcell_backend_fb_state *state, int x, int top,
-                               int box, uint16_t sprite) {
+void inkcell_fb_draw_emoji_box(const struct inkcell_draw_state *state, int x, int top, int box,
+                               uint16_t sprite) {
     if (box <= 0) {
         return;
     }
@@ -1806,7 +1797,7 @@ void inkcell_fb_draw_emoji_box(const struct inkcell_backend_fb_state *state, int
  * transparent margin, so neighbours still separate. Centred in the line's height puts it on
  * the same optical line as those capitals - one font row of padding above and below.
  */
-static void inkcell_fb_draw_emoji(const struct inkcell_backend_fb_state *state, int x, int y,
+static void inkcell_fb_draw_emoji(const struct inkcell_draw_state *state, int x, int y,
                                   uint16_t sprite, int scale) {
     const int box = inkcell_fb_char_adv(state, scale);
     inkcell_fb_draw_emoji_box(
@@ -1827,7 +1818,7 @@ static void inkcell_fb_draw_emoji(const struct inkcell_backend_fb_state *state, 
  * So the box is whichever is larger. A row that reserves one still gets at least its cell, and
  * a symbol is never asked to fit in less than it is drawn at.
  */
-int inkcell_fb_icon_box(const struct inkcell_backend_fb_state *state, int scale) {
+int inkcell_fb_icon_box(const struct inkcell_draw_state *state, int scale) {
     const int cell = inkcell_fb_char_adv(state, scale);
     const int drawn = inkcell_fb_icon_drawn(state, scale);
     return drawn > cell ? drawn : cell;
@@ -1849,7 +1840,7 @@ int inkcell_fb_icon_box(const struct inkcell_backend_fb_state *state, int scale)
  * shape on the capitals' height rather than the air - drawing the window at the body's height
  * instead would sit every symbol a fifth short of the text it labels.
  */
-int inkcell_fb_icon_drawn(const struct inkcell_backend_fb_state *state, int scale) {
+int inkcell_fb_icon_drawn(const struct inkcell_draw_state *state, int scale) {
     const int body = inkcell_font_cap(inkcell_fb_font(state), scale);
     return (body * INKCELL_ICON_WINDOW + INKCELL_ICON_BODY / 2) / INKCELL_ICON_BODY;
 }
@@ -1906,7 +1897,7 @@ static int inkcell_fb_icon_step(const uint8_t *row0, const uint8_t *row1, int32_
  * diagonal and a staircase. The blend is one multiply per channel per step rather than per
  * pixel, because coverage is quantised into INKCELL_FB_BLEND_STEPS packed colours first.
  */
-void inkcell_fb_draw_icon(const struct inkcell_backend_fb_state *state, int x, int y,
+void inkcell_fb_draw_icon(const struct inkcell_draw_state *state, int x, int y,
                           enum inkcell_icon icon, int scale, struct inkcell_rgb ink,
                           struct inkcell_rgb ground) {
     if (!inkcell_icon_is_valid(icon) || scale <= 0 || scale > INKCELL_FB_ICON_SCALE_MAX) {
@@ -1973,13 +1964,12 @@ void inkcell_fb_draw_icon(const struct inkcell_backend_fb_state *state, int x, i
  * ASCII range separately. Everything below measures with the same walker, so a line is always
  * as wide as it draws.
  */
-void inkcell_fb_draw_text(const struct inkcell_backend_fb_state *state, int x, int y,
-                          const char *text, int scale, struct inkcell_rgb ink,
-                          struct inkcell_rgb ground) {
+void inkcell_fb_draw_text(const struct inkcell_draw_state *state, int x, int y, const char *text,
+                          int scale, struct inkcell_rgb ink, struct inkcell_rgb ground) {
     inkcell_fb_draw_text_weight(state, x, y, text, scale, INKCELL_WEIGHT_REGULAR, ink, ground);
 }
 
-void inkcell_fb_draw_text_weight(const struct inkcell_backend_fb_state *state, int x, int y,
+void inkcell_fb_draw_text_weight(const struct inkcell_draw_state *state, int x, int y,
                                  const char *text, int scale, enum inkcell_weight weight,
                                  struct inkcell_rgb ink, struct inkcell_rgb ground) {
     const struct inkcell_font *font = inkcell_font_at_weight(inkcell_fb_font(state), weight);
@@ -2014,14 +2004,14 @@ void inkcell_fb_draw_text_weight(const struct inkcell_backend_fb_state *state, i
     }
 }
 
-void inkcell_fb_fill_rect(const struct inkcell_backend_fb_state *state, int x, int y, int w, int h,
+void inkcell_fb_fill_rect(const struct inkcell_draw_state *state, int x, int y, int w, int h,
                           struct inkcell_rgb color) {
     inkcell_fb_fill_packed(state, x, y, w, h, compose_color(state, color.r, color.g, color.b));
 }
 
-void inkcell_fb_fill_round_rect_ends(const struct inkcell_backend_fb_state *state, int x, int y,
-                                     int w, int h, int radius, struct inkcell_rgb color,
-                                     bool round_top, bool round_bottom) {
+void inkcell_fb_fill_round_rect_ends(const struct inkcell_draw_state *state, int x, int y, int w,
+                                     int h, int radius, struct inkcell_rgb color, bool round_top,
+                                     bool round_bottom) {
     if (w <= 0 || h <= 0) {
         return;
     }
@@ -2054,8 +2044,8 @@ void inkcell_fb_fill_round_rect_ends(const struct inkcell_backend_fb_state *stat
      * own radius, and deciding against every pixel of it one sub-sample at a time is work with
      * no picture at the end. Two comparisons per row and column is what that costs instead.
      */
-    const int panel_w = (int)state->var.xres;
-    const int panel_h = (int)state->var.yres;
+    const int panel_w = inkcell_fb_panel_width(state);
+    const int panel_h = inkcell_fb_panel_height(state);
     const int middle = w - 2 * radius;
     for (int i = 0; i < radius; ++i) {
         const int top_row = y + i;
@@ -2108,12 +2098,12 @@ void inkcell_fb_fill_round_rect_ends(const struct inkcell_backend_fb_state *stat
     }
 }
 
-void inkcell_fb_fill_round_rect(const struct inkcell_backend_fb_state *state, int x, int y, int w,
-                                int h, int radius, struct inkcell_rgb color) {
+void inkcell_fb_fill_round_rect(const struct inkcell_draw_state *state, int x, int y, int w, int h,
+                                int radius, struct inkcell_rgb color) {
     inkcell_fb_fill_round_rect_ends(state, x, y, w, h, radius, color, true, true);
 }
 
-void inkcell_fb_stroke_round_rect(const struct inkcell_backend_fb_state *state, int x, int y, int w,
+void inkcell_fb_stroke_round_rect(const struct inkcell_draw_state *state, int x, int y, int w,
                                   int h, int radius, int thickness, struct inkcell_rgb color) {
     if (w <= 0 || h <= 0 || thickness <= 0) {
         return;
@@ -2158,8 +2148,8 @@ void inkcell_fb_stroke_round_rect(const struct inkcell_backend_fb_state *state, 
 
     /* Bounded to the panel for the reason the fill's corner bands are: the blend clips, but a
        ring larger than the panel would still be walked in full. */
-    const int panel_w = (int)state->var.xres;
-    const int panel_h = (int)state->var.yres;
+    const int panel_w = inkcell_fb_panel_width(state);
+    const int panel_h = inkcell_fb_panel_height(state);
     const int row_from = y > 0 ? y : 0;
     const int row_to = (y + h) < panel_h ? (y + h) : panel_h;
     for (int py = row_from; py < row_to; ++py) {
@@ -2268,7 +2258,7 @@ static void inkcell_fb_turn_vector(int32_t turn, int32_t *vx, int32_t *vy) {
     *vy = -inkcell_fb_sin_turn(wrapped + 250);
 }
 
-void inkcell_fb_stroke_arc(const struct inkcell_backend_fb_state *state, int cx, int cy, int radius,
+void inkcell_fb_stroke_arc(const struct inkcell_draw_state *state, int cx, int cy, int radius,
                            int thickness, int32_t start, int32_t sweep, struct inkcell_rgb color) {
     if (radius <= 0 || thickness <= 0 || sweep <= 0) {
         return;
@@ -2316,9 +2306,13 @@ void inkcell_fb_stroke_arc(const struct inkcell_backend_fb_state *state, int cx,
     const int64_t top = (int64_t)cy - radius;
     const int64_t bottom = (int64_t)cy + radius;
     const int x0 = (int)(left > 0 ? left : 0);
-    const int x1 = (int)(right < (int64_t)state->var.xres ? right : (int64_t)state->var.xres);
+    const int x1 = (int)(right < (int64_t)inkcell_fb_panel_width(state)
+                             ? right
+                             : (int64_t)inkcell_fb_panel_width(state));
     const int y0 = (int)(top > 0 ? top : 0);
-    const int y1 = (int)(bottom < (int64_t)state->var.yres ? bottom : (int64_t)state->var.yres);
+    const int y1 = (int)(bottom < (int64_t)inkcell_fb_panel_height(state)
+                             ? bottom
+                             : (int64_t)inkcell_fb_panel_height(state));
 
     for (int py = y0; py < y1; ++py) {
         for (int px = x0; px < x1; ++px) {
@@ -2367,8 +2361,9 @@ void inkcell_fb_stroke_arc(const struct inkcell_backend_fb_state *state, int cx,
     }
 }
 
-void inkcell_fb_clear(const struct inkcell_backend_fb_state *state, struct inkcell_rgb color) {
-    inkcell_fb_fill_rect(state, 0, 0, (int)state->var.xres, (int)state->var.yres, color);
+void inkcell_fb_clear(const struct inkcell_draw_state *state, struct inkcell_rgb color) {
+    inkcell_fb_fill_rect(state, 0, 0, inkcell_fb_panel_width(state), inkcell_fb_panel_height(state),
+                         color);
 }
 
 /*
@@ -2393,7 +2388,7 @@ void inkcell_fb_clear(const struct inkcell_backend_fb_state *state, struct inkce
  * not that it has few colours but that it changes colour rarely - and a table would be a cache
  * that has to be sized and invalidated for no further gain.
  */
-void inkcell_fb_scrim_rect(const struct inkcell_backend_fb_state *state, struct inkcell_fb_rect box,
+void inkcell_fb_scrim_rect(const struct inkcell_draw_state *state, struct inkcell_fb_rect box,
                            struct inkcell_rgb color, int percent) {
     if (state == NULL || percent <= 0 || box.w <= 0 || box.h <= 0) {
         return;
@@ -2406,8 +2401,8 @@ void inkcell_fb_scrim_rect(const struct inkcell_backend_fb_state *state, struct 
         return;
     }
 
-    const size_t bpp = state->bytes_per_pixel;
-    const size_t stride = state->fix.line_length;
+    const size_t bpp = state->surface.bytes_per_pixel;
+    const size_t stride = state->surface.stride;
     /* The mix is stated in AA steps rather than in percent so it runs through the same
        inkcell_fb_mix_channel() every anti-aliased edge does - one rounding rule for the whole
        backend, rather than a second one that disagrees at the halves. */
@@ -2416,10 +2411,9 @@ void inkcell_fb_scrim_rect(const struct inkcell_backend_fb_state *state, struct 
     uint32_t memo_in = 0U;
     uint32_t memo_out = 0U;
 
-    uint8_t *row = state->inkcell_fb_ptr + (size_t)clipped.y * stride + (size_t)clipped.x * bpp;
+    uint8_t *row = state->surface.pixels + (size_t)clipped.y * stride + (size_t)clipped.x * bpp;
     for (int r = 0; r < clipped.h; ++r, row += stride) {
-        if ((size_t)(row - state->inkcell_fb_ptr) + (size_t)clipped.w * bpp >
-            state->inkcell_fb_size) {
+        if ((size_t)(row - state->surface.pixels) + (size_t)clipped.w * bpp > state->surface.size) {
             return;
         }
         uint8_t *px = row;
@@ -2443,15 +2437,15 @@ void inkcell_fb_scrim_rect(const struct inkcell_backend_fb_state *state, struct 
 }
 
 /* Columns of text that fit between the margins at this scale. */
-size_t inkcell_fb_cols(const struct inkcell_backend_fb_state *state, int scale) {
-    const int usable = (int)state->var.xres - 2 * inkcell_fb_margin(state);
+size_t inkcell_fb_cols(const struct inkcell_draw_state *state, int scale) {
+    const int usable = inkcell_fb_panel_width(state) - 2 * inkcell_fb_margin(state);
     if (usable <= 0) {
         return 1U;
     }
     return (size_t)(usable / inkcell_fb_char_adv(state, scale));
 }
 
-size_t inkcell_fb_row_cols(const struct inkcell_backend_fb_state *state, int scale) {
+size_t inkcell_fb_row_cols(const struct inkcell_draw_state *state, int scale) {
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
     const int usable = box.text_right - box.text_x;
     const int adv = inkcell_fb_char_adv(state, scale);
@@ -2487,7 +2481,7 @@ size_t inkcell_fb_width(const char *line) {
  * same list highlighting to two slightly different rectangles is a cursor that changes shape as
  * it walks, and two copies of `y - scale` is exactly how that happens.
  */
-struct inkcell_rgb inkcell_fb_draw_row_fill_on(const struct inkcell_backend_fb_state *state, int y,
+struct inkcell_rgb inkcell_fb_draw_row_fill_on(const struct inkcell_draw_state *state, int y,
                                                uint32_t rows, bool selected,
                                                enum inkcell_color ground) {
     if (!selected) {
@@ -2506,13 +2500,13 @@ struct inkcell_rgb inkcell_fb_draw_row_fill_on(const struct inkcell_backend_fb_s
     return fill;
 }
 
-struct inkcell_rgb inkcell_fb_draw_row_fill(const struct inkcell_backend_fb_state *state, int y,
+struct inkcell_rgb inkcell_fb_draw_row_fill(const struct inkcell_draw_state *state, int y,
                                             uint32_t rows, bool selected) {
     return inkcell_fb_draw_row_fill_on(state, y, rows, selected, INKCELL_COLOR_BG);
 }
 
 /* One list row of text, highlighted when it is the cursor: the fill above, then the words. */
-void inkcell_fb_draw_row(const struct inkcell_backend_fb_state *state, int y, const char *text,
+void inkcell_fb_draw_row(const struct inkcell_draw_state *state, int y, const char *text,
                          struct inkcell_rgb color, bool selected) {
     const struct inkcell_rgb ground = inkcell_fb_draw_row_fill(state, y, 1U, selected);
     if (selected) {
@@ -2564,7 +2558,7 @@ void inkcell_fb_format_clock(uint32_t rx_time, char *out, size_t out_len) {
    The x is a parameter because a dialog's paragraph is inset from its panel's edge rather than
    from the body's - the body margin was the only answer while the only wrapped text on screen
    was a screen's own. */
-int inkcell_fb_draw_wrapped_at(const struct inkcell_backend_fb_state *state, int x, int y,
+int inkcell_fb_draw_wrapped_at(const struct inkcell_draw_state *state, int x, int y,
                                const char *text, size_t width, int max_lines,
                                struct inkcell_rgb color, struct inkcell_rgb ground) {
     struct inkcell_fb_wrap_ctx wctx;
@@ -2582,7 +2576,7 @@ int inkcell_fb_draw_wrapped_at(const struct inkcell_backend_fb_state *state, int
 }
 
 /* The same, from the body's left margin - which is where a screen's own wrapped text starts. */
-int inkcell_fb_draw_wrapped_centered(const struct inkcell_backend_fb_state *state, int y,
+int inkcell_fb_draw_wrapped_centered(const struct inkcell_draw_state *state, int y,
                                      const char *text, size_t width, int max_lines,
                                      struct inkcell_rgb color, struct inkcell_rgb ground) {
     struct inkcell_fb_wrap_ctx wctx;
@@ -2613,14 +2607,14 @@ int inkcell_fb_draw_wrapped_centered(const struct inkcell_backend_fb_state *stat
     return lines;
 }
 
-int inkcell_fb_draw_wrapped(const struct inkcell_backend_fb_state *state, int y, const char *text,
+int inkcell_fb_draw_wrapped(const struct inkcell_draw_state *state, int y, const char *text,
                             size_t width, int max_lines, struct inkcell_rgb color,
                             struct inkcell_rgb ground) {
     return inkcell_fb_draw_wrapped_at(state, inkcell_fb_margin(state), y, text, width, max_lines,
                                       color, ground);
 }
 
-uint32_t inkcell_fb_wrapped_lines(const struct inkcell_backend_fb_state *state, const char *text,
+uint32_t inkcell_fb_wrapped_lines(const struct inkcell_draw_state *state, const char *text,
                                   size_t width, int scale) {
     struct inkcell_fb_wrap_ctx wctx;
     const struct inkcell_wrap_metric metric = inkcell_fb_wrap_metric(&wctx, state, scale);

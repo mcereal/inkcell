@@ -47,8 +47,8 @@
  * whole of what a viewport changes about writing a screen: a row is at `index * line` whether
  * it is on the panel or four hundred rows above it, and the view decides which.
  */
-static void gallery_scroll_row(struct inkcell_backend_fb_state *state, uint32_t index, int y,
-                               int line, bool selected) {
+static void gallery_scroll_row(struct inkcell_draw_state *state, uint32_t index, int y, int line,
+                               bool selected) {
     static const enum gallery_str_id k_rows[] = {
         GALLERY_STR_ROW_DISPLAY, GALLERY_STR_ROW_SOUND,   GALLERY_STR_ROW_STORAGE,
         GALLERY_STR_ROW_NETWORK, GALLERY_STR_ROW_BATTERY, GALLERY_STR_ROW_SECURITY,
@@ -89,9 +89,8 @@ static void gallery_scroll_row(struct inkcell_backend_fb_state *state, uint32_t 
  * the same viewport - what differs is the chrome above it, which is the point: a collapsing
  * bar is a reader of the scroll rather than a different kind of screen.
  */
-static void gallery_scroll_page(struct inkcell_backend_fb_state *state,
-                                struct inkcell_scroll *scroll, int32_t offset, bool holding,
-                                bool collapsing) {
+static void gallery_scroll_page(struct inkcell_draw_state *state, struct inkcell_scroll *scroll,
+                                int32_t offset, bool holding, bool collapsing) {
     inkcell_fb_clear(state, inkcell_fb_color(state, INKCELL_COLOR_BG));
     struct inkcell_fb_layout layout = inkcell_fb_layout_begin(state, true, true);
 
@@ -126,7 +125,7 @@ static void gallery_scroll_page(struct inkcell_backend_fb_state *state,
     const struct inkcell_fb_rect window = {
         .x = 0,
         .y = layout.body_y,
-        .w = (int)state->var.xres,
+        .w = inkcell_fb_panel_width(state),
         .h = layout.footer_y - inkcell_fb_gutter(state) - layout.body_y,
     };
 
@@ -164,7 +163,7 @@ static void gallery_scroll_page(struct inkcell_backend_fb_state *state,
 }
 
 /* Settled between two rows: an offset that is not a multiple of a line, owing no frames. */
-void gallery_scene_scroll(struct inkcell_backend_fb_state *state) {
+void gallery_scene_scroll(struct inkcell_draw_state *state) {
     static struct inkcell_scroll scroll;
     const int line = inkcell_fb_line_adv(state, state->scale);
     gallery_scroll_page(state, &scroll, 6 * line + line / 2, false, false);
@@ -172,7 +171,7 @@ void gallery_scene_scroll(struct inkcell_backend_fb_state *state) {
 
 /* Pulled past the last row and held there, so the band is at full stretch and the rail's thumb
    has shortened against the end. */
-void gallery_scene_scroll_overscroll(struct inkcell_backend_fb_state *state) {
+void gallery_scene_scroll_overscroll(struct inkcell_draw_state *state) {
     static struct inkcell_scroll scroll;
     /* Far past the end on purpose: the band caps what that becomes, and a picture taken at the
        cap is a picture of the most an overscroll can ever be. */
@@ -181,7 +180,7 @@ void gallery_scene_scroll_overscroll(struct inkcell_backend_fb_state *state) {
 
 /* The heading, collapsed - and the same heading expanded, one page up, so the pair is the
    before and after of the one piece of chrome that needed pixels to exist. */
-void gallery_scene_scroll_title(struct inkcell_backend_fb_state *state) {
+void gallery_scene_scroll_title(struct inkcell_draw_state *state) {
     static struct inkcell_scroll scroll;
     gallery_scroll_page(state, &scroll, 0, false, true);
 }

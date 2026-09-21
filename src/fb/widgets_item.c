@@ -43,10 +43,10 @@ struct inkcell_fb_item_geom {
     int bar_y, bar_h; /* a stacked meter's track; bar_h of 0 is a row that has none */
 };
 
-static struct inkcell_fb_item_geom
-inkcell_fb_item_measure(const struct inkcell_backend_fb_state *state,
-                        const struct inkcell_fb_list *list, const struct inkcell_fb_list_item *item,
-                        uint32_t index, uint32_t rows) {
+static struct inkcell_fb_item_geom inkcell_fb_item_measure(const struct inkcell_draw_state *state,
+                                                           const struct inkcell_fb_list *list,
+                                                           const struct inkcell_fb_list_item *item,
+                                                           uint32_t index, uint32_t rows) {
     const int scale = state->scale;
     const int adv = inkcell_fb_char_adv(state, scale);
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
@@ -265,15 +265,14 @@ inkcell_fb_item_measure(const struct inkcell_backend_fb_state *state,
  * control's label is chrome, which is the type role the action bar's verbs and the navigation
  * bar's tabs already take.
  */
-static int inkcell_fb_segmented_scale(const struct inkcell_backend_fb_state *state) {
+static int inkcell_fb_segmented_scale(const struct inkcell_draw_state *state) {
     return inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL);
 }
 
 /* The chosen word instead of the control, on the terms an ordinary trailing text takes. Both
    ways of ending up there - no room, and no drawable choice - go through this, so a slot that
    fell back for one reason is measured exactly like a slot that fell back for the other. */
-static size_t inkcell_fb_segmented_as_text(const struct inkcell_backend_fb_state *state,
-                                           size_t cols,
+static size_t inkcell_fb_segmented_as_text(const struct inkcell_draw_state *state, size_t cols,
                                            const struct inkcell_fb_segmented *segmented,
                                            bool *out_as_text) {
     if (out_as_text != NULL) {
@@ -286,7 +285,7 @@ static size_t inkcell_fb_segmented_as_text(const struct inkcell_backend_fb_state
     return (cells > 0U && cols > cells + 1U) ? cells + 1U : 0U;
 }
 
-static size_t inkcell_fb_segmented_cols(const struct inkcell_backend_fb_state *state, size_t cols,
+static size_t inkcell_fb_segmented_cols(const struct inkcell_draw_state *state, size_t cols,
                                         const struct inkcell_fb_segmented *segmented,
                                         bool *out_as_text) {
     if (out_as_text != NULL) {
@@ -331,7 +330,7 @@ static size_t inkcell_fb_segmented_cols(const struct inkcell_backend_fb_state *s
     return inkcell_fb_segmented_as_text(state, cols, segmented, out_as_text);
 }
 
-static size_t inkcell_fb_trailing_cols(const struct inkcell_backend_fb_state *state, size_t cols,
+static size_t inkcell_fb_trailing_cols(const struct inkcell_draw_state *state, size_t cols,
                                        size_t reserved,
                                        const struct inkcell_fb_trailing *trailing) {
     const int adv = inkcell_fb_char_adv(state, state->scale);
@@ -419,8 +418,8 @@ static size_t inkcell_fb_trailing_cols(const struct inkcell_backend_fb_state *st
  * A meter and a signal staircase are readings. They are pictures of a value rather than offers
  * to change one, so neither supersedes anything in the gutter however well it fits.
  */
-static bool inkcell_fb_trailing_is_control(const struct inkcell_backend_fb_state *state,
-                                           size_t cols, size_t reserved,
+static bool inkcell_fb_trailing_is_control(const struct inkcell_draw_state *state, size_t cols,
+                                           size_t reserved,
                                            const struct inkcell_fb_trailing *trailing) {
     switch (trailing->kind) {
     case INKCELL_FB_TRAILING_SWITCH:
@@ -452,9 +451,8 @@ static bool inkcell_fb_trailing_is_control(const struct inkcell_backend_fb_state
 /* One piece of a headline, clipped to the cells it was given - declared here for the segmented
    slot's fallback, which writes into the row's value column rather than the trailing edge and
    owes that column the same clipping every other piece of the line gets. */
-static void inkcell_fb_item_piece(struct inkcell_backend_fb_state *state, int x, int y,
-                                  const char *text, size_t cols, struct inkcell_rgb ink,
-                                  struct inkcell_rgb ground);
+static void inkcell_fb_item_piece(struct inkcell_draw_state *state, int x, int y, const char *text,
+                                  size_t cols, struct inkcell_rgb ink, struct inkcell_rgb ground);
 
 /* `reserved` is the same figure inkcell_fb_trailing_cols() was given - see there. Only the slot
    with two forms reads it, and it has to: a segmented button that measured itself against the free
@@ -477,7 +475,7 @@ static void inkcell_fb_item_piece(struct inkcell_backend_fb_state *state, int x,
  */
 /* `value_ink` is the ink the row's own value column is written in, and only the segmented
    slot's fallback uses it - see there. */
-static void inkcell_fb_draw_trailing(struct inkcell_backend_fb_state *state,
+static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
                                      const struct inkcell_fb_item_geom *g, size_t reserved,
                                      const struct inkcell_fb_trailing *trailing, int baseline,
                                      int slot_top, bool selected, enum inkcell_color rest_role,
@@ -732,9 +730,8 @@ static void inkcell_fb_draw_trailing(struct inkcell_backend_fb_state *state,
  * The clipping is per piece and the positions are absolute, so the value column lands in exactly
  * the cell the composed line used to put it in.
  */
-static void inkcell_fb_item_piece(struct inkcell_backend_fb_state *state, int x, int y,
-                                  const char *text, size_t cols, struct inkcell_rgb ink,
-                                  struct inkcell_rgb ground) {
+static void inkcell_fb_item_piece(struct inkcell_draw_state *state, int x, int y, const char *text,
+                                  size_t cols, struct inkcell_rgb ink, struct inkcell_rgb ground) {
     if (cols == 0U) {
         return;
     }
@@ -745,7 +742,7 @@ static void inkcell_fb_item_piece(struct inkcell_backend_fb_state *state, int x,
     inkcell_fb_draw_text(state, x, y, inkcell_line_text(&line), state->scale, ink, ground);
 }
 
-void inkcell_fb_list_item(struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
+void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_list *list,
                           uint32_t index, const struct inkcell_fb_list_item *item) {
     inkcell_fb_list_chrome(state, list);
     const bool band = inkcell_fb_list_band_begin(list);
@@ -1017,8 +1014,8 @@ void inkcell_fb_list_item(struct inkcell_backend_fb_state *state, struct inkcell
  * that. What is left here is the *translation*: which of a conversation's facts goes in which
  * slot, and which of them changes what the row says rather than how it looks.
  */
-void inkcell_fb_draw_conversation(struct inkcell_backend_fb_state *state,
-                                  struct inkcell_fb_list *list, uint32_t index,
+void inkcell_fb_draw_conversation(struct inkcell_draw_state *state, struct inkcell_fb_list *list,
+                                  uint32_t index,
                                   const struct inkcell_fb_conversation *conversation) {
     inkcell_fb_list_chrome(state, list);
     /*
@@ -1093,7 +1090,7 @@ void inkcell_fb_draw_conversation(struct inkcell_backend_fb_state *state,
     inkcell_fb_list_item(state, list, index, &item);
 }
 
-size_t inkcell_fb_field_label_cols(const struct inkcell_backend_fb_state *state,
+size_t inkcell_fb_field_label_cols(const struct inkcell_draw_state *state,
                                    const struct inkcell_fb_layout *layout, size_t preferred) {
     const struct inkcell_metrics *metrics = inkcell_fb_metrics(state);
     if (preferred == 0U) {

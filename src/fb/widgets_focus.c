@@ -21,11 +21,11 @@
 /* How far outside the box the ring sits, and how thick it is: the hairline everything else
    outlines with, and twice it - the same pair the card's focus edge takes, because a ring that
    was thinner than the card's would read as a different kind of thing. */
-static int focus_ring_inset(const struct inkcell_backend_fb_state *state) {
+static int focus_ring_inset(const struct inkcell_draw_state *state) {
     return inkcell_fb_edge(state);
 }
 
-static int focus_ring_thickness(const struct inkcell_backend_fb_state *state) {
+static int focus_ring_thickness(const struct inkcell_draw_state *state) {
     return 2 * inkcell_fb_edge(state);
 }
 
@@ -83,7 +83,7 @@ static bool focus_ring_target(const struct inkcell_focus_map *map, uint32_t id,
  * round from where the ring actually is rather than from the box it set out from - the same
  * property inkcell_anim_to() exists to give a switch flicked twice.
  */
-static void focus_ring_aim(struct inkcell_backend_fb_state *state, uint32_t id,
+static void focus_ring_aim(struct inkcell_draw_state *state, uint32_t id,
                            struct inkcell_focus_rect target, int radius, bool travelled) {
     struct inkcell_fb_focus_ring *ring = &state->focus_ring;
     const bool arriving = ring->id == INKCELL_FOCUS_NONE;
@@ -165,8 +165,7 @@ static void focus_ring_aim(struct inkcell_backend_fb_state *state, uint32_t id,
  * box just painted is carried to the next frame instead and declared at
  * inkcell_fb_app_frame_begin(), where it is early enough to matter.
  */
-static void focus_ring_painted(struct inkcell_backend_fb_state *state,
-                               struct inkcell_focus_rect box) {
+static void focus_ring_painted(struct inkcell_draw_state *state, struct inkcell_focus_rect box) {
     const int pad = focus_ring_inset(state) + focus_ring_thickness(state);
     const int x = box.x - pad;
     const int y = box.y - pad;
@@ -178,7 +177,7 @@ static void focus_ring_painted(struct inkcell_backend_fb_state *state,
         .x = x, .y = y, .right = x + w, .bottom = y + h, .valid = true};
 }
 
-void inkcell_fb_focus_ring_place(struct inkcell_backend_fb_state *state,
+void inkcell_fb_focus_ring_place(struct inkcell_draw_state *state,
                                  const struct inkcell_focus_map *map, uint32_t id) {
     if (state == NULL) {
         return;
@@ -194,7 +193,7 @@ void inkcell_fb_focus_ring_place(struct inkcell_backend_fb_state *state,
     focus_ring_aim(state, id, target, radius, false);
 }
 
-void inkcell_fb_draw_focus_ring(struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_focus_ring(struct inkcell_draw_state *state,
                                 const struct inkcell_focus_map *map, uint32_t id) {
     if (state == NULL) {
         return;
@@ -228,7 +227,7 @@ void inkcell_fb_draw_focus_ring(struct inkcell_backend_fb_state *state,
                                  inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY));
 }
 
-bool inkcell_fb_focus_ring_rect(const struct inkcell_backend_fb_state *state,
+bool inkcell_fb_focus_ring_rect(const struct inkcell_draw_state *state,
                                 struct inkcell_focus_rect *rect, int *radius) {
     if (state == NULL || state->focus_ring.id == INKCELL_FOCUS_NONE) {
         return false;

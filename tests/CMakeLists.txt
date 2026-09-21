@@ -7,6 +7,7 @@
 # them with it, silently. Add a new suite file to INKCELL_TEST_SUITES and it runs.
 set(INKCELL_TEST_SUITES
     suites/ui_anim.c
+    suites/ui_damage.c
     suites/ui_focus.c
     suites/ui_focus_ring.c
     suites/ui_focus_widgets.c
@@ -37,14 +38,20 @@ target_link_libraries(inkcell_tests PRIVATE inkcell inkwell::inkwell inkcell_opt
 add_test(NAME inkcell_unit COMMAND inkcell_tests)
 set_tests_properties(inkcell_unit PROPERTIES LABELS unit)
 
-# The same two checks mesh-client runs over its own tree, because both rules are inkcell's:
-# a renderer that spells out a word is the thing the string catalog exists to prevent, and the
-# layer table is what keeps utils a leaf.
+# The checks a compiler has no opinion about: a renderer that spells out a word is the thing the
+# string catalog exists to prevent, and a public header that names a platform's types is the
+# thing that stops this being a toolkit.
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
     add_test(NAME inkcell_hardcoded_strings
              COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/check-strings.py)
     set_tests_properties(inkcell_hardcoded_strings PROPERTIES LABELS unit)
+
+    # And the third: a public header that includes <linux/fb.h> is a toolkit that has decided,
+    # on behalf of every application, which platform it draws on.
+    add_test(NAME inkcell_platform_headers
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/check-platform.py)
+    set_tests_properties(inkcell_platform_headers PROPERTIES LABELS unit)
 endif()
 
 # ---- the golden sheet -------------------------------------------------------------------------

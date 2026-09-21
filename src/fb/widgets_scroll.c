@@ -22,9 +22,9 @@
 
 /* ---- the viewport ---------------------------------------------------------------------------- */
 
-bool inkcell_fb_viewport_begin(struct inkcell_backend_fb_state *state,
-                               struct inkcell_fb_viewport *view, struct inkcell_fb_rect box,
-                               struct inkcell_scroll *scroll, int32_t content_h) {
+bool inkcell_fb_viewport_begin(struct inkcell_draw_state *state, struct inkcell_fb_viewport *view,
+                               struct inkcell_fb_rect box, struct inkcell_scroll *scroll,
+                               int32_t content_h) {
     if (view != NULL) {
         memset(view, 0, sizeof *view);
     }
@@ -64,8 +64,7 @@ bool inkcell_fb_viewport_begin(struct inkcell_backend_fb_state *state,
     return view->pushed;
 }
 
-void inkcell_fb_viewport_end(struct inkcell_backend_fb_state *state,
-                             struct inkcell_fb_viewport *view) {
+void inkcell_fb_viewport_end(struct inkcell_draw_state *state, struct inkcell_fb_viewport *view) {
     if (state == NULL || view == NULL) {
         return;
     }
@@ -87,7 +86,7 @@ void inkcell_fb_viewport_end(struct inkcell_backend_fb_state *state,
    reading as a thumb and starts reading as a speck. */
 #define INKCELL_FB_RAIL_MIN_THUMB 4
 
-void inkcell_fb_draw_scroll_rail(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_scroll_rail(const struct inkcell_draw_state *state,
                                  const struct inkcell_fb_viewport *view,
                                  const struct inkcell_scroll *scroll) {
     if (state == NULL || view == NULL || scroll == NULL || view->box.h <= 0) {
@@ -198,26 +197,26 @@ void inkcell_fb_draw_scroll_rail(const struct inkcell_backend_fb_state *state,
 
 /* The two heights the bar moves between: collapsed is an ordinary app bar with no trail, and
    expanded is that plus one line of the large title. */
-static int inkcell_fb_large_title_collapsed(const struct inkcell_backend_fb_state *state,
+static int inkcell_fb_large_title_collapsed(const struct inkcell_draw_state *state,
                                             const struct inkcell_fb_layout *layout) {
     return inkcell_fb_app_bar_height(state, layout, 0U);
 }
 
-static int inkcell_fb_large_title_line(const struct inkcell_backend_fb_state *state) {
+static int inkcell_fb_large_title_line(const struct inkcell_draw_state *state) {
     /* One step above the title role, which is the size the whole shape is *for*: a heading
        that is merely the title size on its own row is a title with a gap over it. */
     return inkcell_fb_line_adv(state,
                                inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE) + INKCELL_SCALE(1));
 }
 
-int inkcell_fb_large_title_travel(const struct inkcell_backend_fb_state *state) {
+int inkcell_fb_large_title_travel(const struct inkcell_draw_state *state) {
     if (state == NULL) {
         return 0;
     }
     return inkcell_fb_large_title_line(state);
 }
 
-void inkcell_fb_draw_large_title(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_large_title(const struct inkcell_draw_state *state,
                                  struct inkcell_fb_layout *layout,
                                  const struct inkcell_fb_large_title *bar, int32_t offset) {
     if (state == NULL || layout == NULL || bar == NULL) {
@@ -258,9 +257,9 @@ void inkcell_fb_draw_large_title(const struct inkcell_backend_fb_state *state,
 
     /* The bar's own ground, so the two titles have something honest to fade against - a fade
        towards a colour that is not what is actually behind the glyph is a glyph with a halo. */
-    inkcell_fb_fill_rect(state, 0, layout->body_y, (int)state->var.xres, height, ground);
+    inkcell_fb_fill_rect(state, 0, layout->body_y, inkcell_fb_panel_width(state), height, ground);
 
-    int right = (int)state->var.xres - margin;
+    int right = inkcell_fb_panel_width(state) - margin;
     /*
      * The badge sits on both sizes of the bar and never fades.
      *
@@ -324,7 +323,7 @@ void inkcell_fb_draw_large_title(const struct inkcell_backend_fb_state *state,
         const int y = layout->body_y + collapsed_h + extra - large_line;
         const struct inkcell_rgb ink =
             inkcell_fb_fade(inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY), ground, progress);
-        int large_right = (int)state->var.xres - margin;
+        int large_right = inkcell_fb_panel_width(state) - margin;
         if (bar->detail != NULL && bar->detail[0] != '\0') {
             const struct inkcell_rgb dim =
                 inkcell_fb_fade(inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM), ground, progress);
@@ -361,7 +360,7 @@ void inkcell_fb_draw_large_title(const struct inkcell_backend_fb_state *state,
         const struct inkcell_rgb rule = inkcell_fb_fade(inkcell_fb_color(state, INKCELL_COLOR_RULE),
                                                         ground, INKCELL_ANIM_ONE - progress);
         inkcell_fb_fill_rect(state, 0, layout->body_y + height - inkcell_fb_rule_height(state, 1),
-                             (int)state->var.xres, inkcell_fb_rule_height(state, 1), rule);
+                             inkcell_fb_panel_width(state), inkcell_fb_rule_height(state, 1), rule);
     }
 
     /*

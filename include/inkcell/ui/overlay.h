@@ -245,13 +245,12 @@ struct inkcell_overlay_frame {
  * Mutable state, like everything here that animates: where a layer has got to is the one thing
  * about it the frame itself remembers.
  */
-bool inkcell_fb_overlay_begin(struct inkcell_backend_fb_state *state,
+bool inkcell_fb_overlay_begin(struct inkcell_draw_state *state,
                               const struct inkcell_overlay *overlay,
                               struct inkcell_overlay_frame *frame);
 
 /* Closes it. Pairs with a inkcell_fb_overlay_begin() that returned true. */
-void inkcell_fb_overlay_end(struct inkcell_backend_fb_state *state,
-                            struct inkcell_overlay_frame *frame);
+void inkcell_fb_overlay_end(struct inkcell_draw_state *state, struct inkcell_overlay_frame *frame);
 
 /*
  * The layer that owns the press, or INKCELL_OVERLAY_NONE.
@@ -264,7 +263,7 @@ void inkcell_fb_overlay_end(struct inkcell_backend_fb_state *state,
  * Read between frames, so it answers from the frame just drawn rather than the one being drawn.
  * That is the frame the reader was looking at when they pressed.
  */
-uint32_t inkcell_fb_overlay_modal(const struct inkcell_backend_fb_state *state);
+uint32_t inkcell_fb_overlay_modal(const struct inkcell_draw_state *state);
 
 /*
  * Whether `id` has any of itself on the panel - arriving, arrived or leaving.
@@ -273,7 +272,7 @@ uint32_t inkcell_fb_overlay_modal(const struct inkcell_backend_fb_state *state);
  * body that stops registering its own focus ids while a modal is up, a press that should do
  * nothing at all until a sheet has finished going away.
  */
-bool inkcell_fb_overlay_showing(const struct inkcell_backend_fb_state *state, uint32_t id);
+bool inkcell_fb_overlay_showing(const struct inkcell_draw_state *state, uint32_t id);
 #ifdef __cplusplus
 }
 #endif

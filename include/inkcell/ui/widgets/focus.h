@@ -84,7 +84,7 @@
  * place the ring rather than move it - a cursor that jumps is a worse cue than one that
  * travels, and both are better than a trail of outline left on the panel.
  */
-void inkcell_fb_draw_focus_ring(struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_focus_ring(struct inkcell_draw_state *state,
                                 const struct inkcell_focus_map *map, uint32_t id);
 
 /*
@@ -99,7 +99,7 @@ void inkcell_fb_draw_focus_ring(struct inkcell_backend_fb_state *state,
  * Call it before the draw below, on the frames where the cursor was moved by the layout rather
  * than by a press; the next ordinary press then travels from where this put it.
  */
-void inkcell_fb_focus_ring_place(struct inkcell_backend_fb_state *state,
+void inkcell_fb_focus_ring_place(struct inkcell_draw_state *state,
                                  const struct inkcell_focus_map *map, uint32_t id);
 
 /*
@@ -113,7 +113,7 @@ void inkcell_fb_focus_ring_place(struct inkcell_backend_fb_state *state,
  * at all - the ring is a few pixels of outline, and a golden picture of one halfway through a
  * journey pins the whole curve to a digest that any change to the easing would break.
  */
-bool inkcell_fb_focus_ring_rect(const struct inkcell_backend_fb_state *state,
+bool inkcell_fb_focus_ring_rect(const struct inkcell_draw_state *state,
                                 struct inkcell_focus_rect *rect, int *radius);
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_FOCUS_H */

@@ -45,7 +45,7 @@
  * family's held-back half with the ink that family states - and a component that took a colour
  * and chose the ink itself would be drawing the second combination against the first's contract.
  */
-void inkcell_fb_draw_avatar(const struct inkcell_backend_fb_state *state, int x, int y, int size,
+void inkcell_fb_draw_avatar(const struct inkcell_draw_state *state, int x, int y, int size,
                             const char *label, enum inkcell_icon icon, struct inkcell_paint paint) {
     inkcell_fb_fill_round_rect(state, x, y, size, size, size / 2, paint.fill);
     const bool has_icon = inkcell_icon_is_valid(icon);
@@ -206,7 +206,7 @@ bool inkcell_fb_list_has_cards(const struct inkcell_fb_list *list) {
  * descender in it paints through the hairline, and only at the one scale nothing is rendered at.
  * Where there is no air the cards give up their inset rather than the heading its room.
  */
-static int inkcell_fb_list_card_pad(const struct inkcell_backend_fb_state *state) {
+static int inkcell_fb_list_card_pad(const struct inkcell_draw_state *state) {
     const int edge = inkcell_fb_edge(state);
     int pad = inkcell_scale_px((int)inkcell_fb_metrics(state)->card_pad, state->scale) / 2;
     if (pad < edge) {
@@ -241,7 +241,7 @@ uint32_t inkcell_fb_list_row_height(const struct inkcell_fb_list *list, uint32_t
  * for the same reason every other measurement here does: the list is the authority once it has
  * been told, so a card can never be a row out from the rows standing on it.
  */
-static void inkcell_fb_list_cards(const struct inkcell_backend_fb_state *state,
+static void inkcell_fb_list_cards(const struct inkcell_draw_state *state,
                                   struct inkcell_fb_list *list) {
     if (list == NULL || list->cards == NULL || list->model.visible == 0U) {
         return;
@@ -432,7 +432,7 @@ static void inkcell_fb_list_cards(const struct inkcell_backend_fb_state *state,
  * itself is the same mark in the same strip either way, which is the whole reason there is one
  * of these rather than two.
  */
-void inkcell_fb_draw_list_rail(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_list_rail(const struct inkcell_draw_state *state,
                                const struct inkcell_list *window, int track_y, int track_h) {
     if (state == NULL || window == NULL || track_h <= 0) {
         return;
@@ -462,7 +462,7 @@ void inkcell_fb_draw_list_rail(const struct inkcell_backend_fb_state *state,
      */
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
     const int strip_x = box.x + box.w + inkcell_fb_edge(state);
-    const int strip_w = (int)state->var.xres - strip_x;
+    const int strip_w = inkcell_fb_panel_width(state) - strip_x;
     if (strip_w < 3) {
         return;
     }
@@ -504,8 +504,7 @@ void inkcell_fb_draw_list_rail(const struct inkcell_backend_fb_state *state,
  * The order is the only thing this function decides, and it decides it once: a surface goes
  * under the ink standing on it, and the rail is outside both.
  */
-void inkcell_fb_list_chrome(const struct inkcell_backend_fb_state *state,
-                            struct inkcell_fb_list *list) {
+void inkcell_fb_list_chrome(const struct inkcell_draw_state *state, struct inkcell_fb_list *list) {
     if (list == NULL || list->chrome_drawn) {
         return;
     }
@@ -574,7 +573,7 @@ void inkcell_fb_list_band_end(const struct inkcell_fb_list *list, bool began) {
     }
 }
 
-void inkcell_fb_list_glide(struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
+void inkcell_fb_list_glide(struct inkcell_draw_state *state, struct inkcell_fb_list *list,
                            uint32_t id) {
     if (state == NULL || list == NULL || id == 0U) {
         return;
@@ -671,7 +670,7 @@ void inkcell_fb_list_glide(struct inkcell_backend_fb_state *state, struct inkcel
     /* The whole body is moving, so the whole body is this frame's to repaint - a partial redraw
        that took the window's word for what changed would leave the rows that slid. */
     const int top = list->track_y - inkcell_step_px(state->scale);
-    inkcell_fb_animation_damage(state, 0, top, (int)state->var.xres, list->track_h);
+    inkcell_fb_animation_damage(state, 0, top, inkcell_fb_panel_width(state), list->track_h);
 }
 
 void inkcell_fb_list_focus(struct inkcell_fb_list *list, uint32_t base) {
@@ -681,7 +680,7 @@ void inkcell_fb_list_focus(struct inkcell_fb_list *list, uint32_t base) {
     list->focus_base = base;
 }
 
-void inkcell_fb_list_focus_row(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_list_focus_row(const struct inkcell_draw_state *state,
                                const struct inkcell_fb_list *list, uint32_t index, int y, int h) {
     if (list == NULL || list->focus_base == INKCELL_FOCUS_NONE) {
         return;
@@ -736,7 +735,7 @@ bool inkcell_fb_list_next(struct inkcell_fb_list *list, uint32_t *index) {
     return false;
 }
 
-void inkcell_fb_list_row(const struct inkcell_backend_fb_state *state, struct inkcell_fb_list *list,
+void inkcell_fb_list_row(const struct inkcell_draw_state *state, struct inkcell_fb_list *list,
                          uint32_t index, const char *text, enum inkcell_tone tone) {
     inkcell_fb_list_chrome(state, list);
     /* Drawn out rather than through inkcell_fb_draw_row(), which lays its fill on the panel's own
@@ -777,7 +776,7 @@ void inkcell_fb_list_row(const struct inkcell_backend_fb_state *state, struct in
  * Shared by the headline, its label column and the supporting line, because the three were
  * three copies of this conditional and the supporting one had already grown a flag of its own.
  */
-struct inkcell_rgb inkcell_fb_item_ink(const struct inkcell_backend_fb_state *state,
+struct inkcell_rgb inkcell_fb_item_ink(const struct inkcell_draw_state *state,
                                        enum inkcell_tone tone, bool selected, bool quiet) {
     if (!selected) {
         return inkcell_fb_tone_color(state, tone);
@@ -786,13 +785,13 @@ struct inkcell_rgb inkcell_fb_item_ink(const struct inkcell_backend_fb_state *st
                             quiet ? INKCELL_COLOR_TEXT_ON_SEL_DIM : INKCELL_COLOR_TEXT_ON_SEL);
 }
 
-void inkcell_fb_list_subheader(const struct inkcell_backend_fb_state *state,
-                               struct inkcell_fb_list *list, uint32_t index, const char *text) {
+void inkcell_fb_list_subheader(const struct inkcell_draw_state *state, struct inkcell_fb_list *list,
+                               uint32_t index, const char *text) {
     inkcell_fb_list_subheader_icon(state, list, index, text,
                                    (struct inkcell_fb_leading){.kind = INKCELL_FB_LEADING_NONE});
 }
 
-void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_list_subheader_icon(const struct inkcell_draw_state *state,
                                     struct inkcell_fb_list *list, uint32_t index, const char *text,
                                     struct inkcell_fb_leading leading) {
     inkcell_fb_list_chrome(state, list);
@@ -963,12 +962,12 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_backend_fb_state *state
 
 /* The width a note's body wraps to. The list's own columns: a paragraph indented past the rows
    around it would be a second left margin on a panel that has room for one. */
-static size_t inkcell_fb_note_cols(const struct inkcell_backend_fb_state *state) {
+static size_t inkcell_fb_note_cols(const struct inkcell_draw_state *state) {
     return inkcell_fb_row_cols(state, state->scale);
 }
 
-uint32_t inkcell_fb_list_note_steps(const struct inkcell_backend_fb_state *state,
-                                    const char *heading, const char *body) {
+uint32_t inkcell_fb_list_note_steps(const struct inkcell_draw_state *state, const char *heading,
+                                    const char *body) {
     if (state == NULL) {
         return 1U;
     }
@@ -982,9 +981,8 @@ uint32_t inkcell_fb_list_note_steps(const struct inkcell_backend_fb_state *state
     return steps > 0U ? steps : 1U;
 }
 
-void inkcell_fb_list_note(const struct inkcell_backend_fb_state *state,
-                          struct inkcell_fb_list *list, uint32_t index, const char *heading,
-                          const char *body) {
+void inkcell_fb_list_note(const struct inkcell_draw_state *state, struct inkcell_fb_list *list,
+                          uint32_t index, const char *heading, const char *body) {
     inkcell_fb_list_chrome(state, list);
     const bool band = inkcell_fb_list_band_begin(list);
     const uint32_t rows = inkcell_fb_list_row_height(list, index);
@@ -1047,9 +1045,8 @@ void inkcell_fb_list_note(const struct inkcell_backend_fb_state *state,
     list->y += (int)rows * list->line;
 }
 
-void inkcell_fb_list_row_line(const struct inkcell_backend_fb_state *state,
-                              struct inkcell_fb_list *list, uint32_t index,
-                              struct inkcell_line *line, enum inkcell_tone tone) {
+void inkcell_fb_list_row_line(const struct inkcell_draw_state *state, struct inkcell_fb_list *list,
+                              uint32_t index, struct inkcell_line *line, enum inkcell_tone tone) {
     /* The row's columns, not the panel's: inkcell_fb_rail_gutter() is kept clear of the box every
        row is drawn in, so a line fitted to inkcell_fb_cols() is a line fitted to a width no row
        has. */

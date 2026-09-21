@@ -24,7 +24,7 @@
 #define INKCELL_CAPTURE_HEIGHT 768U
 
 struct inkcell_capture;
-struct inkcell_backend_fb_state;
+struct inkcell_draw_state;
 
 /*
  * Allocates an off-screen page. The theme is the one <PREFIX>_THEME names, as on the device;
@@ -48,7 +48,7 @@ void inkcell_capture_set_reference(struct inkcell_capture *capture, bool referen
  * scene holds for a moment after opening the way it holds for an animation -
  * inkcell_capture_animating() reports a view still filling.
  */
-struct inkcell_backend_fb_state *inkcell_capture_state(struct inkcell_capture *capture);
+struct inkcell_draw_state *inkcell_capture_state(struct inkcell_capture *capture);
 
 /* Same clamping as the scale passed to open(). */
 void inkcell_capture_set_scale(struct inkcell_capture *capture, int scale);

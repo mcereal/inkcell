@@ -59,7 +59,7 @@ static struct inkcell_fb_layout fab_floor(const struct inkcell_fb_layout *layout
 /* The caption, right-aligned into the gap the column leaves beside itself. Beside the FAB rather
    than in the body's own text column, because the body is a list: a label in that column would
    be a second sentence written across the rows this page is standing the FAB on. */
-static void fab_caption(const struct inkcell_backend_fb_state *state,
+static void fab_caption(const struct inkcell_draw_state *state,
                         const struct inkcell_fb_layout *layout, const struct inkcell_fb_rect *box,
                         enum gallery_str_id caption) {
     const int scale = layout->small;
@@ -79,9 +79,8 @@ static void fab_caption(const struct inkcell_backend_fb_state *state,
  * this file picked: the sizes differ, and a fixed step would either overlap the large one or
  * leave a hole under the small one.
  */
-static void fab_column(struct inkcell_backend_fb_state *state,
-                       const struct inkcell_fb_layout *layout, const struct fab_row *rows,
-                       size_t count) {
+static void fab_column(struct inkcell_draw_state *state, const struct inkcell_fb_layout *layout,
+                       const struct fab_row *rows, size_t count) {
     const int gap = inkcell_fb_space(state, INKCELL_SPACE_MD);
     int floor = layout->footer_y;
 
@@ -113,7 +112,7 @@ static void fab_column(struct inkcell_backend_fb_state *state,
     }
 }
 
-void gallery_scene_fab(struct inkcell_backend_fb_state *state) {
+void gallery_scene_fab(struct inkcell_draw_state *state) {
     struct inkcell_fb_layout layout = gallery_frame(state, GALLERY_STR_HEAD_FAB, 0U);
 
     /*

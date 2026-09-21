@@ -31,7 +31,7 @@
  * it always did rather than crushing it: a small panel, a large glyph scale, or a heading that
  * took two lines.
  */
-static int inkcell_fb_keyboard_cell_h(const struct inkcell_backend_fb_state *state,
+static int inkcell_fb_keyboard_cell_h(const struct inkcell_draw_state *state,
                                       const struct inkcell_fb_layout *layout, int y, int cell_w) {
     const int floor_h = layout->line + inkcell_fb_space(state, INKCELL_SPACE_MD);
     int cell_h = (layout->footer_y - y) / (int)INKCELL_KB_ROWS;
@@ -57,7 +57,7 @@ static int inkcell_fb_keyboard_cell_h(const struct inkcell_backend_fb_state *sta
  * asked for small text has asked for it, and a keycap three times the draft under it would be
  * the screen arguing with them.
  */
-static int inkcell_fb_keyboard_key_scale(const struct inkcell_backend_fb_state *state, int cell_h) {
+static int inkcell_fb_keyboard_key_scale(const struct inkcell_draw_state *state, int cell_h) {
     const int scale = state->scale;
     /* The room one whole step costs, and the count of them the key has room for - converted
        back into a scale at the end. The division has to be in whole steps: a key grown by a
@@ -114,7 +114,7 @@ static enum inkcell_icon inkcell_fb_keyboard_action_icon(const struct inkcell_fb
     }
 }
 
-void inkcell_fb_draw_keyboard(const struct inkcell_backend_fb_state *state,
+void inkcell_fb_draw_keyboard(const struct inkcell_draw_state *state,
                               const struct inkcell_fb_layout *layout, int *y,
                               const struct inkcell_fb_keyboard *keyboard) {
     if (state == NULL || layout == NULL || y == NULL || keyboard == NULL ||
@@ -124,7 +124,7 @@ void inkcell_fb_draw_keyboard(const struct inkcell_backend_fb_state *state,
     const struct inkcell_keyboard *const kb = keyboard->keyboard;
     const int scale = state->scale;
     const int margin = inkcell_fb_margin(state);
-    const int grid_w = (int)state->var.xres - 2 * margin;
+    const int grid_w = inkcell_fb_panel_width(state) - 2 * margin;
     const int cell_w = grid_w / (int)INKCELL_KB_COLS;
     const int cell_h = inkcell_fb_keyboard_cell_h(state, layout, *y, cell_w);
     const int key_scale = inkcell_fb_keyboard_key_scale(state, cell_h);

@@ -25,7 +25,7 @@
    to need a version with real structure in it rather than a toy grid. */
 #define GALLERY_QR_PAYLOAD "https://github.com/mcereal/inkcell"
 
-void gallery_scene_overlays(struct inkcell_backend_fb_state *state) {
+void gallery_scene_overlays(struct inkcell_draw_state *state) {
     struct inkcell_fb_layout layout = gallery_frame(state, GALLERY_STR_HEAD_OVERLAYS, 4U);
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
 
