@@ -28,6 +28,7 @@ that a platform layer has to depend on to write a log line has its arrows the wr
 | **Scrolling** | A body positioned in pixels rather than windowed by row index - so it can rest between two rows, give at its ends the way every touch platform does, and drive a large title that collapses into the app bar as it moves. |
 | **Shapes** | Anti-aliased rounded rectangles, rings and arcs, in integers - so a curve is the same curve on every host that draws it. |
 | **Framebuffer** | `/dev/fb0`, the page flip, damage tracking, a glyph cache, and an off-screen renderer for screenshots. |
+| **Window** | The same frame in an SDL window: damage as texture uploads, a keyboard, and a development host that can run the UI instead of only screenshotting it. Optional - no SDL2, no window, everything else unchanged. |
 | **Input** | evdev to a logical key, hat axes, analogue triggers, key repeat, per-device button profiles. |
 | **i18n** | A catalog mechanism with plural rules and format-string validation. |
 | **Gallery** | Every component, in every theme, rendered with no device attached - and the golden sheet that keeps them that way. |
@@ -179,6 +180,11 @@ handed.
 
 **Linux only** — `epoll`, `timerfd`, `linux/fb.h`, `linux/input.h`.
 
+SDL2 is the one optional dependency, and optional by *presence*: with it you get the window
+backend, without it `inkcell/ui/sdl.h` still exists and reports itself unavailable. A plain
+`git clone` builds and tests either way, and CI has a job for each - `INKCELL_WITH_SDL=OFF`
+forces the second on a machine that has the library.
+
 ```bash
 make test        # debug build + ctest: the unit suite, the no-prose check, the golden sheet
 make debug       # build only
@@ -191,6 +197,29 @@ the suite under both.
 
 As a subdirectory of another project, the tests are off by default and inkcell installs nothing.
 
+## Backends
+
+A backend is six function pointers (`inkcell/ui/backend.h`) and the frame it presents is a
+`struct inkcell_surface` - a pointer, a stride and a channel layout. Three of them ship:
+
+| | |
+|---|---|
+| `inkcell_backend_fb()` | `/dev/fb0`. The device UI: changed spans copied into the mapping, `FBIOPAN_DISPLAY`, and the Brick's two-page mirror. |
+| `inkcell_backend_sdl()` | An SDL window. The same rows, gathered into rectangles and uploaded to a streaming texture. |
+| `inkcell_capture_*()` | No panel at all - a malloc'd page, which is what the gallery and the golden sheet render into. |
+
+They share everything above the surface, which is the point: the rasteriser, the widgets and
+every screen an application writes are the same code in all three, and the golden sheet holds
+them to it. What differs is the last step, and `inkcell_fb_damage_rects()` and
+`inkcell_fb_copy_damage()` are the two shapes that step comes in.
+
+**The SDL backend is a presenter, not a GPU renderer.** The glyphs, the rounded rectangles and
+the anti-aliasing are still the CPU's work; what moves to the GPU is the blit and the scale. Two
+things about SDL do not fit one epoll loop and neither is hidden: it has no descriptor to wait
+on, so its queue is drained from a timerfd registered through `struct inkcell_input_host`, and
+`SDL_RenderPresent()` blocks under vsync, so vsync is off unless `<PREFIX>_SDL_VSYNC` asks for
+it. See the header.
+
 ## What is deliberately not here
 
 - **An event loop.** An application has one already; a UI library that brought a second would be
@@ -198,6 +227,14 @@ As a subdirectory of another project, the tests are off by default and inkcell i
 - **A scene driver for screenshots.** `inkcell_capture_*` renders a frame off-screen, which is
   the reusable half. Driving an app through a scripted sequence of presses is a script against
   *that app's* navigation, so it lives with the app.
+- **A GPU rasteriser.** The SDL backend uploads a software-rendered frame; it does not draw
+  glyphs or shapes on the GPU. That would be a glyph atlas, signed-distance-field rounded
+  rectangles and a second renderer to keep in step with this one, and it is worth doing only
+  once there is a measurement on the device saying the upload is not enough.
+- **A pad over SDL.** SDL's game-controller layer brings a button mapping of its own, and
+  whether it agrees with the profile in `src/input/input_profile.c` about a given handheld is a
+  question for that handheld. A window is driven from a keyboard; a device is driven from
+  evdev.
 - **Translations.** The mechanism is here and so are inkcell's own twenty-three strings. A translation
   covers the catalog in force — both halves at once — so it belongs with the application.
 - **Your vocabulary.** Strings and icons work the same way: inkcell ships only what a *widget*

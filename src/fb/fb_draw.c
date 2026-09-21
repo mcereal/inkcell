@@ -14,6 +14,7 @@
 #include "inkcell/i18n/strings.h"
 #include "inkcell/ui/emoji.h"
 #include "inkcell/ui/icon.h"
+#include "inkwell/base/env.h"
 #include "inkwell/base/text.h"
 #include "inkwell/base/time.h"
 
@@ -737,6 +738,37 @@ static inline uint32_t compose_color(const struct inkcell_draw_state *state, uin
         color |= ~color_mask; /* opaque in whatever byte the colour channels leave free */
     }
     return color;
+}
+
+/*
+ * The look this run is drawn with.
+ *
+ * <PREFIX>_THEME names it (see src/ui/theme/theme.c for the list) and <PREFIX>_FB_SCALE
+ * overrides the glyph multiplier the theme asks for - an environment variable rather than a flag
+ * because on the Brick the app is started by launch.sh, not by anyone with a shell.
+ *
+ * Every backend that opens a panel of its own wants this same answer, which is why it is here
+ * rather than in whichever one was written first. The capture harness is the exception and
+ * deliberately so: a scene script names its theme and its scale, and a screenshot that changed
+ * because of the environment it ran in would be a test that agrees with its own host.
+ */
+void inkcell_fb_state_apply_theme_from_env(struct inkcell_draw_state *state) {
+    const struct inkcell_theme *theme = inkcell_theme_from_env();
+    /* A scale named in the environment outlives a theme switch: it is an explicit choice about
+       this panel, where a theme's own scale is only that theme's default. */
+    state->scale_pinned = inkwell_env_get("FB_SCALE") != NULL;
+    /*
+     * The knob stays in *whole* steps, where the scale it sets is in units.
+     *
+     * Everything inside counts quarters now, but this is the number somebody types on a device
+     * over ssh, and <PREFIX>_FB_SCALE=4 has meant "the body size" for as long as there has been
+     * one. Reading it in units would quietly halve every existing invocation, so the conversion
+     * happens here - the one place the outside world states a scale.
+     */
+    const int steps = (int)inkwell_env_int("FB_SCALE", INKCELL_SCALE_MIN / INKCELL_SCALE_UNIT,
+                                           INKCELL_SCALE_MAX / INKCELL_SCALE_UNIT, 0);
+    const int scale = steps > 0 ? INKCELL_SCALE(steps) : inkcell_theme_scale(theme);
+    inkcell_fb_state_set_theme(state, theme, scale);
 }
 
 /*

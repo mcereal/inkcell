@@ -360,6 +360,22 @@ static enum inkcell_key inkcell_input_map_convention(uint16_t code) {
         return INKCELL_KEY_SELECT;
     case BTN_START: /* 315 */
         return INKCELL_KEY_START;
+    /*
+     * The three caps a keyboard had no route to at all.
+     *
+     * A, B and Y have had one since there was a convention - Enter, Backspace, Space - and X,
+     * START and SELECT were reachable only from a pad profile, so a keyboard could walk this
+     * client's screens and not open the help sheet on any of them. X takes its own letter
+     * because that is what is printed on the cap; the other two take function keys because
+     * that is where a keyboard keeps the presses that are about the application rather than
+     * about what is on screen.
+     */
+    case KEY_X:
+        return INKCELL_KEY_X;
+    case KEY_F1:
+        return INKCELL_KEY_START;
+    case KEY_F2:
+        return INKCELL_KEY_SELECT;
     /* Keyboards, and d-pads that some drivers report as keys rather than a hat. */
     case KEY_UP:
     case BTN_DPAD_UP:

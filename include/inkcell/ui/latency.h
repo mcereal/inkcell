@@ -23,7 +23,9 @@ extern "C" {
  *   press   the kernel's own timestamp on the evdev event, to the end of the present() that
  *           answered it. It starts at the kernel rather than at the read, because a loop busy
  *           decoding does not wake for the event at all - and that wait is the whole of what
- *           an integrated number adds to a standalone one.
+ *           an integrated number adds to a standalone one. A source that has no kernel stamp
+ *           to offer says so - see enum inkcell_latency_clock - and the report labels the row
+ *           rather than quietly printing a shorter number under the same name.
  *   frame   the whole of present(): the two below, back to back.
  *   draw    the render and the damage compare - the client's own work, and the only part of a
  *           frame that a change to the drawing code can move.
@@ -84,6 +86,34 @@ enum inkcell_latency_metric {
     INKCELL_LATENCY_DECODE,
     INKCELL_LATENCY_METRIC_COUNT,
 };
+
+/*
+ * Where a press reading starts, which is not the same question on every input source.
+ *
+ * evdev puts the kernel's own CLOCK_MONOTONIC stamp on an event, so the press metric can begin
+ * at the moment the button moved - before this process was even woken. That is the whole value
+ * of the number: a loop busy decoding a tile does not wake for the event, and the wait is what
+ * an integrated measurement adds to a standalone one.
+ *
+ * A window toolkit has no such stamp to give. SDL times its events on a clock of its own that
+ * is not comparable with this one, and its queue is drained on a tick rather than on a
+ * descriptor, so the earliest honest moment is when the event was taken off that queue. A
+ * reading from there is short by however long it sat in the queue - up to one poll interval -
+ * and short in a way that flatters the client.
+ *
+ * Rather than let that difference hide inside one number, the source declares which it is and
+ * the report says so. Nothing else changes: the same histogram, the same percentiles, and a
+ * comparison between two runs is only meaningful when both ran on the same clock.
+ */
+enum inkcell_latency_clock {
+    INKCELL_LATENCY_CLOCK_KERNEL = 0, /* an evdev stamp: the press metric starts at the button */
+    INKCELL_LATENCY_CLOCK_DELIVERY,   /* no kernel stamp: it starts when we took the event */
+};
+
+/* Declared by whatever is feeding inkcell_latency_event(), once, at init. Survives a reset:
+   it is a property of the input source, not of a measurement. */
+void inkcell_latency_set_clock(enum inkcell_latency_clock clock);
+enum inkcell_latency_clock inkcell_latency_clock(void);
 
 /* CLOCK_MONOTONIC in microseconds - the same clock evdev is put on, so a kernel timestamp and a
    reading taken here are comparable. 0 if the clock read fails, which the probe treats as "no

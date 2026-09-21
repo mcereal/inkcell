@@ -116,3 +116,132 @@ INKCELL_TEST_CASE(damage_refuses_a_surface_with_no_pixel_size, unit) {
     }
     record_success(test_name);
 }
+
+/*
+ * ---- the same damage, as rectangles ----
+ *
+ * The other consumer of the row scan. A copy writes spans straight into a destination and can
+ * afford to treat every row on its own; something handing a frame to a GPU has to name
+ * rectangles, so consecutive damaged rows are gathered into bands. What these cases hold is the
+ * property everything above depends on and none of them can check for itself: the rectangles
+ * that come back cover *every* pixel that changed. One short of that is a stale row left in
+ * front of the reader, on a frame that reported success.
+ */
+
+/* Every damaged row in one band, and the band as wide as its widest row. */
+INKCELL_TEST_CASE(damage_rects_gather_consecutive_rows, unit) {
+    uint8_t previous[DAMAGE_PAGE] = {0};
+    uint8_t frame[DAMAGE_PAGE];
+    uint8_t mapping[DAMAGE_PAGE];
+    memset(frame, 0, sizeof frame);
+    struct inkcell_draw_state state = damage_state(mapping, sizeof mapping);
+
+    struct inkcell_fb_damage_rect rects[4];
+    INKCELL_TEST_FAIL_IF(inkcell_fb_damage_rects(&state, frame, previous, false, rects, 4U) != 0U,
+                         "an unchanged frame has no rectangles");
+
+    /* Pixel 0 of row 0 and pixel 2 of row 1: two rows running, so one band three wide. */
+    frame[0] ^= 1U;
+    frame[DAMAGE_STRIDE + 8U] ^= 1U;
+    const size_t count = inkcell_fb_damage_rects(&state, frame, previous, false, rects, 4U);
+    INKCELL_TEST_FAIL_IF(count != 1U, "consecutive damaged rows must be one band");
+    INKCELL_TEST_FAIL_IF(rects[0].x != 0 || rects[0].y != 0 || rects[0].right != 3 ||
+                             rects[0].bottom != 2,
+                         "a band must span the widest row it covers");
+    INKCELL_TEST_FAIL_IF(memcmp(previous, frame, DAMAGE_PAGE) != 0,
+                         "reporting a rectangle must bring the comparison up to date");
+    record_success(test_name);
+}
+
+/*
+ * Out of rectangles, and not out of damage.
+ *
+ * Two separated bands into a single rectangle: the second cannot start one of its own, so the
+ * first grows over it. That re-sends the untouched rows between them, which is bandwidth; what
+ * it must never do is leave the second band out, which would be a row that changed and was
+ * never handed over.
+ */
+INKCELL_TEST_CASE(damage_rects_widen_rather_than_drop_a_band, unit) {
+    enum { ROWS = 5U };
+    const size_t page = DAMAGE_STRIDE * ROWS;
+    uint8_t previous[DAMAGE_STRIDE * ROWS] = {0};
+    uint8_t frame[DAMAGE_STRIDE * ROWS];
+    uint8_t mapping[DAMAGE_STRIDE * ROWS];
+    memset(frame, 0, page);
+    struct inkcell_draw_state state = damage_state(mapping, page);
+    state.surface.height = ROWS;
+
+    frame[0] ^= 1U;                       /* row 0 */
+    frame[4U * DAMAGE_STRIDE + 8U] ^= 1U; /* row 4, with three clean rows between */
+
+    struct inkcell_fb_damage_rect one[1];
+    const size_t count = inkcell_fb_damage_rects(&state, frame, previous, false, one, 1U);
+    INKCELL_TEST_FAIL_IF(count != 1U, "one rectangle is all that was offered");
+    INKCELL_TEST_FAIL_IF(one[0].y != 0 || one[0].bottom != 5,
+                         "the one rectangle must still cover both bands");
+    INKCELL_TEST_FAIL_IF(one[0].x != 0 || one[0].right != 3, "and must be wide enough for both");
+    record_success(test_name);
+}
+
+/* Damage that cannot be reported must not be consumed: `previous` is how the *next* frame
+   knows, and a row quietly marked clean here is a row nothing ever hands over. */
+INKCELL_TEST_CASE(damage_rects_refuse_to_forget_what_they_cannot_report, unit) {
+    uint8_t previous[DAMAGE_PAGE] = {0};
+    uint8_t frame[DAMAGE_PAGE];
+    uint8_t mapping[DAMAGE_PAGE];
+    memset(frame, 0x31, sizeof frame);
+    struct inkcell_draw_state state = damage_state(mapping, sizeof mapping);
+
+    struct inkcell_fb_damage_rect rects[1];
+    INKCELL_TEST_FAIL_IF(inkcell_fb_damage_rects(&state, frame, previous, true, rects, 0U) != 0U,
+                         "no room for a rectangle must report nothing");
+    for (size_t i = 0U; i < DAMAGE_PAGE; ++i) {
+        INKCELL_TEST_FAIL_IF(previous[i] != 0U, "...and must leave the comparison untouched");
+    }
+    record_success(test_name);
+}
+
+/*
+ * A rectangle names pixels, and a stride may hold bytes that are not any.
+ *
+ * The two halves of one mistake, and the reason it is a mistake here and not in the copy
+ * above: inkcell_fb_copy_damage() writes bytes into a destination that has the padding, so
+ * sending it is harmless; a rectangle is a coordinate on a panel, and a coordinate past its
+ * width is one nothing can accept. A presenter handed such a rectangle does not clip it - it
+ * refuses the upload, and the whole frame is lost rather than a few padding bytes.
+ */
+INKCELL_TEST_CASE(damage_rects_stop_at_the_last_pixel, unit) {
+    uint8_t previous[DAMAGE_PAGE] = {0};
+    uint8_t frame[DAMAGE_PAGE];
+    uint8_t mapping[DAMAGE_PAGE];
+    memset(frame, 0x31, sizeof frame);
+    struct inkcell_draw_state state = damage_state(mapping, sizeof mapping);
+
+    /* A forced frame's span is the whole stride, padding included - the case that would
+       otherwise report four pixels across a surface three pixels wide. */
+    struct inkcell_fb_damage_rect rects[4];
+    const size_t count = inkcell_fb_damage_rects(&state, frame, previous, true, rects, 4U);
+    INKCELL_TEST_FAIL_IF(count != 1U, "a forced frame is one band over every row");
+    INKCELL_TEST_FAIL_IF(rects[0].x != 0 || rects[0].right != (int)state.surface.width,
+                         "a rectangle must stop at the surface's last pixel, not its stride");
+    record_success(test_name);
+}
+
+/* ...and a row whose only difference is in that padding has nothing to report at all. */
+INKCELL_TEST_CASE(damage_rects_ignore_a_change_only_in_the_padding, unit) {
+    uint8_t previous[DAMAGE_PAGE];
+    uint8_t frame[DAMAGE_PAGE];
+    uint8_t mapping[DAMAGE_PAGE];
+    memset(frame, 0x31, sizeof frame);
+    memset(previous, 0x31, sizeof previous);
+    struct inkcell_draw_state state = damage_state(mapping, sizeof mapping);
+
+    /* Byte 12 of row 0: past the third pixel, inside the four bytes of padding. */
+    frame[12] ^= 1U;
+    struct inkcell_fb_damage_rect rects[4];
+    INKCELL_TEST_FAIL_IF(inkcell_fb_damage_rects(&state, frame, previous, false, rects, 4U) != 0U,
+                         "a difference confined to the padding is not a rectangle");
+    INKCELL_TEST_FAIL_IF(previous[12] != frame[12],
+                         "...but is still consumed, or it is rescanned for the rest of the run");
+    record_success(test_name);
+}

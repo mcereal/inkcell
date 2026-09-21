@@ -859,10 +859,44 @@ struct inkcell_fb_layout {
  *
  * Public because the span arithmetic is not the framebuffer's: anything presenting a
  * software-rendered frame - a texture upload, a remote panel - wants the same answer to the
- * same question, and a private copy of it is a second copy to keep correct.
+ * same question, and a private copy of it is a second copy to keep correct. A presenter that
+ * cannot use *this* call - because what it hands the frame to takes rectangles rather than a
+ * destination to copy into - walks the rows itself through inkcell_fb_damage_row() below,
+ * which is the half the two share.
  */
 size_t inkcell_fb_copy_damage(struct inkcell_draw_state *state, const uint8_t *frame,
                               uint8_t *previous, bool force, bool mirror);
+
+/*
+ * The same rows, as rectangles: what a texture upload takes where the copy above takes spans.
+ *
+ * A run of consecutive damaged rows comes back as one rectangle, as wide as the widest row in
+ * the run, because a run is the shape a widget leaves behind - a list row, an app bar, a
+ * snackbar are each a band, and one upload of a band beats one per row.
+ *
+ * `max` caps the rectangles and is deliberately not a cap on the damage: once it is reached
+ * the last rectangle grows to cover everything after it, so what comes back always covers
+ * every pixel that changed. A caller depends on that - a rectangle short of the damage leaves
+ * a stale row in front of the reader - which is why the overflow widens rather than drops.
+ *
+ * Returns how many rectangles were written, and updates `previous` exactly as the copy does.
+ * `max` of 0 is refused without consuming anything: damage that cannot be reported must not be
+ * forgotten.
+ */
+size_t inkcell_fb_damage_rects(struct inkcell_draw_state *state, const uint8_t *frame,
+                               uint8_t *previous, bool force, struct inkcell_fb_damage_rect *out,
+                               size_t max);
+
+/*
+ * The theme and the glyph scale this run asked for, applied to `state`.
+ *
+ * <PREFIX>_THEME names the look and <PREFIX>_FB_SCALE overrides the step size - environment
+ * variables rather than flags because on a handheld the application is started by a launcher,
+ * not by anyone with a shell. A backend that opens a panel calls this once, at init; an
+ * off-screen render that was told its theme and scale does not, because a picture that changed
+ * with the environment it was taken in is not a picture anything can be compared against.
+ */
+void inkcell_fb_state_apply_theme_from_env(struct inkcell_draw_state *state);
 
 void inkcell_fb_animation_damage(struct inkcell_draw_state *state, int x, int y, int w, int h);
 
