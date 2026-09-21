@@ -120,3 +120,11 @@ focus contrast 3 1024x768 90104c543ef5fbfd
 focus contrast 4 1024x768 024079bfc6a2ba39
 focus colorblind 3 1024x768 e40e6cbba2f82b73
 focus colorblind 4 1024x768 0fc359da9e9d3e74
+focus_ring dark 3 1024x768 c7e5fb45f70ff5d1
+focus_ring dark 4 1024x768 6da008e37c8ef120
+focus_ring light 3 1024x768 1bebf40a6732c1f2
+focus_ring light 4 1024x768 a9acccde97282492
+focus_ring contrast 3 1024x768 afbce8b634093c4f
+focus_ring contrast 4 1024x768 b4ac00644920e1d1
+focus_ring colorblind 3 1024x768 e386582c49e9ec27
+focus_ring colorblind 4 1024x768 f76ed5007ff268f9

@@ -38,11 +38,6 @@
  */
 static const int k_scales[] = {3, 4};
 
-/* The clock every scene is drawn against. Named rather than read, so that anything animating
-   lands in the same place on every host. A scene that wants a transition mid-flight steps this
-   itself; none of them do yet. */
-#define GALLERY_CLOCK_MS 1000U
-
 struct gallery_page {
     const char *scene;
     const char *theme;

@@ -122,10 +122,22 @@ struct inkcell_focus_rect {
     int x, y, w, h;
 };
 
-/* One registered thing: what the screen calls it, and where it came out. */
+/* One registered thing: what the screen calls it, where it came out, and how round it was. */
 struct inkcell_focus_item {
     uint32_t id;
     struct inkcell_focus_rect rect;
+    /*
+     * The corner radius the box was drawn with, in pixels. Zero is a square corner and is what
+     * inkcell_focus_add() records.
+     *
+     * Nothing in this file reads it: the finder is about where a box is, and how round it is
+     * has no bearing on what lies to the right of it. It is carried because the one thing that
+     * reads a registration back and *draws* is the focus ring, and a ring that guessed would be
+     * a second opinion about a shape the widget had already stated - a rectangle travelling
+     * onto a pill and stopping square on it. The widget states it once, here, in the same call
+     * that says where it is.
+     */
+    int radius;
 };
 
 /*
@@ -168,6 +180,20 @@ void inkcell_focus_begin(struct inkcell_focus_map *map, struct inkcell_focus_ite
  *     draw itself into a gutter.
  */
 bool inkcell_focus_add(struct inkcell_focus_map *map, uint32_t id, int x, int y, int w, int h);
+
+/*
+ * The same, for a box with rounded corners: `radius` is what it was drawn with, in pixels.
+ *
+ * A second entry point rather than a sixth parameter on the one above, because a square box is
+ * the ordinary case and a caller that has nothing to say about its corners should not have to
+ * say nothing. Both record the same thing; this one records it with a number in it.
+ */
+bool inkcell_focus_add_round(struct inkcell_focus_map *map, uint32_t id, int x, int y, int w, int h,
+                             int radius);
+
+/* The radius `id` was registered with, and 0 for a square one or for an id that is not here.
+   What the focus ring asks, and the reason `radius` is on the item at all. */
+int inkcell_focus_radius_of(const struct inkcell_focus_map *map, uint32_t id);
 
 /* Whether `id` was registered this frame. The question a screen asks *after* laying out, about
    the id it was holding: a card that lost a row, a chip that was elided and a list that scrolled

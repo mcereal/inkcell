@@ -43,6 +43,14 @@ static const struct gallery_scene k_scenes[] = {
        finder answered them. Appended last for the manifest's sake - the table's order names the
        pictures. */
     {"focus", gallery_scene_focus, 0U},
+    /*
+     * The ring, caught in the middle of a move. A seventh of the motion token rather than half:
+     * the curve is an ease-out, so it covers most of the ground early, and a picture taken at
+     * the halfway point is of something that has nearly arrived. This one catches it in the
+     * corridor between the two rows, which is the only place a still can show it travelling
+     * rather than sitting on something.
+     */
+    {"focus_ring", gallery_scene_focus_ring, 20U},
 };
 
 const struct gallery_scene *gallery_scenes(size_t *count) {

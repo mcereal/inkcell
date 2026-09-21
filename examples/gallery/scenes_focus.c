@@ -40,6 +40,16 @@ enum focus_id {
    which is the one place on this screen where all four presses land on something different. */
 #define FOCUS_CURSOR (FOCUS_ID_KEY + 4U)
 
+/* The ring page's journey: the first chip, a pill, to the last key, a rounded square. Chosen to
+   travel in both directions at once and to change shape on the way, because a ring that only
+   ever slid along a row would be a picture of half of what it does. */
+#define FOCUS_ID_RING_FROM FOCUS_ID_CHIP
+#define FOCUS_ID_RING_TO (FOCUS_ID_KEY + 5U)
+
+/* What the screen below can register: the keypad, three chips and the card's two verbs, with
+   room to spare so `dropped` stays a real signal rather than a number this page lives with. */
+#define FOCUS_STORAGE (FOCUS_KEY_COLS * FOCUS_KEY_ROWS + 8U)
+
 #define FOCUS_KEY_COLS 3
 #define FOCUS_KEY_ROWS 2
 
@@ -51,12 +61,12 @@ enum focus_id {
  * reaches the map - which is why a chip, a card's verb and a key all arrive there having said
  * nothing about it. Returns the x past the key, so a row of them is a loop with no arithmetic.
  */
-static int focus_key(struct inkcell_backend_fb_state *state, uint32_t id,
+static int focus_key(struct inkcell_backend_fb_state *state, uint32_t id, uint32_t selected,
                      struct inkcell_fb_rect rect, const char *label, int scale) {
     const struct inkcell_fb_button button = {
         .rect = rect,
         .label = label,
-        .selected = id == FOCUS_CURSOR,
+        .selected = id == selected,
         .variant = INKCELL_FB_BUTTON_FILLED,
         .family = INKCELL_FAMILY_PRIMARY,
         .shape = INKCELL_SHAPE_SM,
@@ -108,8 +118,21 @@ static void focus_link(const struct inkcell_backend_fb_state *state, struct inkc
                                  thick, ink);
 }
 
-void gallery_scene_focus(struct inkcell_backend_fb_state *state) {
-    struct inkcell_fb_layout layout = gallery_frame(state, GALLERY_STR_HEAD_FOCUS, 0U);
+/*
+ * The screen both pages are of: a filter row, a keypad and a card with two verbs, laid out
+ * ragged on purpose.
+ *
+ * Shared because the two pages are the same screen answering two different questions - where a
+ * press goes, and what the move looks like - and a second copy of the layout would be two
+ * screens that drift apart a component at a time.
+ *
+ * `selected` is the key that carries the cursor's own fill. The map is left in `out` for the
+ * caller to ask questions of.
+ */
+static struct inkcell_fb_layout
+focus_screen(struct inkcell_backend_fb_state *state, enum gallery_str_id title, uint32_t selected,
+             struct inkcell_focus_map *out, struct inkcell_focus_item *storage, uint32_t capacity) {
+    struct inkcell_fb_layout layout = gallery_frame(state, title, 0U);
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
     const int scale = layout.small;
     const int high =
@@ -119,8 +142,6 @@ void gallery_scene_focus(struct inkcell_backend_fb_state *state) {
        page that shows six buttons touching. Everything else on this sheet is a specimen of a
        component; this one is a diagram, and it is allowed to be spaced like one. */
     const int corridor = 2 * inkcell_fb_space(state, INKCELL_SPACE_LG);
-    struct inkcell_focus_item storage[FOCUS_KEY_COLS * FOCUS_KEY_ROWS + 8U];
-    struct inkcell_focus_map map;
     int y = layout.body_y + inkcell_fb_space(state, INKCELL_SPACE_MD);
 
     /*
@@ -128,8 +149,8 @@ void gallery_scene_focus(struct inkcell_backend_fb_state *state) {
      * arrangement: a map carried over from the last frame is a map of the layout before this
      * one, and a map filled by the screen is a screen agreeing with the components by hand.
      */
-    inkcell_focus_begin(&map, storage, (uint32_t)(sizeof storage / sizeof storage[0]));
-    inkcell_fb_set_focus_map(state, &map);
+    inkcell_focus_begin(out, storage, capacity);
+    inkcell_fb_set_focus_map(state, out);
 
     /* A filter row: pills as wide as their own words, which is where a row of equal steps stops
        being able to describe a screen. The strip registers the ones it had room for. */
@@ -160,8 +181,8 @@ void gallery_scene_focus(struct inkcell_backend_fb_state *state) {
         for (int col = 0; col < FOCUS_KEY_COLS; ++col) {
             const struct inkcell_fb_rect rect = {
                 .x = box.text_x + col * (key_w + corridor), .y = y, .w = key_w, .h = high};
-            (void)focus_key(state, FOCUS_ID_KEY + (uint32_t)(row * FOCUS_KEY_COLS + col), rect,
-                            k_keys[row][col], scale);
+            (void)focus_key(state, FOCUS_ID_KEY + (uint32_t)(row * FOCUS_KEY_COLS + col), selected,
+                            rect, k_keys[row][col], scale);
         }
         y += high + corridor;
     }
@@ -187,6 +208,15 @@ void gallery_scene_focus(struct inkcell_backend_fb_state *state) {
     inkcell_fb_card_action(&card, gallery_id(GALLERY_STR_ACT_OPEN), false);
     (void)inkcell_fb_draw_card(state, &layout, &y, &card);
 
+    return layout;
+}
+
+void gallery_scene_focus(struct inkcell_backend_fb_state *state) {
+    struct inkcell_focus_item storage[FOCUS_STORAGE];
+    struct inkcell_focus_map map;
+    struct inkcell_fb_layout layout =
+        focus_screen(state, GALLERY_STR_HEAD_FOCUS, FOCUS_CURSOR, &map, storage, FOCUS_STORAGE);
+
     /*
      * The picture: from the cell the cursor is on, wherever each of the four presses lands.
      * Nothing below knows what it is drawing a line to - a chip, a key and a verb are all just
@@ -206,6 +236,61 @@ void gallery_scene_focus(struct inkcell_backend_fb_state *state) {
                        k_dirs[i] == INKCELL_FOCUS_UP || k_dirs[i] == INKCELL_FOCUS_DOWN);
         }
     }
+
+    gallery_footer(state, &layout);
+}
+
+/*
+ * The same screen, with the ring halfway through a move.
+ *
+ * A still picture of something that moves has to be *scripted*, and the script is the two
+ * frames the gallery already renders: the first puts the cursor on the chip without animating
+ * (`inkcell_fb_focus_ring_place()` - a screen opening is not a press) and then asks for the
+ * key, which is what starts the journey; the second is drawn a fraction of a motion later and
+ * is the picture. The clock is what tells them apart, and it is named rather than read, so the
+ * ring is at the same point of the same curve on every host that renders this.
+ *
+ * What the picture shows that no other page can: the ring is a pill at one end and a rounded
+ * square at the other, so halfway across it is neither - it is *becoming* the shape of the
+ * thing it is landing on. The key it is heading for already carries the cursor's fill, which is
+ * the honest depiction of a press: the screen's cursor moved when the button was pressed, and
+ * the ring is what is catching up.
+ */
+/*
+ * A hairline where the journey starts and where it ends.
+ *
+ * A still of something moving needs its endpoints drawn or it is a still of something sitting
+ * in an odd place: without these the ring above reads as a badly aligned outline around key 2
+ * rather than as a ring on its way from the chip to key 6. They are the diagram's furniture,
+ * not the component's - nothing outside this page draws them, and a screen that did would be
+ * telling the reader where the cursor is not.
+ */
+static void focus_ghost(const struct inkcell_backend_fb_state *state,
+                        const struct inkcell_focus_map *map, uint32_t id) {
+    struct inkcell_focus_rect box = {0, 0, 0, 0};
+    if (!inkcell_focus_rect_of(map, id, &box)) {
+        return;
+    }
+    const int inset = inkcell_fb_edge(state);
+    inkcell_fb_stroke_round_rect(state, box.x - inset, box.y - inset, box.w + 2 * inset,
+                                 box.h + 2 * inset, inkcell_focus_radius_of(map, id) + inset,
+                                 inkcell_fb_edge(state),
+                                 inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
+}
+
+void gallery_scene_focus_ring(struct inkcell_backend_fb_state *state) {
+    struct inkcell_focus_item storage[FOCUS_STORAGE];
+    struct inkcell_focus_map map;
+    struct inkcell_fb_layout layout = focus_screen(state, GALLERY_STR_HEAD_FOCUS_RING,
+                                                   FOCUS_ID_RING_TO, &map, storage, FOCUS_STORAGE);
+
+    focus_ghost(state, &map, FOCUS_ID_RING_FROM);
+    focus_ghost(state, &map, FOCUS_ID_RING_TO);
+
+    if (state->now_ms <= GALLERY_CLOCK_MS) {
+        inkcell_fb_focus_ring_place(state, &map, FOCUS_ID_RING_FROM);
+    }
+    inkcell_fb_draw_focus_ring(state, &map, FOCUS_ID_RING_TO);
 
     gallery_footer(state, &layout);
 }

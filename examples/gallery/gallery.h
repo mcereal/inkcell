@@ -73,6 +73,17 @@ static inline const char *gallery_text(enum gallery_str_id id) {
 
 /* ---- scenes --------------------------------------------------------------------------- */
 
+/*
+ * The clock every page is drawn against, in milliseconds.
+ *
+ * Named rather than read, so a frame lands in the same place on every host - and named *here*
+ * rather than in the renderer, because a scene scripting an interaction across the two frames
+ * the harness renders (see `settle_ms`) needs to know which of them it is on. The focus ring's
+ * page is the one that does: the first frame puts the cursor somewhere and the second is the
+ * picture of it moving.
+ */
+#define GALLERY_CLOCK_MS 1000U
+
 struct gallery_scene {
     /* What the picture is of, and the stem its file takes: lower case, no spaces. */
     const char *name;
@@ -116,6 +127,7 @@ void gallery_scene_shapes(struct inkcell_backend_fb_state *state);
 void gallery_scene_keyboard(struct inkcell_backend_fb_state *state);
 void gallery_scene_keyboard_emoji(struct inkcell_backend_fb_state *state);
 void gallery_scene_focus(struct inkcell_backend_fb_state *state);
+void gallery_scene_focus_ring(struct inkcell_backend_fb_state *state);
 
 /* ---- shared scene furniture --------------------------------------------------------------------
  *

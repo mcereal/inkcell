@@ -507,7 +507,9 @@ void inkcell_fb_list_focus_row(const struct inkcell_backend_fb_state *state,
        highlight draws would be a screen disagreeing with itself about where the reader is. */
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
     const struct inkcell_fb_rect rect = {.x = box.x, .y = y, .w = box.w, .h = h};
-    inkcell_fb_focus_register(state, list->focus_base + index, &rect);
+    /* INKCELL_SHAPE_SM because that is what inkcell_fb_draw_row_fill_on() rounds the highlight
+       with, and the ring and the highlight describing one row have to be one shape. */
+    inkcell_fb_focus_register_shaped(state, list->focus_base + index, &rect, INKCELL_SHAPE_SM);
 }
 
 bool inkcell_fb_list_next(struct inkcell_fb_list *list, uint32_t *index) {

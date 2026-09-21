@@ -99,8 +99,12 @@ void inkcell_fb_draw_button(const struct inkcell_backend_fb_state *state,
                             const struct inkcell_fb_button *button) {
     /* Before anything is painted, because this is the frame saying the box exists rather than
        saying what colour it came out. A button with no label and no icon returns below without
-       drawing its contents, and it is still a box a cursor can sit on. */
-    inkcell_fb_focus_register(state, button->focus_id, &button->rect);
+       drawing its contents, and it is still a box a cursor can sit on.
+
+       With its shape, so a ring that lands here later is the curve this button was filled with
+       - a pill on a chip, a rounded square on a keycap - rather than a rectangle the ring
+       guessed at. */
+    inkcell_fb_focus_register_shaped(state, button->focus_id, &button->rect, button->shape);
 
     const struct inkcell_fb_button_paint paint = inkcell_fb_button_paint(state, button);
     if (paint.has_fill) {
@@ -330,7 +334,10 @@ int inkcell_fb_draw_chip_strip(const struct inkcell_backend_fb_state *state, int
         const struct inkcell_fb_rect box =
             inkcell_fb_chip_box(state, x, y, chips[i].icon, label, scale);
         if (box.x + box.w <= limit) {
-            inkcell_fb_focus_register(state, chips[i].focus_id, &box);
+            /* A pill, because that is what inkcell_fb_draw_chip() fills below - the strip
+               registers what the chip is about to be drawn as rather than what a rectangle
+               would have been. */
+            inkcell_fb_focus_register_shaped(state, chips[i].focus_id, &box, INKCELL_SHAPE_FULL);
         }
         const int after =
             inkcell_fb_draw_chip(state, x, y, chips[i].icon, label, i == active, ground, scale);
