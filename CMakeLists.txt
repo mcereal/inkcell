@@ -94,6 +94,9 @@ add_library(inkcell STATIC
     src/fb/fb.c
     src/fb/fb_draw.c
     src/fb/fb_capture.c
+    # what changed since the last frame. Not fb.c's, because a texture upload asks the same
+    # question and must not have to link the file that includes <linux/fb.h> to ask it.
+    src/fb/fb_damage.c
     # what is drawn over a frame rather than in it: the box, the travel, the scrim, the stack
     src/fb/overlay.c
     src/fb/widgets_bubble.c
@@ -129,6 +132,7 @@ target_include_directories(inkcell PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/fb)
 # inkwell's include path to use this. CMake still propagates the *link* requirement, which a
 # static library does need.
 target_link_libraries(inkcell PRIVATE inkcell_options inkwell::inkwell)
+
 add_library(inkcell::inkcell ALIAS inkcell)
 
 if(INKCELL_BUILD_EXAMPLES)

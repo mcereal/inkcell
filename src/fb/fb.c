@@ -57,33 +57,6 @@ static struct inkcell_fb_panel *inkcell_fb_panel_of(void *state_ptr) {
 }
 
 /*
- * The look this run is drawn with.
- *
- * <PREFIX>_THEME names it (see src/ui/theme/theme.c for the list) and <PREFIX>_FB_SCALE
- * overrides the glyph multiplier the theme asks for - an environment variable rather than a flag
- * because on the Brick the app is started by launch.sh, not by anyone with a shell.
- */
-static void inkcell_fb_apply_theme_from_env(struct inkcell_draw_state *state) {
-    const struct inkcell_theme *theme = inkcell_theme_from_env();
-    /* A scale named in the environment outlives a theme switch: it is an explicit choice about
-       this panel, where a theme's own scale is only that theme's default. */
-    state->scale_pinned = inkwell_env_get("INKCELL_FB_SCALE") != NULL;
-    /*
-     * The knob stays in *whole* steps, where the scale it sets is in units.
-     *
-     * Everything inside counts quarters now, but this is the number somebody types on a device
-     * over ssh, and <PREFIX>_FB_SCALE=4 has meant "the body size" for as long as there has been
-     * one. Reading it in units would quietly halve every existing invocation, so the conversion
-     * happens here - the one place the outside world states a scale.
-     */
-    const int steps =
-        (int)inkwell_env_int("INKCELL_FB_SCALE", INKCELL_SCALE_MIN / INKCELL_SCALE_UNIT,
-                             INKCELL_SCALE_MAX / INKCELL_SCALE_UNIT, 0);
-    const int scale = steps > 0 ? INKCELL_SCALE(steps) : inkcell_theme_scale(theme);
-    inkcell_fb_state_set_theme(state, theme, scale);
-}
-
-/*
  * The kernel's description of a pixel, in inkcell's terms.
  *
  * The whole of the conversion, and the only place in the library that reads a bitfield off an
@@ -170,7 +143,7 @@ static int inkcell_backend_fb_init(void **state_out, void *userdata) {
             inkwell_log_warn("ui", "Frame buffers unavailable; drawing directly");
         }
     }
-    inkcell_fb_apply_theme_from_env(state);
+    inkcell_fb_state_apply_theme_from_env(state);
     inkcell_fb_set_app(state, context->app);
 
     inkwell_log_info("ui",
@@ -206,74 +179,6 @@ static void inkcell_backend_fb_shutdown(void *state_ptr, void *userdata) {
         }
     }
     (void)userdata;
-}
-
-/*
- * The Brick's fb0 is 1024x16384: a stack of 768-row pages that NextUI's SDL flips between, and
- * the Allwinner display engine keeps showing whichever page SDL last presented (observed:
- * rows 768..1535, i.e. page 1) after the launcher hands over. Drawing at row 0 is then
- * invisible. Pan the display back to page 0 after each frame and, in case the driver ignores
- * the pan, mirror changed spans into page 1 as well. Compare in ordinary RAM: reading
- * the display mapping to find differences would itself be expensive on the device.
- */
-size_t inkcell_fb_copy_damage(struct inkcell_draw_state *state, const uint8_t *frame,
-                              uint8_t *previous, bool force, bool mirror) {
-    if (state == NULL || frame == NULL || previous == NULL) {
-        return 0U;
-    }
-    const size_t stride = state->surface.stride;
-    const size_t page_bytes = stride * state->surface.height;
-    const size_t bpp = state->surface.bytes_per_pixel;
-    if (bpp == 0U || page_bytes > state->surface.size) {
-        return 0U;
-    }
-    /* A caller may ask for the mirror and still not get it: whether there is a second page to
-       write is the surface's answer, not the caller's, and a mirror that did not check would
-       write `page_bytes` past the end of a single-page mapping. */
-    mirror = mirror && page_bytes <= state->surface.size / 2U;
-    size_t written = 0U;
-    for (uint32_t y = 0U; y < state->surface.height; ++y) {
-        /* The clip band, and the rows something animated into this frame from outside it -
-           see inkcell_fb_animation_damage(). A widget that slid above or below the band is a
-           row the band would otherwise skip, and skipping it leaves the last position of a
-           moving thing on the panel. */
-        if (!force && state->clip_active &&
-            ((int)y < state->clip.y || (int)y >= state->clip.bottom) &&
-            !(state->animation_damage.valid && (int)y >= state->animation_damage.y &&
-              (int)y < state->animation_damage.bottom)) {
-            continue;
-        }
-        const size_t offset = (size_t)y * stride;
-        const uint8_t *src = frame + offset;
-        uint8_t *old = previous + offset;
-        size_t first = 0U;
-        size_t end = stride;
-        if (!force) {
-            if (memcmp(src, old, stride) == 0) {
-                continue;
-            }
-            while (first < end && src[first] == old[first]) {
-                ++first;
-            }
-            while (end > first && src[end - 1U] == old[end - 1U]) {
-                --end;
-            }
-            /* Whole pixels, including when the stride itself has padding. */
-            first -= first % bpp;
-            end = ((end + bpp - 1U) / bpp) * bpp;
-            if (end > stride) {
-                end = stride;
-            }
-        }
-        const size_t bytes = end - first;
-        memcpy(state->surface.pixels + offset + first, src + first, bytes);
-        if (mirror) {
-            memcpy(state->surface.pixels + page_bytes + offset + first, src + first, bytes);
-        }
-        memcpy(old + first, src + first, bytes);
-        written += bytes * (mirror ? 2U : 1U);
-    }
-    return written;
 }
 
 static void inkcell_fb_show_page0(struct inkcell_fb_panel *panel) {
