@@ -365,6 +365,12 @@ static bool focus_run_index(const struct inkcell_focus_run *run, uint32_t id, ui
     return true;
 }
 
+/* Whether item `index` of this run is somewhere a cursor can be. Every item, unless the run
+   named the ones that are not. */
+static bool focus_run_stands(const struct inkcell_focus_run *run, uint32_t index) {
+    return run->focusable == NULL || run->focusable[index] != 0U;
+}
+
 uint32_t inkcell_focus_step(const struct inkcell_focus_map *map, uint32_t id,
                             enum inkcell_focus_dir dir, const struct inkcell_focus_run *runs,
                             size_t run_count) {
@@ -382,15 +388,26 @@ uint32_t inkcell_focus_step(const struct inkcell_focus_map *map, uint32_t id,
             if (!focus_run_index(&runs[i], id, &index)) {
                 continue;
             }
-            if (dir == INKCELL_FOCUS_DOWN && index + 1U < runs[i].count) {
-                return runs[i].base + index + 1U;
+            uint32_t step = index;
+            /* Past the labels, which is what makes this one press rather than two: a list's
+               subheaders take an item index and are not places to stand, so the next *item* and
+               the next thing a cursor can be on are not always the same number. */
+            while (dir == INKCELL_FOCUS_DOWN && step + 1U < runs[i].count) {
+                step += 1U;
+                if (focus_run_stands(&runs[i], step)) {
+                    return runs[i].base + step;
+                }
             }
-            if (dir == INKCELL_FOCUS_UP && index > 0U) {
-                return runs[i].base + index - 1U;
+            while (dir == INKCELL_FOCUS_UP && step > 0U) {
+                step -= 1U;
+                if (focus_run_stands(&runs[i], step)) {
+                    return runs[i].base + step;
+                }
             }
-            /* At the end of the run: the press means leaving it, which is a question about
-               what is drawn and therefore the finder's. Stop looking through the runs - an id
-               is in one of them at most. */
+            /* Nothing left in the run that way - the end of it, or nothing but labels between
+               here and the end. The press means leaving, which is a question about what is
+               drawn and therefore the finder's. Stop looking through the runs: an id is in one
+               of them at most. */
             break;
         }
     }

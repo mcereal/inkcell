@@ -287,6 +287,25 @@ uint32_t inkcell_focus_find_wrapping(const struct inkcell_focus_map *map, uint32
 struct inkcell_focus_run {
     uint32_t base;
     uint32_t count;
+    /*
+     * One byte per item, non-zero where the item is a place to stand. NULL is a run whose every
+     * item is one, which is what a plain list of rows passes.
+     *
+     * It is here because an id in a run is not always a box. A list's subheaders and notes take
+     * an item index like any other row and register nothing - they are labels - so the
+     * sequence a run describes has gaps in it, and a step that walked into one would put the
+     * cursor on a heading: the ring would vanish for a frame and the reader would have to press
+     * again to get past it. The map cannot see the difference, because a label and a row that
+     * has scrolled off are both simply not registered.
+     *
+     * A borrowed array of one byte per item is the shape this toolkit already asks for when a
+     * screen has something to say per item - see `heights` and `cards` on
+     * inkcell_fb_list_begin_cards(). It is borrowed for the call and not retained.
+     *
+     * **A list with a subheader or a note in it needs this.** Leaving it NULL there is the one
+     * way to use a run wrongly, and what it costs is a press at every group boundary.
+     */
+    const uint8_t *focusable;
 };
 
 /*
@@ -305,12 +324,15 @@ struct inkcell_focus_run {
  *
  * An id in a run that is *not* registered still steps, which is the one place this parts
  * company with the finder: a cursor whose row has scrolled out of the window is still a cursor
- * in that list, and the press that brings it back is the same press as any other.
+ * in that list, and the press that brings it back is the same press as any other. Which is also
+ * why a run has to say where its *labels* are - see `focusable` above: not being registered is
+ * what a row off the panel and a subheader have in common, and only one of them is somewhere to
+ * put a cursor.
  *
  * `runs` may be NULL with `run_count` 0, which makes this `inkcell_focus_find()` with more
  * words. A screen with one list passes one run:
  *
- *     const struct inkcell_focus_run runs[] = {{ID_ROWS, screen->count}};
+ *     const struct inkcell_focus_run runs[] = {{.base = ID_ROWS, .count = screen->count}};
  *     enum inkcell_focus_dir dir;
  *     if (inkcell_focus_dir_for_key(key, &dir)) {
  *         const uint32_t next = inkcell_focus_step(&map, screen->focus, dir, runs, 1U);

@@ -446,7 +446,7 @@ static void focus_step_screen(struct inkcell_focus_map *map, struct inkcell_focu
 INKCELL_TEST_CASE(focus_step_scrolls_rather_than_leaving_the_list, unit) {
     struct inkcell_focus_item storage[FOCUS_STORAGE];
     struct inkcell_focus_map map;
-    const struct inkcell_focus_run runs[] = {{STEP_ROWS, STEP_ITEMS}};
+    const struct inkcell_focus_run runs[] = {{.base = STEP_ROWS, .count = STEP_ITEMS}};
     focus_step_screen(&map, storage, FOCUS_STORAGE, 0U);
 
     /* Inside the window the two halves agree, and the run answers because it is asked first. */
@@ -473,7 +473,7 @@ INKCELL_TEST_CASE(focus_step_scrolls_rather_than_leaving_the_list, unit) {
 INKCELL_TEST_CASE(focus_step_leaves_the_list_at_its_ends, unit) {
     struct inkcell_focus_item storage[FOCUS_STORAGE];
     struct inkcell_focus_map map;
-    const struct inkcell_focus_run runs[] = {{STEP_ROWS, STEP_ITEMS}};
+    const struct inkcell_focus_run runs[] = {{.base = STEP_ROWS, .count = STEP_ITEMS}};
     focus_step_screen(&map, storage, FOCUS_STORAGE, STEP_ITEMS - STEP_VISIBLE);
 
     const uint32_t last = STEP_ROWS + STEP_ITEMS - 1U;
@@ -492,7 +492,7 @@ INKCELL_TEST_CASE(focus_step_leaves_the_list_at_its_ends, unit) {
 INKCELL_TEST_CASE(focus_step_leaves_sideways_presses_to_the_geometry, unit) {
     struct inkcell_focus_item storage[FOCUS_STORAGE];
     struct inkcell_focus_map map;
-    const struct inkcell_focus_run runs[] = {{STEP_ROWS, STEP_ITEMS}};
+    const struct inkcell_focus_run runs[] = {{.base = STEP_ROWS, .count = STEP_ITEMS}};
 
     inkcell_focus_begin(&map, storage, FOCUS_STORAGE);
     (void)inkcell_focus_add(&map, STEP_ROWS, 16, 60, 400, 44);
@@ -514,7 +514,7 @@ INKCELL_TEST_CASE(focus_step_leaves_sideways_presses_to_the_geometry, unit) {
 INKCELL_TEST_CASE(focus_step_moves_a_cursor_that_is_not_on_the_panel, unit) {
     struct inkcell_focus_item storage[FOCUS_STORAGE];
     struct inkcell_focus_map map;
-    const struct inkcell_focus_run runs[] = {{STEP_ROWS, STEP_ITEMS}};
+    const struct inkcell_focus_run runs[] = {{.base = STEP_ROWS, .count = STEP_ITEMS}};
     focus_step_screen(&map, storage, FOCUS_STORAGE, 0U);
 
     const uint32_t far_down = STEP_ROWS + 200U;
@@ -532,7 +532,7 @@ INKCELL_TEST_CASE(focus_step_moves_a_cursor_that_is_not_on_the_panel, unit) {
 INKCELL_TEST_CASE(focus_step_without_a_run_is_the_finder, unit) {
     struct inkcell_focus_item storage[FOCUS_STORAGE];
     struct inkcell_focus_map map;
-    const struct inkcell_focus_run runs[] = {{STEP_ROWS, STEP_ITEMS}};
+    const struct inkcell_focus_run runs[] = {{.base = STEP_ROWS, .count = STEP_ITEMS}};
     focus_step_screen(&map, storage, FOCUS_STORAGE, 0U);
 
     /* ID_A is the chip above the list and belongs to no run: down is geometry, and geometry
@@ -544,7 +544,7 @@ INKCELL_TEST_CASE(focus_step_without_a_run_is_the_finder, unit) {
                          "no runs at all is the finder, which agrees inside a window");
 
     /* A run with nothing in it holds no id, so it cannot answer for one. */
-    const struct inkcell_focus_run empty[] = {{STEP_ROWS, 0U}};
+    const struct inkcell_focus_run empty[] = {{.base = STEP_ROWS, .count = 0U}};
     const uint32_t last_visible = STEP_ROWS + STEP_VISIBLE - 1U;
     INKCELL_TEST_FAIL_IF(inkcell_focus_step(&map, last_visible, INKCELL_FOCUS_DOWN, empty, 1U) !=
                              ID_B,
@@ -557,7 +557,8 @@ INKCELL_TEST_CASE(focus_step_without_a_run_is_the_finder, unit) {
 INKCELL_TEST_CASE(focus_step_reads_the_run_the_cursor_is_in, unit) {
     struct inkcell_focus_item storage[FOCUS_STORAGE];
     struct inkcell_focus_map map;
-    const struct inkcell_focus_run runs[] = {{STEP_ROWS, 3U}, {STEP_ROWS + 100U, STEP_ITEMS}};
+    const struct inkcell_focus_run runs[] = {{.base = STEP_ROWS, .count = 3U},
+                                             {.base = STEP_ROWS + 100U, .count = STEP_ITEMS}};
 
     inkcell_focus_begin(&map, storage, FOCUS_STORAGE);
     (void)inkcell_focus_add(&map, STEP_ROWS + 2U, 16, 60, 200, 44);
@@ -572,5 +573,63 @@ INKCELL_TEST_CASE(focus_step_reads_the_run_the_cursor_is_in, unit) {
     INKCELL_TEST_FAIL_IF(inkcell_focus_step(&map, STEP_ROWS + 100U, INKCELL_FOCUS_DOWN, runs, 2U) !=
                              STEP_ROWS + 101U,
                          "the long run keeps going");
+    record_success(test_name);
+}
+
+/*
+ * A grouped list: headings between the runs of rows, which is what a settings screen and a
+ * card list both are.
+ *
+ * A subheader takes an item index like any other row and registers nothing - it is a label -
+ * so the sequence a run describes has gaps in it. Without `focusable` a press lands on the
+ * heading: the ring vanishes for a frame and the reader presses again to get past it. This is
+ * the case that says a run has to be told where its labels are.
+ */
+INKCELL_TEST_CASE(focus_step_passes_over_a_heading_in_one_press, unit) {
+    struct inkcell_focus_item storage[FOCUS_STORAGE];
+    struct inkcell_focus_map map;
+    /* Items 0 and 1 are rows, 2 is a heading, 3 and 4 are rows. */
+    static const uint8_t k_stands[] = {1U, 1U, 0U, 1U, 1U};
+    const struct inkcell_focus_run runs[] = {
+        {.base = STEP_ROWS, .count = 5U, .focusable = k_stands}};
+
+    inkcell_focus_begin(&map, storage, FOCUS_STORAGE);
+    (void)inkcell_focus_add(&map, STEP_ROWS, 16, 60, 600, 44);
+    (void)inkcell_focus_add(&map, STEP_ROWS + 1U, 16, 104, 600, 44);
+    /* item 2 draws a heading and registers nothing */
+    (void)inkcell_focus_add(&map, STEP_ROWS + 3U, 16, 192, 600, 44);
+    (void)inkcell_focus_add(&map, STEP_ROWS + 4U, 16, 236, 600, 44);
+
+    INKCELL_TEST_FAIL_IF(inkcell_focus_step(&map, STEP_ROWS + 1U, INKCELL_FOCUS_DOWN, runs, 1U) !=
+                             STEP_ROWS + 3U,
+                         "down from the row above a heading should be the row below it");
+    INKCELL_TEST_FAIL_IF(inkcell_focus_step(&map, STEP_ROWS + 3U, INKCELL_FOCUS_UP, runs, 1U) !=
+                             STEP_ROWS + 1U,
+                         "and up from the row below should come back past it");
+
+    /* Told nothing, the same press lands on the heading - which is the bug, written down so
+       that what `focusable` is for is not a claim in a comment. */
+    const struct inkcell_focus_run untold[] = {{.base = STEP_ROWS, .count = 5U}};
+    INKCELL_TEST_FAIL_IF(inkcell_focus_step(&map, STEP_ROWS + 1U, INKCELL_FOCUS_DOWN, untold, 1U) !=
+                             STEP_ROWS + 2U,
+                         "a run that was told nothing cannot know a label from a row");
+    record_success(test_name);
+}
+
+/* A run that ends in labels has nowhere left to go, so the press leaves it by the geometry -
+   the same answer as the true end of a list, reached a different way. */
+INKCELL_TEST_CASE(focus_step_leaves_a_run_that_is_all_labels_from_here, unit) {
+    struct inkcell_focus_item storage[FOCUS_STORAGE];
+    struct inkcell_focus_map map;
+    static const uint8_t k_stands[] = {1U, 0U, 0U};
+    const struct inkcell_focus_run runs[] = {
+        {.base = STEP_ROWS, .count = 3U, .focusable = k_stands}};
+
+    inkcell_focus_begin(&map, storage, FOCUS_STORAGE);
+    (void)inkcell_focus_add(&map, STEP_ROWS, 16, 60, 600, 44);
+    (void)inkcell_focus_add(&map, ID_B, 16, 200, 120, 40); /* a verb under the list */
+
+    INKCELL_TEST_FAIL_IF(inkcell_focus_step(&map, STEP_ROWS, INKCELL_FOCUS_DOWN, runs, 1U) != ID_B,
+                         "nothing to stand on below in the run is the end of the run");
     record_success(test_name);
 }

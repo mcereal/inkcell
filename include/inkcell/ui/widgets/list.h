@@ -232,7 +232,12 @@ struct inkcell_fb_list inkcell_fb_list_begin_visible(const struct inkcell_fb_lay
  * press needs to know. See include/inkcell/ui/focus.h.
  *
  * The subheaders and notes between rows register nothing: they are labels, not places to
- * stand, so their item indices are simply absent from the map and a press cannot land on one.
+ * stand, so their item indices are simply absent from the map and a press cannot land on one -
+ * on this frame. They are still item indices, though, so a run over a list that has them must
+ * say which of its items are labels (`focusable` on struct inkcell_focus_run), or a press will
+ * step onto a heading and the reader will have to press again to get past it. Not being
+ * registered is what a label and a row scrolled off the panel have in common, and only one of
+ * them is somewhere to put a cursor.
  */
 void inkcell_fb_list_focus(struct inkcell_fb_list *list, uint32_t base);
 
