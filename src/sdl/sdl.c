@@ -260,7 +260,8 @@ static bool inkcell_sdl_titlebar_sync(struct inkcell_sdl_panel *panel, bool forc
  * AppKit's views and answer before this is asked.
  *
  * `point` is in window points and the boxes are in the frame's pixels. A re-measuring window is
- * both at once; a fixed one is scaled, which is what SDL_RenderWindowToLogical() undoes.
+ * both at once; a fixed one is scaled, which is what SDL_RenderWindowToLogical() undoes - and
+ * before SDL 2.0.18, which has no such call, a fixed window's strip does not drag at all.
  */
 static SDL_HitTestResult inkcell_sdl_hit_test(SDL_Window *window, const SDL_Point *point,
                                               void *data) {
@@ -278,6 +279,12 @@ static SDL_HitTestResult inkcell_sdl_hit_test(SDL_Window *window, const SDL_Poin
         SDL_RenderWindowToLogical(panel->renderer, point->x, point->y, &lx, &ly);
         x = (int)lx;
         y = (int)ly;
+    }
+#else
+    /* Nothing to undo a fixed frame's scaling with, so the boxes cannot be found under the
+       point. A strip that never drags is the smaller loss than tabs that sometimes do. */
+    if (panel->fixed_frame) {
+        return SDL_HITTEST_NORMAL;
     }
 #endif
     return inkcell_pointer_over_target(&panel->pointer_map, x, y, panel->on_click != NULL)
