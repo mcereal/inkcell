@@ -452,9 +452,17 @@ void inkcell_fb_draw_list_rail(const struct inkcell_draw_state *state,
 
     /*
      * The free strip: from the outer edge of the widest thing the list draws - the box plus the
-     * hairline a card spends outward - to the panel edge. The rail is centred in it, so the gap
-     * to the content and the gap to the screen edge are the same number and neither is a
-     * constant anybody has to keep in step with the card.
+     * hairline a card spends outward - to one margin past the content column. The rail is
+     * centred in it, so the gap to the content and the gap to the column's edge are the same
+     * number and neither is a constant anybody has to keep in step with the card.
+     *
+     * A margin past the *column*, not to the panel edge, and the difference only shows once the
+     * two stop being the same place. On a compact surface the column ends one margin short of
+     * the panel, so this is the panel edge exactly, which is where the rail has always been.
+     * Where the column is capped and centred there is a whole empty half-panel beyond it, and a
+     * strip measured to the panel would centre the rail in *that* - stranding it in the middle
+     * of nowhere with the list it reports on far to its left. A rail is beside its content or
+     * it is not a rail.
      *
      * Narrowed rather than moved if the strip cannot hold it with clearance either side: a rail
      * touching the card is what this exists to prevent, and a thinner one still reports the
@@ -462,7 +470,9 @@ void inkcell_fb_draw_list_rail(const struct inkcell_draw_state *state,
      */
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
     const int strip_x = box.x + box.w + inkcell_fb_edge(state);
-    const int strip_w = inkcell_fb_panel_width(state) - strip_x;
+    const int strip_right =
+        inkcell_fb_content_x(state) + inkcell_fb_content_w(state) + inkcell_fb_margin(state);
+    const int strip_w = strip_right - strip_x;
     if (strip_w < 3) {
         return;
     }
