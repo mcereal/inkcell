@@ -63,6 +63,7 @@ INKCELL_TEST_CASE(sdl_without_the_library_refuses_rather_than_pretends, unit) {
 #else /* INKCELL_HAVE_SDL */
 
 #include "inkcell/ui/input_codes.h"
+#include "inkcell/ui/stack.h"
 #include <SDL.h>
 
 #define SDL_TEST_WIDTH 64U
@@ -102,6 +103,12 @@ static void sdl_test_remove_fd(void *ctx, int fd) {
 
 static void sdl_test_request_stop(void *ctx) {
     ((struct sdl_test_host *)ctx)->stops += 1U;
+}
+
+/* One drain of the event queue, which is what the loop would have done on a tick: the timer
+   read inside the pump does not block, so a case may turn it by hand. */
+static void sdl_pump(struct sdl_test_host *host) {
+    (void)host->callback(host->added_fd, 0U, host->userdata);
 }
 
 /*
@@ -218,6 +225,137 @@ INKCELL_TEST_CASE(sdl_hands_over_only_what_changed, unit) {
 }
 
 /*
+ * A drag re-measures the frame, and the width class follows it.
+ *
+ * This is the property the window backend was missing, and it is why it is worth a case of its
+ * own rather than a line in the damage one. Everything a modern layout decides about room -
+ * whether there is space for a rail, whether two panes fit, how wide a column of text is
+ * allowed to get - is decided from the surface's own geometry (inkcell/ui/stack.h). A backend
+ * that scaled a fixed frame to the window answered every one of those questions with the
+ * handheld panel's answer forever, however wide the window was dragged.
+ *
+ * So what is held here is the whole chain, end to end: an SDL resize event reaches the pump,
+ * the surface is reallocated, the application is asked for a frame, and the frame it draws is
+ * in a *different width class* from the one before it. The last of those is the one that
+ * matters - the rest is plumbing that could be right while the layout still never noticed.
+ *
+ * The rest of the case is the three ways a resize must not misbehave: a size that did not
+ * change costs nothing (SDL sends SDL_WINDOWEVENT_SIZE_CHANGED for a move between displays
+ * too), a window dragged to nothing stops at the floor, and the mouse forgets a layout that is
+ * no longer on screen.
+ */
+#define SDL_RESIZE_W 640U
+#define SDL_RESIZE_H 480U
+
+struct sdl_resize_app {
+    unsigned renders;
+    uint32_t width;
+    uint32_t height;
+    enum inkcell_width_class class;
+};
+
+static void sdl_resize_render(struct inkcell_draw_state *state, const void *snapshot, void *ctx) {
+    struct sdl_resize_app *const app = (struct sdl_resize_app *)ctx;
+    (void)snapshot;
+    app->renders += 1U;
+    app->width = state->surface.width;
+    app->height = state->surface.height;
+    /* Read the way a screen reads it, through the layout, rather than off the surface - so
+       what this case holds is the answer a renderer would actually get. */
+    const struct inkcell_fb_layout layout = inkcell_fb_layout_begin(state, true, false);
+    app->class = layout.width;
+    inkcell_fb_clear(state, inkcell_fb_color(state, INKCELL_COLOR_BG));
+}
+
+static unsigned sdl_resize_frames_asked;
+
+static void sdl_resize_request_frame(void *userdata) {
+    (void)userdata;
+    sdl_resize_frames_asked += 1U;
+}
+
+static void sdl_push_resize(int width, int height) {
+    SDL_Event event;
+    memset(&event, 0, sizeof event);
+    event.type = SDL_WINDOWEVENT;
+    event.window.type = SDL_WINDOWEVENT;
+    event.window.event = SDL_WINDOWEVENT_SIZE_CHANGED;
+    event.window.data1 = width;
+    event.window.data2 = height;
+    SDL_PushEvent(&event);
+}
+
+INKCELL_TEST_CASE(sdl_resize_remeasures_and_moves_the_width_class, unit) {
+    setenv("SDL_VIDEODRIVER", "dummy", 0);
+    INKCELL_TEST_FAIL_IF(!inkcell_backend_sdl_is_available(), "the dummy driver must start");
+
+    struct sdl_resize_app app = {0};
+    struct inkcell_fb_app vtable = {.ctx = &app, .render = sdl_resize_render};
+    struct sdl_test_host host = {.added_fd = -1, .removed_fd = -1, .adds = 0U, .stops = 0U};
+    struct inkcell_backend_sdl_context context = {
+        .app = &vtable,
+        .host = {.ctx = &host,
+                 .add_fd = sdl_test_add_fd,
+                 .remove_fd = sdl_test_remove_fd,
+                 .request_stop = sdl_test_request_stop},
+        .title = "inkcell tests",
+        .width = SDL_RESIZE_W,
+        .height = SDL_RESIZE_H,
+        .request_frame = sdl_resize_request_frame,
+    };
+    sdl_resize_frames_asked = 0U;
+
+    const struct inkcell_backend *const backend = inkcell_backend_sdl();
+    void *state = NULL;
+    INKCELL_TEST_FAIL_IF(backend->init(&state, &context) != 0, "the dummy driver must open");
+
+    const int snapshot = 0;
+    backend->present(state, &snapshot, &context);
+    INKCELL_TEST_FAIL_IF_CLEANUP(app.width != SDL_RESIZE_W || app.height != SDL_RESIZE_H,
+                                 backend->shutdown(state, &context),
+                                 "the first frame is drawn at the size the window opened at");
+    INKCELL_TEST_FAIL_IF_CLEANUP(app.class != INKCELL_WIDTH_COMPACT,
+                                 backend->shutdown(state, &context),
+                                 "640 pixels at the body scale is the compact class");
+
+    /* Wide enough for two readable columns, which is a different class by construction. */
+    sdl_push_resize(2400, 900);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(sdl_resize_frames_asked != 1U, backend->shutdown(state, &context),
+                                 "a resize must ask the application for a frame it cannot draw");
+
+    backend->present(state, &snapshot, &context);
+    INKCELL_TEST_FAIL_IF_CLEANUP(app.width != 2400U || app.height != 900U,
+                                 backend->shutdown(state, &context),
+                                 "the frame after a resize is drawn at the window's new size");
+    INKCELL_TEST_FAIL_IF_CLEANUP(app.class != INKCELL_WIDTH_EXPANDED,
+                                 backend->shutdown(state, &context),
+                                 "and the layout it was handed is in the class that width is");
+
+    /* The same size again is not a resize. SDL sends this event for a move between displays. */
+    const unsigned asked = sdl_resize_frames_asked;
+    const unsigned renders = app.renders;
+    sdl_push_resize(2400, 900);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(sdl_resize_frames_asked != asked,
+                                 backend->shutdown(state, &context),
+                                 "a size that did not change must not cost a reallocation");
+    INKCELL_TEST_FAIL_IF_CLEANUP(app.renders != renders, backend->shutdown(state, &context),
+                                 "nor a frame");
+
+    /* And a window dragged at nothing stops somewhere a frame is still a frame. */
+    sdl_push_resize(4, 4);
+    sdl_pump(&host);
+    backend->present(state, &snapshot, &context);
+    INKCELL_TEST_FAIL_IF_CLEANUP(app.width < 64U || app.height < 64U,
+                                 backend->shutdown(state, &context),
+                                 "a resize to nothing must stop at the floor, not hand over one");
+
+    backend->shutdown(state, &context);
+    record_success(test_name);
+}
+
+/*
  * A keyboard reaches the UI through the evdev table, not around it.
  *
  * The property this holds is that there is one keyboard convention in the library rather than
@@ -327,10 +465,6 @@ static void sdl_push_button(Uint32 type, Uint8 button, int x, int y) {
 static void sdl_click(int x, int y) {
     sdl_push_button(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_LEFT, x, y);
     sdl_push_button(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT, x, y);
-}
-
-static void sdl_pump(struct sdl_test_host *host) {
-    (void)host->callback(host->added_fd, 0U, host->userdata);
 }
 
 INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {

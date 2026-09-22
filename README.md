@@ -223,11 +223,20 @@ them to it. What differs is the last step, and `inkcell_fb_damage_rects()` and
 `inkcell_fb_copy_damage()` are the two shapes that step comes in.
 
 **The SDL backend is a presenter, not a GPU renderer.** The glyphs, the rounded rectangles and
-the anti-aliasing are still the CPU's work; what moves to the GPU is the blit and the scale. Two
+the anti-aliasing are still the CPU's work; what moves to the GPU is the blit. Two
 things about SDL do not fit one epoll loop and neither is hidden: it has no descriptor to wait
 on, so its queue is drained from an inkwell timer registered through `struct inkcell_input_host`, and
 `SDL_RenderPresent()` blocks under vsync, so vsync is off unless `<PREFIX>_SDL_VSYNC` asks for
 it. See the header.
+
+**A window re-measures when it is dragged.** The surface is reallocated at the window's new size
+and the application is asked for a frame that shape, so the width classes
+(`inkcell/ui/stack.h`) see the room the window actually has - a window dragged wide gets the
+expanded layout rather than the handheld one, larger. It still *opens* at the device's geometry,
+so a layout that only works at desktop proportions is caught the moment it comes up.
+`<PREFIX>_SDL_FIXED` pins the frame at its opening size and scales it to the window instead,
+which is what you want when the window is standing in for the device rather than being a
+surface of its own.
 
 ## What is deliberately not here
 
