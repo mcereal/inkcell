@@ -140,6 +140,9 @@ struct inkcell_sdl_panel {
        See include/inkcell/ui/pointer.h. The cursors are NULL where the video driver has none -
        the dummy one a test runs under - and then the pointer simply never changes shape. */
     struct inkcell_pointer pointer;
+    /* The secondary button's press, kept apart from the primary's so a right-press released
+       over a row is not a left-click on it. */
+    struct inkcell_pointer context;
     /*
      * The last frame's boxes, copied out when it was presented.
      *
@@ -152,6 +155,7 @@ struct inkcell_sdl_panel {
     struct inkcell_focus_item pointer_items[INKCELL_SDL_POINTER_BOXES];
     struct inkcell_focus_map pointer_map;
     inkcell_click_handler on_click;
+    inkcell_click_handler on_context;
     void *click_userdata;
     SDL_Cursor *arrow;
     SDL_Cursor *hand;
@@ -652,6 +656,29 @@ static void inkcell_sdl_handle_button(struct inkcell_sdl_panel *panel,
         }
         return;
     }
+    /* A control-click is the secondary button on a Mac with one, and SDL reports it as the
+       left: it is turned back into what the reader meant here, on the press, so its release
+       is matched against the same button. */
+    const bool secondary =
+        button->button == SDL_BUTTON_RIGHT ||
+        (button->button == SDL_BUTTON_LEFT && button->type == SDL_MOUSEBUTTONDOWN &&
+         (SDL_GetModState() & KMOD_CTRL) != 0) ||
+        (button->button == SDL_BUTTON_LEFT && button->type == SDL_MOUSEBUTTONUP &&
+         panel->context.down);
+    if (secondary) {
+        if (button->type == SDL_MOUSEBUTTONDOWN) {
+            inkcell_pointer_down(&panel->context, &panel->pointer_map, button->x, button->y);
+            return;
+        }
+        const struct inkcell_pointer_result result =
+            inkcell_pointer_up(&panel->context, &panel->pointer_map, button->x, button->y);
+        if (result.kind != INKCELL_POINTER_NONE && panel->on_context != NULL) {
+            inkcell_latency_event(inkcell_latency_now_us());
+            inkcell_latency_press();
+            panel->on_context(panel->click_userdata, result.target, result.x, result.y);
+        }
+        return;
+    }
     if (button->button != SDL_BUTTON_LEFT) {
         return;
     }
@@ -1054,8 +1081,10 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
     panel->on_key = context->on_key;
     panel->key_userdata = context->key_userdata;
     panel->on_click = context->on_click;
+    panel->on_context = context->on_context;
     panel->click_userdata = context->click_userdata;
     inkcell_pointer_reset(&panel->pointer);
+    inkcell_pointer_reset(&panel->context);
     panel->arrow = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW);
     panel->hand = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND);
     panel->request_frame = context->request_frame;
