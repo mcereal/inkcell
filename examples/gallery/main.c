@@ -72,6 +72,9 @@ static void gallery_render(struct inkcell_draw_state *state, const void *snapsho
     (void)ctx;
     const struct gallery_scene *scene = snapshot;
     scene->render(state);
+    /* A scene's focus map lives on its own stack, so it is gone once the scene returns; the
+       next frame must not register into it. */
+    inkcell_fb_set_focus_map(state, NULL);
 }
 
 /* One page. Returns 0, or a negative errno. */

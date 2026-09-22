@@ -332,6 +332,55 @@ void inkcell_fb_draw_banner(const struct inkcell_draw_state *state,
 
 /* ---- the action bar ------------------------------------------------------------------------- */
 
+/*
+ * Whether a pointer draws this action as its verb alone, in a button of its own.
+ *
+ * A face button's letter is only worth printing to somebody holding the case it is printed on.
+ * With a pointer the verb is the thing pressed, so it becomes the button. A pair keeps its cap:
+ * the arrows and "L/R" are split down the middle into their two keys, and the verb alone
+ * would not say which half is which.
+ */
+static bool inkcell_fb_action_is_verb(const struct inkcell_draw_state *state,
+                                      enum inkcell_button button) {
+    if (!state->pointer) {
+        return false;
+    }
+    switch (button) {
+    case INKCELL_BUTTON_A:
+    case INKCELL_BUTTON_B:
+    case INKCELL_BUTTON_X:
+    case INKCELL_BUTTON_Y:
+    case INKCELL_BUTTON_START:
+    case INKCELL_BUTTON_SELECT:
+        return true;
+    default:
+        return false;
+    }
+}
+
+/*
+ * Whether a pointer has this press somewhere better than the bar: the arrows are the wheel,
+ * the way out is the window's close box, and a B that leaves is the app bar's arrow. Left out
+ * rather than drawn, so the room goes to the verbs nothing else on the frame offers.
+ *
+ * The arrow is asked of the focus map rather than of `layout->back`, because `back` says B
+ * leaves and not that an app bar was drawn to show it: a screen with no heading - the map, the
+ * keyboard - would otherwise lose its only way out.
+ */
+static bool inkcell_fb_action_elsewhere(const struct inkcell_draw_state *state,
+                                        const struct inkcell_fb_layout *layout,
+                                        enum inkcell_button button) {
+    if (!state->pointer) {
+        return false;
+    }
+    if (button == INKCELL_BUTTON_UP_DOWN || button == INKCELL_BUTTON_QUIT) {
+        return true;
+    }
+    struct inkcell_focus_rect arrow;
+    return button == INKCELL_BUTTON_B && layout->back && state->focus != NULL &&
+           inkcell_focus_rect_of(state->focus, INKCELL_FOCUS_KEY(INKCELL_KEY_B), &arrow);
+}
+
 /* The cap's pill and the verb after it, with the half cell between them that every icon-plus-
    label pair in this file uses. Measured rather than assumed, because the pill's padding is
    the button's business (see INKCELL_FB_CHIP_PAD_STEPS). */
@@ -339,6 +388,9 @@ static int inkcell_fb_action_width(const struct inkcell_draw_state *state,
                                    const struct inkcell_button_action *action, int scale) {
     const int adv = inkcell_fb_char_adv(state, scale);
     const char *label = inkcell_str(action->label);
+    if (inkcell_fb_action_is_verb(state, action->button)) {
+        return inkcell_fb_button_width(state, INKCELL_ICON_NONE, label, scale);
+    }
     return inkcell_fb_button_width(state, INKCELL_ICON_NONE, inkcell_button_cap(action->button),
                                    scale) +
            adv / 2 + inkcell_fb_text_width(state, label, scale);
@@ -401,6 +453,30 @@ void inkcell_fb_draw_action_bar(const struct inkcell_draw_state *state,
 
     for (size_t i = 0; i < bar->count; ++i) {
         const struct inkcell_button_action *action = &bar->items[i];
+        if (inkcell_fb_action_elsewhere(state, layout, action->button)) {
+            continue;
+        }
+        if (inkcell_fb_action_is_verb(state, action->button)) {
+            const int w = inkcell_fb_action_width(state, action, small);
+            if (x + w > right) {
+                break;
+            }
+            const struct inkcell_fb_button verb = {
+                .rect = {.x = x,
+                         .y = keys_y - inkcell_step_px(small),
+                         .w = w,
+                         .h = inkcell_fb_line_adv(state, small)},
+                .label = inkcell_str(action->label),
+                .variant = INKCELL_FB_BUTTON_FILLED,
+                .shape = INKCELL_SHAPE_SM,
+                .ground = INKCELL_COLOR_SURFACE_LOW,
+                .scale = small,
+            };
+            inkcell_fb_draw_button(state, &verb);
+            inkcell_fb_action_targets(state, action->button, x, verb.rect.y, w, verb.rect.h);
+            x += w + gap;
+            continue;
+        }
         const char *cap = inkcell_button_cap(action->button);
         const int cap_w = inkcell_fb_button_width(state, INKCELL_ICON_NONE, cap, small);
         /* Dropped from the end rather than clipped: half a verb is a button whose meaning has
@@ -570,6 +646,19 @@ void inkcell_fb_draw_app_bar(const struct inkcell_draw_state *state,
     if (layout->back) {
         inkcell_fb_draw_icon(state, margin, y, INKCELL_ICON_BACK, scale,
                              inkcell_fb_tone_color(state, INKCELL_TONE_DIM), ground);
+    }
+    /* And it is B, to a pointer: the arrow is the way back that the action bar leaves out once
+       there is one. Out into the gutter and down the title's whole line, because an icon's own
+       box is a small thing to have to hit. Only with a pointer, so a panel's map spends no slot
+       on a box nothing can press. */
+    if (layout->back && state->pointer) {
+        const int gutter = inkcell_fb_gutter(state);
+        const struct inkcell_fb_rect arrow = {.x = margin - gutter,
+                                              .y = y,
+                                              .w = gutter + inkcell_fb_icon_box(state, scale) +
+                                                   adv / 2,
+                                              .h = inkcell_fb_line_adv(state, scale)};
+        inkcell_fb_target_register(state, INKCELL_FOCUS_KEY(INKCELL_KEY_B), &arrow);
     }
 
     /*

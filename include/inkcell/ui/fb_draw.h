@@ -378,6 +378,17 @@ struct inkcell_draw_state {
     struct inkcell_fb_damage_rect animation_damage;
     bool thread_cache_disabled;
     /*
+     * Whether the reader has a pointer, and so presses what is drawn rather than a key named
+     * beside it. Set by the backend that has one - the SDL window - and false on a panel.
+     *
+     * What it changes is the chrome's vocabulary, never the layout: the action bar draws a verb
+     * as a button of its own instead of a keycap and a verb, and leaves out what a pointer does
+     * some other way - the arrows (the wheel), the way back (the app bar's arrow) and the way
+     * out (the window's close box). The bar keeps its height either way, so a list lays out the
+     * same rows on both backends.
+     */
+    bool pointer;
+    /*
      * Where this frame's pixels go, and how one is spelled.
      *
      * The only part of this structure a backend owns, and the only part of it that changes when

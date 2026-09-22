@@ -227,3 +227,111 @@ INKCELL_TEST_CASE(pointer_action_bar_hints_are_their_keys, unit) {
     inkcell_capture_close(capture);
     record_success(test_name);
 }
+
+INKCELL_TEST_CASE(pointer_action_bar_is_verbs_and_leaves_out_what_the_pointer_has, unit) {
+    struct inkcell_capture *capture = NULL;
+    INKCELL_TEST_FAIL_IF(inkcell_capture_open(&capture, INKCELL_CAPTURE_WIDTH,
+                                              INKCELL_CAPTURE_HEIGHT, INKCELL_SCALE(2)) < 0,
+                         "the capture should open");
+    struct inkcell_draw_state *const state = inkcell_capture_state(capture);
+    state->pointer = true;
+    struct inkcell_focus_item storage[POINTER_STORAGE];
+    struct inkcell_focus_map map;
+    inkcell_focus_begin(&map, storage, POINTER_STORAGE);
+    inkcell_fb_set_focus_map(state, &map);
+
+    const struct inkcell_button_action items[] = {
+        {.button = INKCELL_BUTTON_A, .label = INKCELL_STR_KEY_DELETE},
+        {.button = INKCELL_BUTTON_B, .label = INKCELL_STR_KEY_CANCEL},
+        {.button = INKCELL_BUTTON_UP_DOWN, .label = INKCELL_STR_KEY_SPACE},
+        {.button = INKCELL_BUTTON_LEFT_RIGHT, .label = INKCELL_STR_KEY_SPACE},
+        {.button = INKCELL_BUTTON_QUIT, .label = INKCELL_STR_KEY_CANCEL},
+    };
+    const struct inkcell_fb_action_bar bar = {.items = items, .count = 5U, .status = NULL};
+    struct inkcell_fb_layout layout = inkcell_fb_layout_begin(state, true, true);
+    const struct inkcell_fb_app_bar heading = {.title = "Title"};
+    inkcell_fb_draw_app_bar(state, &layout, &heading);
+    inkcell_fb_draw_action_bar(state, &layout, &bar);
+
+    struct inkcell_focus_rect a;
+    struct inkcell_focus_rect back;
+    struct inkcell_focus_rect left;
+    struct inkcell_focus_rect up;
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_focus_rect_of(&map, INKCELL_FOCUS_KEY(INKCELL_KEY_A), &a),
+                                 inkcell_capture_close(capture), "a face button's verb is A");
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        !inkcell_focus_rect_of(&map, INKCELL_FOCUS_KEY(INKCELL_KEY_LEFT), &left),
+        inkcell_capture_close(capture), "a pair the pointer has no other way to press stays");
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        inkcell_focus_rect_of(&map, INKCELL_FOCUS_KEY(INKCELL_KEY_UP), &up),
+        inkcell_capture_close(capture), "the arrows are the wheel, and leave the bar");
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        !inkcell_focus_rect_of(&map, INKCELL_FOCUS_KEY(INKCELL_KEY_B), &back),
+        inkcell_capture_close(capture), "the app bar's arrow is B");
+    INKCELL_TEST_FAIL_IF_CLEANUP(back.y >= layout.footer_y, inkcell_capture_close(capture),
+                                 "...and it is the arrow, not a B left in the footer");
+    INKCELL_TEST_FAIL_IF_CLEANUP(map.count != 4U, inkcell_capture_close(capture),
+                                 "the arrow, A, and the pair's two halves - nothing else");
+    INKCELL_TEST_FAIL_IF_CLEANUP(a.x + a.w > left.x, inkcell_capture_close(capture),
+                                 "what is left out gives its room to what follows");
+
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(pointer_off_keeps_the_keycaps, unit) {
+    struct inkcell_capture *capture = NULL;
+    INKCELL_TEST_FAIL_IF(inkcell_capture_open(&capture, INKCELL_CAPTURE_WIDTH,
+                                              INKCELL_CAPTURE_HEIGHT, INKCELL_SCALE(2)) < 0,
+                         "the capture should open");
+    struct inkcell_draw_state *const state = inkcell_capture_state(capture);
+    struct inkcell_focus_item storage[POINTER_STORAGE];
+    struct inkcell_focus_map map;
+    inkcell_focus_begin(&map, storage, POINTER_STORAGE);
+    inkcell_fb_set_focus_map(state, &map);
+
+    const struct inkcell_button_action items[] = {
+        {.button = INKCELL_BUTTON_B, .label = INKCELL_STR_KEY_CANCEL},
+        {.button = INKCELL_BUTTON_UP_DOWN, .label = INKCELL_STR_KEY_SPACE},
+    };
+    const struct inkcell_fb_action_bar bar = {.items = items, .count = 2U, .status = NULL};
+    const struct inkcell_fb_layout layout = inkcell_fb_layout_begin(state, true, true);
+    inkcell_fb_draw_action_bar(state, &layout, &bar);
+
+    struct inkcell_focus_rect b;
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        !inkcell_focus_rect_of(&map, INKCELL_FOCUS_KEY(INKCELL_KEY_B), &b) || b.y < layout.footer_y,
+        inkcell_capture_close(capture), "on a panel, B stays in the footer beside its arrow");
+    INKCELL_TEST_FAIL_IF_CLEANUP(map.count != 3U, inkcell_capture_close(capture),
+                                 "B, and the arrows' two halves");
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(pointer_keeps_back_in_the_bar_when_no_arrow_was_drawn, unit) {
+    struct inkcell_capture *capture = NULL;
+    INKCELL_TEST_FAIL_IF(inkcell_capture_open(&capture, INKCELL_CAPTURE_WIDTH,
+                                              INKCELL_CAPTURE_HEIGHT, INKCELL_SCALE(2)) < 0,
+                         "the capture should open");
+    struct inkcell_draw_state *const state = inkcell_capture_state(capture);
+    state->pointer = true;
+    struct inkcell_focus_item storage[POINTER_STORAGE];
+    struct inkcell_focus_map map;
+    inkcell_focus_begin(&map, storage, POINTER_STORAGE);
+    inkcell_fb_set_focus_map(state, &map);
+
+    /* A screen with no heading - the map - whose way back is B all the same. */
+    const struct inkcell_button_action items[] = {
+        {.button = INKCELL_BUTTON_B, .label = INKCELL_STR_KEY_CANCEL},
+    };
+    const struct inkcell_fb_action_bar bar = {.items = items, .count = 1U, .status = NULL};
+    const struct inkcell_fb_layout layout = inkcell_fb_layout_begin(state, true, true);
+    inkcell_fb_draw_action_bar(state, &layout, &bar);
+
+    struct inkcell_focus_rect b;
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        !inkcell_focus_rect_of(&map, INKCELL_FOCUS_KEY(INKCELL_KEY_B), &b) || b.y < layout.footer_y,
+        inkcell_capture_close(capture), "with no arrow on the frame, the bar is the way back");
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}

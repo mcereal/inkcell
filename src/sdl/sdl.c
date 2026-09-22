@@ -1048,6 +1048,7 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
     };
     inkcell_fb_state_apply_theme_from_env(state);
     inkcell_fb_set_app(state, context->app);
+    state->pointer = true;
 
     panel->host = context->host;
     panel->on_key = context->on_key;
