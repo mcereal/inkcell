@@ -99,7 +99,12 @@ static struct inkcell_sdl_cocoa_controls inkcell_sdl_cocoa_apply(void) {
         return controls;
     }
 
-    /* The window is held to the panel's aspect, so points per panel pixel are one number. */
+    /*
+     * Points per panel pixel, which is one number in both modes for two different reasons: a
+     * fixed frame is held to the panel's aspect and scaled, and a re-measuring one *is* the
+     * window, so the ratio comes out at 1. Either way it depends on the panel height being the
+     * surface's current one - see inkcell_sdl_cocoa_set_panel_size().
+     */
     const NSSize content = nswindow.contentView.bounds.size;
     const CGFloat points_per_px = content.height / (CGFloat)g_unified.panel_h;
     const CGFloat strip = (CGFloat)g_unified.strip_px * points_per_px;
@@ -132,7 +137,16 @@ static struct inkcell_sdl_cocoa_controls inkcell_sdl_cocoa_apply(void) {
     return controls;
 }
 
-bool inkcell_sdl_cocoa_unify_titlebar(SDL_Window *window, int panel_w, int panel_h) {
+void inkcell_sdl_cocoa_set_panel_size(int panel_w, int panel_h) {
+    if (g_unified.window == nil || panel_w <= 0 || panel_h <= 0) {
+        return;
+    }
+    g_unified.panel_w = panel_w;
+    g_unified.panel_h = panel_h;
+}
+
+bool inkcell_sdl_cocoa_unify_titlebar(SDL_Window *window, int panel_w, int panel_h,
+                                      bool lock_aspect) {
     NSWindow *const nswindow = inkcell_sdl_cocoa_window(window);
     if (nswindow == nil || panel_w <= 0 || panel_h <= 0) {
         return false;
@@ -146,12 +160,16 @@ bool inkcell_sdl_cocoa_unify_titlebar(SDL_Window *window, int panel_w, int panel
     nswindow.titleVisibility = NSWindowTitleHidden;
 
     /*
-     * The panel's shape, held. The content view now takes in what was the title bar, so the
-     * window is one bar taller than the panel's aspect until it is resized - and it is resized
-     * here rather than left for the first drag, because SDL learns its drawable's size from
-     * AppKit's resize notification and a style change alone does not send one.
+     * The panel's shape, held where the caller asked for it - see `lock_aspect`.
+     *
+     * The content view now takes in what was the title bar, so the window is one bar taller
+     * than the panel's aspect until it is resized. It is resized here either way rather than
+     * left for the first drag, because SDL learns its drawable's size from AppKit's resize
+     * notification and a style change alone does not send one.
      */
-    nswindow.contentAspectRatio = NSMakeSize(panel_w, panel_h);
+    if (lock_aspect) {
+        nswindow.contentAspectRatio = NSMakeSize(panel_w, panel_h);
+    }
     const CGFloat width = nswindow.contentView.bounds.size.width;
     [nswindow setContentSize:NSMakeSize(width, width * (CGFloat)panel_h / (CGFloat)panel_w)];
 

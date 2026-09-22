@@ -531,6 +531,10 @@ void inkcell_fb_draw_app_bar(const struct inkcell_draw_state *state,
     const int small = layout->small;
     const int adv = inkcell_fb_char_adv(state, scale);
     const int margin = inkcell_fb_content_x(state);
+    /* Stated rather than inferred as `panel_width - margin`. A centred column makes those two
+       equal, but only to within the pixel an odd leftover rounds away - and equal-by-symmetry
+       is not a thing the next reader should have to work out. */
+    const int trailing = margin + inkcell_fb_content_w(state);
     const struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_BG);
 
     int y = layout->body_y;
@@ -549,8 +553,7 @@ void inkcell_fb_draw_app_bar(const struct inkcell_draw_state *state,
      * panel to itself.
      */
     if (bar->trail_count > 0U) {
-        inkcell_fb_draw_app_bar_trail(state, bar, text_x, y, inkcell_fb_panel_width(state) - margin,
-                                      small);
+        inkcell_fb_draw_app_bar_trail(state, bar, text_x, y, trailing, small);
         /* The glyph body and a hair, not the label scale's whole line advance. The advance
            carries the gap between two lines of running text, and the trail is not running text
            - it is a caption sitting on the title. Spending the advance here cost a body row on
@@ -575,7 +578,7 @@ void inkcell_fb_draw_app_bar(const struct inkcell_draw_state *state,
      * where it was neither countable nor a badge - a capsule cannot be spelled inside a
      * sentence.
      */
-    int right = inkcell_fb_panel_width(state) - margin;
+    int right = trailing;
     const int badge_w = inkcell_fb_badge_width(state, bar->badge, small);
     if (badge_w > 0) {
         /* Centred on the title's glyph body rather than on its line advance: the advance
@@ -775,8 +778,13 @@ static struct inkcell_fb_fab_metrics inkcell_fb_fab_measure(const struct inkcell
     m.label_w = has_label ? inkcell_fb_text_width(state, fab->label, m.label_scale) : 0;
     const int wanted = has_label ? m.diameter + m.gap + m.label_w : m.diameter;
 
+    /* The clearance is the theme's margin - a vertical gap, the snackbar's rule - while the two
+       edges are the content column's. Measuring the room from the panel's margin to the
+       column's trailing edge overstates it by however far the column is inset, which on a wide
+       window is enough to accept an extended label that then draws out past the column. */
     const int margin = inkcell_fb_margin(state);
-    m.right = inkcell_fb_content_x(state) + inkcell_fb_content_w(state);
+    const int leading = inkcell_fb_content_x(state);
+    m.right = leading + inkcell_fb_content_w(state);
     /*
      * A full margin clear of the footer rather than the half a card stops at, which is the
      * snackbar's rule and for its reason: a card is *in* the body and belongs against the body's
@@ -784,7 +792,7 @@ static struct inkcell_fb_fab_metrics inkcell_fb_fab_measure(const struct inkcell
      * keeps.
      */
     m.bottom = layout->footer_y - margin;
-    m.room = m.right - margin;
+    m.room = m.right - leading;
     /* The verb is shown only while the frame can hold the whole of it. A label that does not
        fit is a FAB without a label, not a FAB running off the panel - the chip strip's elision,
        with one label instead of five. */
