@@ -249,6 +249,7 @@ INKCELL_TEST_CASE(sdl_hands_over_only_what_changed, unit) {
 
 struct sdl_resize_app {
     unsigned renders;
+    unsigned drops;
     uint32_t width;
     uint32_t height;
     enum inkcell_width_class class;
@@ -274,6 +275,14 @@ static void sdl_resize_request_frame(void *userdata) {
     sdl_resize_frames_asked += 1U;
 }
 
+/* What an application memoised against the old geometry, and the count that says it was asked
+   to let go of it. See struct inkcell_fb_app's `drop_caches`. */
+static void sdl_resize_drop_caches(struct inkcell_draw_state *state, void *ctx) {
+    struct sdl_resize_app *const app = (struct sdl_resize_app *)ctx;
+    (void)state;
+    app->drops += 1U;
+}
+
 static void sdl_push_resize(int width, int height) {
     SDL_Event event;
     memset(&event, 0, sizeof event);
@@ -290,7 +299,8 @@ INKCELL_TEST_CASE(sdl_resize_remeasures_and_moves_the_width_class, unit) {
     INKCELL_TEST_FAIL_IF(!inkcell_backend_sdl_is_available(), "the dummy driver must start");
 
     struct sdl_resize_app app = {0};
-    struct inkcell_fb_app vtable = {.ctx = &app, .render = sdl_resize_render};
+    struct inkcell_fb_app vtable = {
+        .ctx = &app, .render = sdl_resize_render, .drop_caches = sdl_resize_drop_caches};
     struct sdl_test_host host = {.added_fd = -1, .removed_fd = -1, .adds = 0U, .stops = 0U};
     struct inkcell_backend_sdl_context context = {
         .app = &vtable,
@@ -323,6 +333,16 @@ INKCELL_TEST_CASE(sdl_resize_remeasures_and_moves_the_width_class, unit) {
     sdl_pump(&host);
     INKCELL_TEST_FAIL_IF_CLEANUP(sdl_resize_frames_asked != 1U, backend->shutdown(state, &context),
                                  "a resize must ask the application for a frame it cannot draw");
+    /*
+     * And must tell it to forget what it measured for the old surface first.
+     *
+     * A resize is the geometry change struct inkcell_fb_app's `drop_caches` is named for. An
+     * application that memoised a layout against the old width and was never asked to let go of
+     * it draws the requested frame to that old width - on a window that is now a different one,
+     * and with nothing to make it recover.
+     */
+    INKCELL_TEST_FAIL_IF_CLEANUP(app.drops != 1U, backend->shutdown(state, &context),
+                                 "a resize must drop what the application memoised");
 
     backend->present(state, &snapshot, &context);
     INKCELL_TEST_FAIL_IF_CLEANUP(app.width != 2400U || app.height != 900U,
@@ -340,6 +360,8 @@ INKCELL_TEST_CASE(sdl_resize_remeasures_and_moves_the_width_class, unit) {
     INKCELL_TEST_FAIL_IF_CLEANUP(sdl_resize_frames_asked != asked,
                                  backend->shutdown(state, &context),
                                  "a size that did not change must not cost a reallocation");
+    INKCELL_TEST_FAIL_IF_CLEANUP(app.drops != 1U, backend->shutdown(state, &context),
+                                 "nor throw away caches that are still good");
     INKCELL_TEST_FAIL_IF_CLEANUP(app.renders != renders, backend->shutdown(state, &context),
                                  "nor a frame");
 

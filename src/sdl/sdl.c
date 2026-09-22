@@ -359,6 +359,17 @@ static bool inkcell_sdl_resize(struct inkcell_sdl_panel *panel, int width, int h
     panel->frame_valid = false;
     panel->presented = false;
     /*
+     * And whatever the application memoised against the old geometry.
+     *
+     * This is exactly the case struct inkcell_fb_app's `drop_caches` names - "a memo can no
+     * longer be trusted: a reference render, a geometry change" - and a resize is the geometry
+     * change. Without it the frame requested below may lay itself out from measurements taken
+     * for a surface that no longer exists, which is a frame drawn to the old width on a window
+     * that is now a different one. It is called here rather than at the call site so that every
+     * path that changes the geometry drops them, including any that arrives later.
+     */
+    inkcell_fb_app_drop_caches(state);
+    /*
      * And the mouse forgets what it was pointing at. The boxes are the last frame's, measured
      * against a surface that no longer exists, so a click landing between the resize and the
      * next frame would be answered against a layout the reader cannot see - which is the one
@@ -716,8 +727,27 @@ static int inkcell_sdl_pump(int fd, uint32_t events, void *userdata) {
                  * alternative is holding the old texture to scale into the gap, which is a
                  * second copy of the frame kept alive for a few milliseconds of a drag.
                  */
+                const bool remeasured =
+                    event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED &&
+                    inkcell_sdl_resize(panel, event.window.data1, event.window.data2);
+#if defined(__APPLE__)
+                /*
+                 * The buttons do not scale with the frame, so a resize changes how far in the
+                 * tabs have to start, and that *is* a frame.
+                 *
+                 * Forced, and ahead of the two paths below rather than inside one of them. It
+                 * was briefly reachable only on the path that did *not* re-measure, which is
+                 * backwards: a window that just changed size is the case where AppKit has
+                 * certainly moved the controls. The unforced call in present() returns early
+                 * when the theme and the strip height are unchanged, so nothing else would have
+                 * recomputed the inset and the tabs would draw under the buttons.
+                 */
                 if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED &&
-                    inkcell_sdl_resize(panel, event.window.data1, event.window.data2)) {
+                    inkcell_sdl_titlebar_sync(panel, true)) {
+                    inkcell_sdl_request_frame(panel);
+                }
+#endif
+                if (remeasured) {
                     const struct inkcell_rgb ground =
                         inkcell_fb_color(&panel->state, INKCELL_COLOR_BG);
                     SDL_SetRenderDrawColor(panel->renderer, ground.r, ground.g, ground.b,
@@ -727,15 +757,6 @@ static int inkcell_sdl_pump(int fd, uint32_t events, void *userdata) {
                     inkcell_sdl_request_frame(panel);
                     break;
                 }
-#if defined(__APPLE__)
-                /* The buttons do not scale with the frame, so a resize changes how far in the
-                   tabs have to start, and that *is* a frame. The blit still goes first - the
-                   old one until the new one arrives. */
-                if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED &&
-                    inkcell_sdl_titlebar_sync(panel, true)) {
-                    inkcell_sdl_request_frame(panel);
-                }
-#endif
                 inkcell_sdl_blit(panel);
             }
             break;

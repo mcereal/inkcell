@@ -444,9 +444,13 @@ void inkcell_fb_draw_text_field(const struct inkcell_draw_state *state,
         return;
     }
     const int scale = state->scale;
-    const int margin = inkcell_fb_margin(state);
+    /* One gutter inside the box, which is where the label has always sat - it was spelled as
+       the panel's margin while the box started at the panel's gutter, and the two stopped being
+       the same place when the box moved into the content column. Derived from the box now, so
+       it cannot be left behind by it again. */
     const int gutter = inkcell_fb_gutter(state);
     const int box_x = inkcell_fb_content_x(state) - gutter;
+    const int margin = box_x + gutter;
     const int box_w = inkcell_fb_content_w(state) + 2 * gutter;
     const int box_h = inkcell_fb_text_field_box_h(state, layout, field);
     const uint32_t lines = field->lines > 0U ? field->lines : 1U;

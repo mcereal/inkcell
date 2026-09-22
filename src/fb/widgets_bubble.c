@@ -384,8 +384,8 @@ void inkcell_fb_draw_bubble(const struct inkcell_draw_state *state,
     const int pad = adv / 2 > 0 ? adv / 2 : 1;
     const int box_w = (int)metrics.width + 2 * pad;
     const int box_x = bubble->outbound
-                          ? inkcell_fb_panel_width(state) - inkcell_fb_margin(state) - box_w
-                          : inkcell_fb_margin(state);
+                          ? inkcell_fb_content_x(state) + inkcell_fb_content_w(state) - box_w
+                          : inkcell_fb_content_x(state);
     const uint32_t box_rows = metrics.rows - (inkcell_fb_bubble_has(bubble->separator) ? 1U : 0U);
     const int box_h = (int)box_rows * layout->line - inkcell_step_px(scale);
 

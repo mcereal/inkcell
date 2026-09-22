@@ -63,7 +63,19 @@ void inkcell_fb_draw_snackbar(struct inkcell_draw_state *state,
     const int scale = state->scale;
     const int adv = inkcell_fb_char_adv(state, scale);
     const int line = inkcell_fb_line_adv(state, scale);
-    const int margin = inkcell_fb_content_x(state);
+    /*
+     * How far the bar floats above the footer - a *vertical* gap, and so the theme's own margin
+     * rather than anything the content column has a say in.
+     *
+     * Worth naming for what it is, because it was briefly spelled as the column's leading edge.
+     * Those were one number for as long as the column and the panel were the same place; where
+     * the column is capped and centred the leading edge is hundreds of pixels in, and spending
+     * that on a vertical gap lifts the snackbar most of the way up the frame - or, on a wide
+     * enough window, leaves it no band at all and it is never drawn.
+     *
+     * How wide the bar is *is* the column's business, and that is `room` above.
+     */
+    const int clearance = inkcell_fb_margin(state);
     /* A cell in from each edge and a proportional band above and below: a container's padding
        is measured in the same units as what it holds, so a theme asking for bigger text gets a
        proportionally roomier bar rather than a tighter one. */
@@ -108,7 +120,7 @@ void inkcell_fb_draw_snackbar(struct inkcell_draw_state *state,
         .x = 0,
         .y = layout->nav_y,
         .w = inkcell_fb_panel_width(state),
-        .h = layout->footer_y - margin - layout->nav_y,
+        .h = layout->footer_y - clearance - layout->nav_y,
     };
 
     struct inkcell_overlay_frame frame;
