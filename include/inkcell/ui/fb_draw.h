@@ -43,6 +43,7 @@
 #include "inkcell/ui/focus.h"
 #include "inkcell/ui/icon.h"
 #include "inkcell/ui/layout.h"
+#include "inkcell/ui/stack.h"
 #include "inkcell/ui/theme.h"
 
 #include <stdbool.h>
@@ -390,8 +391,9 @@ struct inkcell_draw_state {
        anyway, so no drawing function guards it. */
     const struct inkcell_theme *theme;
     /* Glyph multiplier for body text; the tab bar and footer use one step smaller. The Brick's
-       3.2" panel is 1024 px wide, so 4 gives ~41 columns of legible text. It starts at the
-       theme's own and is overridden by <PREFIX>_FB_SCALE. */
+       3.2" panel is 1024 px wide, so INKCELL_SCALE(4) gives 58 nominal columns - about 71
+       characters of ordinary prose, since this face is proportional and sets them narrower than
+       the nominal advance. It starts at the theme's own and is overridden by <PREFIX>_FB_SCALE. */
     int scale;
     /* Somebody named this multiplier outright - <PREFIX>_FB_SCALE on the device, an explicit
        scale through the capture API - so a theme arriving in a snapshot keeps it rather than
@@ -849,7 +851,68 @@ struct inkcell_fb_layout {
      * inkcell_fb_layout_begin(), and both bars read the same answer.
      */
     bool back;
+    /*
+     * How much room this frame has, as a class rather than a number - see enum
+     * inkcell_width_class in inkcell/ui/stack.h.
+     *
+     * Resolved once here for the reason `small` and `back` are: a screen and the chrome over it
+     * that each asked separately would eventually disagree about which side of a breakpoint
+     * they were on, and the frame would put a rail at one width and a tab strip at another.
+     * Asked once, at inkcell_fb_layout_begin(), and everything in the frame reads this.
+     */
+    enum inkcell_width_class width;
 };
+
+/*
+ * The room the body has, as a box: what a screen lays its parts out in.
+ *
+ * The same four numbers every screen used to assemble out of `body_y`, `footer_y`, the margin
+ * and `body_w` - which is four chances to take the margin off one side only, and one more on
+ * every new screen. It is derived here and nowhere else.
+ *
+ * It reads the layout *as it stands*, so a screen that has drawn chrome already gets what is
+ * left under it: the app bar and the banner both move `body_y` as they take their room, and a
+ * box taken before them is a box that overlaps them.
+ */
+struct inkcell_box inkcell_fb_body_box(const struct inkcell_draw_state *state,
+                                       const struct inkcell_fb_layout *layout);
+
+/*
+ * The same box, capped at the reading measure and centred in what is left.
+ *
+ * What a screen that is one column - of text, of cards, of rows - draws into at any width. On
+ * the handheld panel it is `inkcell_fb_body_box()` unchanged, because the panel never reaches
+ * the cap; in a window dragged wide it is the difference between a readable column and a
+ * paragraph set across a foot of glass. See `inkcell_box_measure()` for why that is not a
+ * preference.
+ *
+ * A screen that genuinely wants the full width - a map, a chart, a two-pane layout it has built
+ * itself out of the width class - asks for the body box instead. This is the default rather
+ * than the rule.
+ */
+struct inkcell_box inkcell_fb_measure_box(const struct inkcell_draw_state *state,
+                                          const struct inkcell_fb_layout *layout);
+
+/*
+ * The frame's width class, from its own geometry.
+ *
+ * `struct inkcell_fb_layout` carries the answer and is what a screen inside a frame should
+ * read; this is for the callers that have no layout yet - the backend deciding what chrome to
+ * put in the frame at all, a test, a second backend asking the same question of its own
+ * surface.
+ */
+enum inkcell_width_class inkcell_fb_width_class(const struct inkcell_draw_state *state);
+
+/*
+ * How wide `cols` columns of body text are, nominally.
+ *
+ * A cell count multiplied by the nominal advance, which everywhere else in this header is the
+ * bug `inkcell_fb_text_width()` exists to prevent. It is legitimate here and only here because
+ * what comes back is a *cap* rather than a fit: nothing is measured against it and nothing is
+ * cut on it, so being a few pixels out on a proportional face changes how wide a column is
+ * allowed to get and nothing else. Fitting real text to it is still the measured call's job.
+ */
+int inkcell_fb_measure_width(const struct inkcell_draw_state *state, size_t cols);
 
 /*
  * Copies the rows that changed from a frame drawn in ordinary RAM into the surface, and returns

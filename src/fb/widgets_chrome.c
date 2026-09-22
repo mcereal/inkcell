@@ -70,7 +70,36 @@ struct inkcell_fb_layout inkcell_fb_layout_begin(const struct inkcell_draw_state
     if (layout.body_w < 1) {
         layout.body_w = 1;
     }
+    /* Taken from the count above rather than from the panel, so a reader who turns the text up
+       gets the simpler layout - see enum inkcell_width_class. Once per frame, here, for the
+       reason the field's note gives. */
+    layout.width = inkcell_width_class_of(layout.cols);
     return layout;
+}
+
+struct inkcell_box inkcell_fb_body_box(const struct inkcell_draw_state *state,
+                                       const struct inkcell_fb_layout *layout) {
+    if (state == NULL || layout == NULL) {
+        return (struct inkcell_box){0};
+    }
+    struct inkcell_box box = {
+        .x = inkcell_fb_margin(state),
+        .y = layout->body_y,
+        .w = layout->body_w,
+        .h = layout->footer_y - layout->body_y,
+    };
+    /* A body with nothing left in it is empty rather than negative: every caller tests
+       inkcell_box_is_empty(), and none of them should have to test for backwards as well. */
+    if (box.h < 0) {
+        box.h = 0;
+    }
+    return box;
+}
+
+struct inkcell_box inkcell_fb_measure_box(const struct inkcell_draw_state *state,
+                                          const struct inkcell_fb_layout *layout) {
+    return inkcell_box_measure(inkcell_fb_body_box(state, layout),
+                               inkcell_fb_measure_width(state, INKCELL_WIDTH_MEASURE_COLS));
 }
 
 /* ---- the navigation bar --------------------------------------------------------------------- */

@@ -76,6 +76,9 @@ add_library(inkcell STATIC
     # measuring in cells, easing curves, chart arithmetic, press-to-panel timing
     src/layout.c
     src/anim.c
+    # where a screen's parts go in the room it was given, and how much room that is as a class
+    # rather than a pixel count. No backend in it, for src/layout.c's reason.
+    src/stack.c
     # where a body has got to, in pixels rather than in rows - and the rubber band at its ends
     src/scroll.c
     src/trend.c

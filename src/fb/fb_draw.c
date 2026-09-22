@@ -2487,6 +2487,17 @@ size_t inkcell_fb_cols(const struct inkcell_draw_state *state, int scale) {
     return (size_t)(usable / inkcell_fb_char_adv(state, scale));
 }
 
+enum inkcell_width_class inkcell_fb_width_class(const struct inkcell_draw_state *state) {
+    return inkcell_width_class_of(inkcell_fb_cols(state, state == NULL ? 1 : state->scale));
+}
+
+int inkcell_fb_measure_width(const struct inkcell_draw_state *state, size_t cols) {
+    if (state == NULL || cols == 0U) {
+        return 0;
+    }
+    return inkcell_fb_char_adv(state, state->scale) * (int)cols;
+}
+
 size_t inkcell_fb_row_cols(const struct inkcell_draw_state *state, int scale) {
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
     const int usable = box.text_right - box.text_x;

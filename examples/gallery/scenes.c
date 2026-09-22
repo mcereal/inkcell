@@ -87,6 +87,13 @@ static const struct gallery_scene k_scenes[] = {
      */
     {"grid", gallery_scene_grid, 0U},
     {"grid_covers", gallery_scene_grid_covers, 0U},
+    /*
+     * The stack, appended for the same reason as the pages above it. It is the one page that is
+     * a picture of arithmetic rather than of a component, and it is also where the width class
+     * has its only picture - which it gets free, because the two scales this sheet is rendered
+     * at fall either side of a threshold on a 1024-pixel panel.
+     */
+    {"stack", gallery_scene_stack, 0U},
 };
 
 const struct gallery_scene *gallery_scenes(size_t *count) {

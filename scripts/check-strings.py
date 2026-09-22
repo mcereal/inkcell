@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # own copy of this check over its own screens.
 CHECKED = [
     "src/layout.c",
+    "src/stack.c",
     "src/trend.c",
     "src/fb/fb_draw.c",
     "src/fb/widgets_bubble.c",
