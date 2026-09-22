@@ -25,6 +25,7 @@ set(INKCELL_TEST_SUITES
     suites/ui_scroll.c
     suites/ui_sdl.c
     suites/ui_shapes.c
+    suites/ui_stack.c
     suites/ui_text.c
     suites/ui_theme.c
     suites/ui_view.c

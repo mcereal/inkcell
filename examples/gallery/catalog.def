@@ -183,3 +183,25 @@ INKCELL_STR_ENTRY(READ_SIGNAL,        "Signal")
 INKCELL_STR_ENTRY(READ_UTILISATION,   "Channel use")
 INKCELL_STR_ENTRY(READ_TEMPERATURE,   "Temperature")
 INKCELL_STR_ENTRY(READ_MIXTURE,       "Air time")
+
+/* ---- stacks and width classes -----------------------------------------------------------------
+ *
+ * The captions on the one page that photographs arithmetic rather than a component. They are
+ * the names of the *parts of a row*, not of anything a real screen would say - a specimen is
+ * labelled with what it is standing in for. */
+
+INKCELL_STR_ENTRY(HEAD_STACK,         "Stacks")
+INKCELL_STR_ENTRY(STACK_ROW,          "A row: fixed, growing, fixed")
+INKCELL_STR_ENTRY(STACK_SHRINK,       "Shrinking, and the floor it stops at")
+INKCELL_STR_ENTRY(STACK_DROP,         "What will not fit")
+INKCELL_STR_ENTRY(STACK_SPREAD,       "Spread to both edges")
+INKCELL_STR_ENTRY(STACK_ICON,         "icon")
+INKCELL_STR_ENTRY(STACK_LABEL,        "label")
+INKCELL_STR_ENTRY(STACK_VALUE,        "value")
+INKCELL_STR_ENTRY(STACK_KEPT,         "item")
+INKCELL_STR_ENTRY(STACK_DROPPED,      "The rest were given up from the tail")
+INKCELL_STR_ENTRY(STACK_BODY,         "body")
+INKCELL_STR_ENTRY(STACK_MEASURE,      "measure")
+INKCELL_STR_ENTRY(WIDTH_COMPACT,      "Width class: compact")
+INKCELL_STR_ENTRY(WIDTH_MEDIUM,       "Width class: medium")
+INKCELL_STR_ENTRY(WIDTH_EXPANDED,     "Width class: expanded")

@@ -192,3 +192,11 @@ grid_covers contrast 12 1024x768 30a559927261d7ff
 grid_covers contrast 16 1024x768 24d02fef6bd3b2e5
 grid_covers colorblind 12 1024x768 bb6ae9cb50ec7a05
 grid_covers colorblind 16 1024x768 f64af401ece7e7a1
+stack dark 12 1024x768 6ab379bd30b2d006
+stack dark 16 1024x768 e905d895554689f6
+stack light 12 1024x768 8908761cad31636c
+stack light 16 1024x768 29c8592aa038e2a4
+stack contrast 12 1024x768 30b628bc81a0421e
+stack contrast 16 1024x768 848d2d3a8b6d1c45
+stack colorblind 12 1024x768 c0fec7dd03b00224
+stack colorblind 16 1024x768 06d6296625810f94
