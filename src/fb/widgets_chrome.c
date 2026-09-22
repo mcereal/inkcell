@@ -646,9 +646,12 @@ void inkcell_fb_draw_app_bar(const struct inkcell_draw_state *state,
     if (layout->back) {
         inkcell_fb_draw_icon(state, margin, y, INKCELL_ICON_BACK, scale,
                              inkcell_fb_tone_color(state, INKCELL_TONE_DIM), ground);
-        /* And it is B, to a pointer: the arrow is the way back that the action bar leaves out
-           once there is one. Out into the gutter and down the title's whole line, because an
-           icon's own box is a small thing to have to hit. */
+    }
+    /* And it is B, to a pointer: the arrow is the way back that the action bar leaves out once
+       there is one. Out into the gutter and down the title's whole line, because an icon's own
+       box is a small thing to have to hit. Only with a pointer, so a panel's map spends no slot
+       on a box nothing can press. */
+    if (layout->back && state->pointer) {
         const int gutter = inkcell_fb_gutter(state);
         const struct inkcell_fb_rect arrow = {.x = margin - gutter,
                                               .y = y,
