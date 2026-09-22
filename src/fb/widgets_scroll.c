@@ -249,7 +249,7 @@ void inkcell_fb_draw_large_title(const struct inkcell_draw_state *state,
     const int extra = large_line - (int)(((int64_t)large_line * progress) / INKCELL_ANIM_ONE);
     const int height = collapsed_h + extra + grown;
 
-    const int margin = inkcell_fb_margin(state);
+    const int margin = inkcell_fb_content_x(state);
     const int small = inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL);
     const int title_scale = inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE);
     const int large_scale = title_scale + INKCELL_SCALE(1);

@@ -861,14 +861,60 @@ struct inkcell_fb_layout {
      * Asked once, at inkcell_fb_layout_begin(), and everything in the frame reads this.
      */
     enum inkcell_width_class width;
+    /* Where the body starts, horizontally: the content column's leading edge. A field rather
+       than the margin it used to be, because above the compact class the column is centred and
+       the margin is no longer where content begins. */
+    int body_x;
 };
+
+/*
+ * The column the frame's content stands in, horizontally.
+ *
+ * The panel inset by its margin - and, once the surface is wider than one column of text has
+ * any use for, capped at the reading measure and centred in what is left. Everything that
+ * places content across the frame is hung off this: the list row, the card, the tab strip's
+ * chips, the action bar's hints, the body box below.
+ *
+ * It exists because "how wide is the surface" and "how wide should this be" stopped being the
+ * same question the moment a window could be dragged. They were the same for as long as the
+ * only surface was a handheld panel, which is why the answer used to be
+ * `inkcell_fb_panel_width()` minus two margins at about thirty call sites. On a maximised
+ * window that answer sets body text across a foot of glass, and no amount of getting the
+ * margins right fixes it: the fix is that content stops being as wide as the surface.
+ *
+ * What is *not* hung off it is a fill. The navigation bar's tier, the action bar's, the
+ * progress hairline and a scrim all run edge to edge, because a band that stopped at the
+ * column would read as a wide card rather than as the frame. So: fills bleed, content sits in
+ * the column - which is the rule every phone and desktop platform converged on.
+ *
+ * `y` and `h` are the whole surface. This answers a horizontal question and nothing else; what
+ * is left vertically is the layout's, and `inkcell_fb_body_box()` is where the two meet.
+ */
+struct inkcell_box inkcell_fb_content_column(const struct inkcell_draw_state *state);
+
+/*
+ * The column's leading edge and its width, for the callers that want one number.
+ *
+ * These two are what `inkcell_fb_margin()` and `inkcell_fb_panel_width() - 2 * margin` used to
+ * be at every site that was placing *content*, and they are spelled as a pair so that the two
+ * cannot be taken from different places. A widget that wants to know how far in things start
+ * asks the first; one filling the width content is allowed asks the second. On a compact
+ * surface they are exactly the old two expressions, which is why the device's frame is
+ * unchanged to the pixel by any of this.
+ *
+ * `inkcell_fb_margin()` has not gone anywhere and is still the right answer to a different
+ * question: how much air a container leaves inside itself. A dialog's padding is a margin; a
+ * dialog's position is the column.
+ */
+int inkcell_fb_content_x(const struct inkcell_draw_state *state);
+int inkcell_fb_content_w(const struct inkcell_draw_state *state);
 
 /*
  * The room the body has, as a box: what a screen lays its parts out in.
  *
- * The same four numbers every screen used to assemble out of `body_y`, `footer_y`, the margin
- * and `body_w` - which is four chances to take the margin off one side only, and one more on
- * every new screen. It is derived here and nowhere else.
+ * The content column above, cut down to what the chrome has left. The same four numbers every
+ * screen used to assemble out of `body_y`, `footer_y`, the margin and `body_w` - which is four
+ * chances to take the margin off one side only, and one more on every new screen.
  *
  * It reads the layout *as it stands*, so a screen that has drawn chrome already gets what is
  * left under it: the app bar and the banner both move `body_y` as they take their room, and a
@@ -878,20 +924,18 @@ struct inkcell_box inkcell_fb_body_box(const struct inkcell_draw_state *state,
                                        const struct inkcell_fb_layout *layout);
 
 /*
- * The same box, capped at the reading measure and centred in what is left.
+ * The same rows, edge to edge: the body box without the column's cap.
  *
- * What a screen that is one column - of text, of cards, of rows - draws into at any width. On
- * the handheld panel it is `inkcell_fb_body_box()` unchanged, because the panel never reaches
- * the cap; in a window dragged wide it is the difference between a readable column and a
- * paragraph set across a foot of glass. See `inkcell_box_measure()` for why that is not a
- * preference.
+ * For the screens whose content is not a column of anything - a map, a chart, a picture, a
+ * two-pane layout a screen has built for itself out of the width class. Those want every pixel
+ * the surface has, and capping them at a *reading* measure would be applying a rule about text
+ * to something that is not text.
  *
- * A screen that genuinely wants the full width - a map, a chart, a two-pane layout it has built
- * itself out of the width class - asks for the body box instead. This is the default rather
- * than the rule.
+ * The default is the body box; this is the exception, and a screen should be able to say which
+ * of the two it is in one word.
  */
-struct inkcell_box inkcell_fb_measure_box(const struct inkcell_draw_state *state,
-                                          const struct inkcell_fb_layout *layout);
+struct inkcell_box inkcell_fb_full_box(const struct inkcell_draw_state *state,
+                                       const struct inkcell_fb_layout *layout);
 
 /*
  * The frame's width class, from its own geometry.

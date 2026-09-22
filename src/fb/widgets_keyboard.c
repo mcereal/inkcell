@@ -123,8 +123,12 @@ void inkcell_fb_draw_keyboard(const struct inkcell_draw_state *state,
     }
     const struct inkcell_keyboard *const kb = keyboard->keyboard;
     const int scale = state->scale;
-    const int margin = inkcell_fb_margin(state);
-    const int grid_w = inkcell_fb_panel_width(state) - 2 * margin;
+    /* Capped with everything else, which is not a reading measure applied to something that is
+       not text: a keyboard stretched across a maximised window puts its two ends a hand apart,
+       and the thing a key is reached by - a thumb on a handheld, a cursor in a window - has the
+       same distance to cover either way. */
+    const int margin = inkcell_fb_content_x(state);
+    const int grid_w = inkcell_fb_content_w(state);
     const int cell_w = grid_w / (int)INKCELL_KB_COLS;
     const int cell_h = inkcell_fb_keyboard_cell_h(state, layout, *y, cell_w);
     const int key_scale = inkcell_fb_keyboard_key_scale(state, cell_h);

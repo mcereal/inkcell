@@ -509,21 +509,16 @@ INKCELL_TEST_CASE(body_box_is_the_room_the_layout_says_it_is, unit) {
     const bool agrees = body.y == layout.body_y && body.w == layout.body_w &&
                         body.h == layout.footer_y - layout.body_y;
     const bool classed = layout.width == inkcell_fb_width_class(state);
-    /* The measure never reaches into the body it came out of, and on this panel never cuts it
-       either: the whole point is that the handheld case is unchanged. */
-    const struct inkcell_box measure = inkcell_fb_measure_box(state, &layout);
-    const bool inside = measure.x >= body.x && measure.x + measure.w <= body.x + body.w &&
-                        measure.y == body.y && measure.h == body.h;
-    /* The panel is one measure wide, near enough - see INKCELL_WIDTH_MEASURE_COLS - so what the
-       cap takes off it is under a column, which is the rounding of a centred integer and not a
-       narrower screen. A device whose body the measure visibly cut would be a cap set wrong. */
-    const bool whole = body.w - measure.w <= inkcell_fb_char_adv(state, state->scale);
+    /* A compact surface is one column by definition, so the cap does not engage and the body
+       keeps the whole width the chrome left it. A device whose body the measure cut would be a
+       cap applied where there was no room to spare. */
+    const struct inkcell_box full = inkcell_fb_full_box(state, &layout);
+    const bool whole = body.x == full.x && body.w == full.w;
     inkcell_capture_close(capture);
 
     INKCELL_TEST_FAIL_IF(!agrees, "the body box is the layout's own numbers, assembled once");
     INKCELL_TEST_FAIL_IF(!classed, "and the layout carries the frame's width class");
-    INKCELL_TEST_FAIL_IF(!inside, "the measure stays inside the body");
-    INKCELL_TEST_FAIL_IF(!whole, "and leaves the handheld panel as wide as it already was");
+    INKCELL_TEST_FAIL_IF(!whole, "a compact surface spends its whole width on its one column");
     record_success(test_name);
 }
 
@@ -537,17 +532,22 @@ INKCELL_TEST_CASE(body_box_measure_narrows_a_wide_window, unit) {
     }
     struct inkcell_draw_state *state = inkcell_capture_state(capture);
     const struct inkcell_fb_layout layout = inkcell_fb_layout_begin(state, true, false);
+    const struct inkcell_box full = inkcell_fb_full_box(state, &layout);
     const struct inkcell_box body = inkcell_fb_body_box(state, &layout);
-    const struct inkcell_box measure = inkcell_fb_measure_box(state, &layout);
-    const int left = measure.x - body.x;
-    const int right = (body.x + body.w) - (measure.x + measure.w);
+    const int left = body.x - full.x;
+    const int right = (full.x + full.w) - (body.x + body.w);
     const enum inkcell_width_class width = layout.width;
+    /* And a row inside that body is inside the column too, not across the surface - which is
+       the half a screen never asks for by name and would never notice going wrong. */
+    const struct inkcell_fb_row_box row = inkcell_fb_row_box(state);
+    const bool row_inside = row.x >= full.x && row.x + row.w <= full.x + full.w && row.w < full.w;
     inkcell_capture_close(capture);
 
     INKCELL_TEST_FAIL_IF(width != INKCELL_WIDTH_EXPANDED,
                          "a 2400px window at the body scale is expanded");
-    INKCELL_TEST_FAIL_IF(measure.w >= body.w, "the measure should have capped it");
+    INKCELL_TEST_FAIL_IF(body.w >= full.w, "the measure should have capped the body");
     INKCELL_TEST_FAIL_IF(left - right > 1 || right - left > 1,
                          "and centred what was left, to the pixel");
+    INKCELL_TEST_FAIL_IF(!row_inside, "a list row follows the column rather than the surface");
     record_success(test_name);
 }

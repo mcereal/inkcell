@@ -13,9 +13,18 @@
  *
  * So this is *not* a GPU renderer. The triangles are one textured quad a frame; the glyphs,
  * the rounded rectangles and the anti-aliasing are still the CPU's work. What it buys is the
- * blit and the scale, a window on a development host where there was only a screenshot before,
+ * blit, a window on a development host where there was only a screenshot before,
  * and - the point of the exercise - a seam that a real GPU renderer can be written behind
  * without touching a single screen.
+ *
+ * A window is a surface in its own right, not a magnifying glass over the device's. Dragging
+ * one re-measures: the surface is reallocated at the new size and the application is asked for
+ * a frame that shape, so everything a layout decides from the room it has - see the width
+ * classes in inkcell/ui/stack.h - is decided from the room the *window* has.
+ * <PREFIX>_SDL_FIXED asks for the other behaviour, which was this backend's only one for a
+ * while: the frame stays the size it opened at and SDL scales it, letterboxing where the
+ * aspect does not match. That is the right thing when the window is standing in for the
+ * device, and the wrong thing when it is the surface.
  *
  * Two things about SDL do not fit an application built on one epoll loop, and neither is
  * hidden here:
@@ -78,8 +87,11 @@ extern "C" {
  * `host` may be left zeroed, and then nothing is pumped and the window is a display. That is
  * the right shape for a test, and the wrong one for anything a person is meant to press.
  *
- * `width`/`height` of 0 take <PREFIX>_SDL_SIZE, then the default above. `title` of NULL takes
- * the library's own.
+ * `width`/`height` of 0 take <PREFIX>_SDL_SIZE, then the default above. They are the size the
+ * window *opens* at; unless <PREFIX>_SDL_FIXED is set, a drag changes it from there, and the
+ * smallest a drag may reach is a floor this backend sets - or the opening size, where that was
+ * already smaller, because a floor above an explicit request would be overruling it.
+ * `title` of NULL takes the library's own.
  *
  * `unified_titlebar` is for an application whose frame opens with inkcell_fb_draw_nav_bar(),
  * and only means anything on a Mac: the frame runs up under a transparent title bar, the
@@ -93,10 +105,12 @@ extern "C" {
  * button, as B. `on_click` is for everything else the frame registered - a row, a tab - and
  * hears the id under the pointer; NULL drops those clicks. See inkcell/ui/pointer.h.
  *
- * `request_frame` is how the window asks for a frame it cannot draw itself: a resize that
- * moves the buttons moves the tabs, and a frame needs the application's snapshot. Called with
+ * `request_frame` is how the window asks for a frame it cannot draw itself, and it matters more
+ * now than it did: a resize has given the application a differently shaped surface and there is
+ * nothing on screen until something draws into it, and on a Mac the window's buttons moving
+ * moves the tabs the last frame drew. Both need the application's snapshot. Called with
  * `frame_userdata`, and expected to end in a present() soon after - it may be NULL, and then
- * the tabs catch up on whatever frame comes next.
+ * the window shows its ground until whatever frame comes next.
  */
 struct inkcell_backend_sdl_context {
     const struct inkcell_fb_app *app;

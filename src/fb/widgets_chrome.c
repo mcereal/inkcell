@@ -65,15 +65,27 @@ struct inkcell_fb_layout inkcell_fb_layout_begin(const struct inkcell_draw_state
     layout.rows = inkcell_fb_layout_rows(state, &layout);
     /* A character count at the body scale, and the pixel width that count is an estimate of.
        Both, because a proportional face makes them different questions - see `body_w`. */
-    layout.cols = inkcell_fb_cols(state, state->scale);
-    layout.body_w = inkcell_fb_panel_width(state) - 2 * inkcell_fb_margin(state);
-    if (layout.body_w < 1) {
-        layout.body_w = 1;
+    /*
+     * The class first, and from the *panel's* count - which is what inkcell_fb_cols() answers,
+     * and the one place that count is the right one. The column is a function of the class, so
+     * a class taken from the column would be a circle.
+     */
+    layout.width = inkcell_width_class_of(inkcell_fb_cols(state, state->scale));
+
+    const struct inkcell_box column = inkcell_fb_content_column(state);
+    layout.body_x = column.x;
+    layout.body_w = column.w;
+    /*
+     * And `cols` from the column, because `cols` is a fact about the *body* - it is what a
+     * screen fitting a label column or an empty state counts against. Panel-based, it would
+     * promise a screen more characters than the body it is drawn in can hold, and the screens
+     * that trust it would run their labels out past the column's trailing edge.
+     */
+    const int adv = inkcell_fb_char_adv(state, state->scale);
+    layout.cols = adv > 0 ? (size_t)(layout.body_w / adv) : 1U;
+    if (layout.cols == 0U) {
+        layout.cols = 1U;
     }
-    /* Taken from the count above rather than from the panel, so a reader who turns the text up
-       gets the simpler layout - see enum inkcell_width_class. Once per frame, here, for the
-       reason the field's note gives. */
-    layout.width = inkcell_width_class_of(layout.cols);
     return layout;
 }
 
@@ -83,7 +95,7 @@ struct inkcell_box inkcell_fb_body_box(const struct inkcell_draw_state *state,
         return (struct inkcell_box){0};
     }
     struct inkcell_box box = {
-        .x = inkcell_fb_margin(state),
+        .x = layout->body_x,
         .y = layout->body_y,
         .w = layout->body_w,
         .h = layout->footer_y - layout->body_y,
@@ -96,10 +108,15 @@ struct inkcell_box inkcell_fb_body_box(const struct inkcell_draw_state *state,
     return box;
 }
 
-struct inkcell_box inkcell_fb_measure_box(const struct inkcell_draw_state *state,
-                                          const struct inkcell_fb_layout *layout) {
-    return inkcell_box_measure(inkcell_fb_body_box(state, layout),
-                               inkcell_fb_measure_width(state, INKCELL_WIDTH_MEASURE_COLS));
+struct inkcell_box inkcell_fb_full_box(const struct inkcell_draw_state *state,
+                                       const struct inkcell_fb_layout *layout) {
+    struct inkcell_box box = inkcell_fb_body_box(state, layout);
+    box.x = inkcell_fb_margin(state);
+    box.w = inkcell_fb_panel_width(state) - 2 * box.x;
+    if (box.w < 1) {
+        box.w = 1;
+    }
+    return box;
 }
 
 /* ---- the navigation bar --------------------------------------------------------------------- */
@@ -124,14 +141,23 @@ void inkcell_fb_draw_nav_bar(const struct inkcell_draw_state *state,
        frame with no inset is the frame it always was. */
     const int gutter = inkcell_fb_gutter(state);
     const int shift = state->top_leading_inset > gutter ? state->top_leading_inset - gutter : 0;
+    /*
+     * The strip's own edges, which are the content column's less the half-gutter a chip's fill
+     * stands outside its text - the same relationship a list row has to the column, and for
+     * the same reason: a tab and a row are both content, and content that started in two
+     * different places would read as two frames.
+     *
+     * The tier behind them is not: it is a fill, so it runs the width of the surface.
+     */
+    const int strip_x = inkcell_fb_content_x(state) - gutter;
+    const int strip_w = inkcell_fb_content_w(state) + gutter;
 
     inkcell_fb_fill_rect(state, 0, 0, width, bar_h,
                          inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
     /* The bar under them, not the body ground: an unselected tab draws no fill of its own, and
        its icon has to blend into what the bar filled behind it. */
-    (void)inkcell_fb_draw_chip_strip(state, gutter + shift, y, tabs, count, active,
-                                     width - inkcell_fb_margin(state) - shift,
-                                     INKCELL_COLOR_SURFACE_LOW, small);
+    (void)inkcell_fb_draw_chip_strip(state, strip_x + shift, y, tabs, count, active,
+                                     strip_x + strip_w - shift, INKCELL_COLOR_SURFACE_LOW, small);
     inkcell_fb_draw_rule(state, 0, bar_h, width, small, INKCELL_COLOR_RULE_STRONG);
 
     layout->nav_y = bar_h + inkcell_fb_rule_height(state, small);
@@ -204,11 +230,11 @@ void inkcell_fb_draw_banner(const struct inkcell_draw_state *state,
     const int small = layout->small;
     const int adv = inkcell_fb_char_adv(state, scale);
     const int small_adv = inkcell_fb_char_adv(state, small);
-    const int margin = inkcell_fb_margin(state);
+    const int margin = inkcell_fb_content_x(state);
     const int pad_x = inkcell_fb_space(state, INKCELL_SPACE_MD);
     const int pad_y = inkcell_fb_space(state, INKCELL_SPACE_SM);
     const int top = layout->body_y;
-    const int width = inkcell_fb_panel_width(state) - 2 * margin;
+    const int width = inkcell_fb_content_w(state);
     if (width <= 2 * pad_x || adv <= 0 || layout->line <= 0) {
         return;
     }
@@ -367,8 +393,11 @@ void inkcell_fb_draw_action_bar(const struct inkcell_draw_state *state,
     const int keys_y =
         top + inkcell_fb_space_at(state, INKCELL_SPACE_SM, small) + inkcell_step_px(small);
     const int gap = inkcell_fb_space_at(state, INKCELL_SPACE_MD, small);
-    const int right = width - inkcell_fb_gutter(state);
-    int x = inkcell_fb_gutter(state);
+    /* In the column, like the tab strip at the other end and for its reason - the tier behind
+       them is the fill and runs edge to edge. */
+    const int gutter = inkcell_fb_gutter(state);
+    const int right = inkcell_fb_content_x(state) + inkcell_fb_content_w(state) + gutter;
+    int x = inkcell_fb_content_x(state) - gutter;
 
     for (size_t i = 0; i < bar->count; ++i) {
         const struct inkcell_button_action *action = &bar->items[i];
@@ -411,8 +440,8 @@ void inkcell_fb_draw_action_bar(const struct inkcell_draw_state *state,
        bounded by what the radio says it is called. */
     char status[INKCELL_LINE_MAX];
     inkwell_str_copy(status, sizeof status, bar->status);
-    inkcell_fb_fit(status, inkcell_fb_cols(state, small));
-    inkcell_fb_draw_text(state, inkcell_fb_margin(state),
+    inkcell_fb_fit(status, inkcell_fb_row_cols(state, small));
+    inkcell_fb_draw_text(state, inkcell_fb_content_x(state),
                          keys_y - inkcell_step_px(small) + inkcell_fb_line_adv(state, small) +
                              inkcell_fb_space_at(state, INKCELL_SPACE_XS, small),
                          status, small, inkcell_fb_tone_color(state, bar->status_tone),
@@ -501,7 +530,7 @@ void inkcell_fb_draw_app_bar(const struct inkcell_draw_state *state,
     const int scale = inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE);
     const int small = layout->small;
     const int adv = inkcell_fb_char_adv(state, scale);
-    const int margin = inkcell_fb_margin(state);
+    const int margin = inkcell_fb_content_x(state);
     const struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_BG);
 
     int y = layout->body_y;
@@ -747,7 +776,7 @@ static struct inkcell_fb_fab_metrics inkcell_fb_fab_measure(const struct inkcell
     const int wanted = has_label ? m.diameter + m.gap + m.label_w : m.diameter;
 
     const int margin = inkcell_fb_margin(state);
-    m.right = inkcell_fb_panel_width(state) - margin;
+    m.right = inkcell_fb_content_x(state) + inkcell_fb_content_w(state);
     /*
      * A full margin clear of the footer rather than the half a card stops at, which is the
      * snackbar's rule and for its reason: a card is *in* the body and belongs against the body's

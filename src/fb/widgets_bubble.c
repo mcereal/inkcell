@@ -329,8 +329,8 @@ void inkcell_fb_draw_separator(const struct inkcell_draw_state *state, int y, co
                                enum inkcell_tone tone) {
     const int adv = inkcell_fb_char_adv(state, state->scale);
     const int rule_y = y + inkcell_scale_px((int)inkcell_fb_font(state)->height, state->scale) / 2;
-    const int left = inkcell_fb_margin(state);
-    const int right = inkcell_fb_panel_width(state) - left;
+    const int left = inkcell_fb_content_x(state);
+    const int right = left + inkcell_fb_content_w(state);
 
     if (!inkcell_fb_bubble_has(label)) {
         inkcell_fb_draw_rule(state, left, rule_y, right - left, state->scale, INKCELL_COLOR_RULE);

@@ -102,6 +102,24 @@ const struct inkcell_backend *inkcell_backend_sdl(void) {
    click takes the box drawn last and those are the ones on top. */
 #define INKCELL_SDL_POINTER_BOXES 512U
 
+/*
+ * The smallest frame a window will be asked to draw.
+ *
+ * Set on the window, so the compositor stops the drag rather than this clamping a size the
+ * reader can see is wrong, and clamped here as well because a video driver is not obliged to
+ * honour a minimum and a zero-width surface is a division by zero two layers up.
+ *
+ * Small enough to be a deliberate choice by whoever dragged it there and large enough that what
+ * is left is still a frame: chrome at both ends and rows between them. Below this the answer
+ * is not a cleverer layout, it is a bigger window.
+ *
+ * It never rises above the size the window was *opened* at, though - see `min_width` on the
+ * panel. A caller that asked for a 64-pixel surface has said what it wants, and a default that
+ * overruled it would be this backend deciding it knows better than an explicit request.
+ */
+#define INKCELL_SDL_MIN_WIDTH 320
+#define INKCELL_SDL_MIN_HEIGHT 240
+
 struct inkcell_sdl_panel {
     struct inkcell_draw_state state;
     SDL_Window *window;
@@ -158,10 +176,40 @@ struct inkcell_sdl_panel {
     bool frame_requested;
     /* Whether the surface holds a frame yet, for frame(). */
     bool presented;
+    /*
+     * Whether the frame keeps the size it opened at and is scaled to the window, which is what
+     * this backend used to do always - see the note in init().
+     *
+     * <PREFIX>_SDL_FIXED asks for it. Off, a resize re-measures: the surface is reallocated at
+     * the window's new size and the application draws a frame that shape.
+     */
+    bool fixed_frame;
+    /* The floor a drag stops at: INKCELL_SDL_MIN_* , or the opening size where that was
+       smaller. Held rather than recomputed so the window and the clamp cannot disagree. */
+    int min_width;
+    int min_height;
 };
 
 static struct inkcell_sdl_panel *inkcell_sdl_panel_of(void *state_ptr) {
     return (struct inkcell_sdl_panel *)state_ptr;
+}
+
+/*
+ * A frame the window needs and cannot draw itself.
+ *
+ * Two things ask for one, and neither is a snapshot changing: a resize, which gives the
+ * application a differently shaped surface to lay out in, and - on a Mac - the window's buttons
+ * moving, which moves the tabs the frame already drew. Both need what only the application has,
+ * so the flag is set either way and `request_frame` is called where one was given.
+ *
+ * The flag outlives the call because animating() is asked after every present, and a host that
+ * heard "at rest" there would cancel the very frame requested during it.
+ */
+static void inkcell_sdl_request_frame(struct inkcell_sdl_panel *panel) {
+    panel->frame_requested = true;
+    if (panel->request_frame != NULL) {
+        panel->request_frame(panel->frame_userdata);
+    }
 }
 
 /* ---- the title bar --------------------------------------------------------------------- */
@@ -175,13 +223,6 @@ static struct inkcell_sdl_panel *inkcell_sdl_panel_of(void *state_ptr) {
  * Returns whether the tabs have to move, which the frame already drawn does not know: the
  * caller either has not drawn yet, or asks the application for another.
  */
-static void inkcell_sdl_request_frame(struct inkcell_sdl_panel *panel) {
-    panel->frame_requested = true;
-    if (panel->request_frame != NULL) {
-        panel->request_frame(panel->frame_userdata);
-    }
-}
-
 static bool inkcell_sdl_titlebar_sync(struct inkcell_sdl_panel *panel, bool force) {
     struct inkcell_draw_state *const state = &panel->state;
     const bool restyle = panel->titlebar_theme != state->theme;
@@ -236,12 +277,96 @@ static void inkcell_sdl_blit(struct inkcell_sdl_panel *panel) {
     if (panel->renderer == NULL || panel->texture == NULL) {
         return;
     }
-    /* The clear is for the letterbox rather than for the frame: with a logical size set, a
-       window whose aspect does not match the panel's has bars down the sides, and they are the
-       only pixels the texture does not cover. */
+    /* The clear is for the letterbox rather than for the frame, and only a fixed frame has one:
+       with a logical size set, a window whose aspect does not match the frame's has bars down
+       the sides and they are the only pixels the texture does not cover. A re-measuring window
+       has no bars - the texture is the window - so the clear costs a fill nothing will show,
+       which is cheap enough not to be worth a branch. */
     SDL_RenderClear(panel->renderer);
     SDL_RenderCopy(panel->renderer, panel->texture, NULL, NULL);
     SDL_RenderPresent(panel->renderer);
+}
+
+/*
+ * The window's new size, taken on: a surface that shape, and a frame drawn into it.
+ *
+ * This is the whole of what a window is for on a development host now. A frame pinned at the
+ * device's geometry and scaled up is a picture of the device - which is a useful thing and is
+ * what <PREFIX>_SDL_FIXED still asks for - but it is not an application: the layout never sees
+ * the room it was given, so a window dragged to twice the width is the handheld layout at twice
+ * the size rather than a layout that used the width. Everything the width classes decide
+ * (inkcell/ui/stack.h) is decided from the surface's own geometry, so a surface that never
+ * changes is a width class that never changes either.
+ *
+ * Allocating before freeing is not tidiness. A resize that cannot be honoured has to leave the
+ * window exactly as it was - the old surface whole, the old texture still holding the frame the
+ * reader is looking at - because the alternative is a window that went blank because a drag
+ * asked for more memory than there was. So everything new is obtained first and nothing old is
+ * released until all of it succeeded.
+ *
+ * Answers whether the geometry actually changed, which is not the same as whether it was
+ * asked to: SDL sends SDL_WINDOWEVENT_SIZE_CHANGED for a move between displays and for its own
+ * programmatic changes, and re-measuring a frame that is already the right shape would be a
+ * full upload and a reallocation for nothing.
+ */
+static bool inkcell_sdl_resize(struct inkcell_sdl_panel *panel, int width, int height) {
+    struct inkcell_draw_state *const state = &panel->state;
+    if (panel->fixed_frame || panel->renderer == NULL) {
+        return false;
+    }
+    if (width < panel->min_width) {
+        width = panel->min_width;
+    }
+    if (height < panel->min_height) {
+        height = panel->min_height;
+    }
+    if ((uint32_t)width == state->surface.width && (uint32_t)height == state->surface.height) {
+        return false;
+    }
+
+    const size_t stride = (size_t)width * 4U;
+    const size_t page_bytes = stride * (size_t)height;
+    uint8_t *const pixels = calloc(1U, page_bytes);
+    uint8_t *const previous = calloc(1U, page_bytes);
+    SDL_Texture *const texture = SDL_CreateTexture(panel->renderer, SDL_PIXELFORMAT_ARGB8888,
+                                                   SDL_TEXTUREACCESS_STREAMING, width, height);
+    if (pixels == NULL || previous == NULL || texture == NULL) {
+        free(pixels);
+        free(previous);
+        if (texture != NULL) {
+            SDL_DestroyTexture(texture);
+        }
+        inkwell_log_warn("ui", "resize to %dx%d refused; keeping %ux%u", width, height,
+                         state->surface.width, state->surface.height);
+        return false;
+    }
+
+    free(state->surface.pixels);
+    free(panel->previous_frame);
+    SDL_DestroyTexture(panel->texture);
+
+    state->surface.pixels = pixels;
+    state->surface.size = page_bytes;
+    state->surface.width = (uint32_t)width;
+    state->surface.height = (uint32_t)height;
+    state->surface.stride = (uint32_t)stride;
+    panel->previous_frame = previous;
+    panel->texture = texture;
+
+    /* Nothing has been drawn at this size, so there is nothing for the damage comparison to be
+       a comparison *with*: the next frame goes up whole. `presented` says the same thing to
+       frame(), which would otherwise hand out a buffer of zeroes as a picture. */
+    panel->frame_valid = false;
+    panel->presented = false;
+    /*
+     * And the mouse forgets what it was pointing at. The boxes are the last frame's, measured
+     * against a surface that no longer exists, so a click landing between the resize and the
+     * next frame would be answered against a layout the reader cannot see - which is the one
+     * thing a pointer must never do. Empty until a frame refills it.
+     */
+    panel->pointer_map.count = 0U;
+    panel->pointer_map.dropped = 0U;
+    return true;
 }
 
 /*
@@ -457,10 +582,12 @@ static void inkcell_sdl_handle_key(struct inkcell_sdl_panel *panel, const SDL_Ke
 /* ---- the mouse ------------------------------------------------------------------------- */
 
 /*
- * The coordinates here are already the frame's. SDL_RenderSetLogicalSize() makes the renderer
- * rewrite every mouse event into logical pixels before it is queued, so a window scaled to twice
- * the panel reports a click on a hint where the hint was drawn. A click in the letterbox comes
- * out past the frame's edge and hits nothing, which is what it is.
+ * The coordinates here are already the frame's, under either of the two ways a window can be
+ * sized. A re-measuring window is the easy case: the surface *is* the window, so a mouse
+ * position needs no translation at all. A fixed one relies on SDL_RenderSetLogicalSize(), which
+ * makes the renderer rewrite every mouse event into logical pixels before it is queued, so a
+ * window scaled to twice the frame reports a click on a hint where the hint was drawn; a click
+ * in the letterbox comes out past the frame's edge and hits nothing, which is what it is.
  *
  * The map is the backend's copy of the last frame's - the frame the reader was looking at when
  * they clicked, which is the same argument the controller makes for a key.
@@ -577,10 +704,33 @@ static int inkcell_sdl_pump(int fd, uint32_t events, void *userdata) {
              */
             if (event.window.event == SDL_WINDOWEVENT_EXPOSED ||
                 event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+                /*
+                 * A re-measuring window takes the new geometry here, and then there is nothing
+                 * to blit: the texture it would have blitted has just been destroyed, and the
+                 * one in its place has never been drawn into. So the window is cleared to the
+                 * ground the frame will be drawn on - not to black, which reads as a flash -
+                 * and a frame is asked for.
+                 *
+                 * That leaves a gap of at most one frame where the application has a
+                 * `request_frame`, and until the next ordinary present where it does not. The
+                 * alternative is holding the old texture to scale into the gap, which is a
+                 * second copy of the frame kept alive for a few milliseconds of a drag.
+                 */
+                if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED &&
+                    inkcell_sdl_resize(panel, event.window.data1, event.window.data2)) {
+                    const struct inkcell_rgb ground =
+                        inkcell_fb_color(&panel->state, INKCELL_COLOR_BG);
+                    SDL_SetRenderDrawColor(panel->renderer, ground.r, ground.g, ground.b,
+                                           SDL_ALPHA_OPAQUE);
+                    SDL_RenderClear(panel->renderer);
+                    SDL_RenderPresent(panel->renderer);
+                    inkcell_sdl_request_frame(panel);
+                    break;
+                }
 #if defined(__APPLE__)
-                /* The one exception: the buttons do not scale with the frame, so a resize
-                   changes how far in the tabs have to start, and that *is* a frame. The blit
-                   still goes first - the old one, scaled, until the new one arrives. */
+                /* The buttons do not scale with the frame, so a resize changes how far in the
+                   tabs have to start, and that *is* a frame. The blit still goes first - the
+                   old one until the new one arrives. */
                 if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED &&
                     inkcell_sdl_titlebar_sync(panel, true)) {
                     inkcell_sdl_request_frame(panel);
@@ -752,11 +902,35 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
         return -ENODEV;
     }
-    /* A logical size is what lets the window be resized without the UI being re-measured: the
-       frame stays the panel's geometry and SDL scales it, letterboxing where the aspect does
-       not match. Re-measuring into the new size would be the other choice and a different
-       feature - it is what `make ui-capture -g WxH` is for. */
-    SDL_RenderSetLogicalSize(panel->renderer, (int)width, (int)height);
+    /*
+     * Whether a drag re-measures the UI or scales it.
+     *
+     * A logical size is what scales it: the frame stays the size it opened at and SDL stretches
+     * it, letterboxing where the aspect does not match. That was this backend's only behaviour
+     * for as long as the only surface it stood in for was a handheld panel, and as a way of
+     * *looking at* that panel it is still the right one - which is why <PREFIX>_SDL_FIXED keeps
+     * it.
+     *
+     * It is no longer the right default. A window is a surface in its own right now, with a
+     * width class taken from its own geometry (inkcell/ui/stack.h), and a frame that never
+     * changes shape is a width class that never changes either - so a window dragged across a
+     * breakpoint would show the handheld layout, larger. Re-measuring is one reallocation per
+     * drag-end and is what makes the window an application rather than a picture of one.
+     *
+     * The size it *opens* at is unchanged either way, and is still the device's unless
+     * something says otherwise. A layout that only works at desktop proportions is still
+     * caught the moment the window comes up, which is what that default was for.
+     */
+    panel->fixed_frame = inkwell_env_bool("SDL_FIXED", "SDL fixed frame", false);
+    panel->min_width = (int)width < INKCELL_SDL_MIN_WIDTH ? (int)width : INKCELL_SDL_MIN_WIDTH;
+    panel->min_height = (int)height < INKCELL_SDL_MIN_HEIGHT ? (int)height : INKCELL_SDL_MIN_HEIGHT;
+    if (panel->fixed_frame) {
+        SDL_RenderSetLogicalSize(panel->renderer, (int)width, (int)height);
+    } else {
+        /* Asked of the window rather than only enforced in the resize, so a drag stops at the
+           edge instead of the frame quietly disagreeing with the window about its own size. */
+        SDL_SetWindowMinimumSize(panel->window, panel->min_width, panel->min_height);
+    }
 
     /*
      * ARGB8888 because that is what the rasteriser already produces: with no channel offsets

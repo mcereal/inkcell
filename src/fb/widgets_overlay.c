@@ -63,14 +63,14 @@ void inkcell_fb_draw_snackbar(struct inkcell_draw_state *state,
     const int scale = state->scale;
     const int adv = inkcell_fb_char_adv(state, scale);
     const int line = inkcell_fb_line_adv(state, scale);
-    const int margin = inkcell_fb_margin(state);
+    const int margin = inkcell_fb_content_x(state);
     /* A cell in from each edge and a proportional band above and below: a container's padding
        is measured in the same units as what it holds, so a theme asking for bigger text gets a
        proportionally roomier bar rather than a tighter one. */
     const int pad_x = adv;
     const int pad_y = inkcell_scale_px(2, scale);
 
-    const int room = inkcell_fb_panel_width(state) - 2 * margin - 2 * pad_x;
+    const int room = inkcell_fb_content_w(state) - 2 * pad_x;
     if (room < adv || line <= 0) {
         return; /* a geometry too small to hold one cell of it; nothing to say here */
     }
