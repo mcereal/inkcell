@@ -65,15 +65,27 @@ struct inkcell_fb_layout inkcell_fb_layout_begin(const struct inkcell_draw_state
     layout.rows = inkcell_fb_layout_rows(state, &layout);
     /* A character count at the body scale, and the pixel width that count is an estimate of.
        Both, because a proportional face makes them different questions - see `body_w`. */
-    layout.cols = inkcell_fb_cols(state, state->scale);
-    /* Taken from the count above rather than from the panel, so a reader who turns the text up
-       gets the simpler layout - see enum inkcell_width_class. Once per frame, here, for the
-       reason the field's note gives, and before the column below, which is a function of it. */
-    layout.width = inkcell_width_class_of(layout.cols);
+    /*
+     * The class first, and from the *panel's* count - which is what inkcell_fb_cols() answers,
+     * and the one place that count is the right one. The column is a function of the class, so
+     * a class taken from the column would be a circle.
+     */
+    layout.width = inkcell_width_class_of(inkcell_fb_cols(state, state->scale));
 
     const struct inkcell_box column = inkcell_fb_content_column(state);
     layout.body_x = column.x;
     layout.body_w = column.w;
+    /*
+     * And `cols` from the column, because `cols` is a fact about the *body* - it is what a
+     * screen fitting a label column or an empty state counts against. Panel-based, it would
+     * promise a screen more characters than the body it is drawn in can hold, and the screens
+     * that trust it would run their labels out past the column's trailing edge.
+     */
+    const int adv = inkcell_fb_char_adv(state, state->scale);
+    layout.cols = adv > 0 ? (size_t)(layout.body_w / adv) : 1U;
+    if (layout.cols == 0U) {
+        layout.cols = 1U;
+    }
     return layout;
 }
 
