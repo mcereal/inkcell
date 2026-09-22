@@ -143,6 +143,8 @@ struct inkcell_sdl_panel {
     /* The secondary button's press, kept apart from the primary's so a right-press released
        over a row is not a left-click on it. */
     struct inkcell_pointer context;
+    /* Which button that press was made with, so only its own release ends it. */
+    Uint8 context_button;
     /*
      * The last frame's boxes, copied out when it was presented.
      *
@@ -656,20 +658,21 @@ static void inkcell_sdl_handle_button(struct inkcell_sdl_panel *panel,
         }
         return;
     }
-    /* A control-click is the secondary button on a Mac with one, and SDL reports it as the
-       left: it is turned back into what the reader meant here, on the press, so its release
-       is matched against the same button. */
-    const bool secondary =
-        button->button == SDL_BUTTON_RIGHT ||
-        (button->button == SDL_BUTTON_LEFT && button->type == SDL_MOUSEBUTTONDOWN &&
-         (SDL_GetModState() & KMOD_CTRL) != 0) ||
-        (button->button == SDL_BUTTON_LEFT && button->type == SDL_MOUSEBUTTONUP &&
-         panel->context.down);
-    if (secondary) {
-        if (button->type == SDL_MOUSEBUTTONDOWN) {
-            inkcell_pointer_down(&panel->context, &panel->pointer_map, button->x, button->y);
-            return;
-        }
+    /*
+     * The secondary button: the right one, or a control-click on a Mac with only one - which
+     * SDL reports as the left, and which is decided on the press. The release that ends it is
+     * the *same* button's, so a left click made while the right is held is still a click, and
+     * a control-click let go after control was released is still a context.
+     */
+    if (button->type == SDL_MOUSEBUTTONDOWN &&
+        (button->button == SDL_BUTTON_RIGHT ||
+         (button->button == SDL_BUTTON_LEFT && (SDL_GetModState() & KMOD_CTRL) != 0))) {
+        inkcell_pointer_down(&panel->context, &panel->pointer_map, button->x, button->y);
+        panel->context_button = button->button;
+        return;
+    }
+    if (button->type == SDL_MOUSEBUTTONUP && panel->context.down &&
+        button->button == panel->context_button) {
         const struct inkcell_pointer_result result =
             inkcell_pointer_up(&panel->context, &panel->pointer_map, button->x, button->y);
         if (result.kind != INKCELL_POINTER_NONE && panel->on_context != NULL) {

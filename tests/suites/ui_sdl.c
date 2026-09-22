@@ -602,6 +602,16 @@ INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
                                  backend->shutdown(state, &context),
                                  "a control-click is the secondary button, released or not");
 
+    /* A left click made while the right is held is a click, and the right's release is still
+       the context it began. */
+    sdl_push_button(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_RIGHT, app.row.x + 10, app.row.y + 10);
+    sdl_click(app.row.x + 10, app.row.y + 10);
+    sdl_push_button(SDL_MOUSEBUTTONUP, SDL_BUTTON_RIGHT, app.row.x + 10, app.row.y + 10);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.clicks != 2U || heard.contexts != 4U,
+                                 backend->shutdown(state, &context),
+                                 "each button's release should end only its own press");
+
     backend->shutdown(state, &context);
     record_success(test_name);
 }
