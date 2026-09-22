@@ -30,13 +30,32 @@
 void inkcell_sdl_cocoa_blend_titlebar(SDL_Window *window, struct inkcell_rgb bar);
 
 /*
- * Once, after the window is created: the frame is extended under the title bar and the window
- * is held to the panel's `panel_w`:`panel_h`, so a resize scales the frame and never
+ * Once, after the window is created: the frame is extended under the title bar.
+ *
+ * `lock_aspect` holds the window to `panel_w`:`panel_h`, so a resize scales the frame and never
  * letterboxes it - which is what keeps the strip at the window's top edge, under the buttons.
+ * That is the *fixed* frame's requirement and only its: a window that re-measures has no
+ * letterbox to avoid, and locking it would leave a Mac window that cannot be dragged to any
+ * shape but the handheld panel's.
  *
  * False when the window is not a Cocoa one, and then nothing was changed.
  */
-bool inkcell_sdl_cocoa_unify_titlebar(SDL_Window *window, int panel_w, int panel_h);
+bool inkcell_sdl_cocoa_unify_titlebar(SDL_Window *window, int panel_w, int panel_h,
+                                      bool lock_aspect);
+
+/*
+ * The surface's dimensions have changed; the controls' arithmetic must be told.
+ *
+ * `inkcell_sdl_cocoa_place_controls()` converts between panel pixels and window points by the
+ * ratio between the two, and it holds the panel's half of that from the unify call. Under a
+ * fixed frame that half never changes and this is never needed. A re-measuring window replaces
+ * its surface on every resize, and a stale panel height makes the ratio wrong by exactly the
+ * factor the window has grown by - so a window dragged to twice its opening height reports half
+ * the inset it should, and the tabs come back out under the buttons.
+ *
+ * A no-op when no window has been unified.
+ */
+void inkcell_sdl_cocoa_set_panel_size(int panel_w, int panel_h);
 
 /* Where the buttons ended up, in the two units the backend needs it in. */
 struct inkcell_sdl_cocoa_controls {

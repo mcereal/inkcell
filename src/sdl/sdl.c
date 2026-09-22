@@ -369,6 +369,15 @@ static bool inkcell_sdl_resize(struct inkcell_sdl_panel *panel, int width, int h
      * path that changes the geometry drops them, including any that arrives later.
      */
     inkcell_fb_app_drop_caches(state);
+#if defined(__APPLE__)
+    /*
+     * And the title bar's arithmetic, which converts between panel pixels and window points by
+     * the ratio between them and holds the panel's half of it. Stale, that ratio is wrong by
+     * exactly the factor the window has grown by, so the forced sync below would report an
+     * inset the tabs then fail to clear the buttons by. Told before anything asks it.
+     */
+    inkcell_sdl_cocoa_set_panel_size(width, height);
+#endif
     /*
      * And the mouse forgets what it was pointing at. The boxes are the last frame's, measured
      * against a surface that no longer exists, so a click landing between the resize and the
@@ -716,20 +725,26 @@ static int inkcell_sdl_pump(int fd, uint32_t events, void *userdata) {
             if (event.window.event == SDL_WINDOWEVENT_EXPOSED ||
                 event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
                 /*
-                 * A re-measuring window takes the new geometry here, and then there is nothing
-                 * to blit: the texture it would have blitted has just been destroyed, and the
-                 * one in its place has never been drawn into. So the window is cleared to the
-                 * ground the frame will be drawn on - not to black, which reads as a flash -
-                 * and a frame is asked for.
+                 * A re-measuring window takes the new geometry here, which leaves a gap of at
+                 * most one frame where the application has a `request_frame` and until the next
+                 * ordinary present where it does not. The alternative is holding the old
+                 * texture to scale into the gap, which is a second copy of the frame kept alive
+                 * for a few milliseconds of a drag.
+                 */
+                /*
+                 * One event, two reasons a frame might be owed, and *one* request.
                  *
-                 * That leaves a gap of at most one frame where the application has a
-                 * `request_frame`, and until the next ordinary present where it does not. The
-                 * alternative is holding the old texture to scale into the gap, which is a
-                 * second copy of the frame kept alive for a few milliseconds of a drag.
+                 * A macOS size change can be both at once: the surface is a new shape, and the
+                 * window's buttons have moved so the tabs must start somewhere else.
+                 * inkcell_sdl_request_frame() calls the application's callback every time
+                 * rather than only setting a flag, so asking twice for the same event is two
+                 * frames for one drag - and a drag is a great many events. The reasons are
+                 * collected and the ask is made once.
                  */
                 const bool remeasured =
                     event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED &&
                     inkcell_sdl_resize(panel, event.window.data1, event.window.data2);
+                bool owed = remeasured;
 #if defined(__APPLE__)
                 /*
                  * The buttons do not scale with the frame, so a resize changes how far in the
@@ -744,20 +759,27 @@ static int inkcell_sdl_pump(int fd, uint32_t events, void *userdata) {
                  */
                 if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED &&
                     inkcell_sdl_titlebar_sync(panel, true)) {
-                    inkcell_sdl_request_frame(panel);
+                    owed = true;
                 }
 #endif
                 if (remeasured) {
+                    /* There is nothing to blit: the texture that held the last frame has just
+                       been destroyed and its replacement has never been drawn into. So the
+                       window is cleared to the ground the next frame will stand on - not to
+                       black, which reads as a flash. */
                     const struct inkcell_rgb ground =
                         inkcell_fb_color(&panel->state, INKCELL_COLOR_BG);
                     SDL_SetRenderDrawColor(panel->renderer, ground.r, ground.g, ground.b,
                                            SDL_ALPHA_OPAQUE);
                     SDL_RenderClear(panel->renderer);
                     SDL_RenderPresent(panel->renderer);
-                    inkcell_sdl_request_frame(panel);
-                    break;
                 }
-                inkcell_sdl_blit(panel);
+                if (owed) {
+                    inkcell_sdl_request_frame(panel);
+                }
+                if (!remeasured) {
+                    inkcell_sdl_blit(panel);
+                }
             }
             break;
         default:
@@ -1009,8 +1031,11 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
     panel->frame_userdata = context->frame_userdata;
 #if defined(__APPLE__)
     if (context->unified_titlebar) {
-        panel->unified_titlebar =
-            inkcell_sdl_cocoa_unify_titlebar(panel->window, (int)width, (int)height);
+        /* The aspect is held only for a fixed frame, which is the mode that letterboxes and so
+           the only one with a reason to. A re-measuring window locked to the handheld panel's
+           4:3 would be a Mac window that cannot be dragged to any shape at all. */
+        panel->unified_titlebar = inkcell_sdl_cocoa_unify_titlebar(panel->window, (int)width,
+                                                                   (int)height, panel->fixed_frame);
     }
     if (panel->unified_titlebar) {
         /* Half the panel is where the buttons start to crowd the first tab off the strip. */
