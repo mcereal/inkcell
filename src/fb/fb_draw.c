@@ -669,7 +669,42 @@ int inkcell_fb_rail_gutter(const struct inkcell_draw_state *state) {
     return inkcell_fb_gutter(state);
 }
 
+struct inkcell_box inkcell_fb_content_column(const struct inkcell_draw_state *state) {
+    struct inkcell_box column = {
+        .x = inkcell_fb_margin(state),
+        .y = 0,
+        .w = inkcell_fb_panel_width(state) - 2 * inkcell_fb_margin(state),
+        .h = inkcell_fb_panel_height(state),
+    };
+    if (column.w < 1) {
+        column.w = 1;
+        return column;
+    }
+    /*
+     * The cap only engages above the compact class, and that is the whole of the rule.
+     *
+     * A compact surface *is* one column - that is what the class means - so capping it at the
+     * measure would be measuring a thing against itself, and on a panel that sits a hair over
+     * the measure it would shave a few pixels off every screen for nothing. Above compact
+     * there is genuinely room to spare, and spending it on a wider column rather than on
+     * margins is the thing that makes a maximised window unreadable.
+     */
+    if (inkcell_fb_width_class(state) == INKCELL_WIDTH_COMPACT) {
+        return column;
+    }
+    return inkcell_box_measure(column, inkcell_fb_measure_width(state, INKCELL_WIDTH_MEASURE_COLS));
+}
+
+int inkcell_fb_content_x(const struct inkcell_draw_state *state) {
+    return inkcell_fb_content_column(state).x;
+}
+
+int inkcell_fb_content_w(const struct inkcell_draw_state *state) {
+    return inkcell_fb_content_column(state).w;
+}
+
 struct inkcell_fb_row_box inkcell_fb_row_box(const struct inkcell_draw_state *state) {
+    const struct inkcell_box column = inkcell_fb_content_column(state);
     const int gutter = inkcell_fb_gutter(state);
     /*
      * The row's own padding: how far its words sit inside its fill. Derived rather than stated,
@@ -679,8 +714,14 @@ struct inkcell_fb_row_box inkcell_fb_row_box(const struct inkcell_draw_state *st
      */
     const int pad = inkcell_fb_margin(state) - gutter;
     struct inkcell_fb_row_box box;
-    box.x = gutter;
-    box.w = inkcell_fb_panel_width(state) - 2 * gutter - inkcell_fb_rail_gutter(state);
+    /*
+     * Hung off the content column rather than off the panel, which is what lets a row stop
+     * being as wide as the surface happens to be. A row's fill still stands a gutter outside
+     * the column's text - that is what a fill is - so on a compact surface, where the column is
+     * the margin-inset panel, this is the arithmetic it always was.
+     */
+    box.x = column.x - pad;
+    box.w = column.w + 2 * pad - inkcell_fb_rail_gutter(state);
     /* A panel too narrow to hold a padded row still has to hand back a box the fills and the
        measurements agree about: one pixel wide, with the text span collapsed onto it. Every
        caller that divides by a column width already guards its own division. */
@@ -2480,6 +2521,10 @@ void inkcell_fb_scrim_rect(const struct inkcell_draw_state *state, struct inkcel
 
 /* Columns of text that fit between the margins at this scale. */
 size_t inkcell_fb_cols(const struct inkcell_draw_state *state, int scale) {
+    /* The panel inset by its margin, deliberately, and not the content column: this is what a
+       width class is *taken from* (see inkcell_fb_width_class), and a column that is itself
+       capped by the class would be a circle. What a screen laying text out wants is
+       inkcell_fb_row_cols(), which is measured inside the column. */
     const int usable = inkcell_fb_panel_width(state) - 2 * inkcell_fb_margin(state);
     if (usable <= 0) {
         return 1U;
@@ -2640,7 +2685,7 @@ int inkcell_fb_draw_wrapped_centered(const struct inkcell_draw_state *state, int
     /* The band the lines are centred in, rather than the panel: a caller that wrapped to a
        narrower width meant that width, and centring on the panel would hang the text off the
        side of the column it was measured for. */
-    const int left = inkcell_fb_margin(state);
+    const int left = inkcell_fb_content_x(state);
     int lines = 0;
     while (lines < max_lines && inkcell_wrap_next(&wrap)) {
         /*

@@ -178,11 +178,13 @@ void gallery_scene_stack(struct inkcell_draw_state *state) {
 
     /* ---- the measure, and the class this frame is in ---- */
     y = gallery_section(state, &layout, y, class_name(layout.width));
+    /* Each bar at its own leading edge, so what the picture shows is where the two boxes
+       actually are - a pair drawn from one origin would say the column is narrower and hide
+       that it is also centred. */
+    const struct inkcell_box full = inkcell_fb_full_box(state, &layout);
     const struct inkcell_box body = inkcell_fb_body_box(state, &layout);
-    const struct inkcell_box measure = inkcell_fb_measure_box(state, &layout);
-    y = rule_of(state, row_box.text_x, y, body.w, GALLERY_STR_STACK_BODY, INKCELL_TONE_DIM);
-    (void)rule_of(state, row_box.text_x, y, measure.w, GALLERY_STR_STACK_MEASURE,
-                  INKCELL_TONE_PRIMARY);
+    y = rule_of(state, full.x, y, full.w, GALLERY_STR_STACK_BODY, INKCELL_TONE_DIM);
+    (void)rule_of(state, body.x, y, body.w, GALLERY_STR_STACK_MEASURE, INKCELL_TONE_PRIMARY);
 
     gallery_footer(state, &layout);
 }

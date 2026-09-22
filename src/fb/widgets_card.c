@@ -61,8 +61,8 @@ inkcell_fb_card_measure(const struct inkcell_draw_state *state,
     struct inkcell_fb_card_metrics m;
     memset(&m, 0, sizeof m);
 
-    m.x = inkcell_fb_margin(state);
-    m.width = inkcell_fb_panel_width(state) - 2 * m.x;
+    m.x = inkcell_fb_content_x(state);
+    m.width = inkcell_fb_content_w(state);
     m.pad = inkcell_scale_px((int)metrics->card_pad, scale);
     /* Half as much above and below as at the sides, which is not a fudge: a row is a line
        *advance* tall, and the advance already carries the leading that accents hang in, so the

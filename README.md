@@ -20,8 +20,9 @@ that a platform layer has to depend on to write a log line has its arrows the wr
 | **Fonts** | A 5x7 pixel face and a proportional UI face in two weights, all as coverage rather than 1-bit masks, resampled into whatever cell the theme asks for. |
 | **Glyphs** | Emoji, icons and font tables, generated (`scripts/gen-*.py`) and committed. |
 | **Layout** | Lines measured in *cells*, scroll windows, text wrapping done once for both the measure and the draw pass. |
+| **The content column** | One answer to "how wide should this be", which stopped being "how wide is the surface" the moment a window could be dragged. Content sits in a column capped at the reading measure; fills still bleed edge to edge. |
 | **Stacks** | A row or a column of unlike things, declared and then resolved: a basis, a share of what is left over, a floor to shrink to. What is placed adds up to the room exactly, and what will not fit is given up from the tail rather than drawn past the edge - so a screen states its shape instead of advancing a `y` cursor by hand. |
-| **Width classes** | Compact, medium, expanded - measured in columns of body text rather than in pixels, so the same answer covers a 3.2" panel, a window dragged wide, and a reader who turned the text up. |
+| **Width classes** | Compact, medium, expanded - measured in columns of body text rather than in pixels, so the same answer covers a 3.2" panel, a window dragged wide, and a reader who turned the text up. Compact is one column and is left alone; above it, the column caps and centres. |
 | **Grids** | A home screen: tiles laid out across and down, a window that scrolls by rows of them, and a press that knows a row's width. A list is the same window one column wide. |
 | **Focus** | A d-pad answered against the rectangles the components drew - "right from here lands on *that*" - so a grid, a card with two verbs on it or a form with a chip row in it is a layout rather than an index somebody maintains. The cursor is one ring, and it travels. |
 | **Motion** | Durations and curves as *tokens*, so a set of controls moves as one system - and the two things that move without being a control: the focus ring travelling between boxes, and a list gliding between windows instead of flicking between them. |
@@ -231,12 +232,12 @@ it. See the header.
 
 **A window re-measures when it is dragged.** The surface is reallocated at the window's new size
 and the application is asked for a frame that shape, so the width classes
-(`inkcell/ui/stack.h`) see the room the window actually has - a window dragged wide gets the
-expanded layout rather than the handheld one, larger. It still *opens* at the device's geometry,
-so a layout that only works at desktop proportions is caught the moment it comes up.
-`<PREFIX>_SDL_FIXED` pins the frame at its opening size and scales it to the window instead,
-which is what you want when the window is standing in for the device rather than being a
-surface of its own.
+(`inkcell/ui/stack.h`) see the room the window actually has, and the content column
+(`inkcell_fb_content_column()`) keeps the text in it readable rather than setting it across the
+whole of a maximised window. It still *opens* at the device's geometry, so a layout that only
+works at desktop proportions is caught the moment it comes up. `<PREFIX>_SDL_FIXED` pins the
+frame at its opening size and scales it to the window instead, which is what you want when the
+window is standing in for the device rather than being a surface of its own.
 
 ## What is deliberately not here
 
