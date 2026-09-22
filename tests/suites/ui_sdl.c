@@ -455,6 +455,8 @@ struct sdl_pointer_heard {
     unsigned key_count;
     uint32_t clicked;
     unsigned clicks;
+    uint32_t context;
+    unsigned contexts;
 };
 
 static void sdl_pointer_on_key(void *userdata, enum inkcell_key key) {
@@ -470,6 +472,14 @@ static void sdl_pointer_on_click(void *userdata, uint32_t target, int x, int y) 
     (void)y;
     heard->clicked = target;
     heard->clicks += 1U;
+}
+
+static void sdl_pointer_on_context(void *userdata, uint32_t target, int x, int y) {
+    struct sdl_pointer_heard *const heard = (struct sdl_pointer_heard *)userdata;
+    (void)x;
+    (void)y;
+    heard->context = target;
+    heard->contexts += 1U;
 }
 
 static void sdl_push_button(Uint32 type, Uint8 button, int x, int y) {
@@ -508,6 +518,7 @@ INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
         .on_key = sdl_pointer_on_key,
         .key_userdata = &heard,
         .on_click = sdl_pointer_on_click,
+        .on_context = sdl_pointer_on_context,
         .click_userdata = &heard,
         .title = "inkcell tests",
         .width = SDL_POINTER_W,
@@ -564,6 +575,42 @@ INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
                                      heard.keys[3] != INKCELL_KEY_B,
                                  backend->shutdown(state, &context),
                                  "two notches down are two downs, and the thumb button is B");
+
+    sdl_push_button(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_RIGHT, app.row.x + 10, app.row.y + 10);
+    sdl_push_button(SDL_MOUSEBUTTONUP, SDL_BUTTON_RIGHT, app.row.x + 10, app.row.y + 10);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        heard.contexts != 1U || heard.context != SDL_POINTER_ROW || heard.clicks != 1U,
+        backend->shutdown(state, &context), "a right-click on a row is its context, never a click");
+
+    sdl_push_button(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_RIGHT, app.hint.x + 1, app.hint.y + 1);
+    sdl_push_button(SDL_MOUSEBUTTONUP, SDL_BUTTON_RIGHT, app.hint.x + 1, app.hint.y + 1);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        heard.contexts != 2U || heard.context != INKCELL_FOCUS_KEY(INKCELL_KEY_B) ||
+            heard.key_count != 4U,
+        backend->shutdown(state, &context), "a right-click on a hint is handed on, not pressed");
+
+    SDL_SetModState(KMOD_LCTRL);
+    sdl_push_button(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_LEFT, app.row.x + 10, app.row.y + 10);
+    sdl_pump(&host);
+    SDL_SetModState(KMOD_NONE);
+    sdl_push_button(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT, app.row.x + 10, app.row.y + 10);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.contexts != 3U || heard.context != SDL_POINTER_ROW ||
+                                     heard.clicks != 1U,
+                                 backend->shutdown(state, &context),
+                                 "a control-click is the secondary button, released or not");
+
+    /* A left click made while the right is held is a click, and the right's release is still
+       the context it began. */
+    sdl_push_button(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_RIGHT, app.row.x + 10, app.row.y + 10);
+    sdl_click(app.row.x + 10, app.row.y + 10);
+    sdl_push_button(SDL_MOUSEBUTTONUP, SDL_BUTTON_RIGHT, app.row.x + 10, app.row.y + 10);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.clicks != 2U || heard.contexts != 4U,
+                                 backend->shutdown(state, &context),
+                                 "each button's release should end only its own press");
 
     backend->shutdown(state, &context);
     record_success(test_name);
