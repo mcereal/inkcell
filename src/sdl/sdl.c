@@ -251,15 +251,45 @@ static bool inkcell_sdl_titlebar_sync(struct inkcell_sdl_panel *panel, bool forc
     return moved;
 }
 
-/* The strip is the window's handle, as a title bar is. The whole strip rather than the room
-   between the tabs, because a tab is not clicked yet - nothing registers one as a target - so
-   dragging from one takes nothing away. When the tabs become targets this has to leave them
-   out. The buttons are AppKit's views and answer before this is asked. */
+/*
+ * The strip is the window's handle, as a title bar is - except where the frame drew something a
+ * click is for. A tab is clicked, not dragged, and AppKit takes a draggable point for the window
+ * before SDL ever sees a button go down, so the tabs have to be carved out here or they cannot be
+ * clicked at all. Asked of the last frame's boxes, the same ones a click is answered against; a
+ * strip with no handler for clicks gives nothing up to a tab it could not deliver. The buttons are
+ * AppKit's views and answer before this is asked.
+ *
+ * `point` is in window points and the boxes are in the frame's pixels. A re-measuring window is
+ * both at once; a fixed one is scaled, which is what SDL_RenderWindowToLogical() undoes - and
+ * before SDL 2.0.18, which has no such call, a fixed window's strip does not drag at all.
+ */
 static SDL_HitTestResult inkcell_sdl_hit_test(SDL_Window *window, const SDL_Point *point,
                                               void *data) {
     (void)window;
     const struct inkcell_sdl_panel *const panel = (const struct inkcell_sdl_panel *)data;
-    return point->y < panel->strip_points ? SDL_HITTEST_DRAGGABLE : SDL_HITTEST_NORMAL;
+    if (point->y >= panel->strip_points) {
+        return SDL_HITTEST_NORMAL;
+    }
+    int x = point->x;
+    int y = point->y;
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+    if (panel->renderer != NULL) {
+        float lx = 0.0f;
+        float ly = 0.0f;
+        SDL_RenderWindowToLogical(panel->renderer, point->x, point->y, &lx, &ly);
+        x = (int)lx;
+        y = (int)ly;
+    }
+#else
+    /* Nothing to undo a fixed frame's scaling with, so the boxes cannot be found under the
+       point. A strip that never drags is the smaller loss than tabs that sometimes do. */
+    if (panel->fixed_frame) {
+        return SDL_HITTEST_NORMAL;
+    }
+#endif
+    return inkcell_pointer_over_target(&panel->pointer_map, x, y, panel->on_click != NULL)
+               ? SDL_HITTEST_NORMAL
+               : SDL_HITTEST_DRAGGABLE;
 }
 #endif
 
