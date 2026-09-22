@@ -391,8 +391,9 @@ struct inkcell_draw_state {
        anyway, so no drawing function guards it. */
     const struct inkcell_theme *theme;
     /* Glyph multiplier for body text; the tab bar and footer use one step smaller. The Brick's
-       3.2" panel is 1024 px wide, so 4 gives ~41 columns of legible text. It starts at the
-       theme's own and is overridden by <PREFIX>_FB_SCALE. */
+       3.2" panel is 1024 px wide, so INKCELL_SCALE(4) gives 58 nominal columns - about 71
+       characters of ordinary prose, since this face is proportional and sets them narrower than
+       the nominal advance. It starts at the theme's own and is overridden by <PREFIX>_FB_SCALE. */
     int scale;
     /* Somebody named this multiplier outright - <PREFIX>_FB_SCALE on the device, an explicit
        scale through the capture API - so a theme arriving in a snapshot keeps it rather than
