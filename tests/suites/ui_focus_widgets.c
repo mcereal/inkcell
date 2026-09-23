@@ -35,6 +35,8 @@ enum {
     W_ID_DIALOG = 300,
     W_ID_BUTTON = 400,
     W_ID_FAB = 500,
+    W_ID_MENU_FIRST = 600,
+    W_ID_MENU_LAST = 700,
     /* A layer id rather than a focus id: the two spaces are unrelated, and a dialog on a
        layer needs one of each. */
     W_ID_DIALOG_LAYER = 9000,
@@ -64,6 +66,44 @@ static bool focus_harness_open(struct focus_harness *h, uint32_t width, uint32_t
 
 static void focus_harness_close(struct focus_harness *h) {
     inkcell_capture_close(h->capture);
+}
+
+/* ---- the menu -------------------------------------------------------------------------- */
+
+INKCELL_TEST_CASE(focus_widgets_menu_identity_is_independent_of_display_order, unit) {
+    struct focus_harness h;
+    INKCELL_TEST_FAIL_IF(!focus_harness_open(&h, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT),
+                         "the capture should open");
+
+    const struct inkcell_fb_menu_item items[] = {
+        {.label = "First"},
+        {.label = "No target"},
+        {.label = "Last"},
+    };
+    const uint32_t focus_ids[] = {W_ID_MENU_FIRST, INKCELL_FOCUS_NONE, W_ID_MENU_LAST};
+    const struct inkcell_fb_menu menu = {
+        .items = items,
+        .count = sizeof items / sizeof items[0],
+        .cursor = UINT32_MAX,
+        .focus_base = W_ID_ROW,
+        .focus_ids = focus_ids,
+    };
+    struct inkcell_fb_rect box = inkcell_fb_menu_box(h.state, &menu, INKCELL_CAPTURE_WIDTH);
+    box.x = 10;
+    box.y = 10;
+    inkcell_fb_draw_menu(h.state, box, &menu);
+
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        !inkcell_focus_has(&h.map, W_ID_MENU_FIRST) || !inkcell_focus_has(&h.map, W_ID_MENU_LAST),
+        focus_harness_close(&h), "explicit menu ids should name the rows that were drawn");
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        inkcell_focus_has(&h.map, W_ID_ROW) || inkcell_focus_has(&h.map, W_ID_ROW + 1U),
+        focus_harness_close(&h), "explicit ids should replace rather than offset the focus base");
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        inkcell_focus_find(&h.map, W_ID_MENU_FIRST, INKCELL_FOCUS_DOWN) != W_ID_MENU_LAST,
+        focus_harness_close(&h), "display order should still decide which menu row is next");
+    focus_harness_close(&h);
+    record_success(test_name);
 }
 
 /* ---- the card --------------------------------------------------------------------------- */

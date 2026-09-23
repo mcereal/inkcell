@@ -221,8 +221,12 @@ struct inkcell_fb_menu {
     uint32_t cursor;
     /* What the d-pad calls the rows: item `i` is `focus_base + i`, the numbering
        inkcell_fb_list_focus() uses and for its reason - a screen's menu cursor is already an
-       item index. INKCELL_FOCUS_NONE registers nothing. */
+       item index. INKCELL_FOCUS_NONE registers nothing. Ignored when `focus_ids` is present. */
     uint32_t focus_base;
+    /* Optional ids parallel to `items`. A menu whose stable action identity differs from its
+       display order supplies these; INKCELL_FOCUS_NONE leaves that item unregistered. NULL keeps
+       the compact `focus_base + i` convention above. */
+    const uint32_t *focus_ids;
 };
 
 /*
