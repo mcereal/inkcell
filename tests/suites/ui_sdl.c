@@ -667,6 +667,7 @@ INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
     sdl_push_key(SDL_SCANCODE_X, SDLK_x, primary, 0U);
     sdl_push_key(SDL_SCANCODE_N, SDLK_n, primary, 1U);
     sdl_push_key(SDL_SCANCODE_S, SDLK_s, (SDL_Keymod)(primary | KMOD_SHIFT), 0U);
+    sdl_push_key(SDL_SCANCODE_R, SDLK_r, (SDL_Keymod)(KMOD_CTRL | KMOD_GUI), 0U);
     sdl_pump(&host);
     INKCELL_TEST_FAIL_IF_CLEANUP(heard.key_count != 5U || heard.keys[4] != INKCELL_KEY_X ||
                                      heard.shortcuts != 2U || heard.shortcut != 'x',

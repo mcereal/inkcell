@@ -626,12 +626,15 @@ static void inkcell_sdl_handle_key(struct inkcell_sdl_panel *panel, const SDL_Ke
        Use SDL's key symbol so the letter follows the active keyboard layout. */
 #if defined(__APPLE__)
     const SDL_Keymod primary = KMOD_GUI;
+    const SDL_Keymod other_command = KMOD_CTRL;
 #else
     const SDL_Keymod primary = KMOD_CTRL;
+    const SDL_Keymod other_command = KMOD_GUI;
 #endif
     if ((key->keysym.mod & (KMOD_CTRL | KMOD_GUI)) != 0) {
         const SDL_Keycode symbol = key->keysym.sym;
-        if (panel->on_shortcut != NULL && (key->keysym.mod & primary) != 0 && key->repeat == 0U &&
+        if (panel->on_shortcut != NULL && (key->keysym.mod & primary) != 0 &&
+            (key->keysym.mod & other_command) == 0 && key->repeat == 0U &&
             (key->keysym.mod & (KMOD_ALT | KMOD_SHIFT)) == 0 && symbol >= SDLK_a &&
             symbol <= SDLK_z) {
             inkcell_latency_event(inkcell_latency_now_us());
