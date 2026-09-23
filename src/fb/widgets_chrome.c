@@ -424,7 +424,7 @@ static void inkcell_fb_action_targets(const struct inkcell_draw_state *state,
         const int left = x + (int)((int64_t)w * (int64_t)k / (int64_t)count);
         const int right = x + (int)((int64_t)w * (int64_t)(k + 1U) / (int64_t)count);
         const struct inkcell_fb_rect rect = {.x = left, .y = y, .w = right - left, .h = h};
-        inkcell_fb_target_register(state, INKCELL_FOCUS_KEY(keys[k]), &rect);
+        inkcell_fb_target_register(state, INKCELL_FOCUS_ACTION_KEY(keys[k]), &rect);
     }
 }
 

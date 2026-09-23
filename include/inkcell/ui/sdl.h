@@ -100,13 +100,15 @@ extern "C" {
  * painted the strip's colour. Either way the frame is the panel's size and a capture of it is
  * unchanged - what moves is the first tab, on a Mac, in a window.
  *
- * The mouse needs nothing here to work. A click on a hint in the action bar is a press of that
- * hint's key and arrives through `on_key`; so does the wheel, as up and down, and the thumb
- * button, as B. `on_click` is for everything else the frame registered - a row, a tab - and
- * hears the id under the pointer; NULL drops those clicks. `on_context` is the secondary button
- * on the same terms - a right-click, or a control-click on a one-button Mac - and hears
- * whatever is under the pointer, a key's target included, with `click_userdata`: what a
- * context menu is of is the application's to say. NULL drops those. See inkcell/ui/pointer.h.
+ * The mouse needs nothing here to work. A click on a hint in the action bar is handed to
+ * `on_action_key` when present, with `key_userdata`; this lets an application distinguish a
+ * visible action from the same logical key on a keyboard or gamepad. NULL preserves the old
+ * path through `on_key`. The wheel still arrives through `on_key` as up and down, and the thumb
+ * button as B. `on_click` is for everything else the frame registered - a row, a tab - and hears
+ * the id under the pointer; NULL drops those clicks. `on_context` is the secondary button on the
+ * same terms - a right-click, or a control-click on a one-button Mac - and hears whatever is
+ * under the pointer, a key's target included, with `click_userdata`: what a context menu is of
+ * is the application's to say. NULL drops those. See inkcell/ui/pointer.h.
  *
  * `request_frame` is how the window asks for a frame it cannot draw itself, and it matters more
  * now than it did: a resize has given the application a differently shaped surface and there is
@@ -119,6 +121,7 @@ struct inkcell_backend_sdl_context {
     const struct inkcell_fb_app *app;
     struct inkcell_input_host host;
     inkcell_key_handler on_key;
+    inkcell_key_handler on_action_key;
     void *key_userdata;
     inkcell_click_handler on_click;
     inkcell_click_handler on_context;

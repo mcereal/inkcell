@@ -227,19 +227,22 @@ bool inkcell_focus_add_target(struct inkcell_focus_map *map, uint32_t id, int x,
 uint32_t inkcell_focus_hit(const struct inkcell_focus_map *map, int x, int y);
 
 /*
- * A block of ids the toolkit reserves for "this box is a key": pressing it with a pointer is
- * pressing that key, and nothing about the application has to be asked.
+ * Two blocks of ids the toolkit reserves for "this box is a key": pressing it with a pointer
+ * is pressing that key, and nothing about the application has to be asked.
  *
- * The action bar registers its hint pills here, so a window can be driven by clicking the verbs
- * it already lists. Anything else that is a key in all but name - a keycap drawn on a help
- * screen, say - can register the same way. The block sits at the top of the id space so that no
- * application enum counting up from 1 ever reaches it.
+ * INKCELL_FOCUS_ACTION_KEY is specifically a visible action-bar hint. Keeping it apart lets an
+ * application route that click through the semantic action the hint names, while an app-bar
+ * back arrow or a keycap drawn on a help screen remains an ordinary logical key. Both blocks
+ * sit at the top of the id space so that no application enum counting up from 1 reaches them.
  */
+#define INKCELL_FOCUS_ACTION_KEY_BASE 0xFFFFFE00U
+#define INKCELL_FOCUS_ACTION_KEY(key) (INKCELL_FOCUS_ACTION_KEY_BASE + (uint32_t)(key))
 #define INKCELL_FOCUS_KEY_BASE 0xFFFFFF00U
 #define INKCELL_FOCUS_KEY(key) (INKCELL_FOCUS_KEY_BASE + (uint32_t)(key))
 
 /* The key a reserved id stands for, or INKCELL_KEY_NONE for an id outside the block. */
 enum inkcell_key inkcell_focus_key_of(uint32_t id);
+enum inkcell_key inkcell_focus_action_key_of(uint32_t id);
 
 /* The radius `id` was registered with, and 0 for a square one or for an id that is not here.
    What the focus ring asks, and the reason `radius` is on the item at all. */

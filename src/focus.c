@@ -272,6 +272,14 @@ enum inkcell_key inkcell_focus_key_of(uint32_t id) {
     return key <= (uint32_t)INKCELL_KEY_SELECT ? (enum inkcell_key)key : INKCELL_KEY_NONE;
 }
 
+enum inkcell_key inkcell_focus_action_key_of(uint32_t id) {
+    if (id <= INKCELL_FOCUS_ACTION_KEY_BASE) {
+        return INKCELL_KEY_NONE;
+    }
+    const uint32_t key = id - INKCELL_FOCUS_ACTION_KEY_BASE;
+    return key <= (uint32_t)INKCELL_KEY_SELECT ? (enum inkcell_key)key : INKCELL_KEY_NONE;
+}
+
 int inkcell_focus_radius_of(const struct inkcell_focus_map *map, uint32_t id) {
     const struct inkcell_focus_item *item = focus_item(map, id);
     return (item != NULL) ? item->radius : 0;

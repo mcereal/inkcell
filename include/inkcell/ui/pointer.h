@@ -10,12 +10,13 @@
  * second description of anything. It is the small amount of *time* a pointer has that a key
  * does not: a click is a press and a release, and the two have to land on the same thing.
  *
- * It answers in one of two ways, and which is not the application's choice:
+ * It answers in one of three ways, and which is not the application's choice:
  *
- *   - **A key.** The box was registered under INKCELL_FOCUS_KEY() - a hint in the action bar -
- *     and clicking it *is* pressing that key. The backend delivers it through the same handler
- *     a keyboard does, so an application that has never heard of a pointer is already driven by
- *     one.
+ *   - **An action key.** A visible hint registered under INKCELL_FOCUS_ACTION_KEY(). The backend
+ *     may hand this to an action-specific adapter, which can resolve the keycap against the
+ *     command set used to draw it.
+ *   - **A key.** Any other key-backed box registered under INKCELL_FOCUS_KEY(), such as an app
+ *     bar's back arrow. The backend delivers it through the same handler a keyboard does.
  *   - **A click.** Any other id: something the application named, and the application says what
  *     clicking it does. A backend hands these on when it was given somewhere to hand them and
  *     drops them otherwise.
@@ -54,6 +55,8 @@ struct inkcell_pointer {
 
 enum inkcell_pointer_kind {
     INKCELL_POINTER_NONE = 0,
+    /* `key` is the binding of a visible action-bar hint. */
+    INKCELL_POINTER_ACTION_KEY,
     /* `key` is to be pressed, exactly as if it had been. */
     INKCELL_POINTER_KEY,
     /* `target` was clicked, at `x`, `y`. */
