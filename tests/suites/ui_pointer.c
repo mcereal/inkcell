@@ -84,8 +84,14 @@ INKCELL_TEST_CASE(pointer_hit_takes_what_was_drawn_last, unit) {
 INKCELL_TEST_CASE(pointer_key_ids_round_trip, unit) {
     INKCELL_TEST_FAIL_IF(inkcell_focus_key_of(INKCELL_FOCUS_KEY(INKCELL_KEY_R1)) != INKCELL_KEY_R1,
                          "a key's id should come back as the key");
+    INKCELL_TEST_FAIL_IF(inkcell_focus_action_key_of(INKCELL_FOCUS_ACTION_KEY(INKCELL_KEY_R1)) !=
+                             INKCELL_KEY_R1,
+                         "an action key's id should come back as the key");
     INKCELL_TEST_FAIL_IF(inkcell_focus_key_of(P_ID_ROW) != INKCELL_KEY_NONE,
                          "an application's own id is not a key");
+    INKCELL_TEST_FAIL_IF(inkcell_focus_action_key_of(INKCELL_FOCUS_KEY(INKCELL_KEY_R1)) !=
+                             INKCELL_KEY_NONE,
+                         "an ordinary key target is not an action hint");
     INKCELL_TEST_FAIL_IF(inkcell_focus_key_of(INKCELL_FOCUS_KEY_BASE) != INKCELL_KEY_NONE,
                          "the block's base is KEY_NONE, which is no key");
     INKCELL_TEST_FAIL_IF(inkcell_focus_key_of(0xFFFFFFFFU) != INKCELL_KEY_NONE,
@@ -196,9 +202,9 @@ INKCELL_TEST_CASE(pointer_action_bar_hints_are_their_keys, unit) {
     struct inkcell_focus_rect a;
     struct inkcell_focus_rect l1;
     struct inkcell_focus_rect r1;
-    const bool drawn = inkcell_focus_rect_of(&map, INKCELL_FOCUS_KEY(INKCELL_KEY_A), &a) &&
-                       inkcell_focus_rect_of(&map, INKCELL_FOCUS_KEY(INKCELL_KEY_L1), &l1) &&
-                       inkcell_focus_rect_of(&map, INKCELL_FOCUS_KEY(INKCELL_KEY_R1), &r1);
+    const bool drawn = inkcell_focus_rect_of(&map, INKCELL_FOCUS_ACTION_KEY(INKCELL_KEY_A), &a) &&
+                       inkcell_focus_rect_of(&map, INKCELL_FOCUS_ACTION_KEY(INKCELL_KEY_L1), &l1) &&
+                       inkcell_focus_rect_of(&map, INKCELL_FOCUS_ACTION_KEY(INKCELL_KEY_R1), &r1);
     INKCELL_TEST_FAIL_IF_CLEANUP(!drawn, inkcell_capture_close(capture),
                                  "every hint should register the key it names");
     INKCELL_TEST_FAIL_IF_CLEANUP(
@@ -220,7 +226,7 @@ INKCELL_TEST_CASE(pointer_action_bar_hints_are_their_keys, unit) {
     inkcell_pointer_down(&pointer, &map, a.x + a.w - 1, a.y + a.h / 2);
     const struct inkcell_pointer_result r =
         inkcell_pointer_up(&pointer, &map, a.x + a.w - 1, a.y + a.h / 2);
-    INKCELL_TEST_FAIL_IF_CLEANUP(r.kind != INKCELL_POINTER_KEY || r.key != INKCELL_KEY_A,
+    INKCELL_TEST_FAIL_IF_CLEANUP(r.kind != INKCELL_POINTER_ACTION_KEY || r.key != INKCELL_KEY_A,
                                  inkcell_capture_close(capture),
                                  "clicking the verb beside the cap presses the cap");
 
@@ -257,13 +263,14 @@ INKCELL_TEST_CASE(pointer_action_bar_is_verbs_and_leaves_out_what_the_pointer_ha
     struct inkcell_focus_rect back;
     struct inkcell_focus_rect left;
     struct inkcell_focus_rect up;
-    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_focus_rect_of(&map, INKCELL_FOCUS_KEY(INKCELL_KEY_A), &a),
-                                 inkcell_capture_close(capture), "a face button's verb is A");
     INKCELL_TEST_FAIL_IF_CLEANUP(
-        !inkcell_focus_rect_of(&map, INKCELL_FOCUS_KEY(INKCELL_KEY_LEFT), &left),
+        !inkcell_focus_rect_of(&map, INKCELL_FOCUS_ACTION_KEY(INKCELL_KEY_A), &a),
+        inkcell_capture_close(capture), "a face button's verb is A");
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        !inkcell_focus_rect_of(&map, INKCELL_FOCUS_ACTION_KEY(INKCELL_KEY_LEFT), &left),
         inkcell_capture_close(capture), "a pair the pointer has no other way to press stays");
     INKCELL_TEST_FAIL_IF_CLEANUP(
-        inkcell_focus_rect_of(&map, INKCELL_FOCUS_KEY(INKCELL_KEY_UP), &up),
+        inkcell_focus_rect_of(&map, INKCELL_FOCUS_ACTION_KEY(INKCELL_KEY_UP), &up),
         inkcell_capture_close(capture), "the arrows are the wheel, and leave the bar");
     INKCELL_TEST_FAIL_IF_CLEANUP(
         !inkcell_focus_rect_of(&map, INKCELL_FOCUS_KEY(INKCELL_KEY_B), &back),
@@ -300,7 +307,8 @@ INKCELL_TEST_CASE(pointer_off_keeps_the_keycaps, unit) {
 
     struct inkcell_focus_rect b;
     INKCELL_TEST_FAIL_IF_CLEANUP(
-        !inkcell_focus_rect_of(&map, INKCELL_FOCUS_KEY(INKCELL_KEY_B), &b) || b.y < layout.footer_y,
+        !inkcell_focus_rect_of(&map, INKCELL_FOCUS_ACTION_KEY(INKCELL_KEY_B), &b) ||
+            b.y < layout.footer_y,
         inkcell_capture_close(capture), "on a panel, B stays in the footer beside its arrow");
     INKCELL_TEST_FAIL_IF_CLEANUP(map.count != 3U, inkcell_capture_close(capture),
                                  "B, and the arrows' two halves");
@@ -330,7 +338,8 @@ INKCELL_TEST_CASE(pointer_keeps_back_in_the_bar_when_no_arrow_was_drawn, unit) {
 
     struct inkcell_focus_rect b;
     INKCELL_TEST_FAIL_IF_CLEANUP(
-        !inkcell_focus_rect_of(&map, INKCELL_FOCUS_KEY(INKCELL_KEY_B), &b) || b.y < layout.footer_y,
+        !inkcell_focus_rect_of(&map, INKCELL_FOCUS_ACTION_KEY(INKCELL_KEY_B), &b) ||
+            b.y < layout.footer_y,
         inkcell_capture_close(capture), "with no arrow on the frame, the bar is the way back");
     inkcell_capture_close(capture);
     record_success(test_name);

@@ -43,6 +43,11 @@ struct inkcell_pointer_result inkcell_pointer_up(struct inkcell_pointer *pointer
     result.target = pressed;
     result.x = x;
     result.y = y;
+    result.key = inkcell_focus_action_key_of(pressed);
+    if (result.key != INKCELL_KEY_NONE) {
+        result.kind = INKCELL_POINTER_ACTION_KEY;
+        return result;
+    }
     result.key = inkcell_focus_key_of(pressed);
     result.kind = result.key != INKCELL_KEY_NONE ? INKCELL_POINTER_KEY : INKCELL_POINTER_CLICK;
     return result;
@@ -74,5 +79,6 @@ bool inkcell_pointer_over_target(const struct inkcell_focus_map *map, int x, int
     if (id == INKCELL_FOCUS_NONE) {
         return false;
     }
-    return clickable || inkcell_focus_key_of(id) != INKCELL_KEY_NONE;
+    return clickable || inkcell_focus_action_key_of(id) != INKCELL_KEY_NONE ||
+           inkcell_focus_key_of(id) != INKCELL_KEY_NONE;
 }

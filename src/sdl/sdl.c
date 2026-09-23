@@ -692,10 +692,12 @@ static void inkcell_sdl_handle_button(struct inkcell_sdl_panel *panel,
     }
     const struct inkcell_pointer_result result =
         inkcell_pointer_up(&panel->pointer, &panel->pointer_map, button->x, button->y);
-    if (result.kind == INKCELL_POINTER_KEY) {
+    if (result.kind == INKCELL_POINTER_ACTION_KEY) {
         inkcell_key_handler handler =
             panel->on_action_key != NULL ? panel->on_action_key : panel->on_key;
         inkcell_sdl_deliver(panel, handler, result.key, true);
+    } else if (result.kind == INKCELL_POINTER_KEY) {
+        inkcell_sdl_deliver(panel, panel->on_key, result.key, true);
     } else if (result.kind == INKCELL_POINTER_CLICK && panel->on_click != NULL) {
         inkcell_latency_event(inkcell_latency_now_us());
         inkcell_latency_press();
