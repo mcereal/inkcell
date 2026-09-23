@@ -707,8 +707,11 @@ INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
     fprintf(stderr, "[sdl text] before opening transition\n");
     heard.open_text_on_x = true;
     sdl_push_key(SDL_SCANCODE_X, SDLK_x, KMOD_NONE, 0U);
+    fprintf(stderr, "[sdl text] pushed opening key\n");
     sdl_push_text("x");
+    fprintf(stderr, "[sdl text] pushed opening text\n");
     sdl_pump(&host);
+    fprintf(stderr, "[sdl text] pumped opening events\n");
     INKCELL_TEST_FAIL_IF_CLEANUP(heard.key_count != 6U || heard.texts != 0U,
                                  backend->shutdown(state, &context),
                                  "the key that opened text input must not type into its draft");
