@@ -84,8 +84,8 @@ jobs:
           path: build/gallery/*.png
           if-no-files-found: ignore
 
-  # macOS is a development host, not a target: the fb backend and evdev compile to refusals there
-  # and the window is how the UI is seen. The golden sheet is the same sheet, so this job is also
+  # macOS is a target like Linux: the fb backend and evdev compile to refusals there and the window
+  # is how the UI is seen. The golden sheet is the same sheet, so this job is also
   # what says the rasteriser draws the same pixels under a second libc and a second compiler.
   macos:
     name: debug (macOS)

@@ -8,8 +8,8 @@
  * USB keyboard on the device would send - so a keycap means one thing everywhere. The numbers
  * are the Linux input ABI and do not change.
  *
- * On Linux they come from the kernel's own header. Anywhere else - macOS, as a development host
- * with a window and no evdev - the ones inkcell and its applications name are spelled out below
+ * On Linux they come from the kernel's own header. Anywhere else - macOS or Windows, with a
+ * window and no evdev - the ones inkcell and its applications name are spelled out below
  * with the kernel's values, each behind #ifndef so a host that does have them is not redefined.
  * <linux/input-event-codes.h> is only #defines, which is why it may appear in a public header
  * where <linux/input.h> (struct input_event, the ioctls) may not; see scripts/check-platform.py.
