@@ -729,12 +729,15 @@ void inkcell_fb_draw_menu(const struct inkcell_draw_state *state, struct inkcell
                                  row_ground);
         }
 
-        if (live && menu->focus_base != INKCELL_FOCUS_NONE) {
+        const uint32_t focus_id = menu->focus_ids != NULL ? menu->focus_ids[i]
+                                                          : (menu->focus_base != INKCELL_FOCUS_NONE
+                                                                 ? menu->focus_base + (uint32_t)i
+                                                                 : INKCELL_FOCUS_NONE);
+        if (live && focus_id != INKCELL_FOCUS_NONE) {
             /* The box the highlight paints, so the ring lands on what the fill covers rather
                than on the text inside it - inkcell_fb_list_row()'s rule. */
             const struct inkcell_fb_rect hit = {box.x + pad / 2, y, box.w - pad, row_h};
-            inkcell_fb_focus_register_shaped(state, menu->focus_base + (uint32_t)i, &hit,
-                                             INKCELL_SHAPE_SM);
+            inkcell_fb_focus_register_shaped(state, focus_id, &hit, INKCELL_SHAPE_SM);
         }
         y += row_h;
     }
