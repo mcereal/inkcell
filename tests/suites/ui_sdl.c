@@ -554,11 +554,15 @@ static void sdl_push_key(SDL_Scancode scancode, SDL_Keycode symbol, SDL_Keymod m
 
 static void sdl_push_text(const char *text) {
     SDL_Event event;
+    fprintf(stderr, "[sdl text] push helper entered\n");
     memset(&event, 0, sizeof event);
     event.type = SDL_TEXTINPUT;
     event.text.type = SDL_TEXTINPUT;
+    fprintf(stderr, "[sdl text] before copy\n");
     snprintf(event.text.text, sizeof event.text.text, "%s", text);
+    fprintf(stderr, "[sdl text] before push\n");
     SDL_PushEvent(&event);
+    fprintf(stderr, "[sdl text] after push\n");
 }
 
 INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
