@@ -298,6 +298,32 @@ INKCELL_TEST_CASE(keyboard_append_is_all_of_a_cell_or_none, unit) {
     INKCELL_TEST_FAIL_IF(tiny[0] != '\0', "a four-byte emoji should not fit a four-byte buffer");
 }
 
+INKCELL_TEST_CASE(keyboard_host_text_obeys_cap_and_utf8_rules, unit) {
+    struct inkcell_keyboard_layout layout = bare_layout();
+    layout.cap = 8U;
+    char text[32] = "ab";
+
+    INKCELL_TEST_FAIL_IF(!inkcell_keyboard_insert_text(&layout, text, sizeof text, "c" TEST_EMOJI),
+                         "committed text and a complete emoji should fit together");
+    INKCELL_TEST_FAIL_IF(strcmp(text, "abc" TEST_EMOJI) != 0,
+                         "host text should append exactly what was committed");
+    INKCELL_TEST_FAIL_IF(inkcell_keyboard_insert_text(&layout, text, sizeof text, "de"),
+                         "a chunk past the cap should be refused whole");
+    INKCELL_TEST_FAIL_IF(strcmp(text, "abc" TEST_EMOJI) != 0,
+                         "a refused chunk must leave the existing text intact");
+    INKCELL_TEST_FAIL_IF(inkcell_keyboard_insert_text(&layout, text, sizeof text, "\n"),
+                         "single-line fields must reject line breaks");
+    INKCELL_TEST_FAIL_IF(inkcell_keyboard_insert_text(&layout, text, sizeof text, "\xC0\xAF"),
+                         "malformed UTF-8 must not enter the draft");
+    INKCELL_TEST_FAIL_IF(strcmp(text, "abc" TEST_EMOJI) != 0,
+                         "invalid input must leave the draft intact");
+    char replacement[8] = "";
+    INKCELL_TEST_FAIL_IF(
+        !inkcell_keyboard_insert_text(&layout, replacement, sizeof replacement, "\xEF\xBF\xBD") ||
+            strcmp(replacement, "\xEF\xBF\xBD") != 0,
+        "a valid replacement character is still valid UTF-8 text");
+}
+
 /* Backspace removes what the user sees as one key, not one byte and not one code point. */
 INKCELL_TEST_CASE(keyboard_delete_takes_a_whole_cell, unit) {
     const struct inkcell_keyboard_layout layout = bare_layout();

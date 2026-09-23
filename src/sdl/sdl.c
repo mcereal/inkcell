@@ -137,6 +137,9 @@ struct inkcell_sdl_panel {
     inkcell_key_handler on_key;
     inkcell_key_handler on_action_key;
     void (*on_shortcut)(void *userdata, char letter);
+    bool (*text_input_active)(void *userdata);
+    void (*on_text_input)(void *userdata, const char *text);
+    bool text_active;
     void *key_userdata;
     /* The mouse: what it pressed, where a scroll has got to, and which cursor it is showing.
        See include/inkcell/ui/pointer.h. The cursors are NULL where the video driver has none -
@@ -621,6 +624,28 @@ static void inkcell_sdl_deliver(struct inkcell_sdl_panel *panel, inkcell_key_han
     }
 }
 
+static void inkcell_sdl_sync_text_input(struct inkcell_sdl_panel *panel) {
+    const bool active = panel->on_text_input != NULL && panel->text_input_active != NULL &&
+                        panel->text_input_active(panel->key_userdata);
+    if (active != panel->text_active) {
+        panel->text_active = active;
+        if (active) {
+            SDL_StartTextInput();
+        } else {
+            SDL_StopTextInput();
+        }
+    }
+}
+
+static void inkcell_sdl_deliver_text(struct inkcell_sdl_panel *panel, const char *text) {
+    if (!panel->text_active || panel->on_text_input == NULL || text == NULL || text[0] == '\0') {
+        return;
+    }
+    inkcell_latency_event(inkcell_latency_now_us());
+    inkcell_latency_press();
+    panel->on_text_input(panel->key_userdata, text);
+}
+
 static void inkcell_sdl_handle_key(struct inkcell_sdl_panel *panel, const SDL_KeyboardEvent *key) {
     /* A desktop shortcut must not also become a controller button (notably Ctrl+X).
        Use SDL's key symbol so the letter follows the active keyboard layout. */
@@ -633,6 +658,14 @@ static void inkcell_sdl_handle_key(struct inkcell_sdl_panel *panel, const SDL_Ke
 #endif
     if ((key->keysym.mod & (KMOD_CTRL | KMOD_GUI)) != 0) {
         const SDL_Keycode symbol = key->keysym.sym;
+        if (panel->text_active && (key->keysym.mod & primary) != 0 &&
+            (key->keysym.mod & (other_command | KMOD_ALT | KMOD_SHIFT)) == 0 && symbol == SDLK_v &&
+            key->repeat == 0U) {
+            char *const clipboard = SDL_GetClipboardText();
+            inkcell_sdl_deliver_text(panel, clipboard);
+            SDL_free(clipboard);
+            return;
+        }
         if (panel->on_shortcut != NULL && (key->keysym.mod & primary) != 0 &&
             (key->keysym.mod & other_command) == 0 && key->repeat == 0U &&
             (key->keysym.mod & (KMOD_ALT | KMOD_SHIFT)) == 0 && symbol >= SDLK_a &&
@@ -642,6 +675,31 @@ static void inkcell_sdl_handle_key(struct inkcell_sdl_panel *panel, const SDL_Ke
             panel->on_shortcut(panel->key_userdata, (char)symbol);
         }
         return;
+    }
+    if (panel->text_active) {
+        enum inkcell_key edit = INKCELL_KEY_NONE;
+        switch (key->keysym.scancode) {
+        case SDL_SCANCODE_BACKSPACE:
+            edit = INKCELL_KEY_X;
+            break;
+        case SDL_SCANCODE_RETURN:
+        case SDL_SCANCODE_KP_ENTER:
+            edit = INKCELL_KEY_START;
+            break;
+        case SDL_SCANCODE_ESCAPE:
+            edit = INKCELL_KEY_B;
+            break;
+        case SDL_SCANCODE_SPACE:
+        case SDL_SCANCODE_X:
+            /* Their characters arrive through SDL_TEXTINPUT, including IME composition. */
+            return;
+        default:
+            break;
+        }
+        if (edit != INKCELL_KEY_NONE) {
+            inkcell_sdl_deliver(panel, panel->on_key, edit, key->repeat == 0U);
+            return;
+        }
     }
     const uint16_t code = inkcell_sdl_evdev_code((int)key->keysym.scancode);
     if (code == 0U) {
@@ -778,6 +836,8 @@ static int inkcell_sdl_pump(int fd, uint32_t events, void *userdata) {
        something else was running are still one drain of the queue. */
     (void)inkwell_timer_read(fd);
 
+    inkcell_sdl_sync_text_input(panel);
+
     SDL_Event event;
     while (SDL_PollEvent(&event) != 0) {
         switch (event.type) {
@@ -786,6 +846,9 @@ static int inkcell_sdl_pump(int fd, uint32_t events, void *userdata) {
             return 0;
         case SDL_KEYDOWN:
             inkcell_sdl_handle_key(panel, &event.key);
+            break;
+        case SDL_TEXTINPUT:
+            inkcell_sdl_deliver_text(panel, event.text.text);
             break;
         case SDL_MOUSEBUTTONDOWN:
         case SDL_MOUSEBUTTONUP:
@@ -871,6 +934,12 @@ static int inkcell_sdl_pump(int fd, uint32_t events, void *userdata) {
             break;
         default:
             break;
+        }
+        /* Start on the next pump: a key that just opened the text context may already have
+           queued its own SDL_TEXTINPUT event. That character belongs to the opening action,
+           not to the new draft. Stop immediately when a submit or dismiss closes it. */
+        if (panel->text_active) {
+            inkcell_sdl_sync_text_input(panel);
         }
     }
     return 0;
@@ -1111,6 +1180,8 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
     panel->on_key = context->on_key;
     panel->on_action_key = context->on_action_key;
     panel->on_shortcut = context->on_shortcut;
+    panel->text_input_active = context->text_input_active;
+    panel->on_text_input = context->on_text_input;
     panel->key_userdata = context->key_userdata;
     panel->on_click = context->on_click;
     panel->on_context = context->on_context;
@@ -1159,6 +1230,10 @@ static void inkcell_backend_sdl_shutdown(void *state_ptr, void *userdata) {
     }
     struct inkcell_draw_state *const state = &panel->state;
     inkcell_sdl_pump_stop(panel);
+    if (panel->text_active) {
+        SDL_StopTextInput();
+        panel->text_active = false;
+    }
     if (panel->hand != NULL) {
         SDL_FreeCursor(panel->hand);
         panel->hand = NULL;

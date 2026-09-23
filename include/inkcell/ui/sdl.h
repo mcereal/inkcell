@@ -125,6 +125,11 @@ struct inkcell_backend_sdl_context {
     /* Called for a primary-modifier letter chord (Command on macOS, Control elsewhere).
        The letter is lowercase ASCII. Such chords never fall through to on_key. */
     void (*on_shortcut)(void *userdata, char letter);
+    /* The application says when its visible context accepts text. Committed UTF-8 (including
+       paste) reaches on_text_input; preedit composition is not drawn in the application frame.
+       Both use key_userdata. When active, Backspace deletes, Enter submits, and Escape leaves. */
+    bool (*text_input_active)(void *userdata);
+    void (*on_text_input)(void *userdata, const char *text);
     void *key_userdata;
     inkcell_click_handler on_click;
     inkcell_click_handler on_context;

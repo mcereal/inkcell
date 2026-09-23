@@ -17,6 +17,8 @@
    backspace and the drawability check have to reason about. */
 #include "inkcell/ui/emoji.h"
 
+#include "inkwell/base/text.h"
+
 #include <string.h>
 
 /*
@@ -122,6 +124,29 @@ static bool keyboard_append(char *text, size_t size, size_t cap, const char *add
     }
     memcpy(&text[len], add, extra + 1U);
     return true;
+}
+
+bool inkcell_keyboard_insert_text(const struct inkcell_keyboard_layout *layout, char *text,
+                                  size_t size, const char *input) {
+    if (text == NULL || size == 0U || input == NULL || input[0] == '\0') {
+        return false;
+    }
+    const size_t bytes = strlen(input);
+    for (size_t offset = 0U; offset < bytes;) {
+        const size_t step =
+            inkwell_text_utf8_sequence_len((const uint8_t *)&input[offset], bytes - offset);
+        if (step == 0U) {
+            return false;
+        }
+        uint32_t codepoint = 0U;
+        (void)inkwell_text_utf8_next(&input[offset], &codepoint);
+        if (codepoint < 0x20U || (codepoint >= 0x7FU && codepoint <= 0x9FU) ||
+            codepoint == 0x2028U || codepoint == 0x2029U) {
+            return false;
+        }
+        offset += step;
+    }
+    return keyboard_append(text, size, keyboard_cap(layout, size), input);
 }
 
 /*
