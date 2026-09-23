@@ -30,6 +30,9 @@ set(INKCELL_TEST_SUITES
     suites/ui_theme.c
     suites/ui_view.c
 )
+if(WIN32)
+    list(APPEND INKCELL_TEST_SUITES suites/ui_input_windows.c)
+endif()
 
 add_executable(inkcell_tests
     framework/inkcell_test.c
