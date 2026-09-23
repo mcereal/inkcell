@@ -704,6 +704,7 @@ INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
                                  backend->shutdown(state, &context),
                                  "primary chords reach shortcuts once and never press face keys");
 
+    fprintf(stderr, "[sdl text] before opening transition\n");
     heard.open_text_on_x = true;
     sdl_push_key(SDL_SCANCODE_X, SDLK_x, KMOD_NONE, 0U);
     sdl_push_text("x");
@@ -713,6 +714,7 @@ INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
                                  "the key that opened text input must not type into its draft");
     heard.open_text_on_x = false;
 
+    fprintf(stderr, "[sdl text] before active text events\n");
     heard.text_active = true;
     sdl_push_key(SDL_SCANCODE_X, SDLK_x, KMOD_NONE, 0U);
     sdl_push_text("x");
@@ -730,6 +732,7 @@ INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
                                  backend->shutdown(state, &context),
                                  "text mode should type characters once and use native edit keys");
 
+    fprintf(stderr, "[sdl text] before clipboard\n");
     SDL_SetClipboardText("paste");
     sdl_push_key(SDL_SCANCODE_V, SDLK_v, primary, 0U);
     sdl_pump(&host);
@@ -738,12 +741,14 @@ INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
                                  backend->shutdown(state, &context),
                                  "primary V should paste into active text without a shortcut");
 
+    fprintf(stderr, "[sdl text] before deactivation\n");
     heard.text_active = false;
     sdl_push_text("ignored");
     sdl_pump(&host);
     INKCELL_TEST_FAIL_IF_CLEANUP(heard.texts != 3U || SDL_IsTextInputActive(),
                                  backend->shutdown(state, &context),
                                  "text input should stop when the visible context closes");
+    fprintf(stderr, "[sdl text] after deactivation\n");
 
     backend->shutdown(state, &context);
     record_success(test_name);
