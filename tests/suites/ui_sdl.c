@@ -463,7 +463,15 @@ struct sdl_pointer_heard {
     unsigned clicks;
     uint32_t context;
     unsigned contexts;
+    char shortcut;
+    unsigned shortcuts;
 };
+
+static void sdl_pointer_on_shortcut(void *userdata, char letter) {
+    struct sdl_pointer_heard *const heard = (struct sdl_pointer_heard *)userdata;
+    heard->shortcut = letter;
+    heard->shortcuts += 1U;
+}
 
 static void sdl_pointer_on_key(void *userdata, enum inkcell_key key) {
     struct sdl_pointer_heard *const heard = (struct sdl_pointer_heard *)userdata;
@@ -512,6 +520,19 @@ static void sdl_click(int x, int y) {
     sdl_push_button(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT, x, y);
 }
 
+static void sdl_push_key(SDL_Scancode scancode, SDL_Keycode symbol, SDL_Keymod modifiers,
+                         Uint8 repeat) {
+    SDL_Event event;
+    memset(&event, 0, sizeof event);
+    event.type = SDL_KEYDOWN;
+    event.key.type = SDL_KEYDOWN;
+    event.key.keysym.scancode = scancode;
+    event.key.keysym.sym = symbol;
+    event.key.keysym.mod = modifiers;
+    event.key.repeat = repeat;
+    SDL_PushEvent(&event);
+}
+
 INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
     setenv("SDL_VIDEODRIVER", "dummy", 0);
     INKCELL_TEST_FAIL_IF(!inkcell_backend_sdl_is_available(), "the dummy driver must start");
@@ -530,6 +551,7 @@ INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
                  .request_stop = sdl_test_request_stop},
         .on_key = sdl_pointer_on_key,
         .on_action_key = sdl_pointer_on_action_key,
+        .on_shortcut = sdl_pointer_on_shortcut,
         .key_userdata = &heard,
         .on_click = sdl_pointer_on_click,
         .on_context = sdl_pointer_on_context,
@@ -634,6 +656,23 @@ INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
     INKCELL_TEST_FAIL_IF_CLEANUP(heard.clicks != 2U || heard.contexts != 4U,
                                  backend->shutdown(state, &context),
                                  "each button's release should end only its own press");
+
+#if defined(__APPLE__)
+    const SDL_Keymod primary = KMOD_GUI;
+#else
+    const SDL_Keymod primary = KMOD_CTRL;
+#endif
+    sdl_push_key(SDL_SCANCODE_X, SDLK_x, KMOD_NONE, 0U);
+    sdl_push_key(SDL_SCANCODE_N, SDLK_n, primary, 0U);
+    sdl_push_key(SDL_SCANCODE_X, SDLK_x, primary, 0U);
+    sdl_push_key(SDL_SCANCODE_N, SDLK_n, primary, 1U);
+    sdl_push_key(SDL_SCANCODE_S, SDLK_s, (SDL_Keymod)(primary | KMOD_SHIFT), 0U);
+    sdl_push_key(SDL_SCANCODE_R, SDLK_r, (SDL_Keymod)(KMOD_CTRL | KMOD_GUI), 0U);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.key_count != 5U || heard.keys[4] != INKCELL_KEY_X ||
+                                     heard.shortcuts != 2U || heard.shortcut != 'x',
+                                 backend->shutdown(state, &context),
+                                 "primary chords reach shortcuts once and never press face keys");
 
     backend->shutdown(state, &context);
     record_success(test_name);

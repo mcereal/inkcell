@@ -122,6 +122,9 @@ struct inkcell_backend_sdl_context {
     struct inkcell_input_host host;
     inkcell_key_handler on_key;
     inkcell_key_handler on_action_key;
+    /* Called for a primary-modifier letter chord (Command on macOS, Control elsewhere).
+       The letter is lowercase ASCII. Such chords never fall through to on_key. */
+    void (*on_shortcut)(void *userdata, char letter);
     void *key_userdata;
     inkcell_click_handler on_click;
     inkcell_click_handler on_context;
