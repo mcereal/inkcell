@@ -136,6 +136,7 @@ struct inkcell_sdl_panel {
     struct inkcell_input_host host;
     inkcell_key_handler on_key;
     inkcell_key_handler on_action_key;
+    void (*on_shortcut)(void *userdata, char letter);
     void *key_userdata;
     /* The mouse: what it pressed, where a scroll has got to, and which cursor it is showing.
        See include/inkcell/ui/pointer.h. The cursors are NULL where the video driver has none -
@@ -621,6 +622,24 @@ static void inkcell_sdl_deliver(struct inkcell_sdl_panel *panel, inkcell_key_han
 }
 
 static void inkcell_sdl_handle_key(struct inkcell_sdl_panel *panel, const SDL_KeyboardEvent *key) {
+    /* A desktop shortcut must not also become a controller button (notably Ctrl+X).
+       Use SDL's key symbol so the letter follows the active keyboard layout. */
+#if defined(__APPLE__)
+    const SDL_Keymod primary = KMOD_GUI;
+#else
+    const SDL_Keymod primary = KMOD_CTRL;
+#endif
+    if ((key->keysym.mod & (KMOD_CTRL | KMOD_GUI)) != 0) {
+        const SDL_Keycode symbol = key->keysym.sym;
+        if (panel->on_shortcut != NULL && (key->keysym.mod & primary) != 0 && key->repeat == 0U &&
+            (key->keysym.mod & (KMOD_ALT | KMOD_SHIFT)) == 0 && symbol >= SDLK_a &&
+            symbol <= SDLK_z) {
+            inkcell_latency_event(inkcell_latency_now_us());
+            inkcell_latency_press();
+            panel->on_shortcut(panel->key_userdata, (char)symbol);
+        }
+        return;
+    }
     const uint16_t code = inkcell_sdl_evdev_code((int)key->keysym.scancode);
     if (code == 0U) {
         return;
@@ -1088,6 +1107,7 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
     panel->host = context->host;
     panel->on_key = context->on_key;
     panel->on_action_key = context->on_action_key;
+    panel->on_shortcut = context->on_shortcut;
     panel->key_userdata = context->key_userdata;
     panel->on_click = context->on_click;
     panel->on_context = context->on_context;
