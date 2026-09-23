@@ -8,27 +8,29 @@
 #include "inkcell/ui/latency.h"
 #include "inkwell/base/array.h"
 #include "inkwell/base/env.h"
-#include "inkwell/base/ioctl.h"
+#include "inkwell/base/fd.h"
 #include "inkwell/base/log.h"
 #include "inkwell/base/text.h"
 #include "inkwell/runtime/loop.h"
 #include "inkwell/runtime/timer.h"
 
 #include <errno.h>
-#include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
 
 /* evdev - the devices themselves - is Linux's. Everything else in this file is the mapping from
    a code to a key, the repeat and the quit keys, which a window backend on any host drives with
    the same codes; see inkcell/ui/input_codes.h. */
 #if defined(__linux__)
+#include "inkwell/base/ioctl.h"
+
+#include <fcntl.h>
 #include <linux/input.h>
 #include <sys/ioctl.h>
+#include <unistd.h>
 #endif
 
 /* Standard evdev codes. The Brick's gamepad device ("TRIMUI Player1") reports the face and
@@ -766,7 +768,7 @@ static void inkcell_input_setup_repeat_timer(struct inkcell_input *input,
     const int add_result = host->add_fd(host->ctx, fd, inkcell_input_repeat_callback, input);
     if (add_result < 0) {
         inkwell_log_warn("input", "Failed to watch the key repeat timer: %d", add_result);
-        close(fd);
+        inkwell_timer_close(fd);
         return;
     }
 
@@ -860,14 +862,14 @@ void inkcell_input_shutdown(struct inkcell_input *input) {
         if (input->host.remove_fd != NULL) {
             input->host.remove_fd(input->host.ctx, input->fds[i]);
         }
-        close(input->fds[i]);
+        (void)inkwell_fd_close(input->fds[i]);
     }
 
     if (input->repeat_timer_fd > 0) {
         if (input->host.remove_fd != NULL) {
             input->host.remove_fd(input->host.ctx, input->repeat_timer_fd);
         }
-        close(input->repeat_timer_fd);
+        inkwell_timer_close(input->repeat_timer_fd);
     }
     input->repeat_timer_fd = -1;
     input->repeat_source_fd = -1;
