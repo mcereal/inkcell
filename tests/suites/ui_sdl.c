@@ -453,6 +453,8 @@ static void sdl_pointer_render(struct inkcell_draw_state *state, const void *sna
 struct sdl_pointer_heard {
     enum inkcell_key keys[16];
     unsigned key_count;
+    enum inkcell_key action_keys[16];
+    unsigned action_count;
     uint32_t clicked;
     unsigned clicks;
     uint32_t context;
@@ -463,6 +465,13 @@ static void sdl_pointer_on_key(void *userdata, enum inkcell_key key) {
     struct sdl_pointer_heard *const heard = (struct sdl_pointer_heard *)userdata;
     if (heard->key_count < 16U) {
         heard->keys[heard->key_count++] = key;
+    }
+}
+
+static void sdl_pointer_on_action_key(void *userdata, enum inkcell_key key) {
+    struct sdl_pointer_heard *const heard = (struct sdl_pointer_heard *)userdata;
+    if (heard->action_count < 16U) {
+        heard->action_keys[heard->action_count++] = key;
     }
 }
 
@@ -516,6 +525,7 @@ INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
                  .remove_fd = sdl_test_remove_fd,
                  .request_stop = sdl_test_request_stop},
         .on_key = sdl_pointer_on_key,
+        .on_action_key = sdl_pointer_on_action_key,
         .key_userdata = &heard,
         .on_click = sdl_pointer_on_click,
         .on_context = sdl_pointer_on_context,
@@ -541,23 +551,24 @@ INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
     inkcell_focus_begin(&app.map, NULL, 0U);
     sdl_click(app.hint.x + app.hint.w / 2, app.hint.y + app.hint.h / 2);
     sdl_pump(&host);
-    INKCELL_TEST_FAIL_IF_CLEANUP(heard.key_count != 1U || heard.keys[0] != INKCELL_KEY_B,
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.action_count != 1U ||
+                                     heard.action_keys[0] != INKCELL_KEY_B || heard.key_count != 0U,
                                  backend->shutdown(state, &context),
-                                 "clicking the B hint must be a press of B");
+                                 "a hint click should use the action handler, not the key one");
 
     sdl_click(app.row.x + 10, app.row.y + 10);
     sdl_pump(&host);
     INKCELL_TEST_FAIL_IF_CLEANUP(heard.clicks != 1U || heard.clicked != SDL_POINTER_ROW ||
-                                     heard.key_count != 1U,
+                                     heard.key_count != 0U || heard.action_count != 1U,
                                  backend->shutdown(state, &context),
                                  "a click on a row the app registered must reach on_click only");
 
     sdl_push_button(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_LEFT, app.row.x + 10, app.row.y + 10);
     sdl_push_button(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT, app.hint.x + 1, app.hint.y + 1);
     sdl_pump(&host);
-    INKCELL_TEST_FAIL_IF_CLEANUP(heard.clicks != 1U || heard.key_count != 1U,
-                                 backend->shutdown(state, &context),
-                                 "dragging off before letting go must do nothing");
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        heard.clicks != 1U || heard.key_count != 0U || heard.action_count != 1U,
+        backend->shutdown(state, &context), "dragging off before letting go must do nothing");
 
     SDL_Event wheel;
     memset(&wheel, 0, sizeof wheel);
@@ -570,9 +581,9 @@ INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
     SDL_PushEvent(&wheel);
     sdl_push_button(SDL_MOUSEBUTTONUP, SDL_BUTTON_X1, 0, 0);
     sdl_pump(&host);
-    INKCELL_TEST_FAIL_IF_CLEANUP(heard.key_count != 4U || heard.keys[1] != INKCELL_KEY_DOWN ||
-                                     heard.keys[2] != INKCELL_KEY_DOWN ||
-                                     heard.keys[3] != INKCELL_KEY_B,
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.key_count != 3U || heard.keys[0] != INKCELL_KEY_DOWN ||
+                                     heard.keys[1] != INKCELL_KEY_DOWN ||
+                                     heard.keys[2] != INKCELL_KEY_B || heard.action_count != 1U,
                                  backend->shutdown(state, &context),
                                  "two notches down are two downs, and the thumb button is B");
 
@@ -588,7 +599,7 @@ INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
     sdl_pump(&host);
     INKCELL_TEST_FAIL_IF_CLEANUP(
         heard.contexts != 2U || heard.context != INKCELL_FOCUS_KEY(INKCELL_KEY_B) ||
-            heard.key_count != 4U,
+            heard.key_count != 3U || heard.action_count != 1U,
         backend->shutdown(state, &context), "a right-click on a hint is handed on, not pressed");
 
     SDL_SetModState(KMOD_LCTRL);
@@ -611,6 +622,46 @@ INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
     INKCELL_TEST_FAIL_IF_CLEANUP(heard.clicks != 2U || heard.contexts != 4U,
                                  backend->shutdown(state, &context),
                                  "each button's release should end only its own press");
+
+    backend->shutdown(state, &context);
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(sdl_action_hint_falls_back_to_the_key_handler, unit) {
+    setenv("SDL_VIDEODRIVER", "dummy", 0);
+    INKCELL_TEST_FAIL_IF(!inkcell_backend_sdl_is_available(), "the dummy driver must start");
+
+    struct sdl_pointer_app app;
+    memset(&app, 0, sizeof app);
+    struct inkcell_fb_app vtable = {.ctx = &app, .render = sdl_pointer_render};
+    struct sdl_test_host host = {.added_fd = -1, .removed_fd = -1};
+    struct sdl_pointer_heard heard;
+    memset(&heard, 0, sizeof heard);
+    struct inkcell_backend_sdl_context context = {
+        .app = &vtable,
+        .host = {.ctx = &host,
+                 .add_fd = sdl_test_add_fd,
+                 .remove_fd = sdl_test_remove_fd,
+                 .request_stop = sdl_test_request_stop},
+        .on_key = sdl_pointer_on_key,
+        .key_userdata = &heard,
+        .title = "inkcell tests",
+        .width = SDL_POINTER_W,
+        .height = SDL_POINTER_H,
+    };
+    const struct inkcell_backend *const backend = inkcell_backend_sdl();
+    void *state = NULL;
+    INKCELL_TEST_FAIL_IF(backend->init(&state, &context) != 0, "the dummy driver must open");
+    const int snapshot = 0;
+    backend->present(state, &snapshot, &context);
+    SDL_PumpEvents();
+    SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+
+    sdl_click(app.hint.x + app.hint.w / 2, app.hint.y + app.hint.h / 2);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.key_count != 1U || heard.keys[0] != INKCELL_KEY_B,
+                                 backend->shutdown(state, &context),
+                                 "without an action handler, a hint should keep using on_key");
 
     backend->shutdown(state, &context);
     record_success(test_name);

@@ -135,6 +135,7 @@ struct inkcell_sdl_panel {
     int timer_fd;
     struct inkcell_input_host host;
     inkcell_key_handler on_key;
+    inkcell_key_handler on_action_key;
     void *key_userdata;
     /* The mouse: what it pressed, where a scroll has got to, and which cursor it is showing.
        See include/inkcell/ui/pointer.h. The cursors are NULL where the video driver has none -
@@ -596,8 +597,8 @@ static void inkcell_sdl_request_stop(struct inkcell_sdl_panel *panel) {
  * a click on a hint, a notch of the wheel - so that the application hears one kind of press.
  * `counted` is whether the latency probe should take it as a press; see below.
  */
-static void inkcell_sdl_deliver(struct inkcell_sdl_panel *panel, enum inkcell_key mapped,
-                                bool counted) {
+static void inkcell_sdl_deliver(struct inkcell_sdl_panel *panel, inkcell_key_handler handler,
+                                enum inkcell_key mapped, bool counted) {
     /*
      * The press is offered to the probe before the application sees it, so that what gets
      * measured ends at the window rather than at the top of this function - and a repeat is
@@ -614,8 +615,8 @@ static void inkcell_sdl_deliver(struct inkcell_sdl_panel *panel, enum inkcell_ke
         inkcell_latency_event(inkcell_latency_now_us());
         inkcell_latency_press();
     }
-    if (panel->on_key != NULL) {
-        panel->on_key(panel->key_userdata, mapped);
+    if (handler != NULL) {
+        handler(panel->key_userdata, mapped);
     }
 }
 
@@ -632,7 +633,7 @@ static void inkcell_sdl_handle_key(struct inkcell_sdl_panel *panel, const SDL_Ke
     if (mapped == INKCELL_KEY_NONE) {
         return;
     }
-    inkcell_sdl_deliver(panel, mapped, key->repeat == 0U);
+    inkcell_sdl_deliver(panel, panel->on_key, mapped, key->repeat == 0U);
 }
 
 /* ---- the mouse ------------------------------------------------------------------------- */
@@ -654,7 +655,7 @@ static void inkcell_sdl_handle_button(struct inkcell_sdl_panel *panel,
         /* The thumb button a browser goes back with. Back here is B, on the release so a
            held button is one press. */
         if (button->type == SDL_MOUSEBUTTONUP) {
-            inkcell_sdl_deliver(panel, INKCELL_KEY_B, true);
+            inkcell_sdl_deliver(panel, panel->on_key, INKCELL_KEY_B, true);
         }
         return;
     }
@@ -692,7 +693,9 @@ static void inkcell_sdl_handle_button(struct inkcell_sdl_panel *panel,
     const struct inkcell_pointer_result result =
         inkcell_pointer_up(&panel->pointer, &panel->pointer_map, button->x, button->y);
     if (result.kind == INKCELL_POINTER_KEY) {
-        inkcell_sdl_deliver(panel, result.key, true);
+        inkcell_key_handler handler =
+            panel->on_action_key != NULL ? panel->on_action_key : panel->on_key;
+        inkcell_sdl_deliver(panel, handler, result.key, true);
     } else if (result.kind == INKCELL_POINTER_CLICK && panel->on_click != NULL) {
         inkcell_latency_event(inkcell_latency_now_us());
         inkcell_latency_press();
@@ -721,7 +724,7 @@ static void inkcell_sdl_handle_wheel(struct inkcell_sdl_panel *panel,
     const int steps = inkcell_pointer_wheel(&panel->pointer, dy);
     const enum inkcell_key key = steps > 0 ? INKCELL_KEY_UP : INKCELL_KEY_DOWN;
     for (int i = 0; i < (steps > 0 ? steps : -steps); ++i) {
-        inkcell_sdl_deliver(panel, key, false);
+        inkcell_sdl_deliver(panel, panel->on_key, key, false);
     }
 }
 
@@ -1082,6 +1085,7 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
 
     panel->host = context->host;
     panel->on_key = context->on_key;
+    panel->on_action_key = context->on_action_key;
     panel->key_userdata = context->key_userdata;
     panel->on_click = context->on_click;
     panel->on_context = context->on_context;
