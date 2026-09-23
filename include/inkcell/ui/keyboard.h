@@ -290,6 +290,12 @@ enum inkcell_keyboard_result inkcell_keyboard_key(struct inkcell_keyboard *kb,
                                                   const struct inkcell_keyboard_layout *layout,
                                                   enum inkcell_key key, char *text, size_t size);
 
+/* Append committed UTF-8 text from a host keyboard or IME. Rejects controls and malformed
+   sequences, and applies the same byte cap as the grid. The whole input fits or none of it is
+   appended. Returns true only when the buffer changed. */
+bool inkcell_keyboard_insert_text(const struct inkcell_keyboard_layout *layout, char *text,
+                                  size_t size, const char *input);
+
 /*
  * The layout is one this grid can actually show: no more than INKCELL_KB_EMOJI_PAGES_MAX pages,
  * every page full, and every cell a glyph this build can draw.
