@@ -1,14 +1,22 @@
 # inkcell
 
-A C17 UI toolkit for handheld Linux devices with a framebuffer and a gamepad — the TrimUI Brick
-(NextUI/MinUI) first among them.
+A C17 UI toolkit for d-pad-first, small-screen interfaces - drawn to a handheld's framebuffer or
+to a desktop window, on Linux, macOS and Windows.
 
-It is the part of [mesh-client](https://github.com/mcereal/mesh-client) that was never about
+"Handheld" is the design constraint, not the platform. Everything here is shaped by a screen a
+few inches across and a pad with no pointer: focus answered against the rectangles actually
+drawn, width measured in columns of text rather than pixels, a type scale in quarter steps, a
+d-pad that always lands somewhere. The same interface then runs unchanged on a TrimUI Brick's
+`/dev/fb0` and in a resizable window on a laptop, and a window dragged wide gets a layout that
+used the width rather than a magnified handheld. Think of it as a console or TV UI toolkit that
+happens to be small enough to read.
+
+It began as the part of [mesh-client](https://github.com/mcereal/mesh-client) that was never about
 Meshtastic: the theme, the fonts and glyph tables, the layout arithmetic, the framebuffer
 backend and its component set, and the evdev layer that turns a handheld's buttons into presses.
 
-It stands on [inkwell](https://github.com/mcereal/inkwell), which is the part that was never
-about *drawing* either: the epoll loop, the clock, the log, the environment knobs and the
+It stands on [inkwell](https://github.com/mcereal/inkwell), the single-threaded runtime that is
+the part that was never about *drawing* either: the loop, the clock, the log, the environment knobs and the
 codecs. Those lived here for a while because this library was extracted first, and a toolkit
 that a platform layer has to depend on to write a log line has its arrows the wrong way round.
 
@@ -31,7 +39,7 @@ that a platform layer has to depend on to write a log line has its arrows the wr
 | **Scrolling** | A body positioned in pixels rather than windowed by row index - so it can rest between two rows, give at its ends the way every touch platform does, and drive a large title that collapses into the app bar as it moves. |
 | **Shapes** | Anti-aliased rounded rectangles, rings and arcs, in integers - so a curve is the same curve on every host that draws it. |
 | **Framebuffer** | `/dev/fb0`, the page flip, damage tracking, a glyph cache, and an off-screen renderer for screenshots. |
-| **Window** | The same frame in an SDL window: damage as texture uploads, a keyboard, and a development host that can run the UI instead of only screenshotting it. Optional - no SDL2, no window, everything else unchanged. |
+| **Window** | The same frame in an SDL window: damage as texture uploads, a keyboard, and a desktop application rather than a picture of a device. Optional - no SDL2, no window, everything else unchanged. |
 | **Input** | evdev to a logical key, hat axes, analogue triggers, key repeat, per-device button profiles. |
 | **i18n** | A catalog mechanism with plural rules and format-string validation. |
 | **Gallery** | Every component, in every theme, rendered with no device attached - and the golden sheet that keeps them that way. |
@@ -181,14 +189,23 @@ handed.
 
 ## Building
 
-**Linux is the target** — `linux/fb.h`, `linux/input.h`, and inkwell's `epoll` loop under them.
+Three systems, each one a program ships on. The rasteriser, the widgets and every screen are
+the same code on all of them; what differs is which backend presents the frame and where a
+press comes from.
 
-**macOS builds and passes the same suite as a development host**, so a UI can be worked on in a
-window with no device: inkwell's loop is `kqueue` there, the fb backend and evdev compile to
-refusals (`inkcell_backend_fb_is_available()` is false, `inkcell_input_init()` watches nothing),
-and the SDL window is how anything is seen. The key codes the window sends are the evdev numbers
-all the same, from `inkcell/ui/input_codes.h`, so a keycap means one thing on both. Nothing ships
-for macOS; CI builds it so it does not rot. `brew install sdl2 ninja` is the setup.
+| | Linux | macOS | Windows |
+|---|---|---|---|
+| Loop underneath | inkwell's epoll | inkwell's kqueue | inkwell's waitable handles |
+| `/dev/fb0` backend | yes | refuses | refuses |
+| evdev input | yes | refuses | refuses |
+| SDL window, keyboard | yes, with SDL2 | yes, with SDL2 | yes, with SDL2 |
+| Off-screen capture | yes | yes | yes |
+| In CI | gcc, clang, ASan+UBSan, no SDL | clang | not yet |
+
+Where a backend refuses, it does so the way everything here does: `inkcell_backend_fb_is_available()`
+is false, `inkcell_input_init()` watches nothing, and nothing above needs an `#ifdef`. The key
+codes a window sends are the evdev numbers all the same, from `inkcell/ui/input_codes.h`, so a
+keycap means one thing everywhere. On macOS, `brew install sdl2 ninja` is the setup.
 
 SDL2 is the one optional dependency, and optional by *presence*: with it you get the window
 backend, without it `inkcell/ui/sdl.h` still exists and reports itself unavailable. A plain

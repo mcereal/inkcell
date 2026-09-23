@@ -13,7 +13,7 @@
  *
  * So this is *not* a GPU renderer. The triangles are one textured quad a frame; the glyphs,
  * the rounded rectangles and the anti-aliasing are still the CPU's work. What it buys is the
- * blit, a window on a development host where there was only a screenshot before,
+ * blit, a desktop window where there was only a screenshot before,
  * and - the point of the exercise - a seam that a real GPU renderer can be written behind
  * without touching a single screen.
  *
@@ -62,7 +62,7 @@ extern "C" {
 
 /*
  * The panel this opens when nobody says otherwise: the TrimUI Brick's, so that what comes up in
- * a window on a development host is the geometry the device will actually draw, and a layout
+ * a window is, by default, the geometry the device will actually draw, and a layout
  * that only works at desktop proportions is caught where it is written rather than after a
  * deploy. <PREFIX>_SDL_SIZE=WxH overrides it, as does naming a size in the context below.
  */

@@ -331,7 +331,7 @@ static void inkcell_sdl_blit(struct inkcell_sdl_panel *panel) {
 /*
  * The window's new size, taken on: a surface that shape, and a frame drawn into it.
  *
- * This is the whole of what a window is for on a development host now. A frame pinned at the
+ * This is the whole of what a window is for now. A frame pinned at the
  * device's geometry and scaled up is a picture of the device - which is a useful thing and is
  * what <PREFIX>_SDL_FIXED still asks for - but it is not an application: the layout never sees
  * the room it was given, so a window dragged to twice the width is the handheld layout at twice
