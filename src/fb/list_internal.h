@@ -81,6 +81,60 @@ void inkcell_fb_list_band_end(const struct inkcell_fb_list *list, bool began);
 void inkcell_fb_draw_list_rail(const struct inkcell_draw_state *state,
                                const struct inkcell_list *window, int track_y, int track_h);
 
+/*
+ * ---- the list's look, as the rows ask for it ----
+ */
+
+/* The corner a group's surface is rounded with - see inkcell_fb_list_cards(). */
+int inkcell_fb_list_section_radius(const struct inkcell_draw_state *state,
+                                   const struct inkcell_fb_list *list);
+
+/* The top of the box the next row stands in: a step above its baseline, and the density's pad
+   above that. Every row shape measures its fill and its focus box from this. */
+int inkcell_fb_list_box_top(const struct inkcell_draw_state *state,
+                            const struct inkcell_fb_list *list);
+
+/*
+ * How the cursor was marked on a row, and what that leaves the row's words to be drawn on.
+ *
+ * `focused` is where the cursor is; `lifted` is whether the row's inks change for it, which is
+ * only ever true under INKCELL_FB_LIST_FOCUS_FILL - the accent and the ring leave every ink as it
+ * was at rest. Kept as two facts because a control in the row still wants to know it is focused
+ * on a list whose words did not change.
+ */
+struct inkcell_fb_list_cue {
+    bool focused;
+    bool lifted;
+    enum inkcell_color rest;   /* what the row stands on when it is not the cursor's */
+    struct inkcell_rgb ground; /* what everything on it is blended against, now */
+};
+
+/*
+ * Marks the cursor on item `index`, in the box `top`/`h` and the list's own focus style, and
+ * says what was laid down. Paints nothing on a row the cursor is not on.
+ *
+ * `tone` and `accent_edge` are the slotted item's: the family a mark is drawn in, and whether
+ * a filled row carries the bar down its leading edge. A row shape with neither passes
+ * INKCELL_TONE_NORMAL and false.
+ */
+struct inkcell_fb_list_cue inkcell_fb_list_cue(const struct inkcell_draw_state *state,
+                                               const struct inkcell_fb_list *list, uint32_t index,
+                                               int top, int h, enum inkcell_tone tone,
+                                               bool accent_edge);
+
+/* The same for a row that fills its whole step - a plain row, a heading, a note - which on a
+   list with no look keeps inkcell_fb_draw_row_fill_on() exactly as it always called it. */
+struct inkcell_fb_list_cue inkcell_fb_list_row_cue(const struct inkcell_draw_state *state,
+                                                   const struct inkcell_fb_list *list,
+                                                   uint32_t index, uint32_t rows);
+
+/* The style's separator under item `index`, from `x` to the row's trailing edge, sitting on
+   `bottom` - the boundary with the next row. Does nothing unless the list asked for separators
+   and the next row is in the same group, in the window, and not the cursor's. */
+void inkcell_fb_list_separator(const struct inkcell_draw_state *state,
+                               const struct inkcell_fb_list *list, uint32_t index, int x,
+                               int bottom);
+
 /* The ink a row's text takes: its tone, or the cursor's, or the quiet pairing for the slots
    that are deliberately secondary. */
 struct inkcell_rgb inkcell_fb_item_ink(const struct inkcell_draw_state *state,

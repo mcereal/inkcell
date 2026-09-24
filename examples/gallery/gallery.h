@@ -157,6 +157,9 @@ void gallery_scene_scroll_overscroll(struct inkcell_draw_state *state);
 void gallery_scene_scroll_title(struct inkcell_draw_state *state);
 void gallery_scene_scaffold(struct inkcell_draw_state *state);
 void gallery_scene_scaffold_top(struct inkcell_draw_state *state);
+void gallery_scene_list_grouped(struct inkcell_draw_state *state);
+void gallery_scene_list_sections(struct inkcell_draw_state *state);
+void gallery_scene_list_plain(struct inkcell_draw_state *state);
 
 /* ---- shared scene furniture --------------------------------------------------------------------
  *

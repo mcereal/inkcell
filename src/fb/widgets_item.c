@@ -13,6 +13,7 @@
 #include "inkcell/i18n/strings.h"
 #include "inkcell/ui/emoji.h"
 
+#include <stdio.h>
 #include <string.h>
 
 /* ---- the conversation cell ----------------------------------------------------------------- */
@@ -41,6 +42,15 @@ struct inkcell_fb_item_geom {
     int marker_x;     /* a plain row's marker cell; only meaningful when the row reserved one */
     size_t cols;      /* text columns between the leading slot and the trailing edge */
     int bar_y, bar_h; /* a stacked meter's track; bar_h of 0 is a row that has none */
+    int accessory_x;  /* the accessory column's cell; only meaningful when the row reserved one */
+    /*
+     * The tiers' type, on a list that sets them in roles of their own - see enum
+     * inkcell_fb_list_type. `tiered` false is a list of uniform rows, where every line is at the
+     * body scale and neither style is read.
+     */
+    bool tiered;
+    struct inkcell_type_style soft; /* the supporting line: INKCELL_TYPE_BODY_SOFT */
+    struct inkcell_type_style meta; /* a trailing figure: INKCELL_TYPE_CAPTION */
 };
 
 static struct inkcell_fb_item_geom inkcell_fb_item_measure(const struct inkcell_draw_state *state,
@@ -64,26 +74,44 @@ static struct inkcell_fb_item_geom inkcell_fb_item_measure(const struct inkcell_
      * that draws taller than the list was told simply cannot happen from here.
      */
     g.rows = rows > 0U ? rows : 1U;
-    g.head_y = list->y;
+    /*
+     * The density's air, and where it goes.
+     *
+     * A step on a comfortable list is a text line with `pad` above and below it, and the list
+     * has already put one pad above the first baseline. A row of one step spends exactly that:
+     * its words sit in the middle of its box. A row of more steps has a pad per step above and
+     * below its words, and spends all of it *outside* them - the lines of one row stay set as
+     * close as they always were, and the room the extra steps brought is the margin round the
+     * whole row rather than a gap opened between its headline and its second line, which would
+     * read as two rows. So the headline drops by the pads the steps after the first brought,
+     * and the fill grows by all of them.
+     *
+     * `text_line` is what a line of words advances, whatever the step is - a badge and a slot
+     * are the height of a line of text, not of a step.
+     */
+    const int pad = list->pad;
+    const int text_line = list->line - 2 * pad;
+    const int spread = (int)g.rows * pad;
+    g.head_y = list->y + (int)(g.rows - 1U) * pad;
     g.fill_x = box.x;
     g.fill_w = box.w;
     g.text_right = box.text_right;
-    g.slot_h = list->line - inkcell_step_px(scale);
+    g.slot_h = text_line - inkcell_step_px(scale);
 
     if (g.rows >= 2U) {
         /* Two rows set closer together than two items are: the supporting line sits a scale
            above where a second row would put it, and the space that frees becomes the gap to
            the next item. */
-        g.supp_y = list->y + list->line - inkcell_step_px(scale);
-        g.fill_top = g.head_y - inkcell_fb_space(state, INKCELL_SPACE_XS);
-        g.fill_h = (int)g.rows * list->line - inkcell_fb_space(state, INKCELL_SPACE_MD);
-        g.head_slot_top = g.fill_top;
+        g.supp_y = g.head_y + text_line - inkcell_step_px(scale);
+        g.head_slot_top = g.head_y - inkcell_fb_space(state, INKCELL_SPACE_XS);
+        g.fill_top = g.head_slot_top - spread;
+        g.fill_h = (int)g.rows * text_line - inkcell_fb_space(state, INKCELL_SPACE_MD) + 2 * spread;
         g.supp_slot_top = g.supp_y - inkcell_fb_space(state, INKCELL_SPACE_XS);
     } else {
-        g.fill_top = g.head_y - inkcell_step_px(scale);
+        g.head_slot_top = g.head_y - inkcell_step_px(scale);
+        g.fill_top = g.head_slot_top - pad;
         g.fill_h = list->line;
-        g.head_slot_top = g.fill_top;
-        g.supp_slot_top = g.fill_top;
+        g.supp_slot_top = g.head_slot_top;
     }
 
     /*
@@ -106,9 +134,12 @@ static struct inkcell_fb_item_geom inkcell_fb_item_measure(const struct inkcell_
      * showed; the rule it breaks is the one stated on INKCELL_FB_LEADING_ICON directly below, and
      * `ui_capture_a_section_starts_every_row_in_one_column` is what holds it now.
      */
+    /* Off the rows' words rather than their air: a comfortable list spaces its rows out and
+       leaves its discs the size they were, which is how a denser or a looser list of the same
+       things still reads as the same things. */
     g.lead_size = item->leading.kind == INKCELL_FB_LEADING_TONAL_SLOT
-                      ? list->line - inkcell_step_px(scale)
-                      : g.fill_h - inkcell_step_px(scale);
+                      ? text_line - inkcell_step_px(scale)
+                      : g.fill_h - 2 * spread - inkcell_step_px(scale);
     /*
      * A step on the panel gives back the hairline each card beside it spends into it, and what
      * may actually be *drawn* in its leading slot follows from what is left.
@@ -149,8 +180,9 @@ static struct inkcell_fb_item_geom inkcell_fb_item_measure(const struct inkcell_
     } else {
         g.lead_disc = g.lead_size;
         /* A hairline inside the top of the row's box, which is where a glyph's own ink sits and
-           so what keeps a disc reading as part of the line beside it. */
-        g.lead_y = g.fill_top + inkcell_fb_space(state, INKCELL_SPACE_XS);
+           so what keeps a disc reading as part of the line beside it. Below the density's air,
+           which the disc stands clear of exactly as the words do. */
+        g.lead_y = g.fill_top + spread + inkcell_fb_space(state, INKCELL_SPACE_XS);
     }
     g.content_x = box.text_x;
     g.text_x = g.content_x;
@@ -177,7 +209,25 @@ static struct inkcell_fb_item_geom inkcell_fb_item_measure(const struct inkcell_
     if (item->label_cols == 0U && item->marker_slot) {
         g.text_x += inkcell_fb_icon_box(state, scale) + adv / 2;
     }
+    /*
+     * The accessory column, taken off the trailing edge before anything else is measured against
+     * it - so the trailing slot, the value column and the words all stand to the left of it, and
+     * a list that reserved it on every row has every one of those in one column whatever each
+     * row's accessory is. A cell of air between it and whatever it follows, which is the gap a
+     * trailing slot keeps from the words.
+     */
+    if (item->accessory != INKCELL_FB_ACCESSORY_NONE || item->accessory_slot) {
+        const int cell = inkcell_fb_icon_box(state, scale);
+        g.accessory_x = g.text_right - cell;
+        g.text_right = g.accessory_x - adv / 2;
+    }
     g.cols = g.text_right > g.text_x ? (size_t)((g.text_right - g.text_x) / adv) : 1U;
+
+    g.tiered = list->style.type == INKCELL_FB_LIST_TYPE_TIERED;
+    if (g.tiered) {
+        g.soft = inkcell_fb_type_style(state, INKCELL_TYPE_BODY_SOFT);
+        g.meta = inkcell_fb_type_style(state, INKCELL_TYPE_CAPTION);
+    }
 
     /*
      * A stacked meter's track, and the one thing on a two-step item that the fill has to be
@@ -330,15 +380,51 @@ static size_t inkcell_fb_segmented_cols(const struct inkcell_draw_state *state, 
     return inkcell_fb_segmented_as_text(state, cols, segmented, out_as_text);
 }
 
+/*
+ * Whole body cells a figure takes: its own measure at the body scale on a uniform row, and on a
+ * tiered one its measure in the caption style, rounded up to the cells the line is counted in -
+ * so a smaller figure takes fewer of the line's cells and the words keep what it gave back.
+ */
+static size_t inkcell_fb_figure_cols(const struct inkcell_draw_state *state, const char *text,
+                                     const struct inkcell_type_style *meta) {
+    if (meta == NULL) {
+        return inkcell_fb_text_cols(state, text, state->scale);
+    }
+    const int adv = inkcell_fb_char_adv(state, state->scale);
+    const int width = inkcell_fb_text_width_styled(state, text, meta);
+    return (width > 0 && adv > 0) ? (size_t)((width + adv - 1) / adv) : 0U;
+}
+
+/*
+ * The glyph multiplier a trailing status capsule is set at: the row's own on a uniform list, and
+ * the label role on a tiered one - where the capsule is a tier below the headline like every
+ * other thing at the trailing edge, and at the body scale it stood as tall as the row's fill and
+ * pressed against the cursor's ring on the one row being pointed at.
+ */
+static int inkcell_fb_status_scale(const struct inkcell_draw_state *state,
+                                   const struct inkcell_type_style *meta) {
+    return meta != NULL ? inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL) : state->scale;
+}
+
+/* `meta` is the tiered list's caption style, NULL on a uniform one: the one slot kind a style
+   changes the width of is the figure, and the figure beside a signal. */
 static size_t inkcell_fb_trailing_cols(const struct inkcell_draw_state *state, size_t cols,
-                                       size_t reserved,
-                                       const struct inkcell_fb_trailing *trailing) {
+                                       size_t reserved, const struct inkcell_fb_trailing *trailing,
+                                       const struct inkcell_type_style *meta) {
     const int adv = inkcell_fb_char_adv(state, state->scale);
     size_t want = 0U;
     switch (trailing->kind) {
     case INKCELL_FB_TRAILING_TEXT: {
-        const size_t cells = inkcell_fb_text_cols(state, trailing->text, state->scale);
+        const size_t cells = inkcell_fb_figure_cols(state, trailing->text, meta);
         want = cells > 0U ? cells + 1U : 0U;
+        break;
+    }
+    case INKCELL_FB_TRAILING_STATUS: {
+        /* The capsule's own measure, padding included, and a cell of air before it - the badge's
+           arithmetic, stated in pixels because the capsule is. */
+        const int width =
+            inkcell_fb_badge_width(state, trailing->text, inkcell_fb_status_scale(state, meta));
+        want = (width > 0 && adv > 0) ? (size_t)((width + adv - 1) / adv) + 1U : 0U;
         break;
     }
     case INKCELL_FB_TRAILING_BADGE: {
@@ -365,7 +451,7 @@ static size_t inkcell_fb_trailing_cols(const struct inkcell_draw_state *state, s
         /* The staircase, its gap to whatever is left of it, and the figure it carries - which
            may be nothing, and then costs nothing. Stated the same way the meter's width is, and
            for the same reason: rungs have no natural width either. */
-        const size_t cells = inkcell_fb_text_cols(state, trailing->text, state->scale);
+        const size_t cells = inkcell_fb_figure_cols(state, trailing->text, meta);
         want = INKCELL_FB_SIGNAL_CELLS + 1U + (cells > 0U ? cells + 1U : 0U);
         break;
     }
@@ -445,7 +531,7 @@ static bool inkcell_fb_trailing_is_control(const struct inkcell_draw_state *stat
     default:
         return false;
     }
-    return inkcell_fb_trailing_cols(state, cols, reserved, trailing) > 0U;
+    return inkcell_fb_trailing_cols(state, cols, reserved, trailing, NULL) > 0U;
 }
 
 /* One piece of a headline, clipped to the cells it was given - declared here for the segmented
@@ -478,10 +564,18 @@ static void inkcell_fb_item_piece(struct inkcell_draw_state *state, int x, int y
 static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
                                      const struct inkcell_fb_item_geom *g, size_t reserved,
                                      const struct inkcell_fb_trailing *trailing, int baseline,
-                                     int slot_top, bool focused, enum inkcell_color rest_role,
+                                     int slot_top, const struct inkcell_fb_list_cue *cue,
+                                     const struct inkcell_type_style *meta,
                                      struct inkcell_rgb value_ink) {
-    const struct inkcell_rgb ground =
-        focused ? inkcell_fb_focus_fill(state, rest_role) : inkcell_fb_color(state, rest_role);
+    /* Where the cursor is, and separately whether the row's inks moved for it: a control is told
+       it is focused whatever the list's focus style, and only a filled row changes ink. */
+    const bool focused = cue->focused;
+    const bool lifted = cue->lifted;
+    const enum inkcell_color rest_role = cue->rest;
+    const struct inkcell_rgb ground = cue->ground;
+    const struct inkcell_rgb quiet_ink = lifted
+                                             ? inkcell_fb_focus_ink(state, INKCELL_TONE_DIM, true)
+                                             : inkcell_fb_tone_color(state, INKCELL_TONE_DIM);
     const int scale = state->scale;
     const int adv = inkcell_fb_char_adv(state, scale);
     const size_t cells = trailing->kind == INKCELL_FB_TRAILING_TEXT
@@ -495,12 +589,46 @@ static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
         }
         /* Always the quiet ink, on the ground and on the fill alike: a trailing figure is
            something the eye glances at on its way past, never the row's own words. */
+        if (meta != NULL) {
+            /* Metadata, in its own role: flush to the edge by its measured width, and centred on
+               the headline's line - the app bar's detail and the sheet's count sit beside their
+               titles the same way. */
+            const int width = inkcell_fb_text_width_styled(state, trailing->text, meta);
+            const int lift =
+                (inkcell_fb_line_adv(state, scale) - inkcell_fb_line_adv_styled(state, meta)) / 2;
+            inkcell_fb_draw_text_styled(state, g->text_right - width, baseline + lift,
+                                        trailing->text, meta, quiet_ink, ground);
+            return;
+        }
         inkcell_fb_draw_text(state, g->text_right - (int)cells * adv, baseline, trailing->text,
-                             scale,
-                             focused ? inkcell_fb_focus_ink(state, INKCELL_TONE_DIM, true)
-                                     : inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
-                             ground);
+                             scale, quiet_ink, ground);
         return;
+    case INKCELL_FB_TRAILING_STATUS: {
+        /* The value chip's capsule, against the edge. The same ground rule it follows in the
+           value column: the cursor's own surface is what tells the chip to commit to its
+           family's full strength rather than vanish into a fill as quiet as its container. */
+        const int chip_scale = inkcell_fb_status_scale(state, meta);
+        const int width = inkcell_fb_badge_width(state, trailing->text, chip_scale);
+        if (width <= 0) {
+            return;
+        }
+        struct inkcell_fb_rect box = {
+            .x = g->text_right - width, .y = slot_top, .w = width, .h = g->slot_h};
+        int text_y = baseline;
+        if (chip_scale != scale) {
+            /* A smaller capsule is centred on the headline's line, the way the app bar seats
+               its badge on the title: the box is the chip's own line, not the row's slot. */
+            text_y =
+                baseline +
+                (inkcell_fb_line_adv(state, scale) - inkcell_fb_line_adv(state, chip_scale)) / 2;
+            box.y = text_y - inkcell_step_px(chip_scale);
+            box.h = inkcell_fb_line_adv(state, chip_scale) - inkcell_step_px(chip_scale);
+        }
+        inkcell_fb_draw_state_chip(state, &box, text_y, trailing->text, trailing->tone,
+                                   lifted ? INKCELL_COLOR_SURFACE_SEL : rest_role, value_ink,
+                                   chip_scale);
+        return;
+    }
     case INKCELL_FB_TRAILING_BADGE: {
         /* The capsule is inkcell_fb_draw_badge()'s, not this slot's: the top app bar's trailing
            slot draws the same thing, and two places filling their own round rect is two capsules
@@ -515,10 +643,7 @@ static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
         /* The quiet ink a trailing figure takes, for the same reason: a chevron is something the
            eye passes on its way down the list, never one of the row's own words. */
         inkcell_fb_draw_icon(state, g->text_right - inkcell_fb_icon_box(state, scale), baseline,
-                             trailing->icon, scale,
-                             focused ? inkcell_fb_focus_ink(state, INKCELL_TONE_DIM, true)
-                                     : inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
-                             ground);
+                             trailing->icon, scale, quiet_ink, ground);
         return;
     case INKCELL_FB_TRAILING_SWITCH: {
         if (trailing->sw == NULL) {
@@ -601,10 +726,7 @@ static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
             inkcell_fb_draw_text(
                 state,
                 g->text_right - inkcell_fb_text_width(state, trailing->segmented->value, scale),
-                baseline, trailing->segmented->value, scale,
-                focused ? inkcell_fb_focus_ink(state, INKCELL_TONE_DIM, true)
-                        : inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
-                ground);
+                baseline, trailing->segmented->value, scale, quiet_ink, ground);
             return;
         }
         const int seg_scale = inkcell_fb_segmented_scale(state);
@@ -648,10 +770,8 @@ static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
          * list, not one of the row's words, and giving quality a colour of its own would put a
          * third statement about the link on a row that has made two.
          */
-        const struct inkcell_rgb quiet = focused
-                                             ? inkcell_fb_focus_ink(state, INKCELL_TONE_DIM, true)
-                                             : inkcell_fb_tone_color(state, INKCELL_TONE_DIM);
-        const struct inkcell_rgb ink = focused
+        const struct inkcell_rgb quiet = quiet_ink;
+        const struct inkcell_rgb ink = lifted
                                            ? inkcell_fb_focus_ink(state, INKCELL_TONE_NORMAL, false)
                                            : inkcell_fb_tone_color(state, INKCELL_TONE_NORMAL);
         /*
@@ -680,6 +800,16 @@ static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
             .h = height,
         };
         inkcell_fb_draw_signal(state, &box, trailing->signal, ink, unlit);
+        if (meta != NULL) {
+            const int figure = inkcell_fb_text_width_styled(state, trailing->text, meta);
+            const int lift =
+                (inkcell_fb_line_adv(state, scale) - inkcell_fb_line_adv_styled(state, meta)) / 2;
+            if (figure > 0) {
+                inkcell_fb_draw_text_styled(state, box.x - adv - figure, baseline + lift,
+                                            trailing->text, meta, quiet, ground);
+            }
+            return;
+        }
         const int figure = inkcell_fb_text_width(state, trailing->text, scale);
         if (figure > 0) {
             inkcell_fb_draw_text(state, box.x - adv - figure, baseline, trailing->text, scale,
@@ -743,14 +873,48 @@ static void inkcell_fb_item_piece(struct inkcell_draw_state *state, int x, int y
     inkcell_fb_draw_text(state, x, y, inkcell_line_text(&line), state->scale, ink, ground);
 }
 
+/*
+ * The same in a type style of its own, fitted to pixels rather than to cells.
+ *
+ * A tier set smaller than the body is narrower than the cells it was given, so clipping it to a
+ * body cell count stops it short of room it has: measured, never counted. Cut on cell boundaries,
+ * so a character is never split and a flag or a joined emoji is never taken apart.
+ *
+ * Centred on the body line it replaces rather than hung from its top, so a smaller second line
+ * keeps the rhythm the row's two lines had - the lift is the difference between the two line
+ * advances, halved, which is what the sheet's caption beside its title does too.
+ */
+static void inkcell_fb_item_piece_styled(struct inkcell_draw_state *state, int x, int y,
+                                         const char *text, int max_w,
+                                         const struct inkcell_type_style *style,
+                                         struct inkcell_rgb ink, struct inkcell_rgb ground) {
+    if (max_w <= 0) {
+        return;
+    }
+    char fitted[INKCELL_LINE_MAX];
+    snprintf(fitted, sizeof fitted, "%s", text != NULL ? text : "");
+    while (inkcell_fb_text_width_styled(state, fitted, style) > max_w) {
+        const size_t cells = inkcell_text_cells(fitted);
+        if (cells <= 1U) {
+            break;
+        }
+        inkcell_text_cell_truncate(fitted, cells - 1U);
+    }
+    const int lift =
+        (inkcell_fb_line_adv(state, state->scale) - inkcell_fb_line_adv_styled(state, style)) / 2;
+    inkcell_fb_draw_text_styled(state, x, y + lift, fitted, style, ink, ground);
+}
+
 void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_list *list,
                           uint32_t index, const struct inkcell_fb_list_item *item) {
     inkcell_fb_list_chrome(state, list);
     const bool band = inkcell_fb_list_band_begin(list);
     const int scale = state->scale;
-    const bool focused = inkcell_fb_list_is_cursor(list, index);
     const uint32_t rows = inkcell_fb_list_row_height(list, index);
     const struct inkcell_fb_item_geom g = inkcell_fb_item_measure(state, list, item, index, rows);
+    /* The box the row stands in, taken before anything advances: where a separator under it
+       goes is where the next row's box begins. */
+    const int box_top = inkcell_fb_list_box_top(state, list);
 
     /* What every icon on this row is blended against: the fill if the cursor laid one down, and
        otherwise whatever the row is standing on - the panel, or the surface of the card its
@@ -758,34 +922,18 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
        coverage and not a mask: text told the wrong ground keeps its shape and gains a halo of a
        colour that is nowhere near it. The focused fill is derived from it too - a lift is a lift
        off whatever is underneath. */
-    const enum inkcell_color rest_role = inkcell_fb_list_ground(list, index);
-    const struct inkcell_rgb ground =
-        focused ? inkcell_fb_focus_fill(state, rest_role) : inkcell_fb_color(state, rest_role);
-
-    if (focused) {
-        const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_SM);
-        const int row_x = g.fill_x;
-        const int row_w = g.fill_w;
-        if (item->accent_edge) {
-            /*
-             * The bar is laid the way a card's edge is: the marker shape first, the fill over
-             * it a scale narrower on the left only. Both share their right edge, so the marker
-             * survives just where the bar is meant to be - and it follows the corner instead
-             * of poking a square end out of it, which is what a straight bar does once the row
-             * has ends.
-             */
-            const enum inkcell_family edge_family = inkcell_tone_family(item->tone);
-            inkcell_fb_fill_round_rect(
-                state, row_x, g.fill_top, row_w, g.fill_h, radius,
-                inkcell_fb_tone_color(state, edge_family != INKCELL_FAMILY_COUNT
-                                                 ? item->tone
-                                                 : INKCELL_TONE_PRIMARY));
-            inkcell_fb_fill_round_rect(state, row_x + inkcell_step_px(scale), g.fill_top,
-                                       row_w - inkcell_step_px(scale), g.fill_h, radius, ground);
-        } else {
-            inkcell_fb_fill_round_rect(state, row_x, g.fill_top, row_w, g.fill_h, radius, ground);
-        }
-    }
+    /*
+     * The cursor's mark, in the list's own focus style: the fill (and the accent bar along its
+     * leading edge, where the row asked for one), the lighter layer and capsule, or the ring.
+     * What comes back is what every ink below is blended against and whether those inks move.
+     */
+    const struct inkcell_fb_list_cue cue = inkcell_fb_list_cue(
+        state, list, index, g.fill_top, g.fill_h, item->tone, item->accent_edge);
+    const bool focused = cue.focused;
+    const bool lifted = cue.lifted;
+    const enum inkcell_color rest_role = cue.rest;
+    const struct inkcell_rgb ground = cue.ground;
+    const struct inkcell_type_style *meta = g.tiered ? &g.meta : NULL;
 
     /*
      * Under the cursor everything is drawn against that fill instead of against the ground,
@@ -796,7 +944,7 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
        inkcell_fb_list_item.label_plain. Resolved once here so the plain row below and the label
        column further down cannot disagree about it. */
     const enum inkcell_tone text_tone = item->label_plain ? INKCELL_TONE_NORMAL : item->tone;
-    const struct inkcell_rgb head_ink = inkcell_fb_item_ink(state, text_tone, focused, false);
+    const struct inkcell_rgb head_ink = inkcell_fb_item_ink(state, text_tone, lifted, false);
 
     if (item->leading.kind == INKCELL_FB_LEADING_AVATAR ||
         item->leading.kind == INKCELL_FB_LEADING_TONAL) {
@@ -833,7 +981,7 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
             const enum inkcell_family family = inkcell_tone_family(item->tone);
             disc = inkcell_fb_paint(
                 state, family != INKCELL_FAMILY_COUNT ? family : INKCELL_FAMILY_PRIMARY,
-                focused ? INKCELL_SLOT_BASE : INKCELL_SLOT_CONTAINER, INKCELL_STATE_REST);
+                lifted ? INKCELL_SLOT_BASE : INKCELL_SLOT_CONTAINER, INKCELL_STATE_REST);
         } else {
             disc =
                 (struct inkcell_paint){item->leading.role < INKCELL_COLOR_COUNT
@@ -859,7 +1007,8 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
      */
     const size_t reserved =
         item->label_cols > 0U ? item->label_cols + INKCELL_FB_ITEM_MARKER_CELLS : 0U;
-    const size_t head_take = inkcell_fb_trailing_cols(state, g.cols, reserved, &item->trailing);
+    const size_t head_take =
+        inkcell_fb_trailing_cols(state, g.cols, reserved, &item->trailing, meta);
     const size_t head_cols = g.cols - head_take;
     if (item->label_cols > 0U) {
         /*
@@ -877,7 +1026,7 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
         const enum inkcell_tone label_tone = item->label_quiet ? INKCELL_TONE_DIM : text_tone;
         const size_t label_cols = item->label_cols < head_cols ? item->label_cols : head_cols;
         inkcell_fb_item_piece(state, g.text_x, g.head_y, item->label, label_cols,
-                              inkcell_fb_item_ink(state, label_tone, focused, item->label_quiet),
+                              inkcell_fb_item_ink(state, label_tone, lifted, item->label_quiet),
                               ground);
         const size_t gutter = item->label_cols + INKCELL_FB_ITEM_MARKER_CELLS;
         if (head_cols > gutter) {
@@ -893,8 +1042,8 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
             if (chip_w > 0 && chip_w <= (int)value_cols * inkcell_fb_char_adv(state, scale)) {
                 const struct inkcell_fb_rect box = {value_x, g.head_slot_top, chip_w, g.slot_h};
                 inkcell_fb_draw_state_chip(state, &box, g.head_y, item->value, item->tone,
-                                           focused ? INKCELL_COLOR_SURFACE_SEL : rest_role,
-                                           head_ink, scale);
+                                           lifted ? INKCELL_COLOR_SURFACE_SEL : rest_role, head_ink,
+                                           scale);
             } else {
                 inkcell_fb_item_piece(state, value_x, g.head_y, item->value, value_cols, head_ink,
                                       ground);
@@ -934,16 +1083,31 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
     }
     if (head_take > 0U) {
         inkcell_fb_draw_trailing(state, &g, reserved, &item->trailing, g.head_y, g.head_slot_top,
-                                 focused, rest_role, head_ink);
+                                 &cue, meta, head_ink);
+    }
+
+    /*
+     * The accessory, in its own column against the edge and on the headline's line - a chevron
+     * or a check is about the row as a whole, and the headline is what names it.
+     *
+     * Quiet for a disclosure, which is furniture the eye passes on its way down; the primary for
+     * a check, because on a list of options the chosen one is the fact the list exists to state.
+     */
+    if (item->accessory != INKCELL_FB_ACCESSORY_NONE) {
+        const bool check = item->accessory == INKCELL_FB_ACCESSORY_CHECK;
+        const enum inkcell_tone tone = check ? INKCELL_TONE_PRIMARY : INKCELL_TONE_DIM;
+        inkcell_fb_draw_icon(state, g.accessory_x, g.head_y,
+                             check ? INKCELL_ICON_CHECK : INKCELL_ICON_CHEVRON, scale,
+                             inkcell_fb_item_ink(state, tone, lifted, !check), ground);
     }
 
     if (g.rows >= 2U && item->supporting != NULL) {
         const struct inkcell_rgb supp_ink =
-            inkcell_fb_item_ink(state, item->supporting_tone, focused, item->supporting_quiet);
+            inkcell_fb_item_ink(state, item->supporting_tone, lifted, item->supporting_quiet);
         /* Nothing reserved: a supporting line has no label column, and the icon that may take
            its first cell is tested against what the slot leaves rather than before it. */
         const size_t supp_take =
-            inkcell_fb_trailing_cols(state, g.cols, 0U, &item->supporting_trailing);
+            inkcell_fb_trailing_cols(state, g.cols, 0U, &item->supporting_trailing, meta);
         /* An icon on the supporting line takes the first cell and the words move over, which is
            what "> " did when it was two characters of the preview. */
         const bool supp_icon =
@@ -953,11 +1117,18 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
             inkcell_fb_draw_icon(state, g.text_x, g.supp_y, item->supporting_icon, scale, supp_ink,
                                  ground);
         }
-        inkcell_fb_item_piece(state, supp_x, g.supp_y, item->supporting,
-                              g.cols - supp_take - (supp_icon ? 1U : 0U), supp_ink, ground);
+        const size_t supp_cols = g.cols - supp_take - (supp_icon ? 1U : 0U);
+        if (g.tiered) {
+            inkcell_fb_item_piece_styled(state, supp_x, g.supp_y, item->supporting,
+                                         (int)supp_cols * inkcell_fb_char_adv(state, scale),
+                                         &g.soft, supp_ink, ground);
+        } else {
+            inkcell_fb_item_piece(state, supp_x, g.supp_y, item->supporting, supp_cols, supp_ink,
+                                  ground);
+        }
         if (supp_take > 0U) {
             inkcell_fb_draw_trailing(state, &g, 0U, &item->supporting_trailing, g.supp_y,
-                                     g.supp_slot_top, focused, rest_role, supp_ink);
+                                     g.supp_slot_top, &cue, meta, supp_ink);
         }
     }
 
@@ -1000,11 +1171,16 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
        window alone would drop the separator at the seam for the length of every scroll. */
     const uint32_t end = list->model.first + list->model.visible + list->tail_count;
     const bool last = (index + 1U >= list->model.count) || (index + 1U >= end);
-    if (item->divider && !focused && !last) {
+    /* Yields to the list's own separators where it asked for them: one hairline per boundary,
+       and the list's is the one that knows where the groups break. */
+    if (item->divider && !list->style.separators && !focused && !last) {
         inkcell_fb_draw_rule(state, g.text_x,
                              g.fill_top + g.fill_h + inkcell_fb_space(state, INKCELL_SPACE_XS),
                              g.text_right - g.text_x, scale, INKCELL_COLOR_RULE);
     }
+    /* The list's separator, on the boundary with the next row and from where the words start
+       to the row's trailing edge - which is where a section's hairline runs on every phone. */
+    inkcell_fb_list_separator(state, list, index, g.text_x, box_top + (int)g.rows * list->line);
 
     inkcell_fb_list_band_end(list, band);
     inkcell_fb_list_focus_row(state, list, index, g.fill_top, g.fill_h);

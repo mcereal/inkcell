@@ -212,3 +212,21 @@ INKCELL_STR_ENTRY(WIDTH_COMPACT,      "Width class: compact")
 INKCELL_STR_ENTRY(WIDTH_MEDIUM,       "Width class: medium")
 INKCELL_STR_ENTRY(WIDTH_EXPANDED,     "Width class: expanded")
 INKCELL_STR_ENTRY(HEAD_SETTINGS,      "Settings")
+
+/* ---- the list's looks -------------------------------------------------------------------------
+ *
+ * One settings screen drawn three ways. The words are chosen so the three kinds of row a list
+ * mixes are all present: rows that open something, rows that are changed where they stand, and
+ * a column of options with one of them chosen. */
+
+INKCELL_STR_ENTRY(HEAD_GROUPED,       "Inset grouped")
+INKCELL_STR_ENTRY(HEAD_SECTIONS,      "Sections, compact")
+INKCELL_STR_ENTRY(HEAD_PLAIN,         "Plain")
+INKCELL_STR_ENTRY(HEAD_CONNECTION,    "Connection")
+INKCELL_STR_ENTRY(HEAD_APPEARANCE,    "Appearance")
+INKCELL_STR_ENTRY(VAL_HOME,           "Home")
+INKCELL_STR_ENTRY(VAL_LIGHT,          "Light")
+INKCELL_STR_ENTRY(VAL_AUTOMATIC,      "Automatic")
+INKCELL_STR_ENTRY(STATUS_VERIFIED,    "Verified")
+INKCELL_STR_ENTRY(STATUS_OFFLINE,     "Offline")
+INKCELL_STR_ENTRY(ROW_CHECKED_AGO,    "Checked 2 minutes ago")

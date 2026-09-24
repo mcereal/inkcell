@@ -5,6 +5,7 @@
  * leading slot draws in src/fb/widgets_item.c, and which is therefore neither's.
  */
 
+#include "inkcell/ui/widgets/chrome.h"
 #include "inkcell/ui/widgets/list.h"
 #include "list_internal.h"
 
@@ -100,6 +101,9 @@ static struct inkcell_fb_list inkcell_fb_list_open(const struct inkcell_fb_layou
     list.track_h = (int)layout->rows * layout->line;
     /* The body, until a caller says its window is smaller - see inkcell_fb_list_begin_visible(). */
     list.band_h = list.track_h;
+    /* Resolved from AUTO by whichever entry point knows about a card array; a list with none is
+       plain, which is what a list with none always looked like. */
+    list.style.appearance = INKCELL_FB_LIST_PLAIN;
     return list;
 }
 
@@ -148,6 +152,9 @@ struct inkcell_fb_list inkcell_fb_list_begin_cards(const struct inkcell_fb_layou
         heights != NULL ? inkcell_fb_list_begin_heights(layout, count, cursor, heights)
                         : inkcell_fb_list_begin(layout, count, cursor);
     list.cards = cards;
+    if (cards != NULL) {
+        list.style.appearance = INKCELL_FB_LIST_CARD_GROUP;
+    }
     return list;
 }
 
@@ -158,7 +165,52 @@ struct inkcell_fb_list inkcell_fb_list_begin_focus(const struct inkcell_fb_layou
     struct inkcell_fb_list list = inkcell_fb_list_open(
         layout, inkcell_list_begin_span(count, cursor, first, last, layout->rows, heights));
     list.cards = cards;
+    if (cards != NULL) {
+        list.style.appearance = INKCELL_FB_LIST_CARD_GROUP;
+    }
     list.focus_card = card && cards != NULL && count > 0U;
+    return list;
+}
+
+struct inkcell_fb_list inkcell_fb_list_begin_styled(const struct inkcell_draw_state *state,
+                                                    const struct inkcell_fb_layout *layout,
+                                                    uint32_t count, uint32_t cursor,
+                                                    const uint8_t *heights, const uint8_t *cards,
+                                                    const struct inkcell_fb_list_style *style) {
+    struct inkcell_fb_list_style look;
+    memset(&look, 0, sizeof look);
+    if (style != NULL) {
+        look = *style;
+    }
+    /*
+     * The step, which is the one thing a density changes: half of INKCELL_SPACE_LG above the
+     * words and half below. Taken off the space scale rather than stated in pixels so that it
+     * grows with the text - a reader who turned the text up wants roomier rows, not the same
+     * few pixels round larger words.
+     *
+     * The window is then however many of those steps the body holds. The body itself does not
+     * move: the rail still measures it, the glide is still clipped to it and a card still may
+     * not run past its bottom - it simply holds fewer, taller steps.
+     */
+    const int pad = (look.density == INKCELL_FB_LIST_COMFORTABLE && state != NULL)
+                        ? inkcell_fb_space(state, INKCELL_SPACE_LG) / 2
+                        : 0;
+    const int step = layout->line + 2 * pad;
+    const int body_h = (int)layout->rows * layout->line;
+    const uint32_t steps = step > 0 ? (uint32_t)(body_h / step) : layout->rows;
+    struct inkcell_fb_list list = inkcell_fb_list_open(
+        layout, heights != NULL ? inkcell_list_begin_heights(count, cursor, steps, heights)
+                                : inkcell_list_begin(count, cursor, steps));
+    list.line = step;
+    list.pad = pad;
+    /* The first baseline sits a pad below where a compact list's would, so the air is above the
+       words as well as below them - and every later baseline follows by whole steps. */
+    list.y += pad;
+    list.cards = cards;
+    if (look.appearance == INKCELL_FB_LIST_APPEARANCE_AUTO) {
+        look.appearance = cards != NULL ? INKCELL_FB_LIST_CARD_GROUP : INKCELL_FB_LIST_PLAIN;
+    }
+    list.style = look;
     return list;
 }
 
@@ -171,8 +223,17 @@ bool inkcell_fb_list_is_cursor(const struct inkcell_fb_list *list, uint32_t inde
 /* Which card item `index` is on, or INKCELL_FB_LIST_NO_CARD. Past the end counts as no card, which
    is what lets the run walk below terminate without knowing the list's length. */
 static uint8_t inkcell_fb_list_card_of(const struct inkcell_fb_list *list, uint32_t index) {
-    if (list == NULL || list->cards == NULL || index >= list->model.count) {
+    if (list == NULL || index >= list->model.count) {
         return INKCELL_FB_LIST_NO_CARD;
+    }
+    /* A grouped look with no array is one group: a settings screen of six rows is a section
+       whether or not it bothered to say so. A plain list with none has no groups at all, which
+       is every list opened before there was a look to ask for. */
+    if (list->cards == NULL) {
+        return (list->style.appearance == INKCELL_FB_LIST_INSET_GROUPED ||
+                list->style.appearance == INKCELL_FB_LIST_CARD_GROUP)
+                   ? 0U
+                   : INKCELL_FB_LIST_NO_CARD;
     }
     return list->cards[index];
 }
@@ -180,14 +241,41 @@ static uint8_t inkcell_fb_list_card_of(const struct inkcell_fb_list *list, uint3
 /* Whether item `index` stands on a card at all - the ground a row is drawn against, where the
    run walk breaks, and whether the leading slot gives the cards beside it their hairline back. */
 bool inkcell_fb_list_on_card(const struct inkcell_fb_list *list, uint32_t index) {
-    return inkcell_fb_list_card_of(list, index) != INKCELL_FB_LIST_NO_CARD;
+    return inkcell_fb_list_has_cards(list) &&
+           inkcell_fb_list_card_of(list, index) != INKCELL_FB_LIST_NO_CARD;
+}
+
+/* Whether two items stand in one group - the question a separator and a section's corners both
+   ask. A plain list with no array is one run, so a separator there falls between every row. */
+static bool inkcell_fb_list_same_group(const struct inkcell_fb_list *list, uint32_t a, uint32_t b) {
+    if (a >= list->model.count || b >= list->model.count) {
+        return false;
+    }
+    const uint8_t card = inkcell_fb_list_card_of(list, a);
+    if (card != inkcell_fb_list_card_of(list, b)) {
+        return false;
+    }
+    return card != INKCELL_FB_LIST_NO_CARD || list->cards == NULL;
+}
+
+void inkcell_fb_list_section_ends(const struct inkcell_fb_list *list, uint32_t index, bool *first,
+                                  bool *last) {
+    const bool grouped =
+        list != NULL && inkcell_fb_list_card_of(list, index) != INKCELL_FB_LIST_NO_CARD;
+    if (first != NULL) {
+        *first = !grouped || index == 0U || !inkcell_fb_list_same_group(list, index - 1U, index);
+    }
+    if (last != NULL) {
+        *last = !grouped || !inkcell_fb_list_same_group(list, index, index + 1U);
+    }
 }
 
 /* Whether this list draws its groups as cards at all, which is a question about the list and
    not about one row of it - see inkcell_fb_list_subheader_icon(), where a heading stands *between*
    two cards and so has a card list's ground under it either way. */
 bool inkcell_fb_list_has_cards(const struct inkcell_fb_list *list) {
-    return list != NULL && list->cards != NULL;
+    return list != NULL && list->style.appearance != INKCELL_FB_LIST_PLAIN &&
+           list->style.appearance != INKCELL_FB_LIST_APPEARANCE_AUTO;
 }
 
 /*
@@ -221,6 +309,229 @@ static int inkcell_fb_list_card_pad(const struct inkcell_draw_state *state) {
     return pad > 0 ? pad : 0;
 }
 
+/*
+ * The corner a group's surface is rounded with, and so the corner the rows at its ends take.
+ *
+ * A card is an object and keeps the row highlight's own small corner, which is what lets the
+ * two nest (see inkcell_fb_list_cards()). A section is a region of the panel, and a region is
+ * rounded like a panel is - INKCELL_SHAPE_MD, the text field's and the card's on the Status tab.
+ * The rows at its ends then take the same corner on the ends they share with it, and the rows
+ * between take none, which is the whole of what "a section with rounded first and last rows"
+ * means.
+ */
+int inkcell_fb_list_section_radius(const struct inkcell_draw_state *state,
+                                   const struct inkcell_fb_list *list) {
+    return inkcell_fb_radius(state,
+                             list != NULL && list->style.appearance == INKCELL_FB_LIST_INSET_GROUPED
+                                 ? INKCELL_SHAPE_MD
+                                 : INKCELL_SHAPE_SM);
+}
+
+int inkcell_fb_list_box_top(const struct inkcell_draw_state *state,
+                            const struct inkcell_fb_list *list) {
+    return list->y - inkcell_step_px(state->scale) - list->pad;
+}
+
+/* Whether this list marks its cursor any way but the one every list always did - the one test
+   that decides whether a plain row keeps inkcell_fb_draw_row_fill_on()'s own path. */
+static bool inkcell_fb_list_restyled(const struct inkcell_fb_list *list) {
+    return list->pad != 0 || list->style.focus != INKCELL_FB_LIST_FOCUS_FILL ||
+           list->style.appearance == INKCELL_FB_LIST_INSET_GROUPED;
+}
+
+/* The colour the row's cursor mark is drawn in: its tone's family where it names one, the
+   primary otherwise - `accent_edge`'s rule, stated once for the bar and the ring alike. */
+static struct inkcell_rgb inkcell_fb_list_mark_color(const struct inkcell_draw_state *state,
+                                                     enum inkcell_tone tone) {
+    return inkcell_fb_tone_color(
+        state, inkcell_tone_family(tone) != INKCELL_FAMILY_COUNT ? tone : INKCELL_TONE_PRIMARY);
+}
+
+/*
+ * A row's mark box, grown to its section's edge where the row is one of the section's ends.
+ *
+ * Grown from the *section's* edge rather than from the box it was handed: a row of more than one
+ * step marks a fill shorter than its steps on purpose (the gap between two-line items), so adding
+ * the section's inset to that fill still left the mark floating above the rounded bottom it is
+ * meant to share. The first row's top is the row's own box top, which is where the surface's
+ * interior starts; the last row's bottom is the row's box bottom plus the inset the surface is
+ * padded by, never past the body.
+ *
+ * Asked by the mark and by the focus registration both, so the frame's ring lands on the box the
+ * mark was drawn in. Leaves every other row, and every list that is not an inset section, alone.
+ */
+static void inkcell_fb_list_end_box(const struct inkcell_draw_state *state,
+                                    const struct inkcell_fb_list *list, uint32_t index, int *top,
+                                    int *h) {
+    if (list->style.appearance != INKCELL_FB_LIST_INSET_GROUPED ||
+        !inkcell_fb_list_on_card(list, index)) {
+        return;
+    }
+    bool first = false;
+    bool last = false;
+    inkcell_fb_list_section_ends(list, index, &first, &last);
+    const int box_top = inkcell_fb_list_box_top(state, list);
+    int bottom = *top + *h;
+    if (first) {
+        *top = box_top;
+    }
+    if (last) {
+        bottom = box_top + (int)inkcell_fb_list_row_height(list, index) * list->line +
+                 inkcell_fb_list_card_pad(state);
+        const int floor_y = list->track_y + list->track_h;
+        if (bottom > floor_y) {
+            bottom = floor_y;
+        }
+    }
+    *h = bottom > *top ? bottom - *top : 0;
+}
+
+struct inkcell_fb_list_cue inkcell_fb_list_cue(const struct inkcell_draw_state *state,
+                                               const struct inkcell_fb_list *list, uint32_t index,
+                                               int top, int h, enum inkcell_tone tone,
+                                               bool accent_edge) {
+    struct inkcell_fb_list_cue cue;
+    cue.focused = inkcell_fb_list_is_cursor(list, index);
+    cue.lifted = false;
+    cue.rest = inkcell_fb_list_ground(list, index);
+    cue.ground = inkcell_fb_color(state, cue.rest);
+    if (!cue.focused) {
+        return cue;
+    }
+
+    const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
+    const int x = box.x;
+    const int w = box.w;
+    /*
+     * The row's corners: every one of them on a list of rows, only the section's own on a row
+     * standing in an inset section. A middle row's fill is square because the section is what
+     * is rounded, and a highlight with four rounded corners in the middle of one reads as a
+     * pill laid on the section rather than as a part of it.
+     *
+     * The section's last row reaches down into the inset the surface is padded by, so its fill
+     * ends where the section does and its corners are the section's corners - rather than a
+     * rounded fill floating a few pixels above a rounded edge, which is two curves where one is
+     * meant.
+     */
+    const bool inset = list->style.appearance == INKCELL_FB_LIST_INSET_GROUPED &&
+                       inkcell_fb_list_on_card(list, index);
+    bool first = true;
+    bool last = true;
+    int radius = inkcell_fb_radius(state, INKCELL_SHAPE_SM);
+    if (inset) {
+        inkcell_fb_list_section_ends(list, index, &first, &last);
+        radius = inkcell_fb_list_section_radius(state, list);
+        inkcell_fb_list_end_box(state, list, index, &top, &h);
+    }
+
+    switch (list->style.focus) {
+    case INKCELL_FB_LIST_FOCUS_ACCENT: {
+        /*
+         * The lightest layer there is, and a capsule down the leading edge. HOVERED rather than
+         * FOCUSED on purpose: the capsule is what says where the cursor is, so the layer only has
+         * to say which row the capsule belongs to - and a layer that light keeps every ink the
+         * row had at rest legible without asking the theme for a second pair.
+         */
+        cue.ground =
+            inkcell_fb_state_layer(state, cue.rest, INKCELL_COLOR_TEXT, INKCELL_STATE_HOVERED);
+        inkcell_fb_fill_round_rect_ends(state, x, top, w, h, radius, cue.ground, first, last);
+        /* Centred in the row's own leading padding - the strip between the fill's edge and
+           where content starts - so it stands clear of both the section's edge and the row's
+           first mark, and reads as belonging to the row rather than to the surface. */
+        const int bar_w = inkcell_step_px(state->scale);
+        const int inset_y = inkcell_fb_space(state, INKCELL_SPACE_XS);
+        const int bar_h = h - 2 * inset_y;
+        const int gutter = box.text_x - x;
+        const int bar_x = gutter > bar_w ? x + (gutter - bar_w) / 2 : x;
+        if (bar_w > 0 && bar_h > 0) {
+            inkcell_fb_fill_round_rect(state, bar_x, top + inset_y, bar_w, bar_h, bar_w / 2,
+                                       inkcell_fb_list_mark_color(state, tone));
+        }
+        return cue;
+    }
+    case INKCELL_FB_LIST_FOCUS_RING: {
+        /* Nothing under the words. The ring is the frame's when the list registered with a
+           focus map - one cursor, one ring - and the row's own otherwise, inside its box so it
+           cannot land on a neighbour's. */
+        if (list->focus_base == INKCELL_FOCUS_NONE) {
+            const int ring = 2 * inkcell_fb_edge(state);
+            inkcell_fb_stroke_round_rect(
+                state, x, top, w, h,
+                (first || last) ? radius : inkcell_fb_radius(state, INKCELL_SHAPE_SM), ring,
+                inkcell_fb_list_mark_color(state, tone));
+        }
+        return cue;
+    }
+    case INKCELL_FB_LIST_FOCUS_FILL:
+    default:
+        break;
+    }
+
+    cue.lifted = true;
+    cue.ground = inkcell_fb_focus_fill(state, cue.rest);
+    if (accent_edge) {
+        /*
+         * The bar is laid the way a card's edge is: the marker shape first, the fill over it a
+         * scale narrower on the left only. Both share their right edge, so the marker survives
+         * just where the bar is meant to be - and it follows the corner instead of poking a
+         * square end out of it, which is what a straight bar does once the row has ends.
+         */
+        const int step = inkcell_step_px(state->scale);
+        inkcell_fb_fill_round_rect_ends(state, x, top, w, h, radius,
+                                        inkcell_fb_list_mark_color(state, tone), first, last);
+        inkcell_fb_fill_round_rect_ends(state, x + step, top, w - step, h, radius, cue.ground,
+                                        first, last);
+    } else {
+        inkcell_fb_fill_round_rect_ends(state, x, top, w, h, radius, cue.ground, first, last);
+    }
+    return cue;
+}
+
+struct inkcell_fb_list_cue inkcell_fb_list_row_cue(const struct inkcell_draw_state *state,
+                                                   const struct inkcell_fb_list *list,
+                                                   uint32_t index, uint32_t rows) {
+    if (!inkcell_fb_list_restyled(list)) {
+        /* The path every list took before it had a look, kept as the call it was: a plain row
+           and a heading mark themselves through inkcell_fb_draw_row_fill_on(), and a list that
+           asked for nothing new must come out of this the same pixels it always did. */
+        struct inkcell_fb_list_cue cue;
+        cue.focused = inkcell_fb_list_is_cursor(list, index);
+        cue.lifted = cue.focused;
+        cue.rest = inkcell_fb_list_ground(list, index);
+        cue.ground = inkcell_fb_draw_row_fill_on(state, list->y, rows, cue.focused, cue.rest);
+        return cue;
+    }
+    return inkcell_fb_list_cue(state, list, index, inkcell_fb_list_box_top(state, list),
+                               (int)(rows > 0U ? rows : 1U) * list->line, INKCELL_TONE_NORMAL,
+                               false);
+}
+
+void inkcell_fb_list_separator(const struct inkcell_draw_state *state,
+                               const struct inkcell_fb_list *list, uint32_t index, int x,
+                               int bottom) {
+    if (!list->style.separators) {
+        return;
+    }
+    /* Not across the break between two groups, not under the last row the window holds, and
+       not against the cursor's row from either side: its fill or its ring is already an edge,
+       and a hairline laid along one is the same line drawn twice, a pixel apart. */
+    const uint32_t end = list->model.first + list->model.visible + list->tail_count;
+    if (index + 1U >= end || !inkcell_fb_list_same_group(list, index, index + 1U) ||
+        inkcell_list_is_cursor(&list->model, index) ||
+        inkcell_list_is_cursor(&list->model, index + 1U)) {
+        return;
+    }
+    const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
+    const int right = box.x + box.w;
+    if (right <= x) {
+        return;
+    }
+    /* Inside this row's box, on the boundary: the next row's own box - and so its fill - starts
+       exactly under it. */
+    const int thickness = inkcell_fb_rule_height(state, state->scale);
+    inkcell_fb_draw_rule(state, x, bottom - thickness, right - x, state->scale, INKCELL_COLOR_RULE);
+}
+
 enum inkcell_color inkcell_fb_list_ground(const struct inkcell_fb_list *list, uint32_t index) {
     return inkcell_fb_list_on_card(list, index) ? INKCELL_COLOR_SURFACE : INKCELL_COLOR_BG;
 }
@@ -243,7 +554,7 @@ uint32_t inkcell_fb_list_row_height(const struct inkcell_fb_list *list, uint32_t
  */
 static void inkcell_fb_list_cards(const struct inkcell_draw_state *state,
                                   struct inkcell_fb_list *list) {
-    if (list == NULL || list->cards == NULL || list->model.visible == 0U) {
+    if (!inkcell_fb_list_has_cards(list) || list->model.visible == 0U) {
         return;
     }
 
@@ -272,7 +583,8 @@ static void inkcell_fb_list_cards(const struct inkcell_draw_state *state,
      * every group. Drawn to one shape they nest exactly, and the hairline stays outside the
      * highlight all the way round.
      */
-    const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_SM);
+    const int radius = inkcell_fb_list_section_radius(state, list);
+    const bool inset = list->style.appearance == INKCELL_FB_LIST_INSET_GROUPED;
 
     /*
      * The card's vertical inset, and it is spent at the bottom only.
@@ -397,6 +709,21 @@ static void inkcell_fb_list_cards(const struct inkcell_draw_state *state,
          */
         const bool focused =
             list->focus_card && list->model.cursor >= i && list->model.cursor < run;
+        /*
+         * An inset section is the surface and nothing else: no hairline, because a section is
+         * not an object and an edge is what says one is there. It keeps the card's geometry to
+         * the pixel - the hairline's width is still spent outward, only in the surface's own
+         * colour - so a row's fill nests inside a section exactly as it does inside a card, and
+         * the two looks can be swapped on one screen without a row moving.
+         */
+        if (inset && !focused) {
+            inkcell_fb_fill_round_rect_ends(state, x, box_top, width, box_h, radius + edge,
+                                            inkcell_fb_color(state, INKCELL_COLOR_SURFACE),
+                                            !cut_top, !cut_bottom);
+            top += height;
+            i = run;
+            continue;
+        }
         const int ring = focused ? 2 * edge : edge;
         inkcell_fb_fill_round_rect_ends(state, x, box_top, width, box_h, radius + edge,
                                         focused ? inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY)
@@ -700,6 +1027,9 @@ void inkcell_fb_list_focus_row(const struct inkcell_draw_state *state,
        it and not the panel. A cursor that could reach a rectangle other than the one the
        highlight draws would be a screen disagreeing with itself about where the reader is. */
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
+    /* An inset section's end rows are marked out to the section's edge, and the box the frame's
+       ring goes round is that box too. */
+    inkcell_fb_list_end_box(state, list, index, &y, &h);
     struct inkcell_fb_rect rect = {.x = box.x, .y = y, .w = box.w, .h = h};
     /*
      * A gliding row is clipped to the window, and what the clip took is not on the frame - so
@@ -724,7 +1054,20 @@ void inkcell_fb_list_focus_row(const struct inkcell_draw_state *state,
     }
     /* INKCELL_SHAPE_SM because that is what inkcell_fb_draw_row_fill_on() rounds the highlight
        with, and the ring and the highlight describing one row have to be one shape. */
-    inkcell_fb_focus_register_shaped(state, list->focus_base + index, &rect, INKCELL_SHAPE_SM);
+    /* On an inset section the rows at its ends are the section's corner, and the frame's ring
+       landing on one is that shape too - the ring drawn round a row whose top is rounded like the
+       section is a ring that agrees with the surface it is standing on. */
+    enum inkcell_shape shape = INKCELL_SHAPE_SM;
+    if (list->style.appearance == INKCELL_FB_LIST_INSET_GROUPED &&
+        inkcell_fb_list_on_card(list, index)) {
+        bool first = false;
+        bool last = false;
+        inkcell_fb_list_section_ends(list, index, &first, &last);
+        if (first || last) {
+            shape = INKCELL_SHAPE_MD;
+        }
+    }
+    inkcell_fb_focus_register_shaped(state, list->focus_base + index, &rect, shape);
     /* And the cursor's row is where the frame's ring goes. A list drawn under a sheet still has
        a cursor, which is why this is a mark rather than a claim: the sheet's rows come later and
        take it. */
@@ -759,15 +1102,13 @@ void inkcell_fb_list_row(const struct inkcell_draw_state *state, struct inkcell_
        ground: a row in a list may be standing on a card, and the ink its glyph edges blend into
        has to be the colour actually under it. */
     const bool band = inkcell_fb_list_band_begin(list);
-    const bool focused = inkcell_fb_list_is_cursor(list, index);
-    const struct inkcell_rgb ground =
-        inkcell_fb_draw_row_fill_on(state, list->y, inkcell_fb_list_row_height(list, index),
-                                    focused, inkcell_fb_list_ground(list, index));
-    inkcell_fb_draw_text(state, inkcell_fb_row_box(state).text_x, list->y, text, state->scale,
-                         focused ? inkcell_fb_focus_ink(state, tone, false)
-                                 : inkcell_fb_tone_color(state, tone),
-                         ground);
-    inkcell_fb_list_band_end(list, band);
+    const struct inkcell_fb_list_cue cue =
+        inkcell_fb_list_row_cue(state, list, index, inkcell_fb_list_row_height(list, index));
+    const int text_x = inkcell_fb_row_box(state).text_x;
+    inkcell_fb_draw_text(state, text_x, list->y, text, state->scale,
+                         cue.lifted ? inkcell_fb_focus_ink(state, tone, false)
+                                    : inkcell_fb_tone_color(state, tone),
+                         cue.ground);
     /* By what the model says this row is, not by one row: a plain row in a list of mixed
        heights is still whatever height that list gave it, and advancing by a row would put
        every row under it in the wrong place. */
@@ -777,7 +1118,10 @@ void inkcell_fb_list_row(const struct inkcell_draw_state *state, struct inkcell_
        whose geometry disagrees with the one thing on the panel that shows where it is. The
        slotted item registers its own `fill_top`, which is this same number arrived at from the
        other side. */
-    inkcell_fb_list_focus_row(state, list, index, list->y - inkcell_step_px(state->scale), height);
+    const int top = inkcell_fb_list_box_top(state, list);
+    inkcell_fb_list_separator(state, list, index, text_x, top + height);
+    inkcell_fb_list_band_end(list, band);
+    inkcell_fb_list_focus_row(state, list, index, top, height);
     list->y += height;
 }
 
@@ -814,13 +1158,12 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_draw_state *state,
     const bool band = inkcell_fb_list_band_begin(list);
     const int scale = inkcell_theme_type_scale(state->theme, INKCELL_TYPE_LABEL, state->scale);
     const uint32_t rows = inkcell_fb_list_row_height(list, index);
-    const bool focused = inkcell_fb_list_is_cursor(list, index);
-
     /* The fill is the whole step whatever size the words are, and it is the same rectangle a
        plain row lays down - a highlight that shrank to the label would be a cursor that changes
        shape as it walks down a list. */
-    const struct inkcell_rgb ground = inkcell_fb_draw_row_fill_on(
-        state, list->y, rows, focused, inkcell_fb_list_ground(list, index));
+    const struct inkcell_fb_list_cue cue = inkcell_fb_list_row_cue(state, list, index, rows);
+    const bool focused = cue.focused;
+    const struct inkcell_rgb ground = cue.ground;
 
     /*
      * Sat on the bottom of the step, so the space the smaller glyphs free is air above the
@@ -835,7 +1178,7 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_draw_state *state,
      * centring the advance would seat the words low and leave the heading hanging off the card
      * above.
      */
-    const int step_top = list->y - inkcell_step_px(state->scale);
+    const int step_top = inkcell_fb_list_box_top(state, list);
     const int step_h = (int)rows * list->line;
     int baseline =
         list->y + inkcell_fb_line_adv(state, state->scale) - inkcell_fb_line_adv(state, scale);
@@ -885,10 +1228,14 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_draw_state *state,
      * drawn is: the list knows which of the two it is drawing, so a screen passes a heading and
      * nothing decides twice.
      */
-    const enum inkcell_tone tone =
-        inkcell_fb_list_has_cards(list) ? INKCELL_TONE_PRIMARY : INKCELL_TONE_DIM;
+    /* A section's heading is the quiet one even on a grouped list: a section is a region rather
+       than an object, so its label is a caption over it and not a title for it - the words above
+       an inset group on every phone. A card keeps its title in the primary. */
+    const enum inkcell_tone tone = list->style.appearance == INKCELL_FB_LIST_CARD_GROUP
+                                       ? INKCELL_TONE_PRIMARY
+                                       : INKCELL_TONE_DIM;
     const struct inkcell_rgb ink =
-        inkcell_fb_item_ink(state, tone, focused, tone == INKCELL_TONE_DIM);
+        inkcell_fb_item_ink(state, tone, cue.lifted, tone == INKCELL_TONE_DIM);
 
     int x = inkcell_fb_row_box(state).text_x;
     if (leading.kind == INKCELL_FB_LEADING_TONAL || leading.kind == INKCELL_FB_LEADING_TONAL_SLOT) {
@@ -1012,13 +1359,14 @@ void inkcell_fb_list_note(const struct inkcell_draw_state *state, struct inkcell
     inkcell_fb_list_chrome(state, list);
     const bool band = inkcell_fb_list_band_begin(list);
     const uint32_t rows = inkcell_fb_list_row_height(list, index);
-    const bool focused = inkcell_fb_list_is_cursor(list, index);
     /* One fill for the whole note, the height the *model* gave it - not the height its words
        want. The two agree when the screen measured with inkcell_fb_list_note_steps(), and when they
        do not it is the model that is right, because it is what every row below was placed against.
      */
-    const struct inkcell_rgb ground = inkcell_fb_draw_row_fill_on(
-        state, list->y, rows, focused, inkcell_fb_list_ground(list, index));
+    const struct inkcell_fb_list_cue cue = inkcell_fb_list_row_cue(state, list, index, rows);
+    const bool focused = cue.focused;
+    const bool lifted = cue.lifted;
+    const struct inkcell_rgb ground = cue.ground;
 
     const int margin = inkcell_fb_row_box(state).text_x;
     const int body_line = inkcell_fb_line_adv(state, state->scale);
@@ -1041,8 +1389,8 @@ void inkcell_fb_list_note(const struct inkcell_draw_state *state, struct inkcell
          */
         inkcell_fb_draw_text(state, margin, y + body_line - inkcell_fb_line_adv(state, scale),
                              inkcell_line_text(&line), scale,
-                             focused ? inkcell_fb_focus_ink(state, INKCELL_TONE_PRIMARY, false)
-                                     : inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY),
+                             lifted ? inkcell_fb_focus_ink(state, INKCELL_TONE_PRIMARY, false)
+                                    : inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY),
                              ground);
         y += body_line;
     }
@@ -1060,8 +1408,8 @@ void inkcell_fb_list_note(const struct inkcell_draw_state *state, struct inkcell
     inkcell_wrap_begin(&wrap, body != NULL ? body : "", inkcell_fb_note_cols(state));
     while (drawn < rows && inkcell_wrap_next(&wrap)) {
         inkcell_fb_draw_text(state, margin, y, wrap.line, state->scale,
-                             focused ? inkcell_fb_focus_ink(state, INKCELL_TONE_NORMAL, false)
-                                     : inkcell_fb_tone_color(state, INKCELL_TONE_NORMAL),
+                             lifted ? inkcell_fb_focus_ink(state, INKCELL_TONE_NORMAL, false)
+                                    : inkcell_fb_tone_color(state, INKCELL_TONE_NORMAL),
                              ground);
         y += body_line;
         drawn++;
@@ -1070,7 +1418,7 @@ void inkcell_fb_list_note(const struct inkcell_draw_state *state, struct inkcell
     inkcell_fb_list_band_end(list, band);
     /* The box the fill covers, when the cursor is on it - for the heading's reason, above. */
     if (focused) {
-        inkcell_fb_list_focus_row(state, list, index, list->y - inkcell_step_px(state->scale),
+        inkcell_fb_list_focus_row(state, list, index, inkcell_fb_list_box_top(state, list),
                                   (int)rows * list->line);
     }
     list->y += (int)rows * list->line;

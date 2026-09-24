@@ -104,6 +104,14 @@ static const struct gallery_scene k_scenes[] = {
     {"scaffold", gallery_scene_scaffold, 0U, 0U, 0U},
     {"scaffold_top", gallery_scene_scaffold_top, 0U, 0U, 0U},
     {"scaffold_wide", gallery_scene_scaffold, 0U, 2240U, 1260U},
+    /*
+     * One settings screen in three of the list's looks - inset sections at two densities, and
+     * plain rows - so the difference between the pages is the look and nothing else. Appended
+     * for the manifest's sake.
+     */
+    {"list_grouped", gallery_scene_list_grouped, 0U, 0U, 0U},
+    {"list_sections", gallery_scene_list_sections, 0U, 0U, 0U},
+    {"list_plain", gallery_scene_list_plain, 0U, 0U, 0U},
 };
 
 const struct gallery_scene *gallery_scenes(size_t *count) {
