@@ -177,6 +177,9 @@ int inkcell_fb_large_title_travel(const struct inkcell_draw_state *state);
 /*
  * Draws the bar at whatever `offset` says it has collapsed to, and consumes the room it took.
  *
+ * This is inkcell_fb_draw_app_bar() with `large` set, and nothing more: a screen that wants a
+ * large title *with* actions, a status mark or an overflow menu calls the app bar directly.
+ *
  * `offset` is inkcell_scroll_offset()'s answer for the body underneath. Negative - the body
  * pulled past its top - is not clamped away: the heading grows, which is the other half of
  * what an overscroll is for and is what every platform does with a large title being pulled

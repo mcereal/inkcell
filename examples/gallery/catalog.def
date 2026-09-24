@@ -230,3 +230,22 @@ INKCELL_STR_ENTRY(VAL_AUTOMATIC,      "Automatic")
 INKCELL_STR_ENTRY(STATUS_VERIFIED,    "Verified")
 INKCELL_STR_ENTRY(STATUS_OFFLINE,     "Offline")
 INKCELL_STR_ENTRY(ROW_CHECKED_AGO,    "Checked 2 minutes ago")
+
+/* ---- the app bar's actions and the compact footer -----------------------------------------
+ *
+ * The verbs a heading carries, the words a search field and a selection put in the title slot,
+ * and the tip that tells a new reader where the rest of the presses went. */
+
+INKCELL_STR_ENTRY(ACT_SHARE,          "Share")
+INKCELL_STR_ENTRY(ACT_REFRESH,        "Refresh")
+INKCELL_STR_ENTRY(ACT_PIN,            "Pin")
+INKCELL_STR_ENTRY(ACT_MUTE,           "Mute")
+INKCELL_STR_ENTRY(ACT_SETTINGS,       "Settings")
+INKCELL_STR_ENTRY(ACT_HELP,           "Help")
+INKCELL_STR_ENTRY(ACT_MORE,           "More")
+INKCELL_STR_ENTRY(ACT_REPLY,          "Reply")
+INKCELL_STR_ENTRY(SEARCH_PLACEHOLDER, "Search messages")
+INKCELL_STR_ENTRY(SEARCH_QUERY,       "ridge antenna")
+INKCELL_STR_ENTRY(SELECTED_COUNT,     "3 selected")
+INKCELL_STR_ENTRY(STATUS_LINKED,      "Linked")
+INKCELL_STR_ENTRY(TIP_MORE,           "The rest of the actions are under START")

@@ -16,6 +16,7 @@
 
 #include "inkcell/ui/fb_draw.h"
 #include "inkcell/ui/widgets/button.h"
+#include "inkcell/ui/widgets/overlay.h"
 
 #include "inkcell/ui/actions.h"
 #include "inkcell/ui/icon.h"
@@ -55,6 +56,17 @@
  */
 struct inkcell_fb_layout inkcell_fb_layout_begin(const struct inkcell_draw_state *state,
                                                  bool footer, bool back);
+
+/*
+ * The same, naming which action bar the foot of the frame is keeping room for.
+ *
+ * inkcell_fb_layout_begin() is this with INKCELL_FB_FOOTER_FULL for `true` - the only bar
+ * there was. A compact bar is one row rather than two, so a screen that asks for one gets that
+ * row back as body, and the action bar reads `layout->footer` to draw the shape it was given
+ * room for.
+ */
+struct inkcell_fb_layout inkcell_fb_layout_begin_footer(const struct inkcell_draw_state *state,
+                                                        enum inkcell_fb_footer footer, bool back);
 
 /*
  * How many body rows are left between `body_y` and the footer, at the body's line advance.
@@ -211,24 +223,134 @@ struct inkcell_fb_action_bar {
      */
     const char *status;
     enum inkcell_tone status_tone;
+    /*
+     * How many of `items` the bar shows before the rest go behind `more`. 0 shows every one of
+     * them, which is the bar as it always was.
+     *
+     * The persistent footer is the right answer on a device with no pointer - it is the one
+     * place a d-pad reader can find out what the buttons do - and the wrong one when it prints
+     * every press on every frame: seven keycaps in a row is a handheld emulator's HUD, and the
+     * press the screen is *for* is one of seven things at the smallest size on the panel. Two
+     * or three is what a reader takes in without reading, and `items` is already in priority
+     * order, so the first `limit` of them are the ones worth the room.
+     */
+    size_t limit;
+    /*
+     * The keycap that opens the rest: the application's own button and its own word for it,
+     * because which key is free to mean "more" is a question about the device and the app. The
+     * TrimUI's MENU is its quit key, and an app there would name START or SELECT here.
+     *
+     * Drawn after the limited items whenever anything is behind it, and never dropped for room
+     * while it is - a bar that elided the one cap leading to everything else would have hidden
+     * the whole set. NULL for none, in which case `limit` simply stops early.
+     */
+    const struct inkcell_button_action *more;
+    /*
+     * Draw the first item's cap as the screen's primary press: a tonal pill in the primary
+     * family, where the others are the neutral keycap.
+     *
+     * The action bar's half of the "one emphasized action" rule the top app bar keeps. A row of
+     * keycaps of equal weight has no way to say "this is what you came here to do", and in a
+     * bar of two or three the one that says so is found without reading.
+     */
+    bool emphasize_first;
 };
 
 /* The room the bar wants at the foot of the panel - what a caller subtracts from the panel
-   height to find where the body ends. */
+   height to find where the body ends. One row for a layout opened with a compact footer, two for
+   anything else. */
 int inkcell_fb_action_bar_height(const struct inkcell_draw_state *state,
                                  const struct inkcell_fb_layout *layout);
 
 /*
- * Draws it, with its top edge at `layout->footer_y`.
+ * Draws it, with its top edge at `layout->footer_y`, and returns the index of the first item
+ * that is *not* on it - `count` when every one of them is.
  *
  * Actions that do not fit are dropped from the *end*, which is why struct inkcell_action_bar
  * is documented as being in priority order: on a narrow panel or in a long translation, the
  * press the screen is for survives and "L/R tabs" - true everywhere, and therefore the least
  * worth the room - is what goes.
+ *
+ * The return is what makes that honest once there is a `more` cap. What the bar dropped for
+ * room and what it held back for `limit` are both the tail of the array, so one index says
+ * where the menu behind `more` starts - see inkcell_fb_action_bar_menu(). A screen keeps it from
+ * the frame it drew, the way it keeps a FAB's box.
  */
-void inkcell_fb_draw_action_bar(const struct inkcell_draw_state *state,
+size_t inkcell_fb_draw_action_bar(const struct inkcell_draw_state *state,
+                                  const struct inkcell_fb_layout *layout,
+                                  const struct inkcell_fb_action_bar *bar);
+
+/*
+ * The menu behind the `more` cap: `bar->items[from..count)` as menu rows, in the bar's own
+ * order. Returns how many were written, at most `max`.
+ *
+ * Row `i` is `bar->items[from + i]`, so the menu's `focus_base + i` numbering maps a chosen row
+ * straight back to the press it stands for. The row says the verb and not the cap: a reader
+ * who opened a menu to find a press is going to choose it from the menu, not go looking for
+ * the key.
+ */
+size_t inkcell_fb_action_bar_menu(const struct inkcell_fb_action_bar *bar, size_t from,
+                                  struct inkcell_fb_menu_item *items, size_t max);
+
+/* ---- the first-use tip ----------------------------------------------------------------------
+ *
+ * A press worth learning, said once, beside the bar it lives in - and then gone.
+ *
+ * The other half of a compact footer. A bar that shows three presses and hides the rest behind
+ * `more` has to tell a new reader that the rest exist, and the full footer did that by printing
+ * all of them, forever. This says it the first time and gets out of the way, which is what
+ * every platform's coach mark is for: a hint that is always there stops being read by the
+ * third frame, and a hint that arrives is read because it moved.
+ *
+ * It rises out of the action bar's top edge and sinks back behind it, rather than fading. A
+ * container cannot fade on a panel with no alpha to composite, and moving is the honest
+ * version: the bar is where the tip came from, so it is where it goes back to.
+ *
+ * Whether it has been seen is the application's business and has to outlive the run, so the
+ * toolkit holds none of it. The app decides a tip is due, stamps `since_ms` once, and keeps
+ * handing the same tip in until inkcell_fb_action_tip_live() says it has finished - then
+ * records it as seen, in whatever it persists.
+ */
+
+/* How long a tip rests where it can be read, between rising and sinking. Four seconds is a
+   sentence of a dozen words read twice, which is the snackbar's own measure. */
+#define INKCELL_FB_ACTION_TIP_HOLD_MS 4000U
+
+struct inkcell_fb_action_tip {
+    /* The press it is about, drawn as the bar draws it - a keycap and nothing else - at the
+       tip's head. NULL for a tip about no one key. */
+    const struct inkcell_button_action *action;
+    /* The sentence: "More actions are under START". Already translated. NULL or empty draws
+       nothing, so "no tip" is a struct rather than a branch. */
+    const char *text;
+    /* When it was first shown, on the clock `state->now_ms` runs on. The tip is a pure function
+       of this and the time: no animation table, no identity, and a picture of it lands in the
+       same place on every host. */
+    uint64_t since_ms;
+};
+
+/*
+ * Whether the tip is still on its way in, resting, or on its way out at `state->now_ms`.
+ *
+ * What an application asks after drawing a frame: while it answers true, the frame after this
+ * one has something to move, and once it answers false the tip has sunk behind the bar and the
+ * app can record it as seen and stop handing it in.
+ */
+bool inkcell_fb_action_tip_live(const struct inkcell_draw_state *state,
+                                const struct inkcell_fb_action_tip *tip);
+
+/*
+ * Draws it at wherever its journey has got to: against the leading edge of the body, standing
+ * on the action bar's top edge.
+ *
+ * Clipped to the body, so the part of it still behind the bar is not painted over the keycaps
+ * - which means it can be drawn before or after the bar and comes out the same. Mutable state
+ * for the reason the FAB's is: it says where it is moving, so a frame drawn under a clip band
+ * still copies the rows it vacated.
+ */
+void inkcell_fb_draw_action_tip(struct inkcell_draw_state *state,
                                 const struct inkcell_fb_layout *layout,
-                                const struct inkcell_fb_action_bar *bar);
+                                const struct inkcell_fb_action_tip *tip);
 
 /* ---- the floating action button ---------------------------------------------------------------
  *
@@ -401,15 +523,136 @@ struct inkcell_fb_rect inkcell_fb_draw_fab(struct inkcell_draw_state *state,
  * the breadcrumb's grammar along with its words, and a badge glued into a title with %s cannot
  * be a badge. What is left in the catalog is one word per level.
  *
- * The four slots, and what each is for:
+ * The slots, and what each is for:
  *
  *   leading    the back affordance. Not a field - it is layout->back, from the action bar's own
  *              table, so the arrow and the B keycap cannot disagree about whether B leaves.
  *   overline   the trail of levels above this one, separated by a drawn chevron. Two levels is
  *              the deepest anything here goes ("Settings > Modules" over "Telemetry").
  *   title      what this screen is. One line, at INKCELL_TYPE_TITLE.
- *   trailing   a badge: a fact about the screen rather than about any row of it.
+ *   badge      a fact about the screen rather than about any row of it.
+ *   status     one compact mark about the whole client - the link, the battery - in a tone.
+ *   actions    the screen's own verbs as icon buttons, one of them optionally emphasized, and
+ *              an overflow button holding whatever did not fit.
+ *
+ * Read from the trailing edge in: overflow, actions, status, badge, then the title in whatever
+ * room is left. Every one of those after the title is optional and zero is "none", so a bar
+ * declared with a title and nothing else is the bar it always was, pixel for pixel.
+ *
+ * And three modes that replace the heading rather than add to it - a search field, a
+ * selection's count - and a large title that collapses into the bar as the body scrolls. See
+ * enum inkcell_fb_app_bar_mode and `large`.
  */
+
+/* ---- the app bar's actions -------------------------------------------------------------------
+ *
+ * The screen's verbs, as icon buttons against the bar's trailing edge.
+ *
+ * Every verb on a screen here has been a keycap, and a keycap is a fine answer to "what do the
+ * buttons do" and a poor one to "what can I do here": it is bound to a button, so a screen has
+ * as many verbs as the case has buttons, and it is printed at the foot of the panel far from
+ * the heading it acts on. An icon in the bar is the answer every platform gives to the second
+ * question - search, share, filter - and it is reached by moving *up* into the chrome, which a
+ * d-pad does as well as a finger.
+ *
+ * The array is in priority order, the action bar's rule: the bar keeps as many as fit from the
+ * front and the rest go behind the overflow button, so the first entry survives a narrow panel
+ * and a long title. Laid out left to right in that same order, so a screen's verbs do not
+ * rearrange themselves as the panel narrows - they fall off the end, into the menu.
+ */
+
+/* The most actions a bar reads. A bar with more verbs than this is a screen that wants a menu of
+   its own rather than a heading, and it is also the width of the mask a fit is reported in. */
+#define INKCELL_FB_APP_BAR_ACTIONS_MAX 8U
+
+struct inkcell_fb_bar_action {
+    /*
+     * The symbol on the bar. INKCELL_ICON_NONE makes the action *menu only*: it is never drawn
+     * on the bar and is always a row of the overflow menu, which is how a screen puts "Settings"
+     * or "Help" behind the dots without a second array to keep in step with the first.
+     */
+    enum inkcell_icon icon;
+    /*
+     * The verb. Required - an action with no words is skipped - because it is what the overflow
+     * menu says when the icon did not fit, what the emphasized action says beside its icon, and
+     * the only thing about a bare symbol that can be translated.
+     */
+    const char *label;
+    /*
+     * The one verb the screen is for: drawn as a tonal pill with its label beside the icon,
+     * where the rest are bare symbols. The first action with this set is the emphasized one and
+     * the flag is ignored on any after it - two emphasized verbs is none.
+     *
+     * It is also the last to leave. When the bar runs short it gives up its label before it
+     * gives up its place, and gives up its place only after every plain action has gone - the
+     * FAB's elision, applied to a verb in the heading.
+     */
+    bool emphasized;
+    /* What the emphasized pill is tinted with. Zero is INKCELL_FAMILY_PRIMARY; a verb that
+       destroys something names the error family. Ignored on a plain action. */
+    enum inkcell_family family;
+    /* Greyed, and registered nowhere - the menu item's rule: the cursor steps over a verb that
+       does nothing rather than landing on it. It stays on the bar, because a verb that is
+       sometimes missing is a bar that rearranges itself under the reader. */
+    bool disabled;
+    bool focused; /* the d-pad will act on it */
+    /* What the d-pad calls it, or INKCELL_FOCUS_NONE. The same id is the overflow menu row's,
+       so a screen answers a press the same way wherever the verb was when it was chosen. */
+    uint32_t focus_id;
+};
+
+/*
+ * A compact mark about the whole client, in the bar: the link is up, the battery is low.
+ *
+ * The action bar's status line said this, on a line of its own under the keycaps, on every
+ * frame. That is a whole row of the panel for a fact that is usually "fine" - and a compact
+ * footer has no second line to put it on. A phone says the same thing with one symbol in the
+ * corner, coloured when it matters, and this is that symbol.
+ */
+struct inkcell_fb_bar_status {
+    /* The symbol. INKCELL_ICON_NONE draws no indicator. */
+    enum inkcell_icon icon;
+    /* What it means. INKCELL_TONE_DIM for "fine", which is what it should be most of the time
+       - a status mark that is always bright is a status mark that is never read. */
+    enum inkcell_tone tone;
+    /* A word beside it - the radio's name, "offline" - at the label scale. The first thing on
+       the bar to go when it runs short. NULL for the symbol alone. */
+    const char *text;
+};
+
+/*
+ * What the heading is doing.
+ *
+ * Modes rather than flags, because each one *replaces* the title slot rather than adding to
+ * it, and two of them at once is not a bar anything draws. None of them changes the bar's
+ * height - the trail is dropped in both, since a search field and a selection count are the
+ * screen's whole heading - so entering or leaving one never reflows the body under it.
+ */
+enum inkcell_fb_app_bar_mode {
+    /* The title, and everything above. */
+    INKCELL_FB_APP_BAR_NORMAL = 0,
+    /*
+     * The title slot is a search field: `query` as typed, or `placeholder` dimmed when it is
+     * empty, a caret while `editing`, and a clear mark once there is something to clear.
+     *
+     * The field is drawn, not edited. What a key press does to the query is the application's
+     * own - on this device it is inkcell's on-screen keyboard - and the field is where the
+     * result is shown, so a filter narrowing the list below is readable without the keyboard
+     * in the way. The actions stay: a search screen's filter button is a verb like any other.
+     */
+    INKCELL_FB_APP_BAR_SEARCH,
+    /*
+     * Contextual selection: the bar fills with the secondary family's container, the leading
+     * mark becomes a close, and the title is what is selected ("3 selected", already
+     * translated). The actions are the verbs that apply to the selection.
+     *
+     * The fill is what makes it a mode rather than a relabelled title - the reader has to be
+     * able to tell at a glance that B now clears a selection instead of leaving the screen. That
+     * is also why the close is drawn whether or not `layout->back` is set: in this mode B has
+     * one meaning, and the mark is how the bar says it.
+     */
+    INKCELL_FB_APP_BAR_SELECTION,
+};
 
 /* Settings is the deepest trail in the tree and it is two levels; three is one level of slack
    so that a screen growing one is a call-site change rather than a component change. */
@@ -426,11 +669,88 @@ struct inkcell_fb_app_bar {
        exists for. */
     const char *badge;
     enum inkcell_family badge_family;
+
+    /* The verbs, in priority order - see struct inkcell_fb_bar_action. At most
+       INKCELL_FB_APP_BAR_ACTIONS_MAX are read. */
+    const struct inkcell_fb_bar_action *actions;
+    size_t action_count;
+    /* The overflow button's focus id and state. It is drawn only when something is behind it,
+       and a screen that leaves the id at INKCELL_FOCUS_NONE has a menu the d-pad cannot reach -
+       which is a bug in the screen, not a choice. */
+    uint32_t overflow_focus_id;
+    bool overflow_focused;
+
+    struct inkcell_fb_bar_status status;
+
+    enum inkcell_fb_app_bar_mode mode;
+    /* INKCELL_FB_APP_BAR_SEARCH only. `query` is the text as typed, NULL or empty for none;
+       `placeholder` is what an empty field says. */
+    const char *query;
+    const char *placeholder;
+    /* The field has the keyboard: draw a caret after the query. */
+    bool editing;
+    /* The field itself, for the d-pad to land on, and the clear mark inside it. The mark is
+       drawn only when there is a query *and* an id to press it by - a clear that cannot be
+       pressed is a mark that promises something the screen does not do. */
+    uint32_t field_focus_id;
+    bool field_focused;
+    uint32_t clear_focus_id;
+    bool clear_focused;
+
+    /*
+     * A large title: the screen's name on a line of its own under the bar, collapsing into the
+     * bar as the body scrolls - see include/inkcell/ui/widgets/scroll.h for the shape and why
+     * it is a cross-fade. `offset` is inkcell_scroll_offset() for the body under it, and
+     * `detail` is the caption beside the large heading only.
+     *
+     * The trail is not drawn - a large title is a tab's root, and a screen with somewhere to go
+     * back up to has an overline instead - and the mode must be NORMAL: a search field or a
+     * selection is the collapsed bar's business, and a heading that stayed large while it was
+     * one would be two headings.
+     */
+    bool large;
+    int32_t offset;
+    const char *detail;
 };
 
-void inkcell_fb_draw_app_bar(const struct inkcell_draw_state *state,
-                             struct inkcell_fb_layout *layout,
-                             const struct inkcell_fb_app_bar *bar);
+/*
+ * Which of a bar's actions it had room for, and where the overflow button came out - what a
+ * screen keeps from the frame it drew, the way it keeps a FAB's box.
+ */
+struct inkcell_fb_app_bar_fit {
+    /* Bit `i` set: `actions[i]` is on the bar. */
+    uint32_t shown;
+    /* How many are behind the overflow button, menu-only ones included. */
+    size_t hidden;
+    /* The overflow button's box, for INKCELL_OVERLAY_ANCHOR to hang the menu off. Zero-width
+       when there is nothing behind it and no button was drawn. */
+    struct inkcell_fb_rect overflow;
+};
+
+/*
+ * Draws it and consumes the rows it took - and says which verbs made it onto the bar.
+ *
+ * The fit is decided here rather than by the caller because it is a function of pixels the
+ * caller does not have: the title's measured width, the badge's, the status mark's, all at the
+ * glyph scale the theme chose. The screen gets the answer back rather than working it out, which
+ * is inkcell_fb_draw_fab()'s arrangement: a box worked out twice is a box that will one day be
+ * two boxes.
+ */
+struct inkcell_fb_app_bar_fit inkcell_fb_draw_app_bar(const struct inkcell_draw_state *state,
+                                                      struct inkcell_fb_layout *layout,
+                                                      const struct inkcell_fb_app_bar *bar);
+
+/*
+ * The overflow menu for a bar as it was last drawn: every action `fit` left off the bar, in the
+ * bar's own order, menu-only ones included. Returns how many rows were written, at most `max`.
+ *
+ * `ids`, when not NULL, is filled in parallel with each action's own focus id, ready to hand the
+ * menu as `focus_ids` - so the id a screen gets back from a menu row is the id it would have got
+ * from the icon on the bar, and one switch answers both.
+ */
+size_t inkcell_fb_app_bar_menu(const struct inkcell_fb_app_bar *bar,
+                               const struct inkcell_fb_app_bar_fit *fit,
+                               struct inkcell_fb_menu_item *items, uint32_t *ids, size_t max);
 
 /*
  * How far down the body the bar pushes it, without drawing anything.
@@ -446,6 +766,17 @@ void inkcell_fb_draw_app_bar(const struct inkcell_draw_state *state,
  */
 int inkcell_fb_app_bar_height(const struct inkcell_draw_state *state,
                               const struct inkcell_fb_layout *layout, size_t trail_count);
+
+/*
+ * The same answer for a whole bar: the trail it will actually draw given its mode, and a large
+ * title at the `offset` it will be drawn at.
+ *
+ * What a screen with a search mode or a large title asks instead of the count above, because
+ * both change which of the bar's lines are drawn and the count alone cannot say so.
+ */
+int inkcell_fb_app_bar_measure(const struct inkcell_draw_state *state,
+                               const struct inkcell_fb_layout *layout,
+                               const struct inkcell_fb_app_bar *bar);
 
 /*
  * What a screen says instead of a list when it has nothing to show, under the icon of whatever

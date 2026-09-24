@@ -112,6 +112,13 @@ static const struct gallery_scene k_scenes[] = {
     {"list_grouped", gallery_scene_list_grouped, 0U, 0U, 0U},
     {"list_sections", gallery_scene_list_sections, 0U, 0U, 0U},
     {"list_plain", gallery_scene_list_plain, 0U, 0U, 0U},
+    /*
+     * Every heading an app bar can be, over the compact footer and its tip - then the same page
+     * on a panel half as wide, where the verbs fall into the overflow menu from the end of the
+     * list and the emphasized one keeps its place. Appended for the manifest's sake.
+     */
+    {"app_bar", gallery_scene_app_bar, 0U, 0U, 0U},
+    {"app_bar_narrow", gallery_scene_app_bar, 0U, 440U, 0U},
 };
 
 const struct gallery_scene *gallery_scenes(size_t *count) {

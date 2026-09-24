@@ -195,13 +195,6 @@ void inkcell_fb_draw_scroll_rail(const struct inkcell_draw_state *state,
 /* ---- the collapsing app bar -------------------------------------------------------------------
  */
 
-/* The two heights the bar moves between: collapsed is an ordinary app bar with no trail, and
-   expanded is that plus one line of the large title. */
-static int inkcell_fb_large_title_collapsed(const struct inkcell_draw_state *state,
-                                            const struct inkcell_fb_layout *layout) {
-    return inkcell_fb_app_bar_height(state, layout, 0U);
-}
-
 /* The role the large heading is set in, which is what the whole shape is *for*: a heading that
    is merely the title size on its own row is a title with a gap over it. The display role is
    two steps over the body, which is exactly where this used to reach by hand - and it brings
@@ -224,169 +217,24 @@ int inkcell_fb_large_title_travel(const struct inkcell_draw_state *state) {
     return inkcell_fb_large_title_line(state);
 }
 
+/*
+ * The drawing is the app bar's now - a large title is inkcell_fb_draw_app_bar() with `large` set,
+ * so it has the actions, the overflow menu and the status mark a small heading has. This stays
+ * as the name a screen with nothing but a heading already calls.
+ */
 void inkcell_fb_draw_large_title(const struct inkcell_draw_state *state,
                                  struct inkcell_fb_layout *layout,
                                  const struct inkcell_fb_large_title *bar, int32_t offset) {
     if (state == NULL || layout == NULL || bar == NULL) {
         return;
     }
-    const int travel = inkcell_fb_large_title_travel(state);
-    const int collapsed_h = inkcell_fb_large_title_collapsed(state, layout);
-
-    /*
-     * How far in it is, 0 fully expanded and ONE fully collapsed.
-     *
-     * Past the top of the content - a body being pulled down - is *not* clamped away: the
-     * heading grows, which is the other half of what an overscroll is for and what every
-     * platform does with a large title being pulled. The growth is the raw overscroll rather
-     * than a fraction of it, because it is already through the band by the time it arrives
-     * here.
-     */
-    int32_t progress = 0;
-    int grown = 0;
-    if (offset > 0 && travel > 0) {
-        progress = (int32_t)(((int64_t)offset * INKCELL_ANIM_ONE) / travel);
-        if (progress > INKCELL_ANIM_ONE) {
-            progress = INKCELL_ANIM_ONE;
-        }
-    } else if (offset < 0) {
-        grown = -offset;
-    }
-
-    const int large_line = inkcell_fb_large_title_line(state);
-    const int extra = large_line - (int)(((int64_t)large_line * progress) / INKCELL_ANIM_ONE);
-    const int height = collapsed_h + extra + grown;
-
-    const int margin = inkcell_fb_content_x(state);
-    const int small = inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL);
-    const int title_scale = inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE);
-    const struct inkcell_type_style large = inkcell_fb_large_title_style(state);
-    /* The detail beside the heading is metadata - a count, a time, a distance - which is the
-       caption role and the second place in this toolkit that wants figures that do not move
-       under the reader. */
-    const struct inkcell_type_style caption = inkcell_fb_type_style(state, INKCELL_TYPE_CAPTION);
-    const struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_BG);
-
-    /* The bar's own ground, so the two titles have something honest to fade against - a fade
-       towards a colour that is not what is actually behind the glyph is a glyph with a halo. */
-    const struct inkcell_box region = inkcell_fb_region(state);
-    inkcell_fb_fill_rect(state, region.x, layout->body_y, region.w, height, ground);
-
-    /* The column's own trailing edge, absolute: `margin` is where the column *starts*, which is
-       only the same distance from the far edge while the column is centred on the whole surface. */
-    const int column_right = margin + inkcell_fb_content_w(state);
-    int right = column_right;
-    /*
-     * The badge sits on both sizes of the bar and never fades.
-     *
-     * It is a *state* rather than a decoration - "unsaved", "3 waiting" - and the collapsed
-     * bar is precisely the one a reader is looking at while they scroll, so a badge that faded
-     * out as the heading shrank would take the fact with it at the moment it is most wanted.
-     */
-    const int badge_w = inkcell_fb_badge_width(state, bar->badge, small);
-    if (badge_w > 0) {
-        const int badge_h = inkcell_scale_px((int)inkcell_fb_font(state)->height, small);
-        const int text_y = layout->body_y + (collapsed_h - badge_h) / 2;
-        const struct inkcell_fb_rect box = {.x = right - badge_w,
-                                            .y = text_y - inkcell_step_px(small),
-                                            .w = badge_w,
-                                            .h = inkcell_fb_line_adv(state, small) -
-                                                 inkcell_step_px(small)};
-        inkcell_fb_draw_badge(state, &box, text_y, bar->badge, bar->badge_family, small);
-        right -= badge_w + inkcell_fb_char_adv(state, small);
-    }
-
-    const int back_w = layout->back ? inkcell_fb_icon_box(state, title_scale) : 0;
-    const int text_x = layout->back ? margin + back_w + inkcell_fb_char_adv(state, small) : margin;
-    if (layout->back) {
-        /* The leading affordance, on the bar at both sizes and never faded: what B does is not
-           less true while the heading is large. */
-        inkcell_fb_draw_icon(state, margin, layout->body_y + (collapsed_h - back_w) / 2,
-                             INKCELL_ICON_BACK, title_scale,
-                             inkcell_fb_tone_color(state, INKCELL_TONE_DIM), ground);
-    }
-
-    /*
-     * The small title, in the bar. Faded *in* as the heading collapses, so it is absent while
-     * the large one has the screen's name and takes over as that one goes.
-     */
-    if (progress > 0 && bar->title != NULL) {
-        const struct inkcell_rgb ink =
-            inkcell_fb_fade(inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY), ground,
-                            INKCELL_ANIM_ONE - progress);
-        char fitted[INKCELL_LINE_MAX];
-        inkwell_str_copy(fitted, sizeof fitted, bar->title);
-        while (inkcell_fb_text_width(state, fitted, title_scale) > right - text_x) {
-            const size_t cells = inkcell_text_cells(fitted);
-            if (cells <= 1U) {
-                break;
-            }
-            inkcell_text_cell_truncate(fitted, cells - 1U);
-        }
-        inkcell_fb_draw_text_weight(state, text_x, layout->body_y, fitted, title_scale,
-                                    inkcell_fb_type_weight(state, INKCELL_TYPE_TITLE), ink, ground);
-    }
-
-    /*
-     * And the large one, on its own row under the bar, faded out as it goes.
-     *
-     * Its row is the room that is being given back, so it is drawn at the bottom of whatever
-     * of that room is left - which is what makes the heading slide up into the bar rather than
-     * shrink in place. The detail beside it is the first thing to go: the collapsed bar has
-     * room for a title and a badge, not for all three.
-     */
-    if (extra > 0 && bar->title != NULL) {
-        const int y = layout->body_y + collapsed_h + extra - large_line;
-        const struct inkcell_rgb ink =
-            inkcell_fb_fade(inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY), ground, progress);
-        int large_right = column_right;
-        if (bar->detail != NULL && bar->detail[0] != '\0') {
-            const struct inkcell_rgb dim =
-                inkcell_fb_fade(inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM), ground, progress);
-            const int w = inkcell_fb_text_width_styled(state, bar->detail, &caption);
-            const int lift = (large_line - inkcell_fb_line_adv_styled(state, &caption)) / 2;
-            inkcell_fb_draw_text_styled(state, large_right - w, y + lift, bar->detail, &caption,
-                                        dim, ground);
-            large_right -= w + inkcell_fb_space(state, INKCELL_SPACE_SM);
-        }
-        char fitted[INKCELL_LINE_MAX];
-        inkwell_str_copy(fitted, sizeof fitted, bar->title);
-        while (inkcell_fb_text_width_styled(state, fitted, &large) > large_right - margin) {
-            const size_t cells = inkcell_text_cells(fitted);
-            if (cells <= 1U) {
-                break;
-            }
-            inkcell_text_cell_truncate(fitted, cells - 1U);
-        }
-        inkcell_fb_draw_text_styled(state, margin, y, fitted, &large, ink, ground);
-    }
-
-    /*
-     * The rule under it, once the heading has gone.
-     *
-     * Faded in with the collapse rather than always drawn, and that is the whole argument for
-     * having one at all: a rule under an expanded heading is a line between a screen's name
-     * and its content, which are the same thing. A rule under a *collapsed* bar is what says
-     * the content has been scrolled underneath it - which is the one fact the shape exists to
-     * carry, and the reason a bar that has swallowed its heading does not read as a bar that
-     * never had one.
-     */
-    if (progress > 0) {
-        const struct inkcell_rgb rule = inkcell_fb_fade(inkcell_fb_color(state, INKCELL_COLOR_RULE),
-                                                        ground, INKCELL_ANIM_ONE - progress);
-        inkcell_fb_fill_rect(state, region.x,
-                             layout->body_y + height - inkcell_fb_rule_height(state, 1), region.w,
-                             inkcell_fb_rule_height(state, 1), rule);
-    }
-
-    /*
-     * What is left of the body, recomputed from the body's real bottom rather than deducted.
-     *
-     * inkcell_fb_draw_app_bar()'s rule, and its reason: `rows` is a floored division, so the
-     * body carries a remainder the count never included and subtracting a row count charges
-     * the bar for it twice. It matters more here than there, because this height changes every
-     * frame while the heading is collapsing - a deduction would drift.
-     */
-    layout->body_y += height;
-    layout->rows = inkcell_fb_layout_rows(state, layout);
+    const struct inkcell_fb_app_bar heading = {
+        .title = bar->title,
+        .badge = bar->badge,
+        .badge_family = bar->badge_family,
+        .large = true,
+        .offset = offset,
+        .detail = bar->detail,
+    };
+    (void)inkcell_fb_draw_app_bar(state, layout, &heading);
 }
