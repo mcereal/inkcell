@@ -1632,6 +1632,14 @@ struct inkcell_wrap_metric inkcell_fb_wrap_metric_styled(struct inkcell_fb_wrap_
     return metric;
 }
 
+size_t inkcell_fb_wrap_budget(const struct inkcell_fb_wrap_ctx *ctx, int width) {
+    const int tracking = ctx != NULL ? ctx->tracking_px : 0;
+    const int budget = width + tracking;
+    /* Never nothing: inkcell_wrap_begin_measured() reads a budget of 0 as one unit anyway, and
+       a column narrower than a cell is a column that still has to emit something. */
+    return budget > 0 ? (size_t)budget : 1U;
+}
+
 int inkcell_fb_line_adv(const struct inkcell_draw_state *state, int scale) {
     return inkcell_font_line(inkcell_fb_font(state), scale);
 }
@@ -2818,7 +2826,7 @@ int inkcell_fb_draw_wrapped_styled(const struct inkcell_draw_state *state, int x
     struct inkcell_fb_wrap_ctx wctx;
     const struct inkcell_wrap_metric metric = inkcell_fb_wrap_metric_styled(&wctx, state, style);
     struct inkcell_wrap wrap;
-    inkcell_wrap_begin_measured(&wrap, text, width, &metric);
+    inkcell_wrap_begin_measured(&wrap, text, inkcell_fb_wrap_budget(&wctx, (int)width), &metric);
 
     /* The role's line, not the font's: a paragraph is the one place a line height is visible at
        all, and a supporting body that loosened its leading did so for exactly this call. */
@@ -2881,5 +2889,5 @@ uint32_t inkcell_fb_wrapped_lines_styled(const struct inkcell_draw_state *state,
                                          size_t width, const struct inkcell_type_style *style) {
     struct inkcell_fb_wrap_ctx wctx;
     const struct inkcell_wrap_metric metric = inkcell_fb_wrap_metric_styled(&wctx, state, style);
-    return inkcell_wrap_lines_measured(text, width, &metric);
+    return inkcell_wrap_lines_measured(text, inkcell_fb_wrap_budget(&wctx, (int)width), &metric);
 }

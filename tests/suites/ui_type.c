@@ -24,6 +24,7 @@
 
 #include "inkcell/ui/fb_capture.h"
 #include "inkcell/ui/fb_draw.h"
+#include "inkcell/ui/layout.h"
 #include "inkcell/ui/theme.h"
 
 #include <stdint.h>
@@ -255,6 +256,76 @@ INKCELL_TEST_CASE(ui_type_tabular_figures_share_an_advance, unit) {
                                      inkcell_fb_text_width_styled(page.state, "www", &plain),
                                  inkcell_capture_close(page.capture),
                                  "tabular figures changed the width of letters");
+    inkcell_capture_close(page.capture);
+    record_success(test_name);
+}
+
+/*
+ * A wrapped line never draws past the column it was wrapped to, at any width.
+ *
+ * The seam this pins is an arithmetic one, and it looks like an off-by-one until it is drawn. A
+ * wrap metric answers per *cell*, so the wrapper charges a line of n cells n tracking steps -
+ * but a line has n-1 gaps in it, and inkcell_fb_text_width_styled() takes the last step back
+ * off, because air after the final letter is not part of the line. For a *tight* style the
+ * wrapper therefore undercounts, and accepts a line that draws past the column by up to the
+ * tracking: on a display role at the body scale, four pixels off the end of a heading.
+ *
+ * The correction is a per-line constant, which is why it cannot live in the metric and lives in
+ * inkcell_fb_wrap_budget() instead. The scan is the point of the case: the mismatch only shows
+ * at the widths where a break candidate falls inside that one step, so a single budget is a
+ * coin toss and a few hundred of them is a proof.
+ */
+INKCELL_TEST_CASE(ui_type_wrapped_lines_stay_inside_the_column, unit) {
+    struct type_page page;
+    INKCELL_TEST_FAIL_IF(!type_open(&page), "the capture panel should open");
+
+    static const char k_paragraph[] =
+        "A supporting paragraph long enough to wrap onto a second and a third line, which is "
+        "what a note row and an empty state both have to survive.";
+
+    struct inkcell_type_style styles[3];
+    styles[0] = inkcell_type_style_plain(INKCELL_SCALE(4), INKCELL_WEIGHT_REGULAR);
+    styles[1] = styles[0];
+    styles[1].tracking = -INKCELL_SCALE(1); /* tight: the direction that overflows */
+    styles[2] = styles[0];
+    styles[2].tracking = INKCELL_SCALE(1); /* loose: the direction that wraps early */
+
+    for (size_t i = 0U; i < sizeof styles / sizeof styles[0]; ++i) {
+        const struct inkcell_type_style *style = &styles[i];
+        for (int width = 60; width <= 400; ++width) {
+            struct inkcell_fb_wrap_ctx ctx;
+            const struct inkcell_wrap_metric metric =
+                inkcell_fb_wrap_metric_styled(&ctx, page.state, style);
+            struct inkcell_wrap wrap;
+            inkcell_wrap_begin_measured(&wrap, k_paragraph, inkcell_fb_wrap_budget(&ctx, width),
+                                        &metric);
+            while (inkcell_wrap_next(&wrap)) {
+                const int drawn = inkcell_fb_text_width_styled(page.state, wrap.line, style);
+                /* One cell is allowed past the edge and always was: a column narrower than a
+                   word has to emit something rather than loop. Anything wider than a single
+                   cell is the accounting being wrong. */
+                if (inkcell_text_cells(wrap.line) <= 1U) {
+                    continue;
+                }
+                INKCELL_TEST_FAIL_IF_CLEANUP(drawn > width, inkcell_capture_close(page.capture),
+                                             "a wrapped line draws past the column it was "
+                                             "wrapped to");
+            }
+        }
+    }
+
+    /* And the identity underneath it: the budget is over the column by exactly what the metric
+       is over the measurement, which is one tracking step either way. */
+    struct inkcell_fb_wrap_ctx ctx;
+    (void)inkcell_fb_wrap_metric_styled(&ctx, page.state, &styles[1]);
+    INKCELL_TEST_FAIL_IF_CLEANUP((int)inkcell_fb_wrap_budget(&ctx, 240) - 240 !=
+                                     inkcell_type_tracking_px(&styles[1]),
+                                 inkcell_capture_close(page.capture),
+                                 "the wrap budget is not the column plus one tracking step");
+    (void)inkcell_fb_wrap_metric_styled(&ctx, page.state, &styles[0]);
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_wrap_budget(&ctx, 240) != 240U,
+                                 inkcell_capture_close(page.capture),
+                                 "an untracked style did not wrap to the column itself");
     inkcell_capture_close(page.capture);
     record_success(test_name);
 }

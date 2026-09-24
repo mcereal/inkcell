@@ -1115,11 +1115,33 @@ struct inkcell_fb_wrap_ctx {
 struct inkcell_wrap_metric inkcell_fb_wrap_metric(struct inkcell_fb_wrap_ctx *ctx,
                                                   const struct inkcell_draw_state *state,
                                                   int scale);
-/* The same over a role's style, which is the one to use where the text is going to be drawn
-   with one. */
+/*
+ * The same over a role's style, which is the one to use where the text is going to be drawn
+ * with one - and which is only half of a pair: the budget has to come from
+ * inkcell_fb_wrap_budget() below, or a tracked style wraps to the wrong width.
+ */
 struct inkcell_wrap_metric inkcell_fb_wrap_metric_styled(struct inkcell_fb_wrap_ctx *ctx,
                                                          const struct inkcell_draw_state *state,
                                                          const struct inkcell_type_style *style);
+
+/*
+ * The budget to hand inkcell_wrap_begin_measured() for a column `width` pixels wide.
+ *
+ * Tracking is the reason this is not simply `width`, and the arithmetic is worth stating
+ * because it looks like an off-by-one until it is.
+ *
+ * A wrap metric answers per *cell*, and the wrapper accepts a line while the cells' answers sum
+ * to no more than the budget. So a line of n cells is charged n tracking steps. But a line only
+ * has n-1 gaps in it: inkcell_fb_text_width_styled() takes the last one back off, because air
+ * after the final letter is not part of the line. The two would therefore disagree by exactly
+ * one step - and the direction is the bad one for a tight style, where the wrapper undercounts
+ * and accepts a line that draws past the column by a pixel or two.
+ *
+ * The difference is a per-*line* constant, so no per-cell metric can carry it; it goes in the
+ * budget instead, where it cancels exactly. A style with no tracking - every plain one - gets
+ * `width` back unchanged.
+ */
+size_t inkcell_fb_wrap_budget(const struct inkcell_fb_wrap_ctx *ctx, int width);
 int inkcell_fb_line_adv(const struct inkcell_draw_state *state, int scale);
 /* The line advance `style`'s role asks for: the font's own, at the role's line height. The one
    to step a wrapped paragraph by, because a role that loosened its leading did so precisely for
