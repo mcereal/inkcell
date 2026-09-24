@@ -853,13 +853,19 @@ static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
 #define INKCELL_FB_ITEM_MARKER_CELLS 3U
 
 /*
- * One piece of a headline: the words, clipped to the cells it was given, in the ink it was
+ * One piece of a headline: the words, clipped to the room it was given, in the ink it was
  * given.
  *
  * The headline is drawn in pieces rather than composed into one string and drawn once, which is
  * the whole of what lets a label and its value take two inks - see inkcell_fb_list_item.label_tone.
  * The clipping is per piece and the positions are absolute, so the value column lands in exactly
  * the cell the composed line used to put it in.
+ *
+ * The room is `cols` cells wide, and the words are fitted to that many *pixels* rather than that
+ * many cells: the face is proportional, so a cell is a nominal width and a run of wide letters
+ * is wider than the same count of average ones. Clipped by count alone, a base64 key ran past
+ * the row's edge and off the card it stood on. Cut on cell boundaries, so a character is never
+ * split and a flag or a joined emoji is never taken apart.
  */
 static void inkcell_fb_item_piece(struct inkcell_draw_state *state, int x, int y, const char *text,
                                   size_t cols, struct inkcell_rgb ink, struct inkcell_rgb ground) {
@@ -870,7 +876,20 @@ static void inkcell_fb_item_piece(struct inkcell_draw_state *state, int x, int y
     inkcell_line_reset(&line);
     inkcell_line_printf(&line, "%s", text != NULL ? text : "");
     inkcell_line_fit(&line, cols);
-    inkcell_fb_draw_text(state, x, y, inkcell_line_text(&line), state->scale, ink, ground);
+    char fitted[INKCELL_LINE_MAX];
+    snprintf(fitted, sizeof fitted, "%s", inkcell_line_text(&line));
+    /* Down to nothing if it has to be: one character wider than a one-cell room is still
+       wider than the room, and an empty piece is the answer to a column too narrow for it. */
+    const int room = (int)cols * inkcell_fb_char_adv(state, state->scale);
+    while (fitted[0] != '\0' && inkcell_fb_text_width(state, fitted, state->scale) > room) {
+        const size_t cells = inkcell_text_cells(fitted);
+        if (cells == 0U) {
+            fitted[0] = '\0';
+            break;
+        }
+        inkcell_text_cell_truncate(fitted, cells - 1U);
+    }
+    inkcell_fb_draw_text(state, x, y, fitted, state->scale, ink, ground);
 }
 
 /*
@@ -893,9 +912,10 @@ static void inkcell_fb_item_piece_styled(struct inkcell_draw_state *state, int x
     }
     char fitted[INKCELL_LINE_MAX];
     snprintf(fitted, sizeof fitted, "%s", text != NULL ? text : "");
-    while (inkcell_fb_text_width_styled(state, fitted, style) > max_w) {
+    while (fitted[0] != '\0' && inkcell_fb_text_width_styled(state, fitted, style) > max_w) {
         const size_t cells = inkcell_text_cells(fitted);
-        if (cells <= 1U) {
+        if (cells == 0U) {
+            fitted[0] = '\0';
             break;
         }
         inkcell_text_cell_truncate(fitted, cells - 1U);
