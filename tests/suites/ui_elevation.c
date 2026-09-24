@@ -196,6 +196,12 @@ INKCELL_TEST_CASE(elevation_validate_rejects_what_is_not_a_scale, unit) {
                          "an opacity past 100% passed validation");
     INKCELL_TEST_FAIL_IF(reason[0] == '\0', "validation failed without saying why");
 
+    /* Hover is never contrast-checked itself; the order is what keeps it under focus, which is. */
+    struct inkcell_theme loud_hover = *inkcell_theme_default();
+    loud_hover.metrics.opacity[INKCELL_OPACITY_HOVER] = 100U;
+    INKCELL_TEST_FAIL_IF(inkcell_theme_validate(&loud_hover, reason, sizeof reason),
+                         "a hover layer heavier than focus passed validation");
+
     struct inkcell_theme deep = *inkcell_theme_default();
     deep.metrics.shadow[INKCELL_ELEVATION_MODAL].depth = 101U;
     INKCELL_TEST_FAIL_IF(inkcell_theme_validate(&deep, reason, sizeof reason),

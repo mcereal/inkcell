@@ -1369,6 +1369,22 @@ bool inkcell_theme_validate(const struct inkcell_theme *theme, char *reason, siz
         }
     }
     /*
+     * The state layers have to rise too: hover no heavier than focus, focus no heavier than
+     * press. Contrast is only checked for the focused and pressed layers below, and a mix
+     * lighter than one that passes still passes - so the order is what extends those checks to
+     * hover. Without it a theme could set hover to 100% and draw a hovered container in its own
+     * ink, which nothing here would look at.
+     */
+    if (theme->metrics.opacity[INKCELL_OPACITY_HOVER] >
+            theme->metrics.opacity[INKCELL_OPACITY_FOCUS] ||
+        theme->metrics.opacity[INKCELL_OPACITY_FOCUS] >
+            theme->metrics.opacity[INKCELL_OPACITY_PRESS]) {
+        if (reason != NULL) {
+            snprintf(reason, reason_len, "%s", "state layers must rise: hover <= focus <= press");
+        }
+        return false;
+    }
+    /*
      * A shadow is a mix too, and it has to *rise*: each level at least as far off the page as the
      * one under it, on all three axes. A dialog casting a shorter shadow than the card behind it
      * is a dialog that reads as sitting underneath it, and that is exactly the inversion a table

@@ -2874,9 +2874,18 @@ void inkcell_fb_draw_shadow(const struct inkcell_draw_state *state, struct inkce
      * the band the ground has been drawn again before this runs; outside it, what is on the
      * panel is last frame's shadow already, and leaving it alone is correct.
      *
-     * The overlay layer is the caller this costs anything, and it costs a frame: the span a
-     * layer records is carried into the next frame's band (see inkcell_fb_app_frame_begin()),
-     * so the edge of a shadow that has travelled past it arrives one frame late.
+     * What this costs depends on the band the application builds. inkcell_fb_app_frame_begin()
+     * declares the span each overlay drew last frame - shadow included - as damage before
+     * anything paints, and an application that makes its band from that damage (mesh-client
+     * does) repaints those rows, so an overlay's shadow is never lost for more than the frame
+     * its edge first moves past the band. That is the same contract the scrim already relies
+     * on: a band that left out the carried span would leave the scrim dimming stale rows too.
+     *
+     * A widget that declares damage mid-frame and carries nothing forward - the FAB - is the
+     * case this does cost: while it widens outside the band, the new part of its fill has no
+     * shadow under it until a frame repaints those rows. That is a missing shadow for a moment,
+     * and the alternative - darkening rows nobody repainted - is a shadow that gets darker
+     * every frame.
      */
     if (state->clip_active) {
         const int right =
