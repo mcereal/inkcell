@@ -352,3 +352,47 @@ INKCELL_TEST_CASE(list_style_an_accent_is_lighter_than_a_fill, unit) {
                          "an accent row's layer should sit nearer the ground than a fill");
     record_success(test_name);
 }
+
+/*
+ * An inset section's end rows are marked out to the section's edges, whatever their height, and
+ * the box the frame's ring is given is that same box. A two-line last row marks a fill shorter
+ * than its steps on purpose, so this is the case where the mark and the section could part.
+ */
+INKCELL_TEST_CASE(list_style_inset_end_rows_register_out_to_the_section_edge, unit) {
+    struct style_harness h;
+    INKCELL_TEST_FAIL_IF(!style_harness_open(&h, true), "the capture should open");
+
+    /* The body a few lines down the panel, as an app bar would leave it, so the first row's box
+       is not clipped by the panel's own top edge before the map is asked about it. */
+    h.layout.body_y += 4 * h.layout.line;
+    h.layout.rows -= 4U;
+    const uint8_t heights[] = {2U, 1U, 2U};
+    const struct inkcell_fb_list_style inset = {.appearance = INKCELL_FB_LIST_INSET_GROUPED};
+    struct inkcell_fb_list list =
+        inkcell_fb_list_begin_styled(h.state, &h.layout, 3U, 0U, heights, NULL, &inset);
+    inkcell_fb_list_focus(&list, STYLE_ID_ROW);
+    int box_top[3] = {0, 0, 0};
+    uint32_t index = 0U;
+    while (inkcell_fb_list_next(&list, &index)) {
+        box_top[index] = list.y - inkcell_step_px(h.state->scale) - list.pad;
+        const struct inkcell_fb_list_item item = {.text = "row", .supporting = "second"};
+        inkcell_fb_list_item(h.state, &list, index, &item);
+    }
+    struct inkcell_focus_rect first = {0, 0, 0, 0};
+    struct inkcell_focus_rect middle = {0, 0, 0, 0};
+    struct inkcell_focus_rect last = {0, 0, 0, 0};
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_focus_rect_of(&h.map, STYLE_ID_ROW, &first) ||
+                                     !inkcell_focus_rect_of(&h.map, STYLE_ID_ROW + 1U, &middle) ||
+                                     !inkcell_focus_rect_of(&h.map, STYLE_ID_ROW + 2U, &last),
+                                 style_harness_close(&h), "every row should be registered");
+    INKCELL_TEST_FAIL_IF_CLEANUP(first.y != box_top[0], style_harness_close(&h),
+                                 "the first row should be marked from the section's top");
+    INKCELL_TEST_FAIL_IF_CLEANUP(last.y + last.h <= box_top[2] + 2 * list.line,
+                                 style_harness_close(&h),
+                                 "a two-line last row should be marked past its steps, into the "
+                                 "section's inset");
+    INKCELL_TEST_FAIL_IF_CLEANUP(middle.y + middle.h > box_top[2], style_harness_close(&h),
+                                 "a middle row should keep to its own steps");
+    style_harness_close(&h);
+    record_success(test_name);
+}

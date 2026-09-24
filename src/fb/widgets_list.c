@@ -347,6 +347,45 @@ static struct inkcell_rgb inkcell_fb_list_mark_color(const struct inkcell_draw_s
         state, inkcell_tone_family(tone) != INKCELL_FAMILY_COUNT ? tone : INKCELL_TONE_PRIMARY);
 }
 
+/*
+ * A row's mark box, grown to its section's edge where the row is one of the section's ends.
+ *
+ * Grown from the *section's* edge rather than from the box it was handed: a row of more than one
+ * step marks a fill shorter than its steps on purpose (the gap between two-line items), so adding
+ * the section's inset to that fill still left the mark floating above the rounded bottom it is
+ * meant to share. The first row's top is the row's own box top, which is where the surface's
+ * interior starts; the last row's bottom is the row's box bottom plus the inset the surface is
+ * padded by, never past the body.
+ *
+ * Asked by the mark and by the focus registration both, so the frame's ring lands on the box the
+ * mark was drawn in. Leaves every other row, and every list that is not an inset section, alone.
+ */
+static void inkcell_fb_list_end_box(const struct inkcell_draw_state *state,
+                                    const struct inkcell_fb_list *list, uint32_t index, int *top,
+                                    int *h) {
+    if (list->style.appearance != INKCELL_FB_LIST_INSET_GROUPED ||
+        !inkcell_fb_list_on_card(list, index)) {
+        return;
+    }
+    bool first = false;
+    bool last = false;
+    inkcell_fb_list_section_ends(list, index, &first, &last);
+    const int box_top = inkcell_fb_list_box_top(state, list);
+    int bottom = *top + *h;
+    if (first) {
+        *top = box_top;
+    }
+    if (last) {
+        bottom = box_top + (int)inkcell_fb_list_row_height(list, index) * list->line +
+                 inkcell_fb_list_card_pad(state);
+        const int floor_y = list->track_y + list->track_h;
+        if (bottom > floor_y) {
+            bottom = floor_y;
+        }
+    }
+    *h = bottom > *top ? bottom - *top : 0;
+}
+
 struct inkcell_fb_list_cue inkcell_fb_list_cue(const struct inkcell_draw_state *state,
                                                const struct inkcell_fb_list *list, uint32_t index,
                                                int top, int h, enum inkcell_tone tone,
@@ -382,13 +421,7 @@ struct inkcell_fb_list_cue inkcell_fb_list_cue(const struct inkcell_draw_state *
     if (inset) {
         inkcell_fb_list_section_ends(list, index, &first, &last);
         radius = inkcell_fb_list_section_radius(state, list);
-        if (last) {
-            const int floor_y = list->track_y + list->track_h;
-            h += inkcell_fb_list_card_pad(state);
-            if (top + h > floor_y) {
-                h = floor_y - top;
-            }
-        }
+        inkcell_fb_list_end_box(state, list, index, &top, &h);
     }
 
     switch (list->style.focus) {
@@ -994,6 +1027,9 @@ void inkcell_fb_list_focus_row(const struct inkcell_draw_state *state,
        it and not the panel. A cursor that could reach a rectangle other than the one the
        highlight draws would be a screen disagreeing with itself about where the reader is. */
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
+    /* An inset section's end rows are marked out to the section's edge, and the box the frame's
+       ring goes round is that box too. */
+    inkcell_fb_list_end_box(state, list, index, &y, &h);
     struct inkcell_fb_rect rect = {.x = box.x, .y = y, .w = box.w, .h = h};
     /*
      * A gliding row is clipped to the window, and what the clip took is not on the frame - so
