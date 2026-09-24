@@ -872,14 +872,13 @@ static void inkcell_fb_item_piece(struct inkcell_draw_state *state, int x, int y
     if (cols == 0U) {
         return;
     }
-    struct inkcell_line line;
-    inkcell_line_reset(&line);
-    inkcell_line_printf(&line, "%s", text != NULL ? text : "");
-    inkcell_line_fit(&line, cols);
+    /* Fitted to the room's pixels and nothing else. It used to be clipped to `cols` characters
+       first, which is a count: on a proportional face six narrow letters are fewer than six
+       cells of ink, and "Filter" in a column measured to hold it came out "Filt". Down to
+       nothing if it has to be: one character wider than a one-cell room is still wider than
+       the room, and an empty piece is the answer to a column too narrow for it. */
     char fitted[INKCELL_LINE_MAX];
-    snprintf(fitted, sizeof fitted, "%s", inkcell_line_text(&line));
-    /* Down to nothing if it has to be: one character wider than a one-cell room is still
-       wider than the room, and an empty piece is the answer to a column too narrow for it. */
+    snprintf(fitted, sizeof fitted, "%s", text != NULL ? text : "");
     const int room = (int)cols * inkcell_fb_char_adv(state, state->scale);
     while (fitted[0] != '\0' && inkcell_fb_text_width(state, fitted, state->scale) > room) {
         const size_t cells = inkcell_text_cells(fitted);
@@ -1296,4 +1295,30 @@ size_t inkcell_fb_field_label_cols(const struct inkcell_draw_state *state,
         preferred = metrics->field_label_cols;
     }
     return layout->cols < metrics->narrow_cols ? layout->cols / 2U : preferred;
+}
+
+size_t inkcell_fb_field_label_cols_fit(const struct inkcell_draw_state *state,
+                                       const struct inkcell_fb_layout *layout,
+                                       const char *const *labels, size_t count) {
+    const int adv = inkcell_fb_char_adv(state, state->scale);
+    int widest = 0;
+    for (size_t i = 0U; labels != NULL && i < count; ++i) {
+        if (labels[i] != NULL) {
+            const int w = inkcell_fb_text_width(state, labels[i], state->scale);
+            widest = w > widest ? w : widest;
+        }
+    }
+    size_t cols = adv > 0 ? (size_t)((widest + adv - 1) / adv) : 0U;
+    if (cols == 0U) {
+        cols = 1U;
+    }
+    /* The value keeps at least half of what the label leaves, whatever the labels ask for: a
+       label trimmed to fit is still a label, and a value pushed off the row is nothing. Half of
+       the row less the marker gutter the item puts between the two, or a capped label and its
+       gutter would take more than half, and on a narrow row all of it. */
+    const size_t shared = layout->cols > INKCELL_FB_ITEM_MARKER_CELLS
+                              ? layout->cols - INKCELL_FB_ITEM_MARKER_CELLS
+                              : 0U;
+    const size_t half = shared / 2U;
+    return half > 0U && cols > half ? half : cols;
 }

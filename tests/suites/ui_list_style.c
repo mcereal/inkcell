@@ -301,6 +301,95 @@ INKCELL_TEST_CASE(list_style_a_wide_value_stays_inside_its_row, unit) {
     record_success(test_name);
 }
 
+INKCELL_TEST_CASE(list_style_a_fitted_label_column_holds_its_widest_label, unit) {
+    struct style_harness h;
+    INKCELL_TEST_FAIL_IF(!style_harness_open(&h, false), "the capture should open");
+    const int adv = inkcell_fb_char_adv(h.state, h.state->scale);
+
+    const char *const labels[] = {"ID", "Relayed by", NULL, "Hops"};
+    const size_t cols = inkcell_fb_field_label_cols_fit(h.state, &h.layout, labels, 4U);
+    const int widest = inkcell_fb_text_width(h.state, "Relayed by", h.state->scale);
+    INKCELL_TEST_FAIL_IF_CLEANUP((int)cols * adv < widest, style_harness_close(&h),
+                                 "the column should hold the widest label's ink");
+    INKCELL_TEST_FAIL_IF_CLEANUP((int)(cols - 1U) * adv >= widest, style_harness_close(&h),
+                                 "and be no wider than the whole cells that takes");
+
+    char wide[160];
+    memset(wide, 'W', sizeof wide - 1U);
+    wide[sizeof wide - 1U] = '\0';
+    const char *const long_one[] = {wide};
+    const size_t capped = inkcell_fb_field_label_cols_fit(h.state, &h.layout, long_one, 1U);
+    INKCELL_TEST_FAIL_IF_CLEANUP(capped >= h.layout.cols / 2U, style_harness_close(&h),
+                                 "a label wider than half the body is held under half");
+    /* And the value it leaves room for is drawn, past the middle of the row. */
+    const struct inkcell_fb_list_item item = {
+        .label = wide, .label_cols = capped, .value = "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"};
+    /* Two rows with the cursor on the second, so the first - the one read - stands on the panel. */
+    struct inkcell_fb_list list = inkcell_fb_list_begin(&h.layout, 2U, 1U);
+    uint32_t index = 0U;
+    while (inkcell_fb_list_next(&list, &index)) {
+        inkcell_fb_list_item(h.state, &list, index,
+                             index == 0U ? &item
+                                         : &(const struct inkcell_fb_list_item){.text = ""});
+    }
+    const struct inkcell_fb_row_box box = inkcell_fb_row_box(h.state);
+    const struct inkcell_rgb bg = inkcell_fb_color(h.state, INKCELL_COLOR_BG);
+    long value_ink = 0;
+    for (int y = h.layout.body_y; y < h.layout.body_y + h.layout.line; ++y) {
+        for (int x = box.x + box.w / 2; x < box.x + box.w; ++x) {
+            value_ink += style_same_rgb(style_pixel(&h, x, y), bg) ? 0 : 1;
+        }
+    }
+    INKCELL_TEST_FAIL_IF_CLEANUP(value_ink == 0, style_harness_close(&h),
+                                 "a capped label should still leave its value on the row");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_field_label_cols_fit(h.state, &h.layout, NULL, 0U) !=
+                                     1U,
+                                 style_harness_close(&h), "no labels is one cell, never none");
+    style_harness_close(&h);
+    record_success(test_name);
+}
+
+/* The ink one plain row's label leaves on the panel, with the label column `cols` cells wide. */
+static long style_label_ink(const char *label, size_t cols) {
+    struct style_harness h;
+    if (!style_harness_open(&h, false)) {
+        return -1;
+    }
+    const struct inkcell_fb_list_item item = {.label = label, .label_cols = cols, .value = ""};
+    struct inkcell_fb_list list = inkcell_fb_list_begin(&h.layout, 1U, 0U);
+    uint32_t index = 0U;
+    while (inkcell_fb_list_next(&list, &index)) {
+        inkcell_fb_list_item(h.state, &list, index, &item);
+    }
+    /* Against the row's own ground, sampled at its far end where the empty value leaves it
+       bare: the row is the cursor's, so its fill is not the panel's. */
+    const struct inkcell_fb_row_box box = inkcell_fb_row_box(h.state);
+    long ink = 0;
+    const int top = h.layout.body_y;
+    for (int y = top; y < top + h.layout.line && y < (int)INKCELL_CAPTURE_HEIGHT; ++y) {
+        const struct inkcell_rgb ground = style_pixel(&h, box.x + box.w - 2, y);
+        for (int x = box.x; x < box.x + box.w && x < (int)INKCELL_CAPTURE_WIDTH; ++x) {
+            ink += style_same_rgb(style_pixel(&h, x, y), ground) ? 0 : 1;
+        }
+    }
+    style_harness_close(&h);
+    return ink;
+}
+
+INKCELL_TEST_CASE(list_style_a_label_is_fitted_by_ink_not_by_count, unit) {
+    /* Six narrow letters in a column of four cells: they fit by ink and would not by count, so a
+       count cut them to the four a shorter label draws. */
+    struct style_harness h;
+    INKCELL_TEST_FAIL_IF(!style_harness_open(&h, false), "the capture should open");
+    const int room = 4 * inkcell_fb_char_adv(h.state, h.state->scale);
+    const int six = inkcell_fb_text_width(h.state, "iiiiii", h.state->scale);
+    style_harness_close(&h);
+    INKCELL_TEST_FAIL_IF(six > room, "the premise: six narrow letters fit four cells of ink");
+    INKCELL_TEST_FAIL_IF(style_label_ink("iiiiii", 4U) <= style_label_ink("iiii", 4U),
+                         "a label that fits its column by ink should be drawn whole");
+    record_success(test_name);
+}
+
 /* Draws one plain row whose label column is one cell wide, and copies out the band just past
    that cell: whatever a one-cell label spilled into. */
 static bool style_one_cell_label(const char *label, struct inkcell_rgb *band, size_t band_len,
