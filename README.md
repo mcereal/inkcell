@@ -40,6 +40,7 @@ that a platform layer has to depend on to write a log line has its arrows the wr
 | **Layers** | One z-stack for everything drawn *over* a screen: a box from a placement, an entrance and a shorter exit, a scrim over what is behind, and an answer to which overlay owns the press. A new overlay is its content and nothing else. |
 | **Scrolling** | A body positioned in pixels rather than windowed by row index - so it can rest between two rows, give at its ends the way every touch platform does, and drive a large title that collapses into the app bar as it moves. |
 | **Shapes** | Anti-aliased rounded rectangles, rings and arcs, in integers - so a curve is the same curve on every host that draws it. |
+| **Depth** | Opacity and elevation as *tokens*. One opacity table carries the state layers, the disabled fade and the scrim; four elevation levels (flat, raised, floating, modal) each name a shadow's offset, softness and depth. A shadow is drawn by reading back the frame already on the panel and darkening it - the scrim's trick with a shape - so it works on a display with no alpha to composite. A theme can be flat all the way up, and the high-contrast one is. |
 | **Framebuffer** | `/dev/fb0`, the page flip, damage tracking, a glyph cache, and an off-screen renderer for screenshots. |
 | **Window** | The same frame in an SDL window: damage as texture uploads, a keyboard, and a desktop application rather than a picture of a device. Optional - no SDL2, no window, everything else unchanged. |
 | **Input** | evdev to a logical key, hat axes, analogue triggers, key repeat, per-device button profiles. |
@@ -51,7 +52,8 @@ that a platform layer has to depend on to write a log line has its arrows the wr
 These are authoring rules — breaking one compiles and looks fine.
 
 - **Nothing is spelled out in a renderer.** A screen names an *id* and something else answers: a
-  string (`INKCELL_STR_*`), an icon (`INKCELL_ICON_*`), a tone, a family, a role, a shape.
+  string (`INKCELL_STR_*`), an icon (`INKCELL_ICON_*`), a tone, a family, a role, a shape,
+  an opacity, an elevation.
   `scripts/check-strings.py` fails the build on prose in a component.
 - **A widget takes a *tone*, never a colour** — the same reason a stylesheet has a token called
   "danger" instead of the hex for red: it is what lets a theme change the answer.

@@ -182,10 +182,23 @@ struct inkcell_overlay {
      */
     struct inkcell_fb_rect bounds;
     /*
-     * Whether the frame behind it is dimmed. The depth is the theme's (metrics.scrim_pct) and
-     * it eases in with the layer, so a scrim never appears before the panel it belongs to.
+     * Whether the frame behind it is dimmed. The depth is the theme's (INKCELL_OPACITY_SCRIM)
+     * and it eases in with the layer, so a scrim never appears before the panel it belongs to.
      */
     bool scrim;
+    /*
+     * How far off the page the panel stands, and so what shadow it casts: after the scrim,
+     * before the panel, eased in with the layer exactly as the scrim is. FLAT - the zero value -
+     * casts none, which is what every layer declared before this field existed still does.
+     *
+     * The layer draws it rather than the panel, because the layer is what knows where the panel
+     * *was*: a shadow is a read-modify-write like the scrim, and the region it covers goes into
+     * the span carried to the next frame for the scrim's reason. `shape` is the corner the panel
+     * is filled with, so the shadow's corner is the panel's; a panel with only its top corners
+     * rounded (a sheet) states its top corner, and the square bottom is off the edge anyway.
+     */
+    enum inkcell_elevation elevation;
+    enum inkcell_shape shape;
     /*
      * Whether the press is the layer's while it is up.
      *

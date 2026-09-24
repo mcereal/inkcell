@@ -255,11 +255,12 @@ void inkcell_fb_draw_action_bar(const struct inkcell_draw_state *state,
  * inkcell_fb_fab_clearance() - so that the last row of a list can still be scrolled out from
  * under it.
  *
- * What it is filled with. A FAB elsewhere floats on a shadow, and this panel has no alpha to
- * cast one with - the same fact the surface tiers carry. So the fill is the whole cue, which is
- * the snackbar's answer one component over: it is the only saturated container on the body, and
- * it takes a *family* rather than a tone because it fills something and a fill travels with the
- * ink the theme was validated against. INKCELL_SHAPE_FULL rather than a rounded square, because
+ * What it is filled with. A FAB floats on a shadow, and this one casts the floating level's
+ * (INKCELL_ELEVATION_FLOATING) where the theme states one - but on a dark palette a shadow is a
+ * few levels of the ground, so the fill is still the main cue, which is the snackbar's answer
+ * one component over: it is the only saturated container on the body, and it takes a *family*
+ * rather than a tone because it fills something and a fill travels with the ink the theme was
+ * validated against. INKCELL_SHAPE_FULL rather than a rounded square, because
  * the circle is what makes the extended form read as the same object grown sideways rather than
  * as a second control.
  */

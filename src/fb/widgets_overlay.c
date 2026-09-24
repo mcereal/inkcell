@@ -141,7 +141,10 @@ void inkcell_fb_draw_snackbar(struct inkcell_draw_state *state,
                                       /* No scrim and not modal. A notice is not a question -
                                          nothing about it is waiting for a press, and dimming
                                          the screen to say "Sent" would be the loudest thing
-                                         on the panel saying the quietest thing. */
+                                         on the panel saying the quietest thing. It floats,
+                                         though: over the body and not of it. */
+                                      .elevation = INKCELL_ELEVATION_FLOATING,
+                                      .shape = INKCELL_SHAPE_SM,
                                   },
                                   &frame)) {
         /* All the way out. The store forgot the words several frames ago; now so does this,
@@ -520,6 +523,8 @@ bool inkcell_fb_draw_dialog(struct inkcell_draw_state *state,
                                       .bounds = bounds,
                                       .scrim = true,
                                       .modal = true,
+                                      .elevation = INKCELL_ELEVATION_MODAL,
+                                      .shape = INKCELL_SHAPE_LG,
                                   },
                                   &frame)) {
         return false;

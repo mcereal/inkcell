@@ -1026,9 +1026,20 @@ struct inkcell_fb_rect inkcell_fb_draw_fab(struct inkcell_draw_state *state,
      * geometry already knows.
      */
     const int pad = inkcell_fb_space_at(state, INKCELL_SPACE_XS, m.scale);
-    inkcell_fb_animation_damage(state, m.right - m.room - pad, box.y - pad, m.room + 2 * pad,
-                                box.h + 2 * pad);
+    /* And the shadow's reach past the widest it could be, so the rows it darkens are copied
+       with the rest. The shadow keeps itself to the band regardless - see
+       inkcell_fb_draw_shadow() - so this is about the copy, not the draw. */
+    const struct inkcell_fb_rect room = {m.right - m.room - pad, box.y - pad, m.room + 2 * pad,
+                                         box.h + 2 * pad};
+    const struct inkcell_fb_rect reach =
+        inkcell_fb_shadow_bounds(state, room, INKCELL_ELEVATION_FLOATING);
+    inkcell_fb_animation_damage(state, reach.x, reach.y, reach.w, reach.h);
 
+    /* It floats: over the body, not of it - which is what Material's FAB says with a shadow and
+       this one now does too, where the theme casts one. The fill is still the main cue (the
+       only saturated container on the body), which is what carries it on a dark palette. */
+    inkcell_fb_draw_shadow(state, box, inkcell_fb_radius(state, INKCELL_SHAPE_FULL),
+                           INKCELL_ELEVATION_FLOATING, INKCELL_ANIM_ONE);
     inkcell_fb_fill_round_rect(state, box.x, box.y, box.w, box.h,
                                inkcell_fb_radius(state, INKCELL_SHAPE_FULL), paint.paint.fill);
 
