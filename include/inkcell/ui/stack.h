@@ -339,7 +339,9 @@ enum inkcell_width_class {
      */
     INKCELL_WIDTH_MEDIUM,
     /* Two panes. A list and the thing it selects, side by side, which is the shape every
-       desktop mail client and every tablet has converged on. */
+       desktop mail client and every tablet has converged on. Two panes do not wait for this
+       class: the scaffold splits a medium frame too once its detail holds a measure - see
+       inkcell/ui/widgets/scaffold.h. What this class guarantees is that both panes do. */
     INKCELL_WIDTH_EXPANDED,
 };
 

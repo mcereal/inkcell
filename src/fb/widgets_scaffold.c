@@ -406,15 +406,29 @@ void inkcell_fb_scaffold_begin(struct inkcell_draw_state *state,
      * the panes are measured in columns of whatever scale the reader chose, and a ratio is a
      * fixed width that scales with them.
      */
-    frame->split = scaffold->split && frame->width == INKCELL_WIDTH_EXPANDED;
-    if (frame->split) {
-        const int rule = inkcell_fb_rule_height(state, small);
+    /*
+     * And which frames get one: any wider than compact whose detail would hold a whole measure.
+     *
+     * The line is the detail's rather than the list's because the two panes are not read the
+     * same way. The detail is running text and is held to a measure, since a pane narrower than
+     * that cannot be read; the list is short rows read by their leading edge, and reads the same
+     * at two fifths of the width. Asking for two whole measures - the expanded class - kept a
+     * 1920 window at the handheld's scale to one centred ribbon with most of the window empty
+     * either side of it.
+     */
+    const int rule = inkcell_fb_rule_height(state, small);
+    struct inkcell_box panes[2] = {{0}};
+    if (scaffold->split && frame->width != INKCELL_WIDTH_COMPACT) {
         struct inkcell_stack row;
         inkcell_stack_begin(&row, frame->content, INKCELL_AXIS_X, rule);
         (void)inkcell_stack_add_grow(&row, 0, 2U);
         (void)inkcell_stack_add_grow(&row, 0, 3U);
-        struct inkcell_box panes[2];
         (void)inkcell_stack_resolve(&row, panes, 2U);
+        (void)inkcell_fb_set_region(state, panes[1]);
+        frame->split = inkcell_fb_cols(state, state->scale) >= INKCELL_WIDTH_MEASURE_COLS;
+        (void)inkcell_fb_set_region(state, frame->content);
+    }
+    if (frame->split) {
         frame->list = panes[0];
         frame->detail = panes[1];
 
