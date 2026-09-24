@@ -505,4 +505,18 @@ void inkcell_fb_draw_conversation(struct inkcell_draw_state *state, struct inkce
 size_t inkcell_fb_field_label_cols(const struct inkcell_draw_state *state,
                                    const struct inkcell_fb_layout *layout, size_t preferred);
 
+/*
+ * The label column these labels need: the widest one, measured in the face it is drawn in and
+ * rounded up to whole cells, capped at half the body so the values always keep the other half.
+ *
+ * For a screen whose labels are its own - a detail's facts, a form's fields - rather than a
+ * preferred width in cells. A column counted for one language's words is either too wide for
+ * the next language's or trims them, and a proportional face makes the count an estimate even
+ * in the first one. The column is still whole cells because the item lays out in cells; what
+ * decides how many is the ink.
+ */
+size_t inkcell_fb_field_label_cols_fit(const struct inkcell_draw_state *state,
+                                       const struct inkcell_fb_layout *layout,
+                                       const char *const *labels, size_t count);
+
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_ITEM_H */

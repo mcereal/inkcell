@@ -1297,3 +1297,24 @@ size_t inkcell_fb_field_label_cols(const struct inkcell_draw_state *state,
     }
     return layout->cols < metrics->narrow_cols ? layout->cols / 2U : preferred;
 }
+
+size_t inkcell_fb_field_label_cols_fit(const struct inkcell_draw_state *state,
+                                       const struct inkcell_fb_layout *layout,
+                                       const char *const *labels, size_t count) {
+    const int adv = inkcell_fb_char_adv(state, state->scale);
+    int widest = 0;
+    for (size_t i = 0U; labels != NULL && i < count; ++i) {
+        if (labels[i] != NULL) {
+            const int w = inkcell_fb_text_width(state, labels[i], state->scale);
+            widest = w > widest ? w : widest;
+        }
+    }
+    size_t cols = adv > 0 ? (size_t)((widest + adv - 1) / adv) : 0U;
+    if (cols == 0U) {
+        cols = 1U;
+    }
+    /* The value keeps at least half the row, whatever the labels ask for: a label trimmed to fit
+       is still a label, and a value pushed off the row is nothing. */
+    const size_t half = layout->cols / 2U;
+    return half > 0U && cols > half ? half : cols;
+}

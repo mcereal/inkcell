@@ -301,6 +301,33 @@ INKCELL_TEST_CASE(list_style_a_wide_value_stays_inside_its_row, unit) {
     record_success(test_name);
 }
 
+INKCELL_TEST_CASE(list_style_a_fitted_label_column_holds_its_widest_label, unit) {
+    struct style_harness h;
+    INKCELL_TEST_FAIL_IF(!style_harness_open(&h, false), "the capture should open");
+    const int adv = inkcell_fb_char_adv(h.state, h.state->scale);
+
+    const char *const labels[] = {"ID", "Relayed by", NULL, "Hops"};
+    const size_t cols = inkcell_fb_field_label_cols_fit(h.state, &h.layout, labels, 4U);
+    const int widest = inkcell_fb_text_width(h.state, "Relayed by", h.state->scale);
+    INKCELL_TEST_FAIL_IF_CLEANUP((int)cols * adv < widest, style_harness_close(&h),
+                                 "the column should hold the widest label's ink");
+    INKCELL_TEST_FAIL_IF_CLEANUP((int)(cols - 1U) * adv >= widest, style_harness_close(&h),
+                                 "and be no wider than the whole cells that takes");
+
+    char wide[160];
+    memset(wide, 'W', sizeof wide - 1U);
+    wide[sizeof wide - 1U] = '\0';
+    const char *const long_one[] = {wide};
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        inkcell_fb_field_label_cols_fit(h.state, &h.layout, long_one, 1U) != h.layout.cols / 2U,
+        style_harness_close(&h), "a label wider than half the body is held to half");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_field_label_cols_fit(h.state, &h.layout, NULL, 0U) !=
+                                     1U,
+                                 style_harness_close(&h), "no labels is one cell, never none");
+    style_harness_close(&h);
+    record_success(test_name);
+}
+
 /* Draws one plain row whose label column is one cell wide, and copies out the band just past
    that cell: whatever a one-cell label spilled into. */
 static bool style_one_cell_label(const char *label, struct inkcell_rgb *band, size_t band_len,
