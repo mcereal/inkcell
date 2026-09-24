@@ -244,3 +244,17 @@ INKCELL_ICON_ENTRY(DELIVERED,   "done_all")
    rather than WARNING's triangle - that one asks a question a dialog is about to act on, this
    one reports a fact about a message that has already happened. */
 INKCELL_ICON_ENTRY(UNDELIVERED, "error")
+
+/* ---- the app bar's own furniture ------------------------------------------------------------
+ *
+ * The two marks the top app bar draws itself rather than being handed, which is what earns them
+ * a place in a toolkit's set: an application names neither, so there is nobody else to supply
+ * them. */
+
+/* More verbs than the bar had room for, behind one press - the overflow menu. The vertical
+   three dots every platform draws there; a horizontal ellipsis reads as text that was cut
+   short, which is a different thing and one this toolkit already draws with "...". */
+INKCELL_ICON_ENTRY(MORE,        "more_vert")
+/* The heading has become a search field, and this is what the field is for. Drawn inside the
+   field rather than as the bar's leading mark, which stays the way out. */
+INKCELL_ICON_ENTRY(SEARCH,      "search")

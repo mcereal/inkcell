@@ -842,11 +842,30 @@ size_t inkcell_fb_row_cols(const struct inkcell_draw_state *state, int scale);
 const struct inkcell_metrics *inkcell_fb_metrics(const struct inkcell_draw_state *state);
 const struct inkcell_font *inkcell_fb_font(const struct inkcell_draw_state *state);
 
+/*
+ * Which action bar the frame is keeping room for at its foot.
+ *
+ * A question about the *layout* rather than about the bar, for the reason `footer_y` is: the
+ * bar is drawn last, over a body that was laid out long before, so how tall it will be has to
+ * be known when the frame opens. See inkcell_fb_layout_begin_footer().
+ */
+enum inkcell_fb_footer {
+    INKCELL_FB_FOOTER_NONE = 0,
+    /* The keycap row and the status line under it: every press the screen offers, spelled out.
+       What a screen that is being learned wants, and what every frame had before there was a
+       choice. */
+    INKCELL_FB_FOOTER_FULL,
+    /* One row: the two or three presses that matter here, and a way to the rest. The status
+       line moves up into the app bar's indicator, or rides the end of the keycap row when there
+       is room for it. */
+    INKCELL_FB_FOOTER_COMPACT,
+};
+
 /* Where the chrome ends and the body begins. Opened by inkcell_fb_layout_begin(), and moved
    down by each piece of chrome as it takes its room - see include/inkcell/ui/widgets/chrome.h. */
 struct inkcell_fb_layout {
     int body_y;    /* first body row */
-    int footer_y;  /* top of the two footer lines */
+    int footer_y;  /* top of the action bar: two lines, or one when `footer` is compact */
     int line;      /* body line advance */
     uint32_t rows; /* body rows available */
     size_t cols;   /* body columns, at the nominal advance - an estimate on a proportional face */
@@ -901,6 +920,10 @@ struct inkcell_fb_layout {
        than the margin it used to be, because above the compact class the column is centred and
        the margin is no longer where content begins. */
     int body_x;
+    /* The bar `footer_y` was measured for. Carried so that the action bar draws the shape the
+       body was laid out around - a compact bar drawn into a full bar's room would leave a
+       status line's worth of dead ground under the keycaps. */
+    enum inkcell_fb_footer footer;
 };
 
 /*
