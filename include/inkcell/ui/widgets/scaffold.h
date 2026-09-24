@@ -17,8 +17,14 @@
  *
  *   compact    a navigation bar across the bottom (or the tab strip across the top - see enum
  *              inkcell_fb_compact_nav for why an application may keep it)
- *   medium     a navigation rail down the leading edge
+ *   medium     a navigation rail down the leading edge - and, once the detail would hold a
+ *              whole measure beside the list, the split below
  *   expanded   the rail, and the body split into a list pane and a detail pane
+ *
+ * The split follows the detail rather than the class. The detail is running text and is held to
+ * a measure; the list is short rows read by their leading edge and reads the same at two fifths
+ * of the width. So a medium window with room for a measured detail splits too, and one without
+ * it keeps one pane.
  *
  * **What the application still owns** is everything that is a *fact* rather than a placement:
  * which destinations exist, what they are called, which one is active, what their badges say,
@@ -135,9 +141,10 @@ struct inkcell_fb_scaffold {
      * Whether this screen has a list and a detail that could stand side by side.
      *
      * A statement about the screen, not a request for two panes: the scaffold splits only when
-     * the frame is expanded, and on anything narrower the application shows one or the other as
-     * it always has. That is why `frame.split` is read back rather than assumed - the same screen
-     * is one pane in a phone-sized window and two in a maximised one.
+     * the frame is wider than compact and the detail would hold a whole measure, and on anything
+     * narrower the application shows one or the other as it always has. That is why `frame.split`
+     * is read back rather than assumed - the same screen is one pane in a phone-sized window and
+     * two in a maximised one.
      */
     bool split;
     /* The progress hairline: the client is waiting on something. */

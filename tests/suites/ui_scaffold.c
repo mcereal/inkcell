@@ -157,7 +157,9 @@ INKCELL_TEST_CASE(scaffold_medium_puts_a_rail_beside_the_body, unit) {
 
     const int rail = inkcell_fb_scaffold_rail_width(state, k_destinations, SCAFFOLD_COUNT);
     INKCELL_TEST_FAIL_IF(frame.nav != INKCELL_FB_NAV_RAIL, "medium gets a rail");
-    INKCELL_TEST_FAIL_IF(frame.split, "medium does not split");
+    /* Medium, but the detail would be narrower than a measure beside the list: one pane. */
+    INKCELL_TEST_FAIL_IF(frame.split,
+                         "a medium frame too narrow for a measured detail is one pane");
     INKCELL_TEST_FAIL_IF(frame.nav_box.x != 0 || frame.nav_box.w != rail ||
                              frame.nav_box.h != (int)INKCELL_CAPTURE_HEIGHT,
                          "the rail runs the leading edge, top to bottom");
@@ -254,6 +256,40 @@ INKCELL_TEST_CASE(scaffold_expanded_splits_a_screen_that_has_a_detail, unit) {
     INKCELL_TEST_FAIL_IF(!inkcell_box_is_empty(frame.detail), "no detail pane without a split");
     const struct inkcell_fb_layout none = inkcell_fb_scaffold_detail(state, &frame, NULL);
     INKCELL_TEST_FAIL_IF(none.line != 0, "asking for a detail that is not there gets nothing");
+    inkcell_fb_scaffold_end(state, &frame, NULL);
+
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
+/*
+ * A medium window wide enough to give the detail a whole measure splits too.
+ *
+ * The line two panes cross is the detail's, not the list's: the detail is where running text is,
+ * so it is held to a measure, and the list beside it is a column of short rows read by their
+ * leading edge, which reads the same at two fifths of the width. 1920x1080 at the handheld's
+ * scale is the case this is for - medium, and before this one pane in a centred ribbon with most
+ * of the window empty either side.
+ */
+INKCELL_TEST_CASE(scaffold_medium_splits_when_the_detail_gets_a_measure, unit) {
+    struct inkcell_draw_state *state = NULL;
+    struct inkcell_capture *capture = scaffold_open(1920U, 1080U, INKCELL_SCALE(4), &state);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+    INKCELL_TEST_FAIL_IF(inkcell_fb_width_class(state) != INKCELL_WIDTH_MEDIUM,
+                         "a 1920 window at the handheld's scale is medium");
+
+    const struct inkcell_fb_scaffold scaffold = {
+        .destinations = k_destinations, .count = SCAFFOLD_COUNT, .footer = true, .split = true};
+    struct inkcell_fb_scaffold_frame frame;
+    inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+    INKCELL_TEST_FAIL_IF(frame.nav != INKCELL_FB_NAV_RAIL, "medium keeps the rail");
+    INKCELL_TEST_FAIL_IF(!frame.split, "a medium frame with room for a measured detail splits");
+    INKCELL_TEST_FAIL_IF(frame.detail.w <= frame.list.w, "the detail gets the larger share");
+
+    const struct inkcell_fb_layout detail = inkcell_fb_scaffold_detail(state, &frame, NULL);
+    INKCELL_TEST_FAIL_IF(detail.line == 0, "the detail pane should be there to draw into");
+    INKCELL_TEST_FAIL_IF(inkcell_fb_cols(state, state->scale) < INKCELL_WIDTH_MEASURE_COLS,
+                         "the detail pane should hold a whole measure");
     inkcell_fb_scaffold_end(state, &frame, NULL);
 
     inkcell_capture_close(capture);
