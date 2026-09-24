@@ -1151,17 +1151,42 @@ static int inkcell_fb_app_bar_draw_cluster(const struct inkcell_draw_state *stat
            not fit - still the one filled shape on the bar, so still findable as "the" action. */
         const int w =
             plan->emphasized_label ? inkcell_fb_app_bar_pill_w(state, row, action) : row->side;
+        if (action->disabled) {
+            /*
+             * Disabled, it lays down no fill - and so it is drawn here rather than as a TEXT
+             * button, whose ground is a colour *role*: on a selection bar the row is the
+             * secondary container, which no role names, and an icon blended against the ground
+             * instead comes out with a halo. The row's own ink and ground are the pair that is
+             * actually behind it, which is the plain actions' answer.
+             */
+            const struct inkcell_rgb ink =
+                inkcell_fb_fade(row->ink, row->ground, INKCELL_ANIM_ONE / 2);
+            const int scale = plan->emphasized_label ? row->small : row->scale;
+            const int glyph = inkcell_scale_px((int)inkcell_fb_font(state)->height, scale);
+            const int content =
+                plan->emphasized_label
+                    ? w - inkcell_fb_button_width(state, INKCELL_ICON_NONE, "", scale)
+                    : inkcell_fb_icon_box(state, scale);
+            int cx = x - w + (w - content) / 2;
+            const int cy = row->center - glyph / 2;
+            inkcell_fb_draw_icon(state, cx, cy, action->icon, scale, ink, row->ground);
+            if (plan->emphasized_label) {
+                cx += inkcell_fb_icon_box(state, scale) + inkcell_fb_char_adv(state, scale) / 2;
+                inkcell_fb_draw_text(state, cx, cy, action->label, scale, ink, row->ground);
+            }
+            x -= w + row->gap;
+            continue;
+        }
         const struct inkcell_fb_button pill = {
             .rect = {.x = x - w, .y = top, .w = w, .h = row->side},
             .icon = action->icon,
             .label = plan->emphasized_label ? action->label : NULL,
-            .focused = action->focused && !action->disabled,
-            .variant = action->disabled ? INKCELL_FB_BUTTON_TEXT : INKCELL_FB_BUTTON_TONAL,
+            .focused = action->focused,
+            .variant = INKCELL_FB_BUTTON_TONAL,
             .family = action->family,
             .shape = INKCELL_SHAPE_FULL,
-            .idle_tone = INKCELL_TONE_DIM,
             .scale = plan->emphasized_label ? row->small : row->scale,
-            .focus_id = action->disabled ? INKCELL_FOCUS_NONE : action->focus_id,
+            .focus_id = action->focus_id,
         };
         inkcell_fb_draw_button(state, &pill);
         x -= w + row->gap;
