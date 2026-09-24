@@ -389,6 +389,28 @@ bool inkcell_fb_overlay_begin(struct inkcell_draw_state *state,
      */
     struct inkcell_fb_damage_rect span = inkcell_overlay_span(box, slot->drawn);
     span = inkcell_overlay_span(inkcell_fb_shadow_bounds(state, box, overlay->elevation), span);
+    /*
+     * And, while it is moving, where it is going.
+     *
+     * The shadow is the one thing here that is drawn only inside the band (see
+     * inkcell_fb_draw_shadow()), and the band a frame is drawn under is built from what the
+     * frame *before* declared. A layer that has moved since is casting its shadow partly onto
+     * rows nobody declared, and that part was simply not drawn - a frame's worth of missing
+     * shadow at every step of every arrival, which a partial frame and a full one disagree
+     * about. The panel is let through regardless, being declared as it is drawn; the shadow
+     * cannot be, because it darkens what is there.
+     *
+     * The travel is a straight line from `from` to `rest`, so the two ends' reaches cover every
+     * frame of it. Only while it travels, and only for a layer that casts anything: the slot's
+     * record is emptied every frame, so a layer at rest goes back to declaring its own box.
+     */
+    if (overlay->elevation != INKCELL_ELEVATION_FLAT &&
+        inkcell_anim_active(&slot->travel, state->now_ms)) {
+        span =
+            inkcell_overlay_span(inkcell_fb_shadow_bounds(state, rest, overlay->elevation), span);
+        span =
+            inkcell_overlay_span(inkcell_fb_shadow_bounds(state, from, overlay->elevation), span);
+    }
     if (overlay->scrim) {
         span = inkcell_overlay_span(bounds, span);
     }

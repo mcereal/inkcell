@@ -396,3 +396,81 @@ INKCELL_TEST_CASE(list_style_inset_end_rows_register_out_to_the_section_edge, un
     style_harness_close(&h);
     record_success(test_name);
 }
+
+/*
+ * An accent list keeps its cue on the row: the row is still a target a press and a pointer
+ * reach, but it is not the frame's mark, so the travelling ring does not circle a row that has
+ * already said where the cursor is. A fill list, which has no capsule, still hands the ring the
+ * row.
+ */
+INKCELL_TEST_CASE(list_style_an_accent_row_is_not_the_frames_mark, unit) {
+    const enum inkcell_fb_list_focus looks[] = {INKCELL_FB_LIST_FOCUS_ACCENT,
+                                                INKCELL_FB_LIST_FOCUS_FILL};
+    for (size_t i = 0; i < sizeof looks / sizeof looks[0]; ++i) {
+        struct style_harness h;
+        INKCELL_TEST_FAIL_IF(!style_harness_open(&h, true), "the capture should open");
+        const struct inkcell_fb_list_style look = {.focus = looks[i]};
+        struct inkcell_fb_list list =
+            inkcell_fb_list_begin_styled(h.state, &h.layout, 2U, 1U, NULL, NULL, &look);
+        inkcell_fb_list_focus(&list, STYLE_ID_ROW);
+        uint32_t index = 0U;
+        while (inkcell_fb_list_next(&list, &index)) {
+            const struct inkcell_fb_list_item item = {.text = "row"};
+            inkcell_fb_list_item(h.state, &list, index, &item);
+        }
+        const bool registered = inkcell_focus_has(&h.map, STYLE_ID_ROW + 1U);
+        const uint32_t marked = inkcell_focus_marked(&h.map);
+        style_harness_close(&h);
+        INKCELL_TEST_FAIL_IF(!registered, "the cursor's row should still be a target");
+        if (looks[i] == INKCELL_FB_LIST_FOCUS_ACCENT) {
+            INKCELL_TEST_FAIL_IF(marked != INKCELL_FOCUS_NONE,
+                                 "an accent row should not be the frame's mark");
+        } else {
+            INKCELL_TEST_FAIL_IF(marked != STYLE_ID_ROW + 1U,
+                                 "a filled row should be the frame's mark");
+        }
+    }
+    record_success(test_name);
+}
+
+/*
+ * And over something else that marked: an accent list drawn after a filled one - a sheet of
+ * accent rows over a page whose row took the ring - moves the cursor off the page. Declining to
+ * mark would leave the ring on the row underneath while the sheet's row shows its own cue.
+ */
+INKCELL_TEST_CASE(list_style_an_accent_row_takes_the_mark_from_what_is_beneath, unit) {
+    struct style_harness h;
+    INKCELL_TEST_FAIL_IF(!style_harness_open(&h, true), "the capture should open");
+
+    const struct inkcell_fb_list_style fill = {.focus = INKCELL_FB_LIST_FOCUS_FILL};
+    struct inkcell_fb_list page =
+        inkcell_fb_list_begin_styled(h.state, &h.layout, 2U, 0U, NULL, NULL, &fill);
+    inkcell_fb_list_focus(&page, STYLE_ID_ROW);
+    uint32_t index = 0U;
+    while (inkcell_fb_list_next(&page, &index)) {
+        const struct inkcell_fb_list_item item = {.text = "page"};
+        inkcell_fb_list_item(h.state, &page, index, &item);
+    }
+    const uint32_t under = inkcell_focus_marked(&h.map);
+
+    const struct inkcell_fb_list_style accent = {.focus = INKCELL_FB_LIST_FOCUS_ACCENT};
+    struct inkcell_fb_list sheet =
+        inkcell_fb_list_begin_styled(h.state, &h.layout, 2U, 1U, NULL, NULL, &accent);
+    inkcell_fb_list_focus(&sheet, STYLE_ID_ROW + 100U);
+    while (inkcell_fb_list_next(&sheet, &index)) {
+        const struct inkcell_fb_list_item item = {.text = "sheet"};
+        inkcell_fb_list_item(h.state, &sheet, index, &item);
+    }
+    const uint32_t over = inkcell_focus_marked(&h.map);
+
+    /* And a plain mark after it takes the ring back. */
+    inkcell_focus_mark(&h.map, STYLE_ID_ROW);
+    const uint32_t again = inkcell_focus_marked(&h.map);
+    style_harness_close(&h);
+
+    INKCELL_TEST_FAIL_IF(under != STYLE_ID_ROW, "the filled page's row should take the ring first");
+    INKCELL_TEST_FAIL_IF(over != INKCELL_FOCUS_NONE,
+                         "the ring should leave the page once an accent sheet's row is marked");
+    INKCELL_TEST_FAIL_IF(again != STYLE_ID_ROW, "a plain mark after it should take the ring back");
+    record_success(test_name);
+}

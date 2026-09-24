@@ -181,6 +181,12 @@ struct inkcell_focus_map {
      * came out on top, and so which one the ring belongs on.
      */
     uint32_t focused;
+    /*
+     * Whether the last mark came from something that draws its own cursor cue - see
+     * inkcell_focus_mark_cued(). It still takes the mark, so whatever was marked beneath it is
+     * no longer where the cursor is; it simply has no ring to be given.
+     */
+    bool cued;
 };
 
 /* Empties the map onto `storage`. Call it at the top of the draw, once, before anything is
@@ -237,7 +243,21 @@ bool inkcell_focus_add_target(struct inkcell_focus_map *map, uint32_t id, int x,
  */
 void inkcell_focus_mark(struct inkcell_focus_map *map, uint32_t id);
 
-/* The last id marked this frame, or INKCELL_FOCUS_NONE. What a frame hands the focus ring. */
+/*
+ * The same mark, from a component that says where the cursor is itself - a list row with its own
+ * lift and capsule.
+ *
+ * It wins exactly as a plain mark does, which is the point: a sheet whose rows carry their own
+ * cue is drawn over a list whose row was marked a moment earlier, and the cursor is on the sheet.
+ * Declining to mark would leave the ring on the row underneath; marking plainly would put a
+ * second cue on a row that already has one. So the mark moves, and the ring is told there is
+ * nothing for it to go round - inkcell_focus_marked() answers INKCELL_FOCUS_NONE until something
+ * marks plainly again.
+ */
+void inkcell_focus_mark_cued(struct inkcell_focus_map *map, uint32_t id);
+
+/* The last id marked this frame, or INKCELL_FOCUS_NONE - which is also the answer when that last
+   mark was a cued one (inkcell_focus_mark_cued()). What a frame hands the focus ring. */
 uint32_t inkcell_focus_marked(const struct inkcell_focus_map *map);
 
 /*

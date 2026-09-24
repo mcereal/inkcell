@@ -395,3 +395,72 @@ INKCELL_TEST_CASE(elevation_overlay_span_covers_its_shadow, unit) {
     inkcell_capture_close(capture);
     record_success(test_name);
 }
+
+/*
+ * And while it travels: the band a frame is drawn under is what the frame before declared, and
+ * a layer on its way in has moved since. The shadow is cut to the band, so every frame of the
+ * journey has to find its own shadow's reach already declared - and once the layer is at rest
+ * it goes back to declaring only where it is, or a snackbar's whole path off the panel would be
+ * repainted for as long as it was up.
+ */
+INKCELL_TEST_CASE(elevation_a_travelling_layer_declares_where_its_shadow_is_going, unit) {
+    struct inkcell_capture *capture = NULL;
+    INKCELL_TEST_FAIL_IF(inkcell_capture_open(&capture, 400U, 300U, INKCELL_SCALE(4)) < 0,
+                         "the capture should open");
+    struct inkcell_draw_state *state = inkcell_capture_state(capture);
+    uint64_t now = 1000U;
+    inkcell_fb_state_set_now(state, now);
+
+    const struct inkcell_overlay desc = {
+        .id = 9U,
+        .up = true,
+        .placement = INKCELL_OVERLAY_BOTTOM,
+        .travel = INKCELL_OVERLAY_TRAVEL_OFF_PANEL,
+        .w = 200,
+        .h = 60,
+        .bounds = {.x = 0, .y = 0, .w = 400, .h = 260},
+        .elevation = INKCELL_ELEVATION_FLOATING,
+        .shape = INKCELL_SHAPE_SM,
+    };
+    struct inkcell_overlay_frame frame;
+    struct inkcell_fb_rect box = {0, 0, 0, 0};
+    int moving_frames = 0;
+    for (int i = 0; i < 40; ++i) {
+        now += 16U;
+        inkcell_fb_state_set_now(state, now);
+        inkcell_fb_app_frame_begin(state);
+        const struct inkcell_fb_damage_rect band = state->animation_damage;
+        if (!inkcell_fb_overlay_begin(state, &desc, &frame)) {
+            continue;
+        }
+        box = frame.box;
+        inkcell_fb_overlay_end(state, &frame);
+        if (i == 0) {
+            continue; /* the first frame has no frame before it to have declared anything */
+        }
+        const struct inkcell_fb_rect reach =
+            inkcell_fb_shadow_bounds(state, box, INKCELL_ELEVATION_FLOATING);
+        const int top = reach.y > 0 ? reach.y : 0;
+        const int bottom = reach.y + reach.h < 300 ? reach.y + reach.h : 300;
+        if (bottom <= top) {
+            continue; /* still wholly off the panel */
+        }
+        ++moving_frames;
+        INKCELL_TEST_FAIL_IF_CLEANUP(!band.valid || band.y > top || band.bottom < bottom ||
+                                         band.x > reach.x || band.right < reach.x + reach.w,
+                                     inkcell_capture_close(capture),
+                                     "a frame of the journey drew its shadow outside the band");
+    }
+    INKCELL_TEST_FAIL_IF_CLEANUP(moving_frames < 2, inkcell_capture_close(capture),
+                                 "the layer should have been seen travelling");
+
+    inkcell_fb_app_frame_begin(state);
+    const struct inkcell_fb_damage_rect rest = state->animation_damage;
+    const struct inkcell_fb_rect reach =
+        inkcell_fb_shadow_bounds(state, box, INKCELL_ELEVATION_FLOATING);
+    INKCELL_TEST_FAIL_IF_CLEANUP(rest.bottom > reach.y + reach.h, inkcell_capture_close(capture),
+                                 "a layer at rest should stop declaring the path it came up");
+
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}

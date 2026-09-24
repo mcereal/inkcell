@@ -1583,6 +1583,8 @@ void inkcell_fb_focus_register_shaped(const struct inkcell_draw_state *state, ui
  *     inkcell_fb_draw_focus_ring(state, &map, inkcell_focus_marked(&map));
  */
 void inkcell_fb_focus_mark(const struct inkcell_draw_state *state, uint32_t id);
+/* The same for a component that draws its own cursor cue - see inkcell_focus_mark_cued(). */
+void inkcell_fb_focus_mark_cued(const struct inkcell_draw_state *state, uint32_t id);
 
 /*
  * Registers `rect` as a pointer target under `id`: something a click can press and the d-pad
