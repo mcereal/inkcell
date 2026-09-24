@@ -1312,8 +1312,13 @@ size_t inkcell_fb_field_label_cols_fit(const struct inkcell_draw_state *state,
     if (cols == 0U) {
         cols = 1U;
     }
-    /* The value keeps at least half the row, whatever the labels ask for: a label trimmed to fit
-       is still a label, and a value pushed off the row is nothing. */
-    const size_t half = layout->cols / 2U;
+    /* The value keeps at least half of what the label leaves, whatever the labels ask for: a
+       label trimmed to fit is still a label, and a value pushed off the row is nothing. Half of
+       the row less the marker gutter the item puts between the two, or a capped label and its
+       gutter would take more than half, and on a narrow row all of it. */
+    const size_t shared = layout->cols > INKCELL_FB_ITEM_MARKER_CELLS
+                              ? layout->cols - INKCELL_FB_ITEM_MARKER_CELLS
+                              : 0U;
+    const size_t half = shared / 2U;
     return half > 0U && cols > half ? half : cols;
 }

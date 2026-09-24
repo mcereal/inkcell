@@ -507,7 +507,8 @@ size_t inkcell_fb_field_label_cols(const struct inkcell_draw_state *state,
 
 /*
  * The label column these labels need: the widest one, measured in the face it is drawn in and
- * rounded up to whole cells, capped at half the body so the values always keep the other half.
+ * rounded up to whole cells, capped at half of the body less the marker gutter so the values
+ * always keep at least as much as the label.
  *
  * For a screen whose labels are its own - a detail's facts, a form's fields - rather than a
  * preferred width in cells. A column counted for one language's words is either too wide for

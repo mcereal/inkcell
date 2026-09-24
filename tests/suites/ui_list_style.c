@@ -318,9 +318,30 @@ INKCELL_TEST_CASE(list_style_a_fitted_label_column_holds_its_widest_label, unit)
     memset(wide, 'W', sizeof wide - 1U);
     wide[sizeof wide - 1U] = '\0';
     const char *const long_one[] = {wide};
-    INKCELL_TEST_FAIL_IF_CLEANUP(
-        inkcell_fb_field_label_cols_fit(h.state, &h.layout, long_one, 1U) != h.layout.cols / 2U,
-        style_harness_close(&h), "a label wider than half the body is held to half");
+    const size_t capped = inkcell_fb_field_label_cols_fit(h.state, &h.layout, long_one, 1U);
+    INKCELL_TEST_FAIL_IF_CLEANUP(capped >= h.layout.cols / 2U, style_harness_close(&h),
+                                 "a label wider than half the body is held under half");
+    /* And the value it leaves room for is drawn, past the middle of the row. */
+    const struct inkcell_fb_list_item item = {
+        .label = wide, .label_cols = capped, .value = "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"};
+    /* Two rows with the cursor on the second, so the first - the one read - stands on the panel. */
+    struct inkcell_fb_list list = inkcell_fb_list_begin(&h.layout, 2U, 1U);
+    uint32_t index = 0U;
+    while (inkcell_fb_list_next(&list, &index)) {
+        inkcell_fb_list_item(h.state, &list, index,
+                             index == 0U ? &item
+                                         : &(const struct inkcell_fb_list_item){.text = ""});
+    }
+    const struct inkcell_fb_row_box box = inkcell_fb_row_box(h.state);
+    const struct inkcell_rgb bg = inkcell_fb_color(h.state, INKCELL_COLOR_BG);
+    long value_ink = 0;
+    for (int y = h.layout.body_y; y < h.layout.body_y + h.layout.line; ++y) {
+        for (int x = box.x + box.w / 2; x < box.x + box.w; ++x) {
+            value_ink += style_same_rgb(style_pixel(&h, x, y), bg) ? 0 : 1;
+        }
+    }
+    INKCELL_TEST_FAIL_IF_CLEANUP(value_ink == 0, style_harness_close(&h),
+                                 "a capped label should still leave its value on the row");
     INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_field_label_cols_fit(h.state, &h.layout, NULL, 0U) !=
                                      1U,
                                  style_harness_close(&h), "no labels is one cell, never none");
