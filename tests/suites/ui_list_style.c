@@ -264,6 +264,43 @@ INKCELL_TEST_CASE(list_style_the_accessory_column_is_one_column, unit) {
     record_success(test_name);
 }
 
+/* ---- words -------------------------------------------------------------------------------- */
+
+/*
+ * A value is fitted to the pixels its column has, not to a count of cells.
+ *
+ * The UI face is proportional, so a cell count is a nominal width: a run of wide letters - a
+ * base64 key is the case that showed it - is wider than the same number of average ones, and a
+ * value clipped to its cells alone ran out past the row's edge and off the card it stood on.
+ */
+INKCELL_TEST_CASE(list_style_a_wide_value_stays_inside_its_row, unit) {
+    struct style_harness h;
+    INKCELL_TEST_FAIL_IF(!style_harness_open(&h, false), "the capture should open");
+
+    char wide[160];
+    memset(wide, 'W', sizeof wide - 1U);
+    wide[sizeof wide - 1U] = '\0';
+    const struct inkcell_fb_list_item item = {
+        .label = "Public key", .label_cols = 12U, .label_quiet = true, .value = wide};
+    struct inkcell_fb_list list = inkcell_fb_list_begin(&h.layout, 1U, 0U);
+    uint32_t index = 0U;
+    while (inkcell_fb_list_next(&list, &index)) {
+        inkcell_fb_list_item(h.state, &list, index, &item);
+    }
+
+    const struct inkcell_fb_row_box box = inkcell_fb_row_box(h.state);
+    const struct inkcell_rgb bg = inkcell_fb_color(h.state, INKCELL_COLOR_BG);
+    for (int y = 0; y < (int)INKCELL_CAPTURE_HEIGHT; ++y) {
+        for (int x = box.x + box.w; x < (int)INKCELL_CAPTURE_WIDTH; ++x) {
+            INKCELL_TEST_FAIL_IF_CLEANUP(!style_same_rgb(style_pixel(&h, x, y), bg),
+                                         style_harness_close(&h),
+                                         "a value should not draw past its row's edge");
+        }
+    }
+    style_harness_close(&h);
+    record_success(test_name);
+}
+
 /* ---- focus -------------------------------------------------------------------------------- */
 
 /* Where a focused one-line row's box is on the panel: its left edge and its middle. */
