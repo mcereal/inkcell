@@ -971,6 +971,16 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_draw_state *state,
     inkcell_fb_draw_text_weight(state, x, baseline, inkcell_line_text(&line), scale,
                                 inkcell_fb_type_weight(state, INKCELL_TYPE_LABEL), ink, ground);
     inkcell_fb_list_band_end(list, band);
+    /*
+     * Registered only when the cursor is on it. A heading is a title, not a destination: most
+     * lists never park the cursor on one, and a box for every heading would give a click and
+     * the d-pad somewhere to land that the list's own model refuses. But a list that *does* put
+     * the cursor here has drawn the focused fill, and the ring has to have the same box to go
+     * to - so that one heading goes in, the same box a plain row registers, and is marked.
+     */
+    if (focused) {
+        inkcell_fb_list_focus_row(state, list, index, step_top, step_h);
+    }
     list->y += (int)rows * list->line;
 }
 
@@ -1058,6 +1068,11 @@ void inkcell_fb_list_note(const struct inkcell_draw_state *state, struct inkcell
     }
 
     inkcell_fb_list_band_end(list, band);
+    /* The box the fill covers, when the cursor is on it - for the heading's reason, above. */
+    if (focused) {
+        inkcell_fb_list_focus_row(state, list, index, list->y - inkcell_step_px(state->scale),
+                                  (int)rows * list->line);
+    }
     list->y += (int)rows * list->line;
 }
 

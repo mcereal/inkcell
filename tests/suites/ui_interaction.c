@@ -19,6 +19,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <string.h>
 
 #define INTERACTION_STORAGE 32U
 
@@ -207,6 +208,86 @@ INKCELL_TEST_CASE(interaction_frame_marks_focus_and_not_selection, unit) {
     INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_focus_marked(&map) != I_ID_SHEET + 1U,
                                  inkcell_capture_close(capture),
                                  "the answer under the dialog's cursor takes the mark");
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
+/*
+ * The lift rows are checked on a card as well as the panel, and only on a theme that lifts.
+ *
+ * Found by walking the secondary family's base down the grey scale on a copy of the dark theme:
+ * somewhere on the way it still clears everything the ground asks of it and fails only on a
+ * focused row. The same palette with `focus_fill` set never draws that row, so it must pass
+ * whatever the lift would have said - the check is about what is on the panel, not what could be.
+ */
+INKCELL_TEST_CASE(interaction_lift_contract_holds_on_cards_and_only_for_lifting_themes, unit) {
+    const struct inkcell_theme *dark = inkcell_theme_by_id("dark");
+    INKCELL_TEST_FAIL_IF(dark == NULL, "the dark theme should exist");
+    INKCELL_TEST_FAIL_IF(!inkcell_theme_validate(dark, NULL, 0U),
+                         "dark should validate as shipped");
+
+    bool found = false;
+    for (int grey = 160; grey >= 60 && !found; --grey) {
+        struct inkcell_theme lifting = *dark;
+        lifting.colors[INKCELL_COLOR_SECONDARY] =
+            (struct inkcell_rgb){(uint8_t)grey, (uint8_t)grey, (uint8_t)grey};
+        char reason[160] = "";
+        if (inkcell_theme_validate(&lifting, reason, sizeof reason)) {
+            continue;
+        }
+        struct inkcell_theme filling = lifting;
+        filling.focus_fill = true;
+        if (inkcell_theme_validate(&filling, NULL, 0U)) {
+            /* The first grey that only a lift rejects. It has to be the lift *on a card* that
+               caught it for this to be the case the card rows were added for; the panel's lift is
+               the easier of the two, since the card sits nearer the text. */
+            INKCELL_TEST_FAIL_IF(strstr(reason, "state") == NULL,
+                                 "the rejection should come from a focused-state pair");
+            found = true;
+        } else {
+            break; /* a rest contract caught it first; nothing lift-only lies further down */
+        }
+    }
+    INKCELL_TEST_FAIL_IF(!found, "some secondary should fail the lift and pass everywhere else - "
+                                 "and a filling theme should not be held to it");
+    record_success(test_name);
+}
+
+/* A heading or note the cursor stands on is registered and ringed; one it is not on is neither,
+   because most lists never park there and a click must not land on a title. */
+INKCELL_TEST_CASE(interaction_focused_subheader_and_note_take_the_mark, unit) {
+    struct inkcell_capture *capture = NULL;
+    INKCELL_TEST_FAIL_IF(inkcell_capture_open(&capture, INKCELL_CAPTURE_WIDTH,
+                                              INKCELL_CAPTURE_HEIGHT, INKCELL_SCALE(2)) < 0,
+                         "the capture should open");
+    struct inkcell_draw_state *state = inkcell_capture_state(capture);
+    struct inkcell_focus_item storage[INTERACTION_STORAGE];
+    struct inkcell_focus_map map;
+
+    for (uint32_t cursor = 0U; cursor < 2U; ++cursor) {
+        inkcell_focus_begin(&map, storage, INTERACTION_STORAGE);
+        inkcell_fb_set_focus_map(state, &map);
+        struct inkcell_fb_layout layout = inkcell_fb_layout_begin(state, false, false);
+        struct inkcell_fb_list list = inkcell_fb_list_begin(&layout, 3U, cursor);
+        inkcell_fb_list_focus(&list, I_ID_ROW);
+        uint32_t index = 0U;
+        while (inkcell_fb_list_next(&list, &index)) {
+            if (index == 0U) {
+                inkcell_fb_list_subheader(state, &list, index, "Section");
+            } else if (index == 1U) {
+                inkcell_fb_list_note(state, &list, index, "", "A note");
+            } else {
+                inkcell_fb_list_row(state, &list, index, "row", INKCELL_TONE_NORMAL);
+            }
+        }
+        INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_focus_marked(&map) != I_ID_ROW + cursor,
+                                     inkcell_capture_close(capture),
+                                     cursor == 0U ? "a focused heading should take the ring"
+                                                  : "a focused note should take the ring");
+        INKCELL_TEST_FAIL_IF_CLEANUP(
+            inkcell_focus_has(&map, I_ID_ROW + (1U - cursor)), inkcell_capture_close(capture),
+            "a heading or note the cursor is not on is not somewhere to click or land");
+    }
     inkcell_capture_close(capture);
     record_success(test_name);
 }

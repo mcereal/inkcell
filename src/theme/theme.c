@@ -1171,13 +1171,20 @@ static const struct theme_state_pair k_required_state[] = {
     {INKCELL_COLOR_ERROR, INKCELL_COLOR_SURFACE_HIGH, INKCELL_COLOR_TEXT, INKCELL_STATE_REST, 3.0},
     {INKCELL_COLOR_ERROR, INKCELL_COLOR_SURFACE_HIGH, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED,
      3.0},
-    /*
-     * A focused row, lifted rather than filled - see inkcell_fb_focus_fill(). The row keeps its
-     * own inks, so every ink a row is written in has to hold on the lift as well as at rest, on
-     * both grounds a list stands on: the panel and a card. Held at the ratios the same inks
-     * owe the ground itself, because a lift that cost a tier its contract would be a cursor
-     * that makes the row it is on harder to read.
-     */
+};
+
+/*
+ * A focused row, lifted rather than filled - see inkcell_fb_focus_fill(). The row keeps its own
+ * inks, so every ink a row is written in - the three neutral tiers and every family's tone - has
+ * to hold on the lift as well as at rest, on both grounds a list stands on: the panel and a card.
+ * Held at the ratios the same inks owe the ground itself, because a lift that cost a tier its
+ * contract would be a cursor that makes the row it is on harder to read.
+ *
+ * Only for a theme that lifts. One that sets `focus_fill` never draws this combination - it
+ * fills with SURFACE_SEL under TEXT_ON_SEL, which the table above already holds on every theme -
+ * so checking a lift it will never paint would reject a palette for a pair that is not on screen.
+ */
+static const struct theme_state_pair k_required_lift[] = {
     {INKCELL_COLOR_TEXT, INKCELL_COLOR_BG, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 4.5},
     {INKCELL_COLOR_TEXT, INKCELL_COLOR_SURFACE, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 4.5},
     {INKCELL_COLOR_TEXT_STRONG, INKCELL_COLOR_BG, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 4.5},
@@ -1188,9 +1195,14 @@ static const struct theme_state_pair k_required_state[] = {
     {INKCELL_COLOR_PRIMARY, INKCELL_COLOR_BG, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
     {INKCELL_COLOR_PRIMARY, INKCELL_COLOR_SURFACE, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
     {INKCELL_COLOR_SECONDARY, INKCELL_COLOR_BG, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
+    {INKCELL_COLOR_SECONDARY, INKCELL_COLOR_SURFACE, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED,
+     3.0},
     {INKCELL_COLOR_TERTIARY, INKCELL_COLOR_BG, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
+    {INKCELL_COLOR_TERTIARY, INKCELL_COLOR_SURFACE, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
     {INKCELL_COLOR_SUCCESS, INKCELL_COLOR_BG, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
+    {INKCELL_COLOR_SUCCESS, INKCELL_COLOR_SURFACE, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
     {INKCELL_COLOR_WARNING, INKCELL_COLOR_BG, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
+    {INKCELL_COLOR_WARNING, INKCELL_COLOR_SURFACE, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
     {INKCELL_COLOR_ERROR, INKCELL_COLOR_BG, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
     {INKCELL_COLOR_ERROR, INKCELL_COLOR_SURFACE, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
 };
@@ -1285,8 +1297,12 @@ bool inkcell_theme_validate(const struct inkcell_theme *theme, char *reason, siz
         }
     }
 
-    for (size_t i = 0; i < sizeof k_required_state / sizeof k_required_state[0]; ++i) {
-        const struct theme_state_pair *pair = &k_required_state[i];
+    const size_t lift_count =
+        theme->focus_fill ? 0U : sizeof k_required_lift / sizeof k_required_lift[0];
+    const size_t state_count = sizeof k_required_state / sizeof k_required_state[0];
+    for (size_t i = 0; i < state_count + lift_count; ++i) {
+        const struct theme_state_pair *pair =
+            i < state_count ? &k_required_state[i] : &k_required_lift[i - state_count];
         const struct inkcell_rgb ground = inkcell_theme_state_layer(
             theme->colors[pair->ground], theme->colors[pair->layer], pair->state);
         const double ratio = inkcell_theme_contrast(theme->colors[pair->ink], ground);
