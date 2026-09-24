@@ -388,6 +388,7 @@ bool inkcell_fb_overlay_begin(struct inkcell_draw_state *state,
      * long as the modal was up.
      */
     struct inkcell_fb_damage_rect span = inkcell_overlay_span(box, slot->drawn);
+    span = inkcell_overlay_span(inkcell_fb_shadow_bounds(state, box, overlay->elevation), span);
     if (overlay->scrim) {
         span = inkcell_overlay_span(bounds, span);
     }
@@ -407,6 +408,10 @@ bool inkcell_fb_overlay_begin(struct inkcell_draw_state *state,
         inkcell_fb_scrim_rect(state, bounds, inkcell_fb_color(state, INKCELL_COLOR_SCRIM),
                               (int)(((int64_t)depth * progress) / INKCELL_ANIM_ONE));
     }
+    /* And the panel's own shadow, over the scrim rather than under it: the scrim dims the page
+       and the panel is above the page, so what it casts falls on the dimmed frame. */
+    inkcell_fb_draw_shadow(state, box, inkcell_fb_radius(state, overlay->shape), overlay->elevation,
+                           progress);
 
     frame->id = overlay->id;
     frame->box = box;

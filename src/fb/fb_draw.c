@@ -600,8 +600,9 @@ struct inkcell_paint inkcell_fb_paint(const struct inkcell_draw_state *state,
 struct inkcell_rgb inkcell_fb_state_layer(const struct inkcell_draw_state *state,
                                           enum inkcell_color fill, enum inkcell_color ink,
                                           enum inkcell_state ui_state) {
-    return inkcell_theme_state_layer(inkcell_fb_color(state, fill), inkcell_fb_color(state, ink),
-                                     ui_state);
+    return inkcell_theme_state_layer_for(state != NULL ? state->theme : NULL,
+                                         inkcell_fb_color(state, fill),
+                                         inkcell_fb_color(state, ink), ui_state);
 }
 
 /* One channel of the mix. Integer, and towards the ground rather than by an alpha, for the
@@ -681,7 +682,7 @@ int inkcell_fb_margin(const struct inkcell_draw_state *state) {
 }
 
 int inkcell_fb_scrim_depth(const struct inkcell_draw_state *state) {
-    return (int)inkcell_fb_metrics(state)->scrim_pct;
+    return inkcell_theme_opacity(state != NULL ? state->theme : NULL, INKCELL_OPACITY_SCRIM);
 }
 
 int inkcell_fb_rail_gutter(const struct inkcell_draw_state *state) {
@@ -2723,6 +2724,249 @@ void inkcell_fb_scrim_rect(const struct inkcell_draw_state *state, struct inkcel
             memo_in = packed;
             memo_out = mixed;
             memo_valid = true;
+        }
+    }
+}
+
+/*
+ * ---- the shadow -------------------------------------------------------------------------------
+ *
+ * The scrim's read-modify-write with a shape to it: what is on the panel around a box, moved
+ * towards INKCELL_COLOR_SHADOW by an amount that falls off with distance from the box's edge.
+ * See inkcell_fb_draw_shadow() in the header for what it is for and the contract it holds its
+ * callers to.
+ *
+ * The falloff is a smoothstep across `blur`, centred on the edge of the box *after* it has been
+ * moved down by `offset`. Centred rather than starting at the edge, because that is what a soft
+ * shadow is: half in and half out of the silhouette that casts it. A falloff that began at the
+ * edge at full strength would put a hard dark band `offset` pixels tall under every box, which
+ * reads as a border that slipped rather than as depth. Smoothstep rather than linear because a
+ * linear ramp has a visible corner where it meets the ground and a smoothstep does not - it
+ * arrives flat at both ends, which is the one property of a gaussian worth paying for.
+ *
+ * Everything is integer, in sixteenths of a pixel, for the reason the anti-aliasing is: a golden
+ * digest that depended on a float's rounding would pass on one machine and fail on another.
+ */
+
+/* Floor of the square root, for the one place a distance needs one: the rounded corners. */
+static int64_t inkcell_fb_isqrt(int64_t v) {
+    if (v <= 0) {
+        return 0;
+    }
+    int64_t root = 0;
+    int64_t bit = (int64_t)1 << 62;
+    while (bit > v) {
+        bit >>= 2;
+    }
+    while (bit != 0) {
+        if (v >= root + bit) {
+            v -= root + bit;
+            root = (root >> 1) + bit;
+        } else {
+            root >>= 1;
+        }
+        bit >>= 2;
+    }
+    return root;
+}
+
+/* Sixteenths of a pixel per pixel: the resolution of the falloff. */
+#define INKCELL_FB_SHADOW_Q 16
+/* The falloff's own resolution: 0 is none of the shadow, this is all of it. Finer than the
+   anti-aliasing's sixteen steps on purpose - an edge is a pixel wide and sixteen levels across
+   one pixel are invisible, but a shadow is a ramp sixteen pixels long and sixteen levels across
+   that is a staircase. */
+#define INKCELL_FB_SHADOW_ONE 256
+
+/*
+ * Signed distance, in sixteenths, from the centre of pixel (px, py) to the rounded rectangle
+ * whose half-extents are (hx, hy) about (cx, cy) - all in sixteenths too. Negative inside.
+ *
+ * The usual formulation: fold the point into one quadrant, measure it against the corner circle
+ * if it is past both straight edges, and against the nearer straight edge otherwise. Only the
+ * first case needs a root, and it is the minority of pixels a shadow touches.
+ */
+static int inkcell_fb_round_rect_distance(int px, int py, int cx, int cy, int hx, int hy,
+                                          int radius) {
+    const int dx = px * INKCELL_FB_SHADOW_Q + INKCELL_FB_SHADOW_Q / 2 - cx;
+    const int dy = py * INKCELL_FB_SHADOW_Q + INKCELL_FB_SHADOW_Q / 2 - cy;
+    const int qx = (dx < 0 ? -dx : dx) - (hx - radius);
+    const int qy = (dy < 0 ? -dy : dy) - (hy - radius);
+    if (qx > 0 && qy > 0) {
+        return (int)inkcell_fb_isqrt((int64_t)qx * qx + (int64_t)qy * qy) - radius;
+    }
+    return (qx > qy ? qx : qy) - radius;
+}
+
+/* One channel moved `amount` of INKCELL_FB_SHADOW_ONE towards `to`, rounded to nearest. */
+static inline uint8_t inkcell_fb_shadow_channel(uint8_t from, uint8_t to, int amount) {
+    const int span = (int)to - (int)from;
+    const int moved = span * amount;
+    return (uint8_t)((int)from + (moved + (moved >= 0 ? INKCELL_FB_SHADOW_ONE / 2
+                                                      : -(INKCELL_FB_SHADOW_ONE / 2))) /
+                                     INKCELL_FB_SHADOW_ONE);
+}
+
+struct inkcell_fb_rect inkcell_fb_shadow_bounds(const struct inkcell_draw_state *state,
+                                                struct inkcell_fb_rect box,
+                                                enum inkcell_elevation elevation) {
+    const struct inkcell_shadow_px shadow = inkcell_theme_shadow(
+        state != NULL ? state->theme : NULL, elevation, state != NULL ? state->scale : 0);
+    if (shadow.depth <= 0 || box.w <= 0 || box.h <= 0) {
+        return box;
+    }
+    /* Half the blur either side of the moved edge, rounded up so the last faint pixel is
+       inside what a caller declares as damage. */
+    const int half = (shadow.blur + 1) / 2;
+    const int top = box.y + shadow.offset - half;
+    const int bottom = box.y + box.h + shadow.offset + half;
+    struct inkcell_fb_rect out = {
+        .x = box.x - half,
+        .y = top < box.y ? top : box.y,
+        .w = box.w + 2 * half,
+        .h = 0,
+    };
+    out.h = (bottom > box.y + box.h ? bottom : box.y + box.h) - out.y;
+    return out;
+}
+
+void inkcell_fb_draw_shadow(const struct inkcell_draw_state *state, struct inkcell_fb_rect box,
+                            int radius, enum inkcell_elevation elevation, int32_t progress) {
+    if (state == NULL || box.w <= 0 || box.h <= 0 || progress <= 0) {
+        return;
+    }
+    const struct inkcell_shadow_px shadow =
+        inkcell_theme_shadow(state->theme, elevation, state->scale);
+    if (shadow.depth <= 0) {
+        return;
+    }
+    if (progress > INKCELL_ANIM_ONE) {
+        progress = INKCELL_ANIM_ONE;
+    }
+    /* The whole shadow's strength at its darkest, in falloff units, eased in with the thing
+       casting it: a dialog half arrived casts half a shadow, so the two are one arrival. */
+    const int peak = (int)(((int64_t)shadow.depth * INKCELL_FB_SHADOW_ONE * progress) /
+                           ((int64_t)100 * INKCELL_ANIM_ONE));
+    if (peak <= 0) {
+        return;
+    }
+
+    const int short_side = box.w < box.h ? box.w : box.h;
+    if (radius < 0) {
+        radius = 0;
+    }
+    if (radius > short_side / 2) {
+        radius = short_side / 2;
+    }
+    const struct inkcell_fb_rect bounds = inkcell_fb_shadow_bounds(state, box, elevation);
+
+    struct inkcell_fb_clipped_box clipped;
+    if (!inkcell_fb_clip_box(state, bounds.x, bounds.y, bounds.w, bounds.h, &clipped)) {
+        return;
+    }
+    /*
+     * The band, always - including where something declared this region as animating.
+     *
+     * Every other primitive is let through the band inside declared damage, because what it
+     * puts down is the same colour however many times it is put down. This one is not: it
+     * darkens what is there, so a pixel it touches twice without a repaint between is a pixel
+     * a step darker, and a shadow over rows nothing repainted would deepen every frame. Inside
+     * the band the ground has been drawn again before this runs; outside it, what is on the
+     * panel is last frame's shadow already, and leaving it alone is correct.
+     *
+     * What this costs depends on the band the application builds. inkcell_fb_app_frame_begin()
+     * declares the span each overlay drew last frame - shadow included - as damage before
+     * anything paints, and an application that makes its band from that damage (mesh-client
+     * does) repaints those rows, so an overlay's shadow is never lost for more than the frame
+     * its edge first moves past the band. That is the same contract the scrim already relies
+     * on: a band that left out the carried span would leave the scrim dimming stale rows too.
+     *
+     * A widget that declares damage mid-frame and carries nothing forward - the FAB - is the
+     * case this does cost: while it widens outside the band, the new part of its fill has no
+     * shadow under it until a frame repaints those rows. That is a missing shadow for a moment,
+     * and the alternative - darkening rows nobody repainted - is a shadow that gets darker
+     * every frame.
+     */
+    if (state->clip_active) {
+        const int right =
+            clipped.x + clipped.w < state->clip.right ? clipped.x + clipped.w : state->clip.right;
+        const int bottom =
+            clipped.y + clipped.h < state->clip.bottom ? clipped.y + clipped.h : state->clip.bottom;
+        if (clipped.x < state->clip.x) {
+            clipped.dx += state->clip.x - clipped.x;
+            clipped.x = state->clip.x;
+        }
+        if (clipped.y < state->clip.y) {
+            clipped.dy += state->clip.y - clipped.y;
+            clipped.y = state->clip.y;
+        }
+        clipped.w = right - clipped.x;
+        clipped.h = bottom - clipped.y;
+        if (clipped.w <= 0 || clipped.h <= 0) {
+            return;
+        }
+    }
+
+    /* The casting shape in sixteenths, moved down by the offset. */
+    const int hx = box.w * INKCELL_FB_SHADOW_Q / 2;
+    const int hy = box.h * INKCELL_FB_SHADOW_Q / 2;
+    const int cx = box.x * INKCELL_FB_SHADOW_Q + hx;
+    const int cy = (box.y + shadow.offset) * INKCELL_FB_SHADOW_Q + hy;
+    const int r_q = radius * INKCELL_FB_SHADOW_Q;
+    const int span = shadow.blur * INKCELL_FB_SHADOW_Q;
+    const struct inkcell_rgb color = inkcell_fb_color(state, INKCELL_COLOR_SHADOW);
+
+    const size_t bpp = state->surface.bytes_per_pixel;
+    const size_t stride = state->surface.stride;
+    uint8_t *row = state->surface.pixels + (size_t)clipped.y * stride + (size_t)clipped.x * bpp;
+    for (int r = 0; r < clipped.h; ++r, row += stride) {
+        if ((size_t)(row - state->surface.pixels) + (size_t)clipped.w * bpp > state->surface.size) {
+            return;
+        }
+        /* Where this row is in the caller's coordinates, which is what the shape is stated in. */
+        const int y = bounds.y + clipped.dy + r;
+        /*
+         * The part of the row the box itself is about to cover, skipped. Only on the rows clear
+         * of its corners, where "inside the box" is a plain span; a corner row is measured all
+         * the way across, because the curve leaves pixels at its ends that the fill will not.
+         * This is most of the region on anything the size of a dialog, and it is why a shadow
+         * costs its perimeter rather than its area.
+         */
+        const bool plain = y >= box.y + radius && y < box.y + box.h - radius;
+        uint8_t *px = row;
+        for (int c = 0; c < clipped.w; ++c, px += bpp) {
+            const int x = bounds.x + clipped.dx + c;
+            if (plain && x >= box.x && x < box.x + box.w) {
+                const int skip = box.x + box.w - x;
+                c += skip - 1;
+                px += (size_t)(skip - 1) * bpp;
+                continue;
+            }
+            const int d = inkcell_fb_round_rect_distance(x, y, cx, cy, hx, hy, r_q);
+            /* 0 at half the blur inside the edge, `span` at half the blur outside it. */
+            const int u = d + span / 2;
+            if (u >= span) {
+                continue;
+            }
+            int falloff = INKCELL_FB_SHADOW_ONE;
+            if (u > 0) {
+                const int t = (u * INKCELL_FB_SHADOW_ONE) / span;
+                const int smooth = (t * t * (3 * INKCELL_FB_SHADOW_ONE - 2 * t)) /
+                                   (INKCELL_FB_SHADOW_ONE * INKCELL_FB_SHADOW_ONE);
+                falloff = INKCELL_FB_SHADOW_ONE - smooth;
+            }
+            const int amount = (peak * falloff) / INKCELL_FB_SHADOW_ONE;
+            if (amount <= 0) {
+                continue;
+            }
+            const struct inkcell_rgb ground =
+                decompose_color(state, inkcell_fb_load_pixel(px, bpp));
+            inkcell_fb_store_span(
+                px, 1,
+                compose_color(state, inkcell_fb_shadow_channel(ground.r, color.r, amount),
+                              inkcell_fb_shadow_channel(ground.g, color.g, amount),
+                              inkcell_fb_shadow_channel(ground.b, color.b, amount)),
+                bpp);
         }
     }
 }

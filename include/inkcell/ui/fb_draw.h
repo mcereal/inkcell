@@ -742,7 +742,8 @@ struct inkcell_rgb inkcell_fb_fade(struct inkcell_rgb ink, struct inkcell_rgb gr
 int inkcell_fb_margin(const struct inkcell_draw_state *state);
 
 /* How far towards INKCELL_COLOR_SCRIM a modal takes the frame behind it, as a percentage: the
-   theme's metrics.scrim_pct. What inkcell_fb_scrim_rect() is handed by a layer easing one in. */
+   theme's INKCELL_OPACITY_SCRIM. What inkcell_fb_scrim_rect() is handed by a layer easing one
+   in. */
 int inkcell_fb_scrim_depth(const struct inkcell_draw_state *state);
 /* The corner radius for a kind of container, at the frame's own glyph scale. The only way a
    radius enters the framebuffer layers, for the reason inkcell_fb_color() is the only way a colour
@@ -1219,6 +1220,37 @@ void inkcell_fb_clear(const struct inkcell_draw_state *state, struct inkcell_rgb
  */
 void inkcell_fb_scrim_rect(const struct inkcell_draw_state *state, struct inkcell_fb_rect box,
                            struct inkcell_rgb color, int percent);
+
+/*
+ * The shadow a box at `elevation` casts, drawn *before* the box is filled.
+ *
+ * What is already on the panel around `box` is moved towards INKCELL_COLOR_SHADOW - most of the
+ * way at the edge, fading to nothing `blur` further out, all of it `offset` below the box. The
+ * three numbers are the theme's (enum inkcell_elevation), so a renderer says what kind of thing
+ * it is drawing and never how dark. A flat level, or a theme that states no shadows, draws
+ * nothing at all.
+ *
+ * It is the scrim's trick with a shape: this panel has no alpha layer to lay a shadow on, but
+ * the frame under a card was drawn by us, into our own buffer, a moment ago, and can be read
+ * back and darkened. `radius` is the corner the box is about to be filled with - pass the same
+ * value to both, or the shadow's corners and the box's will disagree.
+ *
+ * `progress` eases it in, INKCELL_ANIM_ONE for all of it: a layer arriving casts a shadow that
+ * arrives with it, the way the scrim does.
+ *
+ * **Draw it over pixels this frame has painted.** It darkens what is there, so a region drawn
+ * over twice without a repaint between is darkened twice. It keeps itself inside the clip band
+ * for that reason - unlike every other primitive, it is *not* let through the band by declared
+ * animation damage - and a caller whose shadow travels (an overlay) makes sure the region it
+ * vacates is in the next frame's band, which the overlay layer already does for its scrim.
+ */
+void inkcell_fb_draw_shadow(const struct inkcell_draw_state *state, struct inkcell_fb_rect box,
+                            int radius, enum inkcell_elevation elevation, int32_t progress);
+/* The region `box`'s shadow at `elevation` can touch, `box` included: what a caller that moves
+   declares as damage. `box` itself for a level that casts nothing. */
+struct inkcell_fb_rect inkcell_fb_shadow_bounds(const struct inkcell_draw_state *state,
+                                                struct inkcell_fb_rect box,
+                                                enum inkcell_elevation elevation);
 size_t inkcell_fb_cols(const struct inkcell_draw_state *state, int scale);
 /*
  * Text and one glyph of it, in `ink` over `ground`.

@@ -69,11 +69,12 @@
  * button variants answer for a screen full of controls. Material has the same three and uses
  * them for the same thing.
  *
- * Here they are three *surface tiers* rather than three shadows. The Brick's display engine
- * composites fb0 against its own background layer, so there is no alpha and nothing to cast a
- * shadow into - the distance a card is off the ground is carried by its fill alone, which is
- * how Material's tonal elevation works and why it survives a light palette as well as a dark
- * one (see the tier comment in include/inkcell/ui/theme.h).
+ * Here they are three *surface tiers* first. The distance a card is off the ground is carried
+ * by its fill, which is how Material's tonal elevation works and why it survives a dark palette
+ * as well as a light one (see the tier comment in include/inkcell/ui/theme.h). The elevated
+ * variant also casts INKCELL_ELEVATION_RAISED's shadow, which is what makes it findable on a
+ * light palette where the tiers are a few percent apart; a theme with no shadows draws the
+ * tier alone.
  *
  * All three keep the hairline. The edge is not decoration on a theme whose surface is a step
  * off the ground - it is the whole of what says a card is there - and an outlined card, whose

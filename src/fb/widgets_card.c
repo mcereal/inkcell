@@ -72,10 +72,10 @@ inkcell_fb_card_measure(const struct inkcell_draw_state *state,
     m.pad_y = m.pad / 2 > 0 ? m.pad / 2 : m.pad;
     m.edge = inkcell_fb_edge(state);
     /*
-     * The variant, as a fill and nothing else. Three tiers rather than three shadows: there is
-     * no alpha on this panel to cast one into, so how far a card is off the ground is carried
-     * by the surface it is drawn on - which is Material's tonal elevation, and is why the
-     * three survive a light palette as well as a dark one.
+     * The variant, as a fill first. Three tiers, because how far a card is off the ground is
+     * carried by the surface it is drawn on - which is Material's tonal elevation, and is why
+     * the three survive a dark palette, where a shadow is nearly invisible, as well as a light
+     * one. The elevated card also casts one where the theme asks; see inkcell_fb_draw_card().
      */
     switch (card->variant) {
     case INKCELL_FB_CARD_ELEVATED:
@@ -687,6 +687,20 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_draw_state *state,
      * grows inward into the padding. See inkcell_fb_card_measure().
      */
     const int top = *y;
+    /*
+     * The elevated card's shadow, under everything else it draws. Only that variant: a filled
+     * card is *on* the page and an outlined one is the page itself, held by its edge - a shadow
+     * under either would be claiming a distance the fill says it does not have.
+     *
+     * On a dark palette this is a few levels of the ground and the tier is still what does the
+     * work; on a light one the tiers are a few percent apart and the shadow is what the eye
+     * finds first. Which is the division of labour enum inkcell_elevation describes.
+     */
+    if (card->variant == INKCELL_FB_CARD_ELEVATED) {
+        inkcell_fb_draw_shadow(
+            state, (struct inkcell_fb_rect){.x = m.x, .y = top, .w = m.width, .h = height},
+            m.radius + m.edge, INKCELL_ELEVATION_RAISED, INKCELL_ANIM_ONE);
+    }
     if (m.ring > 0) {
         inkcell_fb_fill_round_rect(state, m.x, top, m.width, height, m.radius + m.edge,
                                    inkcell_fb_color(state, m.fill));

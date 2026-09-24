@@ -69,11 +69,16 @@ enum inkcell_color {
      * The three surface tiers, lowest first.
      *
      * A surface says how far a thing is from the ground, and the whole point of having more
-     * than one is that a panel over a panel has to be tellable from it. The Brick's display
-     * engine composites fb0 against its own background layer rather than against what we have
-     * already drawn, so there is no alpha to shade with and no drop shadow to cast - the
-     * distance is carried by the fill alone, which is how Material's tonal elevation works and
-     * why it survives a light palette as well as a dark one.
+     * than one is that a panel over a panel has to be tellable from it. The distance is carried
+     * by the fill first, which is how Material's tonal elevation works and why it survives a
+     * light palette as well as a dark one - a shadow on a near-black ground is close to
+     * invisible, and a tier is not.
+     *
+     * A shadow is the second half, where a theme asks for one: see enum inkcell_elevation. It
+     * was left out for years on the grounds that the display engine composites fb0 against its
+     * own layer and there is no alpha to cast one with. That is true of what is *behind* the
+     * page and irrelevant to what is on it - a shadow darkens the frame we drew a moment ago,
+     * exactly as the scrim below does.
      *
      * Lower is nearer the ground, so on a dark theme the tiers get lighter as they rise and on
      * a light one they get darker. A theme states all three and nothing that draws knows which
@@ -91,7 +96,7 @@ enum inkcell_color {
      * The three tiers above say how far a thing is from the ground, which works for anything
      * that belongs to the screen it is on. A transient notice does not - it is over the whole
      * UI, it was not there a second ago and will not be there in four - and no tier can say
-     * that on a panel with no shadow and no alpha to raise it with. Inverting the ground can:
+     * that, and on a dark theme no shadow can either. Inverting the ground can:
      * a fill that reads as "not part of this screen" is found before it is read, which is the
      * whole job of a snackbar.
      *
@@ -207,21 +212,32 @@ enum inkcell_color {
     /*
      * The scrim: what the frame behind a modal is mixed towards.
      *
-     * The surface tiers a few roles up carry the note that this panel has no alpha to raise a
-     * thing with, so distance is spent on the fill instead. That is true of anything *drawn* -
-     * the display engine composites fb0 against its own layer, so there is nothing behind the
-     * page to blend with. It was read for years as "and therefore there is no scrim", which
-     * does not follow: a scrim does not blend against what is behind the page, it blends
-     * against what is already *on* it, and the frame under a dialog was drawn by us, into our
-     * own buffer, a few microseconds earlier. inkcell_fb_scrim_rect() reads it back and mixes.
+     * This panel has no alpha channel anything composites: the display engine composites fb0
+     * against its own layer, so there is nothing behind the page to blend with. That was read
+     * for years as "and therefore there is no scrim", which does not follow: a scrim does not blend
+     * against what is behind the page, it blends against what is already *on* it, and the frame
+     * under a dialog was drawn by us, into our own buffer, a few microseconds earlier.
+     * inkcell_fb_scrim_rect() reads it back and mixes.
      *
      * A role rather than "darken by a third", because which way is *away* is a fact about the
      * palette. A dark theme scrims towards black and a light one very nearly does too - what a
      * light theme must not do is scrim towards its own ground, which would make the dimmed
      * content and the panel behind it the same colour and turn the scrim into an eraser. How
-     * far it goes is `scrim_pct` on the metrics, so a palette can say both halves.
+     * far it goes is INKCELL_OPACITY_SCRIM, so a palette can say both halves.
      */
     INKCELL_COLOR_SCRIM,
+    /*
+     * What a raised thing's shadow darkens the frame under it towards.
+     *
+     * The scrim's argument one size smaller: a shadow is not a colour laid down, it is what is
+     * already on the panel moved part of the way towards this - see inkcell_fb_draw_shadow().
+     * How far it goes and how wide it spreads are the elevation table's (struct inkcell_shadow),
+     * so a palette states which way is *darker* and the metrics state how much.
+     *
+     * A role rather than black because a warm palette wants a warm shadow: pure black under a
+     * sepia card reads as a smudge rather than as depth.
+     */
+    INKCELL_COLOR_SHADOW,
     INKCELL_COLOR_COUNT
 };
 
@@ -466,6 +482,84 @@ enum inkcell_shape {
        whatever this turns out to be" is not a length a theme can state in advance. */
     INKCELL_SHAPE_FULL,
     INKCELL_SHAPE_COUNT
+};
+
+/*
+ * The opacity scale: how much of one colour a mix takes from the other, in percent.
+ *
+ * This panel has no alpha channel anyone composites, so "opacity" here is always a *mix
+ * against something known*: a state layer is the ink mixed into the fill under it, a disabled
+ * label is the fill with some of its ink left in, a scrim is the frame moved towards
+ * INKCELL_COLOR_SCRIM. What those have in common is the number, and the numbers were three
+ * constants in theme.c and a field on the metrics - each a good figure, none of them a theme's
+ * to move. A theme built for sunlight wants a heavier focus layer the way it wants a deeper
+ * scrim, and could only say the second.
+ *
+ * So they are one table, read through inkcell_theme_opacity() and applied with
+ * inkcell_theme_mix(). The shadow's own depth is not in it: a shadow's darkness belongs with
+ * its spread and its offset, because the three are one decision - see struct inkcell_shadow.
+ *
+ * inkcell_theme_validate() checks the focused layer of every pair drawn that way against the
+ * theme's own figure, so raising FOCUS far enough to cost a label its contrast fails the
+ * tests for the theme that did it rather than going in unnoticed.
+ */
+enum inkcell_opacity {
+    INKCELL_OPACITY_HOVER = 0, /* a pointer resting on it: the lightest, the pointer is visible */
+    INKCELL_OPACITY_FOCUS,     /* the d-pad will act on it */
+    INKCELL_OPACITY_PRESS,     /* being activated, this instant */
+    /* The share of a disabled label that is still ink rather than fill. Higher is *less*
+       faded, which is the one entry here that runs the other way - it is the amount of the
+       word that survives, which is what Material states and what a reader judges. */
+    INKCELL_OPACITY_DISABLED,
+    INKCELL_OPACITY_SCRIM, /* how far the frame behind a modal is taken towards the scrim */
+    INKCELL_OPACITY_COUNT
+};
+
+/*
+ * How far a thing stands off the page, named for what kind of thing it is.
+ *
+ * The shape scale's move applied to depth. A renderer does not state a shadow any more than it
+ * states a radius: it says "this is a dialog" and the theme answers with how far below it the
+ * shadow falls, how soft it is and how dark. Four levels rather than Material's six, because
+ * that is how many kinds of raised thing there are here - and a level no component reaches
+ * for is a level nobody can tell from its neighbours.
+ *
+ * Elevation is *also* a surface tier, and this does not replace that: the tier is the fill a
+ * thing is painted with and still carries the distance on a dark theme, where a shadow on a
+ * near-black ground is close to invisible. A shadow is what makes the same distance legible
+ * on a light ground, where the tiers are a few percent apart and the eye reads the edge a
+ * shadow gives before it reads the fill.
+ *
+ * FLAT is the zero value on purpose, so a struct that predates the field casts nothing.
+ */
+enum inkcell_elevation {
+    INKCELL_ELEVATION_FLAT = 0, /* on the page: an ordinary card, a row */
+    INKCELL_ELEVATION_RAISED,   /* a step off it: an elevated card */
+    INKCELL_ELEVATION_FLOATING, /* over the body, not of it: a FAB, a snackbar, a menu */
+    INKCELL_ELEVATION_MODAL,    /* over everything, and waiting: a dialog, a sheet */
+    INKCELL_ELEVATION_COUNT
+};
+
+/*
+ * One level's shadow: the three numbers that are one decision.
+ *
+ * `offset` and `blur` are in *half* steps of the glyph scale, as the spacing scale is and for
+ * its reason - a theme drawing bigger gets a proportionally deeper shadow rather than one that
+ * shrinks relative to everything around it. `depth` is a percentage, the opacity scale's unit:
+ * how far the frame directly under the edge is taken towards INKCELL_COLOR_SHADOW, fading to
+ * nothing `blur` further out.
+ *
+ * One light, straight above and a little forward, so `offset` is downward only. Material's key
+ * and ambient pair is two of these summed; on a panel this size the ambient half is a pixel or
+ * two of haze that costs a read-back pass to draw, and the key light alone carries the depth.
+ *
+ * All zeroes is a flat level, and a theme that is all flat - the high-contrast one - draws
+ * exactly what it drew before shadows existed.
+ */
+struct inkcell_shadow {
+    uint8_t offset; /* how far below the box it falls, in half steps */
+    uint8_t blur;   /* how far past the edge it takes to fade out, in half steps */
+    uint8_t depth;  /* how dark at the edge, as a percentage towards the shadow colour */
 };
 
 /*
@@ -777,20 +871,29 @@ struct inkcell_metrics {
        is a legal, entirely square theme. */
     uint8_t shape[INKCELL_SHAPE_FULL];
     /*
-     * How far towards INKCELL_COLOR_SCRIM the frame behind a modal is taken, as a percentage.
+     * The opacity scale, in percent, indexed by enum inkcell_opacity. Read it through
+     * inkcell_theme_opacity().
      *
-     * A percentage rather than a colour because the scrim is a *mix* and the thing it is mixed
-     * with is whatever happened to be on the panel - which is the point of it: the shapes and
-     * the columns under a dialog stay legible as shapes and columns, dimmed, so the reader can
-     * still see what the question is about. A flat fill over them would be a second screen.
+     * The scrim's entry is the one that used to be `scrim_pct` here, and its argument is
+     * unchanged. A percentage rather than a colour because the scrim is a *mix* and the thing
+     * it is mixed with is whatever happened to be on the panel - which is the point of it: the
+     * shapes and the columns under a dialog stay legible as shapes and columns, dimmed, so the
+     * reader can still see what the question is about. Material asks for 32%; a theme built for
+     * legibility rather than for looks wants more, because on that palette the content under
+     * the scrim and the panel over it are both near-maximum contrast and a gentle dim does not
+     * separate them. 0 is a legal theme with no scrim at all, and the overlays still work.
      *
-     * Material asks for 32%; a theme built for legibility rather than for looks wants more,
-     * because on that palette the content under the scrim and the panel over it are both
-     * near-maximum contrast and a gentle dim does not separate them. 0 is a legal theme with
-     * no scrim at all, and the overlays still work - what is lost is the dimming, not the
-     * modal.
+     * The state layers are Material's figures near enough - a hover is a hint, a focus a
+     * visible step and a press a step further - and small on purpose: the layer has to be
+     * findable without taking the fill far enough that the ink checked against it stops being
+     * readable. All zeroes is a theme with no state layers, which is legal and is what a theme
+     * that fills its cursor (`focus_fill`) could reasonably ask for.
      */
-    uint8_t scrim_pct;
+    uint8_t opacity[INKCELL_OPACITY_COUNT];
+    /* The elevation scale, indexed by enum inkcell_elevation. Read it through
+       inkcell_theme_shadow(), which does the multiply. The FLAT entry is read like the others,
+       so a theme could give the page itself a shadow - none does, and it would be odd. */
+    struct inkcell_shadow shadow[INKCELL_ELEVATION_COUNT];
 };
 
 struct inkcell_theme {
@@ -884,6 +987,12 @@ enum inkcell_tone inkcell_family_tone(enum inkcell_family family);
  */
 struct inkcell_rgb inkcell_theme_state_layer(struct inkcell_rgb fill, struct inkcell_rgb ink,
                                              enum inkcell_state state);
+/* The same layer at `theme`'s own opacity figures. inkcell_theme_state_layer() is this with the
+   default theme, kept for a caller that holds two colours and no theme; anything that draws has
+   a theme and should say so, or a theme that moved its focus layer is ignored by that widget. */
+struct inkcell_rgb inkcell_theme_state_layer_for(const struct inkcell_theme *theme,
+                                                 struct inkcell_rgb fill, struct inkcell_rgb ink,
+                                                 enum inkcell_state state);
 
 /*
  * The one layer an interaction earns: PRESSED over FOCUSED over HOVERED, and REST when disabled
@@ -902,6 +1011,43 @@ enum inkcell_state inkcell_interaction_layer(struct inkcell_interaction interact
  * strength is one nobody can tell is disabled.
  */
 struct inkcell_rgb inkcell_theme_disabled_ink(struct inkcell_rgb fill, struct inkcell_rgb ink);
+/* The same fade at `theme`'s INKCELL_OPACITY_DISABLED; the one above is the default theme's. */
+struct inkcell_rgb inkcell_theme_disabled_ink_for(const struct inkcell_theme *theme,
+                                                  struct inkcell_rgb fill, struct inkcell_rgb ink);
+
+/* `theme`'s figure for `opacity`, in percent, capped at 100. 0 for an unknown entry. */
+int inkcell_theme_opacity(const struct inkcell_theme *theme, enum inkcell_opacity opacity);
+
+/*
+ * `from` taken `percent` of the way towards `to`: the one mix every opacity token is applied
+ * with.
+ *
+ * Integer, rounded half away from zero, and with one rule worth knowing: a channel that differs
+ * at all moves by at least one step when `percent` is above zero. A twelfth of a four-step
+ * difference rounds to nothing, and a layer that resolves to its own fill is a cursor that has
+ * left no mark - the point of a mix this small is to be *found*, and one step is the smallest
+ * amount of being found there is. 0 returns `from` and 100 returns `to`, exactly.
+ */
+struct inkcell_rgb inkcell_theme_mix(struct inkcell_rgb from, struct inkcell_rgb to, int percent);
+
+/* One level's shadow in pixels at a glyph scale: struct inkcell_shadow after the multiply. */
+struct inkcell_shadow_px {
+    int offset; /* pixels below the box */
+    int blur;   /* pixels past the edge before it is gone */
+    int depth;  /* percent towards INKCELL_COLOR_SHADOW at the edge */
+};
+
+/*
+ * `elevation`'s shadow at glyph multiplier `scale`. All zeroes for a flat level, for an unknown
+ * one, and for a level whose depth or spread is zero - so a caller can test `depth > 0` and
+ * know there is nothing to draw, rather than drawing a shadow that has no width.
+ *
+ * A level that asked for any spread gets at least a pixel of it, the spacing scale's rule: a
+ * shadow rounded away at a small scale is depth that stops existing on exactly the theme that
+ * draws smallest.
+ */
+struct inkcell_shadow_px inkcell_theme_shadow(const struct inkcell_theme *theme,
+                                              enum inkcell_elevation elevation, int scale);
 
 /*
  * The fill and the ink for one family, one slot and one state, resolved together.

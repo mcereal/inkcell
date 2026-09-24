@@ -76,12 +76,44 @@
  * proportional '1' in either is a column that shifts under the eye every time it updates.
  */
 /*
- * Taken as a parameter rather than restated in the table, so a theme that wants a deeper dim
- * says one number instead of a copy of everything above it. A second initializer for the same
- * member would have done it in fewer characters and is what -Woverride-init exists to catch:
- * "the last one wins" is a rule a reader has to know, and a macro argument is not.
+ * The elevation scale, three ways.
+ *
+ * In half steps, so at the device's scale a half is two pixels: a raised card casts 2px down
+ * and fades over 6, a dialog 6px down over 16. Offset and blur grow together because a thing
+ * further off the page is further from its shadow *and* lit more diffusely - a far shadow with
+ * a crisp edge reads as a hole in the panel rather than as depth.
+ *
+ * The depth is the half that differs by palette. On a light ground a quarter of the way to
+ * black is a clear edge; on a near-black one the same mix moves the ground by a few levels and is
+ * gone, so a dark palette states roughly double. It does not come out louder - there is less
+ * room between the ground and black to move through - it comes out *visible*, which is what
+ * the light palette's figure already is on its own ground.
+ *
+ * And none at all, for a palette whose whole design is hard edges: see the contrast theme.
  */
-#define INKCELL_METRICS_SCRIM_FIELDS(scrim)                                                        \
+#define INKCELL_SHADOWS_LIGHT                                                                      \
+    {                                                                                              \
+        [INKCELL_ELEVATION_FLAT] = {0U, 0U, 0U}, [INKCELL_ELEVATION_RAISED] = {1U, 3U, 16U},       \
+        [INKCELL_ELEVATION_FLOATING] = {2U, 5U, 22U}, [INKCELL_ELEVATION_MODAL] = {3U, 8U, 28U},   \
+    }
+#define INKCELL_SHADOWS_DARK                                                                       \
+    {                                                                                              \
+        [INKCELL_ELEVATION_FLAT] = {0U, 0U, 0U}, [INKCELL_ELEVATION_RAISED] = {1U, 3U, 40U},       \
+        [INKCELL_ELEVATION_FLOATING] = {2U, 5U, 50U}, [INKCELL_ELEVATION_MODAL] = {3U, 8U, 60U},   \
+    }
+#define INKCELL_SHADOWS_NONE                                                                       \
+    {                                                                                              \
+        { 0U, 0U, 0U }                                                                             \
+    }
+
+/*
+ * The scrim and the shadows are taken as parameters rather than restated in the table, so a
+ * theme that wants a deeper dim says one number instead of a copy of everything above it. A
+ * second initializer for the same member would have done it in fewer characters and is what
+ * -Woverride-init exists to catch: "the last one wins" is a rule a reader has to know, and a
+ * macro argument is not.
+ */
+#define INKCELL_METRICS_FIELDS(scrim, shadows)                                                     \
     .margin = 16U, .scale = INKCELL_SCALE(4), .bubble_width_pct = 75U,                             \
     .type =                                                                                        \
         {                                                                                          \
@@ -128,15 +160,22 @@
             [INKCELL_SHAPE_SM] = 2U,                                                               \
             [INKCELL_SHAPE_MD] = 3U,                                                               \
             [INKCELL_SHAPE_LG] = 4U,                                                               \
-    }, /* Material's 32%, which is the figure every platform has converged on: enough              \
-          that the eye stops reading the body, little enough that it can still see what            \
-          the question is about, and a palette that needs more says so. */                         \
-        .scrim_pct = (scrim)
+    },                                                                                             \
+    .opacity =                                                                                     \
+        {                                                                                          \
+            [INKCELL_OPACITY_HOVER] = 8U,      [INKCELL_OPACITY_FOCUS] = 12U,                      \
+            [INKCELL_OPACITY_PRESS] = 20U,     [INKCELL_OPACITY_DISABLED] = 38U,                   \
+            [INKCELL_OPACITY_SCRIM] = (scrim),                                                     \
+    },                                                                                             \
+    .shadow = shadows
 
-/* The default metrics: Material's 32% scrim, which is the figure every platform has settled
-   on. */
-#define INKCELL_METRICS_DEFAULT                                                                    \
-    { INKCELL_METRICS_SCRIM_FIELDS(32U) }
+/* The default metrics: Material's 32% scrim, which is the figure every platform has converged
+   on - enough that the eye stops reading the body, little enough that it can still see what the
+   question is about, and a palette that needs more says so. */
+#define INKCELL_METRICS_DARK                                                                       \
+    { INKCELL_METRICS_FIELDS(32U, INKCELL_SHADOWS_DARK) }
+#define INKCELL_METRICS_LIGHT                                                                      \
+    { INKCELL_METRICS_FIELDS(32U, INKCELL_SHADOWS_LIGHT) }
 
 static const struct inkcell_theme
     k_themes[] =
@@ -226,6 +265,9 @@ static const struct inkcell_theme
                            plainly: away from the content is towards black, and the content
                            over it is already light. */
                         [INKCELL_COLOR_SCRIM] = RGB(0, 0, 0),
+                        /* Black too, and the dark palettes' shadows are deeper for it: there is
+                           very little room between this ground and black to move through. */
+                        [INKCELL_COLOR_SHADOW] = RGB(0, 0, 0),
                     },
                 /* Bright tints for a dark ground: the initials over them are the ground colour, so
                    a tint has to carry the contrast the way the accent fill does. */
@@ -251,7 +293,7 @@ static const struct inkcell_theme
                         RGB(176, 108, 190), /* orchid */
                         RGB(104, 84, 144),  /* deep violet */
                     },
-                .metrics = INKCELL_METRICS_DEFAULT,
+                .metrics = INKCELL_METRICS_DARK,
             },
             {
                 .id = "light",
@@ -334,6 +376,9 @@ static const struct inkcell_theme
                            colour of the panel over it, which is an eraser rather than a
                            scrim. */
                         [INKCELL_COLOR_SCRIM] = RGB(0, 0, 0),
+                        /* A blue-black rather than black: the surfaces here lean cool, and a
+                           neutral shadow under a cool card reads a shade dirty. */
+                        [INKCELL_COLOR_SHADOW] = RGB(8, 12, 24),
                     },
                 /* The dark half of each hue, because here the initials are the paper ground. */
                 .avatars =
@@ -357,7 +402,7 @@ static const struct inkcell_theme
                         RGB(120, 150, 60),  /* olive */
                         RGB(168, 182, 200), /* pale slate */
                     },
-                .metrics = INKCELL_METRICS_DEFAULT,
+                .metrics = INKCELL_METRICS_LIGHT,
             },
             {
                 .id = "contrast",
@@ -436,10 +481,12 @@ static const struct inkcell_theme
                         [INKCELL_COLOR_METER_TRACK] = RGB(96, 96, 96),
                         [INKCELL_COLOR_CODE] = RGB(0, 0, 0),
                         [INKCELL_COLOR_CODE_GROUND] = RGB(255, 255, 255),
-                        /* Black, and taken much further than the others at `scrim_pct`: on a
+                        /* Black, and taken much further than the others at its scrim opacity: on a
                            palette where the body and the panel over it are both at maximum
                            contrast, a gentle dim separates nothing. */
                         [INKCELL_COLOR_SCRIM] = RGB(0, 0, 0),
+                        /* Stated for completeness and never drawn: every level here is flat. */
+                        [INKCELL_COLOR_SHADOW] = RGB(0, 0, 0),
                     },
                 /* Two, not six. A palette of hues is exactly what this theme exists to do without,
                    so an avatar here is the yellow or the white and the initials carry the rest. */
@@ -465,8 +512,13 @@ static const struct inkcell_theme
                 /* A deeper scrim than the rest. This palette puts the body and the panel over
                    it both at very nearly maximum contrast, so a third of the way towards black
                    leaves two white-on-black surfaces separated by almost nothing - the dim has
-                   to be most of the way for a modal here to read as a modal. */
-                .metrics = {INKCELL_METRICS_SCRIM_FIELDS(62U)},
+                   to be most of the way for a modal here to read as a modal.
+
+                   And no shadows. Every raised thing on this palette already has a near-white
+                   outline on black, which is the strongest edge the panel can draw; a soft
+                   shadow beside it adds a grey band exactly where this theme promises there is
+                   none. */
+                .metrics = {INKCELL_METRICS_FIELDS(62U, INKCELL_SHADOWS_NONE)},
             },
             {
                 .id = "colorblind",
@@ -540,6 +592,7 @@ static const struct inkcell_theme
                         [INKCELL_COLOR_CODE] = RGB(0, 0, 0),
                         [INKCELL_COLOR_CODE_GROUND] = RGB(255, 255, 255),
                         [INKCELL_COLOR_SCRIM] = RGB(0, 0, 0),
+                        [INKCELL_COLOR_SHADOW] = RGB(0, 0, 0),
                     },
                 /* The Okabe-Ito set again, this time as fills. They are the six that stay separable
                    under every common dichromacy, which is the only reason to spend six on avatars
@@ -569,7 +622,7 @@ static const struct inkcell_theme
                         RGB(0, 158, 115),  /* bluish green */
                         RGB(0, 114, 178),  /* blue */
                     },
-                .metrics = INKCELL_METRICS_DEFAULT,
+                .metrics = INKCELL_METRICS_DARK,
             },
 };
 
@@ -710,27 +763,30 @@ enum inkcell_color inkcell_tone_role(enum inkcell_tone tone) {
 /*
  * The state layer, as a fixed-point mix.
  *
- * The percentages are the whole of the design: enough that the cursor is found without looking
- * for it, little enough that the ink the theme was validated against still reads on the result.
- * inkcell_theme_validate() checks the focused variant of every pair drawn this way, so these
- * numbers cannot be raised without the tests saying which theme it broke.
+ * The percentages are the theme's (INKCELL_OPACITY_HOVER and on), and they are the whole of the
+ * design: enough that the cursor is found without looking for it, little enough that the ink the
+ * theme was validated against still reads on the result. inkcell_theme_validate() checks the
+ * focused variant of every pair drawn this way at the theme's own figure, so these numbers
+ * cannot be raised without the tests saying which theme it broke.
  */
-static const uint8_t k_state_mix_pct[INKCELL_STATE_COUNT] = {
-    [INKCELL_STATE_REST] = 0U,
-    [INKCELL_STATE_HOVERED] = 8U,
-    [INKCELL_STATE_FOCUSED] = 12U,
-    [INKCELL_STATE_PRESSED] = 20U,
-};
+static enum inkcell_opacity state_opacity(enum inkcell_state state) {
+    switch (state) {
+    case INKCELL_STATE_HOVERED:
+        return INKCELL_OPACITY_HOVER;
+    case INKCELL_STATE_PRESSED:
+        return INKCELL_OPACITY_PRESS;
+    case INKCELL_STATE_FOCUSED:
+    default:
+        return INKCELL_OPACITY_FOCUS;
+    }
+}
 
-/* The share of a disabled label that is still ink rather than fill - Material's 38%. */
-#define INKCELL_DISABLED_INK_PCT 38U
-
-static uint8_t mix_channel(uint8_t fill, uint8_t ink, unsigned pct) {
+static uint8_t mix_channel(uint8_t fill, uint8_t ink, int pct) {
     const int delta = (int)ink - (int)fill;
-    if (delta == 0) {
+    if (delta == 0 || pct <= 0) {
         return fill;
     }
-    int scaled = (delta * (int)pct + (delta >= 0 ? 50 : -50)) / 100;
+    int scaled = (delta * pct + (delta >= 0 ? 50 : -50)) / 100;
     if (scaled == 0) {
         /*
          * A twelfth of a four-step difference rounds to nothing, and a layer that resolves to
@@ -744,17 +800,38 @@ static uint8_t mix_channel(uint8_t fill, uint8_t ink, unsigned pct) {
     return (uint8_t)((int)fill + scaled);
 }
 
-struct inkcell_rgb inkcell_theme_state_layer(struct inkcell_rgb fill, struct inkcell_rgb ink,
-                                             enum inkcell_state state) {
+struct inkcell_rgb inkcell_theme_mix(struct inkcell_rgb from, struct inkcell_rgb to, int percent) {
+    if (percent > 100) {
+        percent = 100;
+    }
+    return (struct inkcell_rgb){
+        .r = mix_channel(from.r, to.r, percent),
+        .g = mix_channel(from.g, to.g, percent),
+        .b = mix_channel(from.b, to.b, percent),
+    };
+}
+
+int inkcell_theme_opacity(const struct inkcell_theme *theme, enum inkcell_opacity opacity) {
+    theme = theme_or_default(theme);
+    if ((int)opacity < 0 || (int)opacity >= (int)INKCELL_OPACITY_COUNT) {
+        return 0;
+    }
+    const int pct = (int)theme->metrics.opacity[opacity];
+    return pct > 100 ? 100 : pct;
+}
+
+struct inkcell_rgb inkcell_theme_state_layer_for(const struct inkcell_theme *theme,
+                                                 struct inkcell_rgb fill, struct inkcell_rgb ink,
+                                                 enum inkcell_state state) {
     if ((int)state <= (int)INKCELL_STATE_REST || state >= INKCELL_STATE_COUNT) {
         return fill;
     }
-    const unsigned pct = k_state_mix_pct[state];
-    return (struct inkcell_rgb){
-        .r = mix_channel(fill.r, ink.r, pct),
-        .g = mix_channel(fill.g, ink.g, pct),
-        .b = mix_channel(fill.b, ink.b, pct),
-    };
+    return inkcell_theme_mix(fill, ink, inkcell_theme_opacity(theme, state_opacity(state)));
+}
+
+struct inkcell_rgb inkcell_theme_state_layer(struct inkcell_rgb fill, struct inkcell_rgb ink,
+                                             enum inkcell_state state) {
+    return inkcell_theme_state_layer_for(NULL, fill, ink, state);
 }
 
 enum inkcell_state inkcell_interaction_layer(struct inkcell_interaction interaction) {
@@ -770,13 +847,34 @@ enum inkcell_state inkcell_interaction_layer(struct inkcell_interaction interact
     return interaction.hovered ? INKCELL_STATE_HOVERED : INKCELL_STATE_REST;
 }
 
-struct inkcell_rgb inkcell_theme_disabled_ink(struct inkcell_rgb fill, struct inkcell_rgb ink) {
+struct inkcell_rgb inkcell_theme_disabled_ink_for(const struct inkcell_theme *theme,
+                                                  struct inkcell_rgb fill, struct inkcell_rgb ink) {
     /* The same mix, pointed the other way: the fill moved towards the ink by the part of the ink
        that survives. Rounded the same way, so a label on a fill it already matches stays put. */
-    return (struct inkcell_rgb){
-        .r = mix_channel(fill.r, ink.r, INKCELL_DISABLED_INK_PCT),
-        .g = mix_channel(fill.g, ink.g, INKCELL_DISABLED_INK_PCT),
-        .b = mix_channel(fill.b, ink.b, INKCELL_DISABLED_INK_PCT),
+    return inkcell_theme_mix(fill, ink, inkcell_theme_opacity(theme, INKCELL_OPACITY_DISABLED));
+}
+
+struct inkcell_rgb inkcell_theme_disabled_ink(struct inkcell_rgb fill, struct inkcell_rgb ink) {
+    return inkcell_theme_disabled_ink_for(NULL, fill, ink);
+}
+
+struct inkcell_shadow_px inkcell_theme_shadow(const struct inkcell_theme *theme,
+                                              enum inkcell_elevation elevation, int scale) {
+    const struct inkcell_shadow_px none = {0, 0, 0};
+    theme = theme_or_default(theme);
+    if ((int)elevation < 0 || (int)elevation >= (int)INKCELL_ELEVATION_COUNT) {
+        return none;
+    }
+    const struct inkcell_shadow *level = &theme->metrics.shadow[elevation];
+    if (level->depth == 0U || level->blur == 0U) {
+        return none;
+    }
+    scale = inkcell_theme_clamp_scale(theme, scale);
+    const int blur = ((int)level->blur * scale) / (2 * INKCELL_SCALE_UNIT);
+    return (struct inkcell_shadow_px){
+        .offset = ((int)level->offset * scale) / (2 * INKCELL_SCALE_UNIT),
+        .blur = blur > 0 ? blur : 1,
+        .depth = level->depth > 100U ? 100 : (int)level->depth,
     };
 }
 
@@ -801,7 +899,7 @@ struct inkcell_paint inkcell_theme_paint(const struct inkcell_theme *theme,
      * three of the four themes under 4.5:1, because those pairs sit near the floor by design.
      */
     return (struct inkcell_paint){
-        .fill = container ? inkcell_theme_state_layer(fill, ink, state) : fill,
+        .fill = container ? inkcell_theme_state_layer_for(theme, fill, ink, state) : fill,
         .ink = ink,
     };
 }
@@ -1258,15 +1356,57 @@ bool inkcell_theme_validate(const struct inkcell_theme *theme, char *reason, siz
         }
         return false;
     }
-    /* A scrim is a mix and a mix is a fraction; 0 is the legal theme with no scrim at all, and
-       100 is the one where the body disappears entirely under the modal - still a mix, and
-       still a choice a palette is entitled to make. Past that it is not one. */
-    if (theme->metrics.scrim_pct > 100U) {
+    /* An opacity is a mix and a mix is a fraction; 0 is legal everywhere (a theme with no scrim,
+       no state layers) and 100 is the one where what is under it disappears entirely - still a
+       mix, and still a choice a palette is entitled to make. Past that it is not one. */
+    for (int i = 0; i < (int)INKCELL_OPACITY_COUNT; ++i) {
+        if (theme->metrics.opacity[i] > 100U) {
+            if (reason != NULL) {
+                snprintf(reason, reason_len, "opacity %d is %u%%, which is not a fraction", i,
+                         theme->metrics.opacity[i]);
+            }
+            return false;
+        }
+    }
+    /*
+     * The state layers have to rise too: hover no heavier than focus, focus no heavier than
+     * press. Contrast is only checked for the focused and pressed layers below, and a mix
+     * lighter than one that passes still passes - so the order is what extends those checks to
+     * hover. Without it a theme could set hover to 100% and draw a hovered container in its own
+     * ink, which nothing here would look at.
+     */
+    if (theme->metrics.opacity[INKCELL_OPACITY_HOVER] >
+            theme->metrics.opacity[INKCELL_OPACITY_FOCUS] ||
+        theme->metrics.opacity[INKCELL_OPACITY_FOCUS] >
+            theme->metrics.opacity[INKCELL_OPACITY_PRESS]) {
         if (reason != NULL) {
-            snprintf(reason, reason_len, "scrim %u%% is not a fraction of the way towards it",
-                     theme->metrics.scrim_pct);
+            snprintf(reason, reason_len, "%s", "state layers must rise: hover <= focus <= press");
         }
         return false;
+    }
+    /*
+     * A shadow is a mix too, and it has to *rise*: each level at least as far off the page as the
+     * one under it, on all three axes. A dialog casting a shorter shadow than the card behind it
+     * is a dialog that reads as sitting underneath it, and that is exactly the inversion a table
+     * edited one row at a time makes.
+     */
+    for (int i = 0; i < (int)INKCELL_ELEVATION_COUNT; ++i) {
+        const struct inkcell_shadow *level = &theme->metrics.shadow[i];
+        if (level->depth > 100U) {
+            if (reason != NULL) {
+                snprintf(reason, reason_len, "elevation %d's shadow is %u%% deep", i, level->depth);
+            }
+            return false;
+        }
+        const struct inkcell_shadow *below = i > 0 ? &theme->metrics.shadow[i - 1] : NULL;
+        if (below != NULL && (level->offset < below->offset || level->blur < below->blur ||
+                              level->depth < below->depth)) {
+            if (reason != NULL) {
+                snprintf(reason, reason_len, "elevation %d casts less shadow than elevation %d", i,
+                         i - 1);
+            }
+            return false;
+        }
     }
     if (inkcell_font_by_id(theme->font_id) == NULL) {
         if (reason != NULL) {
@@ -1303,8 +1443,8 @@ bool inkcell_theme_validate(const struct inkcell_theme *theme, char *reason, siz
     for (size_t i = 0; i < state_count + lift_count; ++i) {
         const struct theme_state_pair *pair =
             i < state_count ? &k_required_state[i] : &k_required_lift[i - state_count];
-        const struct inkcell_rgb ground = inkcell_theme_state_layer(
-            theme->colors[pair->ground], theme->colors[pair->layer], pair->state);
+        const struct inkcell_rgb ground = inkcell_theme_state_layer_for(
+            theme, theme->colors[pair->ground], theme->colors[pair->layer], pair->state);
         const double ratio = inkcell_theme_contrast(theme->colors[pair->ink], ground);
         if (ratio + 0.005 < pair->ratio) {
             if (reason != NULL) {
@@ -1394,7 +1534,7 @@ bool inkcell_theme_validate(const struct inkcell_theme *theme, char *reason, siz
                 ground = theme->colors[k_family_rules[i].ground];
             } else {
                 ink = inkcell_theme_family(theme, family, k_family_rules[i].ink);
-                ground = inkcell_theme_state_layer(fill, ink, k_family_rules[i].state);
+                ground = inkcell_theme_state_layer_for(theme, fill, ink, k_family_rules[i].state);
             }
             const double ratio = inkcell_theme_contrast(ink, ground);
             if (ratio + 0.005 < k_family_rules[i].ratio) {
