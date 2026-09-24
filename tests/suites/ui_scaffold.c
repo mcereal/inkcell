@@ -14,7 +14,9 @@
 #include "inkcell/ui/fb_capture.h"
 #include "inkcell/ui/focus.h"
 #include "inkcell/ui/widgets/scaffold.h"
+#include "inkcell/ui/widgets/scroll.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #define SCAFFOLD_WIDE_W 2240U
@@ -273,6 +275,63 @@ INKCELL_TEST_CASE(scaffold_without_destinations_is_all_content, unit) {
                          "the content is the whole surface");
     inkcell_fb_scaffold_end(state, &frame, NULL);
 
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
+/* Whether any pixel in the span [x0, x1) of row `y` differs between two copies of a frame. */
+static bool span_changed(const uint8_t *before, const uint8_t *after, size_t stride, int y, int x0,
+                         int x1, size_t bpp) {
+    const size_t start = (size_t)y * stride + (size_t)x0 * bpp;
+    return memcmp(before + start, after + start, (size_t)(x1 - x0) * bpp) != 0;
+}
+
+INKCELL_TEST_CASE(scaffold_detail_pane_title_badge_sits_on_the_pane_edge, unit) {
+    struct inkcell_draw_state *state = NULL;
+    struct inkcell_capture *capture =
+        scaffold_open(SCAFFOLD_WIDE_W, SCAFFOLD_WIDE_H, INKCELL_SCALE(3), &state);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+
+    const struct inkcell_fb_scaffold scaffold = {
+        .destinations = k_destinations, .count = SCAFFOLD_COUNT, .footer = true, .split = true};
+    /* The ground first, so that what the bar paints behind itself is not itself a change. */
+    inkcell_fb_clear(state, inkcell_fb_color(state, INKCELL_COLOR_BG));
+    struct inkcell_fb_scaffold_frame frame;
+    inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+    struct inkcell_fb_layout detail = inkcell_fb_scaffold_detail(state, &frame, NULL);
+    INKCELL_TEST_FAIL_IF(detail.line == 0, "the wide page splits");
+
+    /* The column's trailing edge, measured while the region is the detail pane. */
+    const int right = inkcell_fb_content_x(state) + inkcell_fb_content_w(state);
+    const int probe = inkcell_fb_char_adv(state, state->scale);
+
+    uint32_t w = 0U, h = 0U;
+    size_t stride = 0U;
+    const uint8_t *pixels = inkcell_capture_pixels(capture, &w, &h, &stride);
+    INKCELL_TEST_FAIL_IF(pixels == NULL, "the frame should have pixels");
+    const size_t bpp = state->surface.bytes_per_pixel;
+    const size_t size = stride * h;
+    uint8_t *before = malloc(size);
+    INKCELL_TEST_FAIL_IF(before == NULL, "the copy should allocate");
+    memcpy(before, pixels, size);
+
+    /* The collapsed bar with a badge. The badge is drawn against the column's trailing edge, so
+       the span just inside that edge has to change somewhere in the bar's first line - a badge
+       placed from the region's width minus the column's *start* would land a pane-width away. */
+    const struct inkcell_fb_large_title bar = {.title = "Display", .badge = "9"};
+    const int top = detail.body_y;
+    inkcell_fb_draw_large_title(state, &detail, &bar, inkcell_fb_large_title_travel(state));
+    bool changed = false;
+    /* Short of the hairline the collapsed bar draws across its foot, which spans the pane and so
+       changes this span wherever the badge went. */
+    const int stop = detail.body_y - 2 * inkcell_fb_rule_height(state, 1);
+    for (int y = top; y < stop && !changed; ++y) {
+        changed = span_changed(before, pixels, stride, y, right - probe, right, bpp);
+    }
+    free(before);
+    INKCELL_TEST_FAIL_IF(!changed, "the badge should sit against the detail column's edge");
+
+    inkcell_fb_scaffold_end(state, &frame, NULL);
     inkcell_capture_close(capture);
     record_success(test_name);
 }
