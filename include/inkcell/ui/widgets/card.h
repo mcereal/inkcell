@@ -158,7 +158,7 @@ struct inkcell_fb_card_row {
  */
 struct inkcell_fb_card_action {
     char label[INKCELL_FB_CARD_LABEL_MAX];
-    bool selected; /* the screen's cursor is on this button */
+    bool focused; /* the screen's cursor is on this button */
 };
 
 /* What fits beside a heading at the largest glyph scale with room for the words. A card wanting
@@ -277,13 +277,13 @@ void inkcell_fb_card_proportion(struct inkcell_fb_card *card, enum inkcell_tone 
  * A verb, as a button on the card's heading line. Declared left to right: the first call is the
  * leftmost button, which is also the first the screen cursor reaches.
  *
- * `selected` says the cursor is on it, which is also what makes the card itself read as
+ * `focused` says the cursor is on it, which is also what makes the card itself read as
  * focused - see inkcell_fb_draw_card().
  *
  * A card carries the whole verb and nothing about the press: which button runs it is the action
  * bar's business, and a keycap drawn twice on one frame is a screen disagreeing with itself.
  */
-void inkcell_fb_card_action(struct inkcell_fb_card *card, inkcell_str_id label, bool selected);
+void inkcell_fb_card_action(struct inkcell_fb_card *card, inkcell_str_id label, bool focused);
 
 /* Whether anything was added. A card with no rows is not drawn, so a screen can build one
    unconditionally and let it disappear when the radio has reported nothing. A card with verbs
@@ -321,7 +321,7 @@ int inkcell_fb_card_height(const struct inkcell_draw_state *state,
  * case nothing is drawn and `*y` is untouched. That is also the answer for every card after it,
  * so a screen can stop.
  *
- * A card holding the selected action draws its edge in the primary instead of in
+ * A card holding the focused action draws its edge in the primary instead of in
  * INKCELL_COLOR_OUTLINE, and draws it thicker: that is the focus ring, and it is the one cue
  * here that is not a state layer. A layer mixed into a fill this large is a change nobody
  * notices from across a table, and every tone written on the card would owe the result its own

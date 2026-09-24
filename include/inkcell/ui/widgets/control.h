@@ -42,7 +42,7 @@
  * ON_ACCENT and off it the knob is TEXT_ON_SEL, which are the two pairs
  * inkcell_theme_validate() already holds to 4.5:1 - so a theme cannot be added that makes the
  * knob disappear. Both pairs are contracted against the *ground*, which is why a switch on a
- * selected row lays its own ground first rather than sitting on the cursor fill: on two of the
+ * focused row lays its own ground first rather than sitting on the cursor fill: on two of the
  * four themes the cursor fill and the resting track are the same colour, and the control would
  * have vanished on exactly the row the cursor was on.
  */
@@ -54,7 +54,7 @@ struct inkcell_fb_switch {
        something can name the error family and be red while it is on. */
     enum inkcell_family family;
     bool on;
-    bool selected; /* the row under it carries the cursor fill */
+    bool focused; /* the row under it carries the cursor fill */
     /*
      * What the control is standing on when the row under it is not the cursor's: the panel, or
      * the surface of the card its list drew the group on.
@@ -66,7 +66,7 @@ struct inkcell_fb_switch {
      *
      * INKCELL_COLOR_BG is 0, so a caller drawing onto the panel leaves it zeroed and says
      * nothing. A control in a list never sets it at all: inkcell_fb_list_item() writes it from the
-     * model, the same way it already writes `selected`.
+     * model, the same way it already writes `focused`.
      */
     enum inkcell_color ground;
     bool dim; /* it reports a state rather than offering one: drawn muted */
@@ -103,7 +103,7 @@ void inkcell_fb_draw_switch(struct inkcell_draw_state *state, const struct inkce
  * where turning the second on turned the first off.
  *
  * Everything else is the switch's, deliberately: `id` keys the same animation table, the
- * geometry falls out of the same glyph metrics, and a selected row gets its own ground laid
+ * geometry falls out of the same glyph metrics, and a focused row gets its own ground laid
  * for the same reason - two of the four themes make the cursor fill and the resting control the
  * same colour.
  */
@@ -136,8 +136,8 @@ struct inkcell_fb_selection {
        plain choice wants; a row selected *for deletion* can name the error family. */
     enum inkcell_family family;
     bool on;
-    bool selected; /* the row under it carries the cursor fill */
-    bool dim;      /* it reports a state rather than offering one: drawn muted */
+    bool focused; /* the row under it carries the cursor fill */
+    bool dim;     /* it reports a state rather than offering one: drawn muted */
 };
 
 /* The size a selection control wants at `scale` - a square, so both out params get the same
@@ -216,7 +216,7 @@ int inkcell_fb_segmented_height(const struct inkcell_draw_state *state, int scal
  */
 void inkcell_fb_draw_segmented(const struct inkcell_draw_state *state,
                                const struct inkcell_fb_rect *rect,
-                               const struct inkcell_fb_segmented *segmented, bool selected,
+                               const struct inkcell_fb_segmented *segmented, bool focused,
                                enum inkcell_color ground, int scale);
 
 /* ---- the text field -------------------------------------------------------------------------
@@ -230,7 +230,7 @@ void inkcell_fb_draw_segmented(const struct inkcell_draw_state *state,
  *
  * There is one field on screen at a time and it is always the thing being edited, so there is
  * no unfocused state to draw: a text field here is a *focused* text field, which is why it has
- * no `selected` and takes no cursor index. What it does have is the two things the keyboard got
+ * no `focused` and takes no cursor index. What it does have is the two things the keyboard got
  * wrong when it owned them:
  *
  *   - **the tail, not the head.** A draft longer than the box shows its *end*, because the end

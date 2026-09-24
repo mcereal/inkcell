@@ -172,6 +172,15 @@ struct inkcell_focus_map {
     uint32_t count;
     uint32_t capacity;
     uint32_t dropped;
+    /*
+     * The id the frame drew as *focused*, or INKCELL_FOCUS_NONE - see inkcell_focus_mark().
+     *
+     * Kept beside the boxes because it is the same kind of fact: something the frame found out
+     * while drawing, not something the application decided before it. The application knows a
+     * list's cursor index and a dialog's cursor answer; only the frame knows which of those
+     * came out on top, and so which one the ring belongs on.
+     */
+    uint32_t focused;
 };
 
 /* Empties the map onto `storage`. Call it at the top of the draw, once, before anything is
@@ -213,6 +222,23 @@ bool inkcell_focus_add_round(struct inkcell_focus_map *map, uint32_t id, int x, 
  */
 bool inkcell_focus_add_target(struct inkcell_focus_map *map, uint32_t id, int x, int y, int w,
                               int h, int radius);
+
+/*
+ * Says that `id` - already registered, or about to be - is the thing drawn as focused.
+ *
+ * Called by the component that drew the cursor, at the moment it drew it: the list for the row
+ * under its cursor, a button whose `focused` is set. The *last* call wins, for
+ * inkcell_focus_hit()'s reason: a sheet's rows are drawn after the list beneath them, and the sheet
+ * is where the d-pad is. INKCELL_FOCUS_NONE is ignored rather than clearing, so a component with no
+ * id cannot take the mark away from one that had one.
+ *
+ * Selection never marks. The current tab is drawn as selected on every frame, and a ring that
+ * followed it would be a cursor that never leaves the tab strip.
+ */
+void inkcell_focus_mark(struct inkcell_focus_map *map, uint32_t id);
+
+/* The last id marked this frame, or INKCELL_FOCUS_NONE. What a frame hands the focus ring. */
+uint32_t inkcell_focus_marked(const struct inkcell_focus_map *map);
 
 /*
  * What is under the point (x, y), or INKCELL_FOCUS_NONE.

@@ -42,7 +42,7 @@ void gallery_scene_transcript(struct inkcell_draw_state *state) {
            against the ground. */
         {.text = gallery_text(GALLERY_STR_CHAT_OUTBOUND),
          .outbound = true,
-         .selected = true,
+         .focused = true,
          .meta = {.clock = "09:44", .state = INKCELL_ICON_SENDING}},
         /* And one that did not go. A failure has to read as a failure without reading as an
            alert: the client is not warning about anything, it is reporting. */

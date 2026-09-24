@@ -364,6 +364,9 @@ static const struct inkcell_theme
                 .name = "High contrast",
                 .font_id = "ui",
                 .dark = true,
+                /* The inverse-video bar the cursor has always been here - see the note on
+                   SURFACE_SEL below. */
+                .focus_fill = true,
                 .colors =
                     {
                         /* Inverse video for the cursor - a white bar with black text - because a
@@ -709,14 +712,18 @@ enum inkcell_color inkcell_tone_role(enum inkcell_tone tone) {
  *
  * The percentages are the whole of the design: enough that the cursor is found without looking
  * for it, little enough that the ink the theme was validated against still reads on the result.
- * inkcell_theme_validate() checks the selected variant of every pair drawn this way, so these
- * two numbers cannot be raised without the tests saying which theme it broke.
+ * inkcell_theme_validate() checks the focused variant of every pair drawn this way, so these
+ * numbers cannot be raised without the tests saying which theme it broke.
  */
 static const uint8_t k_state_mix_pct[INKCELL_STATE_COUNT] = {
     [INKCELL_STATE_REST] = 0U,
-    [INKCELL_STATE_SELECTED] = 12U,
-    [INKCELL_STATE_ACTIVE] = 20U,
+    [INKCELL_STATE_HOVERED] = 8U,
+    [INKCELL_STATE_FOCUSED] = 12U,
+    [INKCELL_STATE_PRESSED] = 20U,
 };
+
+/* The share of a disabled label that is still ink rather than fill - Material's 38%. */
+#define INKCELL_DISABLED_INK_PCT 38U
 
 static uint8_t mix_channel(uint8_t fill, uint8_t ink, unsigned pct) {
     const int delta = (int)ink - (int)fill;
@@ -747,6 +754,29 @@ struct inkcell_rgb inkcell_theme_state_layer(struct inkcell_rgb fill, struct ink
         .r = mix_channel(fill.r, ink.r, pct),
         .g = mix_channel(fill.g, ink.g, pct),
         .b = mix_channel(fill.b, ink.b, pct),
+    };
+}
+
+enum inkcell_state inkcell_interaction_layer(struct inkcell_interaction interaction) {
+    if (interaction.disabled) {
+        return INKCELL_STATE_REST;
+    }
+    if (interaction.pressed) {
+        return INKCELL_STATE_PRESSED;
+    }
+    if (interaction.focused) {
+        return INKCELL_STATE_FOCUSED;
+    }
+    return interaction.hovered ? INKCELL_STATE_HOVERED : INKCELL_STATE_REST;
+}
+
+struct inkcell_rgb inkcell_theme_disabled_ink(struct inkcell_rgb fill, struct inkcell_rgb ink) {
+    /* The same mix, pointed the other way: the fill moved towards the ink by the part of the ink
+       that survives. Rounded the same way, so a label on a fill it already matches stays put. */
+    return (struct inkcell_rgb){
+        .r = mix_channel(fill.r, ink.r, INKCELL_DISABLED_INK_PCT),
+        .g = mix_channel(fill.g, ink.g, INKCELL_DISABLED_INK_PCT),
+        .b = mix_channel(fill.b, ink.b, INKCELL_DISABLED_INK_PCT),
     };
 }
 
@@ -1127,20 +1157,42 @@ struct theme_state_pair {
 
 static const struct theme_state_pair k_required_state[] = {
     /* The inbound bubble under the cursor: SURFACE_HIGH with its own body ink mixed in. */
-    {INKCELL_COLOR_TEXT, INKCELL_COLOR_SURFACE_HIGH, INKCELL_COLOR_TEXT, INKCELL_STATE_SELECTED,
+    {INKCELL_COLOR_TEXT, INKCELL_COLOR_SURFACE_HIGH, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED,
      4.5},
-    {INKCELL_COLOR_TEXT_DIM, INKCELL_COLOR_SURFACE_HIGH, INKCELL_COLOR_TEXT, INKCELL_STATE_SELECTED,
+    {INKCELL_COLOR_TEXT_DIM, INKCELL_COLOR_SURFACE_HIGH, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED,
      3.0},
     /* A bubble's sender line is the primary, and a critical alert heads its bubble in the error
        colour instead - so that pairing has to hold everywhere the primary one does, or the one
        message a theme must not swallow is the one it swallows. Both at rest and selected. */
     {INKCELL_COLOR_PRIMARY, INKCELL_COLOR_SURFACE_HIGH, INKCELL_COLOR_TEXT, INKCELL_STATE_REST,
      3.0},
-    {INKCELL_COLOR_PRIMARY, INKCELL_COLOR_SURFACE_HIGH, INKCELL_COLOR_TEXT, INKCELL_STATE_SELECTED,
+    {INKCELL_COLOR_PRIMARY, INKCELL_COLOR_SURFACE_HIGH, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED,
      3.0},
     {INKCELL_COLOR_ERROR, INKCELL_COLOR_SURFACE_HIGH, INKCELL_COLOR_TEXT, INKCELL_STATE_REST, 3.0},
-    {INKCELL_COLOR_ERROR, INKCELL_COLOR_SURFACE_HIGH, INKCELL_COLOR_TEXT, INKCELL_STATE_SELECTED,
+    {INKCELL_COLOR_ERROR, INKCELL_COLOR_SURFACE_HIGH, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED,
      3.0},
+    /*
+     * A focused row, lifted rather than filled - see inkcell_fb_focus_fill(). The row keeps its
+     * own inks, so every ink a row is written in has to hold on the lift as well as at rest, on
+     * both grounds a list stands on: the panel and a card. Held at the ratios the same inks
+     * owe the ground itself, because a lift that cost a tier its contract would be a cursor
+     * that makes the row it is on harder to read.
+     */
+    {INKCELL_COLOR_TEXT, INKCELL_COLOR_BG, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 4.5},
+    {INKCELL_COLOR_TEXT, INKCELL_COLOR_SURFACE, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 4.5},
+    {INKCELL_COLOR_TEXT_STRONG, INKCELL_COLOR_BG, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 4.5},
+    {INKCELL_COLOR_TEXT_STRONG, INKCELL_COLOR_SURFACE, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED,
+     4.5},
+    {INKCELL_COLOR_TEXT_DIM, INKCELL_COLOR_BG, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
+    {INKCELL_COLOR_TEXT_DIM, INKCELL_COLOR_SURFACE, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
+    {INKCELL_COLOR_PRIMARY, INKCELL_COLOR_BG, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
+    {INKCELL_COLOR_PRIMARY, INKCELL_COLOR_SURFACE, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
+    {INKCELL_COLOR_SECONDARY, INKCELL_COLOR_BG, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
+    {INKCELL_COLOR_TERTIARY, INKCELL_COLOR_BG, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
+    {INKCELL_COLOR_SUCCESS, INKCELL_COLOR_BG, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
+    {INKCELL_COLOR_WARNING, INKCELL_COLOR_BG, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
+    {INKCELL_COLOR_ERROR, INKCELL_COLOR_BG, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
+    {INKCELL_COLOR_ERROR, INKCELL_COLOR_SURFACE, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED, 3.0},
 };
 
 /*
@@ -1275,9 +1327,9 @@ bool inkcell_theme_validate(const struct inkcell_theme *theme, char *reason, siz
             {INKCELL_SLOT_ON_CONTAINER, INKCELL_SLOT_CONTAINER, INKCELL_COLOR_COUNT,
              INKCELL_STATE_REST, 4.5},
             {INKCELL_SLOT_ON_CONTAINER, INKCELL_SLOT_CONTAINER, INKCELL_COLOR_COUNT,
-             INKCELL_STATE_SELECTED, 4.5},
+             INKCELL_STATE_FOCUSED, 4.5},
             {INKCELL_SLOT_ON_CONTAINER, INKCELL_SLOT_CONTAINER, INKCELL_COLOR_COUNT,
-             INKCELL_STATE_ACTIVE, 4.5},
+             INKCELL_STATE_PRESSED, 4.5},
             /* BASE is ink as often as it is a fill - a status word on a card, a title on the
                body - so it owes both grounds the secondary threshold. */
             {INKCELL_SLOT_COUNT, INKCELL_SLOT_BASE, INKCELL_COLOR_BG, INKCELL_STATE_REST, 3.0},

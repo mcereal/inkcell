@@ -295,19 +295,58 @@ INKCELL_STATIC_ASSERT((int)INKCELL_COLOR_ON_ERROR_CONTAINER ==
  *
  * Material calls this a state layer: the resting fill with its own ink mixed into it a little,
  * so "the cursor is on this" is one operation applied to whatever the thing is already painted
- * in. Before this, every element that could be selected stated a second colour - the chat
+ * in. Before this, every element that could be focused stated a second colour - the chat
  * bubbles alone cost two extra roles in four themes - and each of those was a value somebody
  * had matched by eye to the one above it.
  *
  * Mixing the *ink* in rather than white or black is what makes one rule work on a dark ground
  * and a light one: the layer always moves the fill towards the thing written on it, so it
  * lightens on dark and darkens on light without either being spelled out.
+ *
+ * Only the *transient* states are here, and that is the distinction this enum exists to keep.
+ * Where the d-pad will act, where a pointer is resting and what is being pressed this instant
+ * are all facts about the reader's hands, gone the moment they move. Whether something is
+ * *selected* - the current tab, the checked choice, the radio this client is connected to - is
+ * a fact about the application that outlives any press, and a thing can be selected and focused
+ * at once and has to be tellable as both. Selection is therefore the *resting* paint a widget
+ * is given (a family's container, a marker, a check), and a layer from here goes over it. See
+ * struct inkcell_interaction below, which is where the two meet.
+ *
+ * These used to be REST, SELECTED and ACTIVE, and SELECTED meant "the cursor is on it". That one
+ * word covering both the d-pad's position and the application's choice is how a list came to
+ * paint the cursor as a solid bar: it was the only mark selection had, so it had to be loud.
  */
 enum inkcell_state {
     INKCELL_STATE_REST = 0,
-    INKCELL_STATE_SELECTED, /* the cursor is on it */
-    INKCELL_STATE_ACTIVE,   /* pressed */
+    INKCELL_STATE_HOVERED, /* a pointer is over it; the lightest, because the pointer is visible */
+    INKCELL_STATE_FOCUSED, /* the d-pad will act on it */
+    INKCELL_STATE_PRESSED, /* being activated, this instant */
     INKCELL_STATE_COUNT
+};
+
+/*
+ * Everything a control can be at once, as separate facts.
+ *
+ * The enum above is the *layer*: one of them wins, because there is one fill to mix into. This is
+ * what a caller actually knows, and it knows all five independently - a row can be the selected
+ * channel, under the cursor and disabled, and each of those is drawn by a different mechanism:
+ *
+ *   - `focused`, `hovered`, `pressed` pick the state layer, strongest first. A focused control
+ *     also carries the focus ring, which is drawn by the frame rather than by the control - see
+ *     include/inkcell/ui/widgets/focus.h.
+ *   - `selected` picks the *resting* paint and never a layer. It is the application's state, so
+ *     it has to survive the cursor leaving.
+ *   - `disabled` takes no layer at all - a control that cannot act does not answer the pointer
+ *     or the press - and fades its ink towards its fill instead (inkcell_theme_disabled_ink()).
+ *     It is still focusable: a d-pad that skips a greyed-out row gives the reader no way to find
+ *     out why it is grey.
+ */
+struct inkcell_interaction {
+    bool focused;  /* where the d-pad will act */
+    bool selected; /* persistent application state: the current tab, a checked choice */
+    bool pressed;  /* immediate activation feedback */
+    bool hovered;  /* a pointer is over it, where there is a pointer */
+    bool disabled; /* present, but will not act */
 };
 
 /*
@@ -761,6 +800,19 @@ struct inkcell_theme {
     bool dark;           /* whether the ground is darker than the text; nothing draws
                             differently for it, but a caller choosing a default cares */
     struct inkcell_rgb colors[INKCELL_COLOR_COUNT];
+    /*
+     * Whether a focused row is *filled* - SURFACE_SEL under TEXT_ON_SEL - rather than lifted.
+     *
+     * False is the zero value and the default: the row takes a state layer over whatever it is
+     * standing on (inkcell_fb_focus_fill()), keeps its own inks, and the focus ring says where
+     * the cursor is. That is a console's cursor rather than a utility's, and it works on a card
+     * as well as the panel because the lift is relative to the ground under it.
+     *
+     * True is for a theme whose whole reason to exist is that a quiet cue is not enough: the
+     * high-contrast theme keeps its inverse-video bar, because a lift one tone off black is the
+     * first thing to vanish in sunlight. The ring is drawn either way.
+     */
+    bool focus_fill;
     /* Avatar fills, read through inkcell_theme_avatar(). Only the first `avatar_count` are
        used, so a theme states its palette and leaves the rest zeroed. */
     struct inkcell_rgb avatars[INKCELL_AVATAR_TINTS];
@@ -824,14 +876,32 @@ enum inkcell_tone inkcell_family_tone(enum inkcell_family family);
  * `fill` with `ink` mixed into it by however much `state` calls for: the state layer.
  *
  * REST returns `fill` untouched, so a caller can hand the state straight through rather than
- * branching on it. The percentages are Material's, near enough - a selected element is a
- * visible step and a pressed one is a step further - and they are small on purpose: the layer
- * has to be findable without taking the fill far enough that the ink checked against it stops
+ * branching on it. The percentages are Material's, near enough - a hovered element is a hint, a
+ * focused one a visible step and a pressed one a step further - and they are small on purpose: the
+ * layer has to be findable without taking the fill far enough that the ink checked against it stops
  * being readable, which inkcell_theme_validate() then confirms for every pair that is drawn
  * this way.
  */
 struct inkcell_rgb inkcell_theme_state_layer(struct inkcell_rgb fill, struct inkcell_rgb ink,
                                              enum inkcell_state state);
+
+/*
+ * The one layer an interaction earns: PRESSED over FOCUSED over HOVERED, and REST when disabled
+ * or when nothing is happening to it. `selected` never changes the answer - see
+ * struct inkcell_interaction.
+ */
+enum inkcell_state inkcell_interaction_layer(struct inkcell_interaction interaction);
+
+/*
+ * `ink` faded most of the way to `fill`: what a disabled control's label is drawn in.
+ *
+ * Material's 38%, by the same fixed-point mix the state layer uses, and against the fill the
+ * label is actually on rather than towards grey - so it reads as the same word, held back, on
+ * every surface and every theme. It is deliberately *not* held to a contrast floor by
+ * inkcell_theme_validate(): WCAG exempts inactive controls, and a disabled label legible at full
+ * strength is one nobody can tell is disabled.
+ */
+struct inkcell_rgb inkcell_theme_disabled_ink(struct inkcell_rgb fill, struct inkcell_rgb ink);
 
 /*
  * The fill and the ink for one family, one slot and one state, resolved together.

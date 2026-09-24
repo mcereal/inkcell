@@ -61,12 +61,12 @@ enum focus_id {
  * reaches the map - which is why a chip, a card's verb and a key all arrive there having said
  * nothing about it. Returns the x past the key, so a row of them is a loop with no arithmetic.
  */
-static int focus_key(struct inkcell_draw_state *state, uint32_t id, uint32_t selected,
+static int focus_key(struct inkcell_draw_state *state, uint32_t id, uint32_t focused,
                      struct inkcell_fb_rect rect, const char *label, int scale) {
     const struct inkcell_fb_button button = {
         .rect = rect,
         .label = label,
-        .selected = id == selected,
+        .focused = id == focused,
         .variant = INKCELL_FB_BUTTON_FILLED,
         .family = INKCELL_FAMILY_PRIMARY,
         .shape = INKCELL_SHAPE_SM,
@@ -126,11 +126,11 @@ static void focus_link(const struct inkcell_draw_state *state, struct inkcell_fo
  * press goes, and what the move looks like - and a second copy of the layout would be two
  * screens that drift apart a component at a time.
  *
- * `selected` is the key that carries the cursor's own fill. The map is left in `out` for the
+ * `focused` is the key that carries the cursor's own fill. The map is left in `out` for the
  * caller to ask questions of.
  */
 static struct inkcell_fb_layout
-focus_screen(struct inkcell_draw_state *state, enum gallery_str_id title, uint32_t selected,
+focus_screen(struct inkcell_draw_state *state, enum gallery_str_id title, uint32_t focused,
              struct inkcell_focus_map *out, struct inkcell_focus_item *storage, uint32_t capacity) {
     struct inkcell_fb_layout layout = gallery_frame(state, title, 0U);
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
@@ -181,7 +181,7 @@ focus_screen(struct inkcell_draw_state *state, enum gallery_str_id title, uint32
         for (int col = 0; col < FOCUS_KEY_COLS; ++col) {
             const struct inkcell_fb_rect rect = {
                 .x = box.text_x + col * (key_w + corridor), .y = y, .w = key_w, .h = high};
-            (void)focus_key(state, FOCUS_ID_KEY + (uint32_t)(row * FOCUS_KEY_COLS + col), selected,
+            (void)focus_key(state, FOCUS_ID_KEY + (uint32_t)(row * FOCUS_KEY_COLS + col), focused,
                             rect, k_keys[row][col], scale);
         }
         y += high + corridor;

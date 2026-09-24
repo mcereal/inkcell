@@ -152,7 +152,7 @@ void gallery_scene_fab(struct inkcell_draw_state *state) {
          true},
         /* Under the cursor: the family at full strength, with the ink the theme checked against
            it. The pair, not the fill - which is what a FAB taking a family is for. */
-        {{.icon = INKCELL_ICON_COMPOSE, .size = INKCELL_FB_FAB_LG, .selected = true},
+        {{.icon = INKCELL_ICON_COMPOSE, .size = INKCELL_FB_FAB_LG, .focused = true},
          GALLERY_STR_ACT_SELECT,
          false},
         {{.icon = INKCELL_ICON_COMPOSE, .size = INKCELL_FB_FAB_LG}, GALLERY_STR_HEAD_FAB, false},

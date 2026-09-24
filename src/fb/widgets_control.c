@@ -77,7 +77,7 @@ void inkcell_fb_draw_switch(struct inkcell_draw_state *state, const struct inkce
      * cursor fill and the resting track are the same colour - so without this the control
      * would be invisible on precisely the row being pointed at.
      */
-    if (sw->selected) {
+    if (sw->focused) {
         /* The ring is a fraction of the glyph scale rather than of the control, because the row
            fill it has to stay inside is measured from the scale too - a ring sized off the
            control overhung the highlight bar top and bottom and notched it. */
@@ -205,7 +205,7 @@ void inkcell_fb_draw_selection(struct inkcell_draw_state *state,
      * precisely the row being pointed at.
      */
     const struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_BG);
-    if (sel->selected) {
+    if (sel->focused) {
         const int pad = inkcell_fb_space(state, INKCELL_SPACE_XS);
         inkcell_fb_fill_round_rect(state, sel->rect.x - pad, sel->rect.y - pad,
                                    sel->rect.w + 2 * pad, sel->rect.h + 2 * pad, radius + pad,
@@ -241,7 +241,7 @@ void inkcell_fb_draw_selection(struct inkcell_draw_state *state,
      * over it - which is how every outline in this file used to be drawn. That needs to know
      * what is behind the hole, and it steps twice, once on each of the two edges it paints.
      * inkcell_fb_stroke_round_rect() is one shape: the hole is left alone rather than repainted,
-     * so a radio inside a selected row no longer punches the row's fill back to the body ground.
+     * so a radio inside a focused row no longer punches the row's fill back to the body ground.
      */
     inkcell_fb_stroke_round_rect(state, sel->rect.x, sel->rect.y, side, side, radius, ring,
                                  outline);
@@ -315,7 +315,7 @@ int inkcell_fb_segmented_width(const struct inkcell_draw_state *state,
 
 void inkcell_fb_draw_segmented(const struct inkcell_draw_state *state,
                                const struct inkcell_fb_rect *rect,
-                               const struct inkcell_fb_segmented *segmented, bool selected,
+                               const struct inkcell_fb_segmented *segmented, bool focused,
                                enum inkcell_color ground, int scale) {
     /* `active` is checked rather than clamped, and that is the point: inkcell_fb_segmented_cols()
        sends a choice outside the set to the words, so reaching here with one means the measure and
@@ -333,7 +333,7 @@ void inkcell_fb_draw_segmented(const struct inkcell_draw_state *state,
        control's: the container is an outline, so what shows through it is whatever is behind -
        and behind it on the row the cursor is on is a fill the outline was never contracted
        against. */
-    if (selected) {
+    if (focused) {
         const int pad = inkcell_fb_space(state, INKCELL_SPACE_XS);
         inkcell_fb_fill_round_rect(state, rect->x - pad, rect->y - pad, rect->w + 2 * pad,
                                    rect->h + 2 * pad, radius,
@@ -361,7 +361,7 @@ void inkcell_fb_draw_segmented(const struct inkcell_draw_state *state,
         const int right = rect->x + (int)((size_t)rect->w * (i + 1U) / segmented->count);
 
         /*
-         * A hairline between two segments, and not against the selected one - which is
+         * A hairline between two segments, and not against the chosen one - which is
          * Material's rule and is right for the reason the divider exists at all: a separator
          * says "these two are different things", and a filled segment has already said it.
          */
@@ -390,7 +390,7 @@ void inkcell_fb_draw_segmented(const struct inkcell_draw_state *state,
             .variant = i == active ? INKCELL_FB_BUTTON_TONAL : INKCELL_FB_BUTTON_TEXT,
             .shape = INKCELL_SHAPE_FULL,
             .idle_tone = INKCELL_TONE_DIM,
-            .ground = selected ? INKCELL_COLOR_BG : ground,
+            .ground = focused ? INKCELL_COLOR_BG : ground,
             .scale = scale,
         };
         inkcell_fb_draw_button(state, &segment);

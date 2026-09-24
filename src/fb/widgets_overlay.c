@@ -436,7 +436,7 @@ void inkcell_fb_draw_dialog_at(const struct inkcell_draw_state *state, struct in
         .rect = {cancel_x, cancel_y, m.cancel_w, m.button_h},
         .icon = INKCELL_ICON_CLOSE,
         .label = m.cancel_label,
-        .selected = dialog->cursor != 0U,
+        .focused = dialog->cursor != 0U,
         .variant = INKCELL_FB_BUTTON_TEXT,
         .shape = INKCELL_SHAPE_FULL,
         .idle_tone = INKCELL_TONE_NORMAL,
@@ -462,13 +462,13 @@ void inkcell_fb_draw_dialog_at(const struct inkcell_draw_state *state, struct in
      * its check and its family-coloured label - a cue that survives every palette because it is
      * ink on the panel rather than one fill against another.
      */
-    const bool accept_selected = dialog->cursor == 0U;
+    const bool accept_focused = dialog->cursor == 0U;
     const struct inkcell_fb_button accept = {
         .rect = {accept_x, accept_y, m.accept_w, m.button_h},
         .icon = INKCELL_ICON_CHECK,
         .label = m.accept_label,
-        .selected = accept_selected,
-        .variant = accept_selected ? INKCELL_FB_BUTTON_TONAL : INKCELL_FB_BUTTON_TEXT,
+        .focused = accept_focused,
+        .variant = accept_focused ? INKCELL_FB_BUTTON_TONAL : INKCELL_FB_BUTTON_TEXT,
         /* The dialog's family, so a destructive confirm is a red pill rather than a red word on
            the ordinary one - and the ink on it is the one checked against that red. */
         .family = accept_family,
@@ -722,7 +722,7 @@ void inkcell_fb_draw_menu(const struct inkcell_draw_state *state, struct inkcell
             continue;
         }
         const bool live = inkcell_fb_menu_item_live(item);
-        const bool selected = (uint32_t)i == menu->cursor;
+        const bool focused = (uint32_t)i == menu->cursor;
         /*
          * The fill under the cursor is the row highlight the whole toolkit uses, taken from
          * the surface the menu is standing on rather than from the body's - a state layer
@@ -730,9 +730,9 @@ void inkcell_fb_draw_menu(const struct inkcell_draw_state *state, struct inkcell
          * and a smudge on the other.
          */
         struct inkcell_rgb row_ground = inkcell_fb_color(state, ground);
-        if (selected && live) {
+        if (focused && live) {
             row_ground =
-                inkcell_fb_state_layer(state, ground, INKCELL_COLOR_TEXT, INKCELL_STATE_SELECTED);
+                inkcell_fb_state_layer(state, ground, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED);
             inkcell_fb_fill_round_rect(state, box.x + pad / 2, y, box.w - pad, row_h,
                                        inkcell_fb_radius(state, INKCELL_SHAPE_SM), row_ground);
         }
@@ -769,6 +769,9 @@ void inkcell_fb_draw_menu(const struct inkcell_draw_state *state, struct inkcell
                than on the text inside it - inkcell_fb_list_row()'s rule. */
             const struct inkcell_fb_rect hit = {box.x + pad / 2, y, box.w - pad, row_h};
             inkcell_fb_focus_register_shaped(state, focus_id, &hit, INKCELL_SHAPE_SM);
+            if (focused) {
+                inkcell_fb_focus_mark(state, focus_id);
+            }
         }
         y += row_h;
     }

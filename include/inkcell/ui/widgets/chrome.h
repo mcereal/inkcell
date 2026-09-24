@@ -321,7 +321,7 @@ struct inkcell_fb_fab {
        checked against it. */
     enum inkcell_family family;
     enum inkcell_fb_fab_size size;
-    bool selected; /* the cursor is on it */
+    bool focused; /* the d-pad will act on it */
     /*
      * Identity for the collapse, in the animation table on the state - the switch's `id` and
      * not a focus id, because the two spaces are unrelated. 0 means "no identity": the FAB

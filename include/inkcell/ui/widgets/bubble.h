@@ -119,7 +119,7 @@ struct inkcell_fb_bubble {
     const char *note;
     struct inkcell_fb_bubble_meta meta;
     bool outbound; /* ours: drawn against the right edge */
-    bool selected; /* the cursor is on it */
+    bool focused;  /* the d-pad will act on it */
     bool failed;   /* the radio said it did not get there */
     /* A critical alert (ALERT_APP). Draws the name line in the bad tone rather than the accent,
        which is the one line every bubble in a channel already has - so an alert is picked out

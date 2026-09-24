@@ -725,6 +725,12 @@ void inkcell_fb_list_focus_row(const struct inkcell_draw_state *state,
     /* INKCELL_SHAPE_SM because that is what inkcell_fb_draw_row_fill_on() rounds the highlight
        with, and the ring and the highlight describing one row have to be one shape. */
     inkcell_fb_focus_register_shaped(state, list->focus_base + index, &rect, INKCELL_SHAPE_SM);
+    /* And the cursor's row is where the frame's ring goes. A list drawn under a sheet still has
+       a cursor, which is why this is a mark rather than a claim: the sheet's rows come later and
+       take it. */
+    if (inkcell_fb_list_is_cursor(list, index)) {
+        inkcell_fb_focus_mark(state, list->focus_base + index);
+    }
 }
 
 bool inkcell_fb_list_next(struct inkcell_fb_list *list, uint32_t *index) {
@@ -753,13 +759,13 @@ void inkcell_fb_list_row(const struct inkcell_draw_state *state, struct inkcell_
        ground: a row in a list may be standing on a card, and the ink its glyph edges blend into
        has to be the colour actually under it. */
     const bool band = inkcell_fb_list_band_begin(list);
-    const bool selected = inkcell_fb_list_is_cursor(list, index);
+    const bool focused = inkcell_fb_list_is_cursor(list, index);
     const struct inkcell_rgb ground =
         inkcell_fb_draw_row_fill_on(state, list->y, inkcell_fb_list_row_height(list, index),
-                                    selected, inkcell_fb_list_ground(list, index));
+                                    focused, inkcell_fb_list_ground(list, index));
     inkcell_fb_draw_text(state, inkcell_fb_row_box(state).text_x, list->y, text, state->scale,
-                         selected ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL)
-                                  : inkcell_fb_tone_color(state, tone),
+                         focused ? inkcell_fb_focus_ink(state, tone, false)
+                                 : inkcell_fb_tone_color(state, tone),
                          ground);
     inkcell_fb_list_band_end(list, band);
     /* By what the model says this row is, not by one row: a plain row in a list of mixed
@@ -776,24 +782,23 @@ void inkcell_fb_list_row(const struct inkcell_draw_state *state, struct inkcell_
 }
 
 /*
- * One tier of a row's text: the tone on the ground, and the cursor's own pair over the fill.
+ * One tier of a row's text: the tone on the ground, and inkcell_fb_focus_ink() over the fill.
  *
- * A row under the cursor is drawn against a different fill rather than in a dimmer version of
- * the same colour, so "which ink" is two questions and not one - and a tier that is quiet on
- * the ground has to stay quiet on the fill or a label column flashes to full strength on
- * precisely the row being read. INKCELL_TONE_DIM is what says a tier is the quiet one, which
- * is the same thing it says everywhere else the theme answers for ink.
+ * A row under the cursor is drawn against a different fill, so "which ink" is two questions and
+ * not one - on a lifted row the answer is usually the same ink, on a filled theme it is not - and a
+ * tier that is quiet on the ground has to stay quiet on the fill or a label column flashes to full
+ * strength on precisely the row being read. INKCELL_TONE_DIM is what says a tier is the quiet one,
+ * which is the same thing it says everywhere else the theme answers for ink.
  *
  * Shared by the headline, its label column and the supporting line, because the three were
  * three copies of this conditional and the supporting one had already grown a flag of its own.
  */
 struct inkcell_rgb inkcell_fb_item_ink(const struct inkcell_draw_state *state,
-                                       enum inkcell_tone tone, bool selected, bool quiet) {
-    if (!selected) {
+                                       enum inkcell_tone tone, bool focused, bool quiet) {
+    if (!focused) {
         return inkcell_fb_tone_color(state, tone);
     }
-    return inkcell_fb_color(state,
-                            quiet ? INKCELL_COLOR_TEXT_ON_SEL_DIM : INKCELL_COLOR_TEXT_ON_SEL);
+    return inkcell_fb_focus_ink(state, tone, quiet);
 }
 
 void inkcell_fb_list_subheader(const struct inkcell_draw_state *state, struct inkcell_fb_list *list,
@@ -809,13 +814,13 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_draw_state *state,
     const bool band = inkcell_fb_list_band_begin(list);
     const int scale = inkcell_theme_type_scale(state->theme, INKCELL_TYPE_LABEL, state->scale);
     const uint32_t rows = inkcell_fb_list_row_height(list, index);
-    const bool selected = inkcell_fb_list_is_cursor(list, index);
+    const bool focused = inkcell_fb_list_is_cursor(list, index);
 
     /* The fill is the whole step whatever size the words are, and it is the same rectangle a
        plain row lays down - a highlight that shrank to the label would be a cursor that changes
        shape as it walks down a list. */
     const struct inkcell_rgb ground = inkcell_fb_draw_row_fill_on(
-        state, list->y, rows, selected, inkcell_fb_list_ground(list, index));
+        state, list->y, rows, focused, inkcell_fb_list_ground(list, index));
 
     /*
      * Sat on the bottom of the step, so the space the smaller glyphs free is air above the
@@ -883,7 +888,7 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_draw_state *state,
     const enum inkcell_tone tone =
         inkcell_fb_list_has_cards(list) ? INKCELL_TONE_PRIMARY : INKCELL_TONE_DIM;
     const struct inkcell_rgb ink =
-        inkcell_fb_item_ink(state, tone, selected, tone == INKCELL_TONE_DIM);
+        inkcell_fb_item_ink(state, tone, focused, tone == INKCELL_TONE_DIM);
 
     int x = inkcell_fb_row_box(state).text_x;
     if (leading.kind == INKCELL_FB_LEADING_TONAL || leading.kind == INKCELL_FB_LEADING_TONAL_SLOT) {
@@ -997,13 +1002,13 @@ void inkcell_fb_list_note(const struct inkcell_draw_state *state, struct inkcell
     inkcell_fb_list_chrome(state, list);
     const bool band = inkcell_fb_list_band_begin(list);
     const uint32_t rows = inkcell_fb_list_row_height(list, index);
-    const bool selected = inkcell_fb_list_is_cursor(list, index);
+    const bool focused = inkcell_fb_list_is_cursor(list, index);
     /* One fill for the whole note, the height the *model* gave it - not the height its words
        want. The two agree when the screen measured with inkcell_fb_list_note_steps(), and when they
        do not it is the model that is right, because it is what every row below was placed against.
      */
     const struct inkcell_rgb ground = inkcell_fb_draw_row_fill_on(
-        state, list->y, rows, selected, inkcell_fb_list_ground(list, index));
+        state, list->y, rows, focused, inkcell_fb_list_ground(list, index));
 
     const int margin = inkcell_fb_row_box(state).text_x;
     const int body_line = inkcell_fb_line_adv(state, state->scale);
@@ -1020,14 +1025,14 @@ void inkcell_fb_list_note(const struct inkcell_draw_state *state, struct inkcell
         inkcell_line_fit(&line, inkcell_fb_row_cols(state, scale));
         /*
          * The ink is chosen with the fill rather than beside it. A heading painted in the
-         * primary whether or not the row was selected is a pair no theme was measured against -
+         * primary whether or not the row was focused is a pair no theme was measured against -
          * the accent over the selection fill is the one combination the contrast contract does
          * not cover, because on a light palette they are two shades of the same hue.
          */
         inkcell_fb_draw_text(state, margin, y + body_line - inkcell_fb_line_adv(state, scale),
                              inkcell_line_text(&line), scale,
-                             selected ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL)
-                                      : inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY),
+                             focused ? inkcell_fb_focus_ink(state, INKCELL_TONE_PRIMARY, false)
+                                     : inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY),
                              ground);
         y += body_line;
     }
@@ -1045,8 +1050,8 @@ void inkcell_fb_list_note(const struct inkcell_draw_state *state, struct inkcell
     inkcell_wrap_begin(&wrap, body != NULL ? body : "", inkcell_fb_note_cols(state));
     while (drawn < rows && inkcell_wrap_next(&wrap)) {
         inkcell_fb_draw_text(state, margin, y, wrap.line, state->scale,
-                             selected ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL)
-                                      : inkcell_fb_tone_color(state, INKCELL_TONE_NORMAL),
+                             focused ? inkcell_fb_focus_ink(state, INKCELL_TONE_NORMAL, false)
+                                     : inkcell_fb_tone_color(state, INKCELL_TONE_NORMAL),
                              ground);
         y += body_line;
         drawn++;

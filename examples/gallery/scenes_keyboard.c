@@ -98,7 +98,7 @@ void gallery_scene_keyboard(struct inkcell_draw_state *state) {
 
     /* Lower case with the cursor in the middle of the grid, which is where a keyboard spends
        almost all of its life. The cursor is on a letter rather than on an action key so that
-       both states of a character key - selected and at rest - are in the same picture. */
+       both states of a character key - focused and at rest - are in the same picture. */
     const struct inkcell_keyboard keyboard = {
         .row = 2U,
         .col = 4U,
