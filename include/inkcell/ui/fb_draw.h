@@ -754,6 +754,18 @@ enum inkcell_weight inkcell_fb_type_weight(const struct inkcell_draw_state *stat
                                            enum inkcell_type type);
 
 /*
+ * The whole of `type` at this state's body scale: size, weight, tracking, line height and
+ * whether its figures are tabular.
+ *
+ * The call a renderer should be making. The two above answer one facet each and are what a
+ * layout reaches for when it only needs a number - a row height, a column width - but anything
+ * that is going to *draw* a line wants the style, because measuring it at one and drawing it at
+ * another is a line that does not fit the box its own layout reserved.
+ */
+struct inkcell_type_style inkcell_fb_type_style(const struct inkcell_draw_state *state,
+                                                enum inkcell_type type);
+
+/*
  * The half-margin: the inset a panel sits in, and the row's own padding either side of it.
  *
  * Not part of the spacing scale, deliberately. The spacing scale is glyph-relative - it is the
@@ -1049,6 +1061,23 @@ int inkcell_fb_text_width(const struct inkcell_draw_state *state, const char *te
    regular one would be a heading its own box clips. */
 int inkcell_fb_text_width_weight(const struct inkcell_draw_state *state, const char *text,
                                  int scale, enum inkcell_weight weight);
+/*
+ * The same at a whole type style - the form the other two are written in terms of.
+ *
+ * What it adds over the weight form is what a style carries: the role's tracking, which widens
+ * or tightens every cell, and its tabular figures, which make every digit step the widest of
+ * the ten. Both change the width of a line, so a caller that drew with a style and measured
+ * without one would be laying out against a string it is not going to draw.
+ *
+ * The trailing cell's tracking is not counted - see the implementation. A NULL style measures
+ * the plain one, which is the face exactly as it was drawn.
+ */
+int inkcell_fb_text_width_styled(const struct inkcell_draw_state *state, const char *text,
+                                 const struct inkcell_type_style *style);
+/* What one cell steps in `style`'s run - the per-character form, for a caller walking a string
+   itself (a cursor, a truncation point). Tracking and tabular figures included. */
+int inkcell_fb_cell_adv_styled(const struct inkcell_draw_state *state, uint32_t codepoint,
+                               const struct inkcell_type_style *style);
 /* The same width, rounded up to whole nominal cells - for the layouts that still reserve
    space in columns. See the note on the implementation. */
 size_t inkcell_fb_text_cols(const struct inkcell_draw_state *state, const char *text, int scale);
@@ -1065,12 +1094,60 @@ size_t inkcell_fb_text_cols(const struct inkcell_draw_state *state, const char *
  */
 struct inkcell_fb_wrap_ctx {
     const struct inkcell_draw_state *state;
+    /* The style the wrapped text will be drawn in, so that the budget is spent in the same
+       advances - a paragraph wrapped without its role's tracking overruns the width it was
+       wrapped to by one cell's worth of air per character. */
+    struct inkcell_type_style style;
+    /* `style.scale`, kept for the callers that read the context back. */
     int scale;
+    /*
+     * What the walk actually steps by, resolved from `style` once by
+     * inkcell_fb_wrap_metric_styled(): the tracking in pixels, and - for a style with tabular
+     * figures - the advance every digit takes.
+     *
+     * Not something a caller sets. They are here rather than worked out inside the walk because
+     * the walk runs once per character and the digit advance is ten table lookups: a paragraph
+     * of readings would have paid for them a few thousand times a frame.
+     */
+    int tracking_px;
+    int digit_adv;
 };
 struct inkcell_wrap_metric inkcell_fb_wrap_metric(struct inkcell_fb_wrap_ctx *ctx,
                                                   const struct inkcell_draw_state *state,
                                                   int scale);
+/*
+ * The same over a role's style, which is the one to use where the text is going to be drawn
+ * with one - and which is only half of a pair: the budget has to come from
+ * inkcell_fb_wrap_budget() below, or a tracked style wraps to the wrong width.
+ */
+struct inkcell_wrap_metric inkcell_fb_wrap_metric_styled(struct inkcell_fb_wrap_ctx *ctx,
+                                                         const struct inkcell_draw_state *state,
+                                                         const struct inkcell_type_style *style);
+
+/*
+ * The budget to hand inkcell_wrap_begin_measured() for a column `width` pixels wide.
+ *
+ * Tracking is the reason this is not simply `width`, and the arithmetic is worth stating
+ * because it looks like an off-by-one until it is.
+ *
+ * A wrap metric answers per *cell*, and the wrapper accepts a line while the cells' answers sum
+ * to no more than the budget. So a line of n cells is charged n tracking steps. But a line only
+ * has n-1 gaps in it: inkcell_fb_text_width_styled() takes the last one back off, because air
+ * after the final letter is not part of the line. The two would therefore disagree by exactly
+ * one step - and the direction is the bad one for a tight style, where the wrapper undercounts
+ * and accepts a line that draws past the column by a pixel or two.
+ *
+ * The difference is a per-*line* constant, so no per-cell metric can carry it; it goes in the
+ * budget instead, where it cancels exactly. A style with no tracking - every plain one - gets
+ * `width` back unchanged.
+ */
+size_t inkcell_fb_wrap_budget(const struct inkcell_fb_wrap_ctx *ctx, int width);
 int inkcell_fb_line_adv(const struct inkcell_draw_state *state, int scale);
+/* The line advance `style`'s role asks for: the font's own, at the role's line height. The one
+   to step a wrapped paragraph by, because a role that loosened its leading did so precisely for
+   the text that wraps. */
+int inkcell_fb_line_adv_styled(const struct inkcell_draw_state *state,
+                               const struct inkcell_type_style *style);
 void inkcell_fb_clear(const struct inkcell_draw_state *state, struct inkcell_rgb color);
 
 /*
@@ -1143,6 +1220,16 @@ void inkcell_fb_draw_text(const struct inkcell_draw_state *state, int x, int y, 
    anything that has not asked for emphasis is set in. */
 void inkcell_fb_draw_text_weight(const struct inkcell_draw_state *state, int x, int y,
                                  const char *text, int scale, enum inkcell_weight weight,
+                                 struct inkcell_rgb ink, struct inkcell_rgb ground);
+/*
+ * The same in a whole type style, and the one a screen naming a role should call.
+ *
+ * Draws what inkcell_fb_text_width_styled() measures, cell for cell: the same tracking, the
+ * same tabular advance, and a newline that steps the role's line rather than the font's. A NULL
+ * style is the plain one.
+ */
+void inkcell_fb_draw_text_styled(const struct inkcell_draw_state *state, int x, int y,
+                                 const char *text, const struct inkcell_type_style *style,
                                  struct inkcell_rgb ink, struct inkcell_rgb ground);
 /* The box an icon is drawn in: one text cell, so a row that puts one in front of its words is
    still measured in columns like every other row. */
@@ -1219,10 +1306,20 @@ int inkcell_fb_draw_wrapped_centered(const struct inkcell_draw_state *state, int
 int inkcell_fb_draw_wrapped_at(const struct inkcell_draw_state *state, int x, int y,
                                const char *text, size_t width, int max_lines,
                                struct inkcell_rgb color, struct inkcell_rgb ground);
+/* The same in a role's style: the run is measured, wrapped and drawn in it, and the rows step
+   the role's line rather than the font's. The one form to use for supporting prose. */
+int inkcell_fb_draw_wrapped_styled(const struct inkcell_draw_state *state, int x, int y,
+                                   const char *text, size_t width, int max_lines,
+                                   const struct inkcell_type_style *style, struct inkcell_rgb color,
+                                   struct inkcell_rgb ground);
 
 /* How many lines `text` wraps to inside `width` pixels, at `scale`. */
 uint32_t inkcell_fb_wrapped_lines(const struct inkcell_draw_state *state, const char *text,
                                   size_t width, int scale);
+/* The same count in a role's style - what a panel sizing itself around a paragraph has to
+   ask, because tracking changes where the lines break. */
+uint32_t inkcell_fb_wrapped_lines_styled(const struct inkcell_draw_state *state, const char *text,
+                                         size_t width, const struct inkcell_type_style *style);
 void inkcell_fb_fill_rect(const struct inkcell_draw_state *state, int x, int y, int w, int h,
                           struct inkcell_rgb color);
 /*

@@ -44,7 +44,13 @@ INKCELL_STR_ENTRY(HEAD_FOCUS,        "Focus")
 INKCELL_STR_ENTRY(HEAD_FOCUS_RING,   "Focus ring")
 INKCELL_STR_ENTRY(HEAD_GLIDE,        "Scrolling")
 INKCELL_STR_ENTRY(HEAD_TYPE,          "Type scale")
+INKCELL_STR_ENTRY(HEAD_FIGURES,       "Figures")
 INKCELL_STR_ENTRY(HEAD_PALETTE,       "Palette")
+
+/* The two ways a column of numbers can be set, which the type scene draws side by side. Words
+   rather than a caption on a diagram because the point is which column lines up. */
+INKCELL_STR_ENTRY(FIGURES_PROPORTIONAL, "Proportional")
+INKCELL_STR_ENTRY(FIGURES_TABULAR,      "Tabular")
 INKCELL_STR_ENTRY(HEAD_CHARTS,        "Charts")
 INKCELL_STR_ENTRY(HEAD_SHAPES,        "Shapes")
 INKCELL_STR_ENTRY(HEAD_CORNERS,       "Corners")

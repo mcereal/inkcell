@@ -355,8 +355,22 @@ int inkcell_fb_draw_chip_strip(const struct inkcell_draw_state *state, int x, in
  * drew separately is a capsule that would end up two different shapes.
  */
 
+/*
+ * The style a capsule's words are set in: the caller's size, in tabular figures.
+ *
+ * A badge is a count and a chip is a state, and both are redrawn in place while their container
+ * stays put - "9 waiting" becoming "10 waiting", a reading ticking over. With the face's
+ * proportional figures the capsule changes width on digits that are the same length, which reads
+ * as the badge twitching rather than as the number changing. Measuring and drawing both go
+ * through this, so the pill is exactly as wide as what is written on it.
+ */
+static struct inkcell_type_style inkcell_fb_capsule_style(int scale) {
+    return inkcell_type_style_tabular(inkcell_type_style_plain(scale, INKCELL_WEIGHT_REGULAR));
+}
+
 int inkcell_fb_badge_width(const struct inkcell_draw_state *state, const char *text, int scale) {
-    const int words = text != NULL ? inkcell_fb_text_width(state, text, scale) : 0;
+    const struct inkcell_type_style style = inkcell_fb_capsule_style(scale);
+    const int words = text != NULL ? inkcell_fb_text_width_styled(state, text, &style) : 0;
     /* Half a cell either side of the words: enough to clear the capsule's own curve at every
        glyph scale a theme may pick, and it is what the row's badge has always taken. The
        padding is a nominal cell because it is space; the words are measured because they are
@@ -375,8 +389,9 @@ static void inkcell_fb_fill_capsule_text(const struct inkcell_draw_state *state,
     }
     inkcell_fb_fill_round_rect(state, box->x, box->y, box->w, box->h,
                                inkcell_fb_radius(state, INKCELL_SHAPE_FULL), paint.fill);
-    inkcell_fb_draw_text(state, box->x + inkcell_fb_char_adv(state, scale) / 2, text_y, text, scale,
-                         paint.ink, paint.fill);
+    const struct inkcell_type_style style = inkcell_fb_capsule_style(scale);
+    inkcell_fb_draw_text_styled(state, box->x + inkcell_fb_char_adv(state, scale) / 2, text_y, text,
+                                &style, paint.ink, paint.fill);
 }
 
 void inkcell_fb_draw_badge(const struct inkcell_draw_state *state,

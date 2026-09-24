@@ -266,23 +266,32 @@ static void inkcell_fb_dial_label(const struct inkcell_draw_state *state,
     }
     const int room = hole * 7 / 10;
 
-    const int scales[] = {inkcell_fb_type_scale(state, INKCELL_TYPE_BODY),
-                          inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL)};
-    for (size_t i = 0U; i < sizeof scales / sizeof scales[0]; ++i) {
-        const int scale = scales[i];
-        if (scale <= 0) {
+    /*
+     * In tabular figures, at whichever of the two sizes fits.
+     *
+     * The label in a ring is a *reading* - "47%", "12 dB" - and it is redrawn every time the
+     * value moves while the ring around it stays exactly where it is. With proportional figures
+     * a centred reading slides left and right by a pixel or two as its digits change, which is
+     * the one motion in a dial that does not mean anything.
+     */
+    const struct inkcell_type_style styles[] = {
+        inkcell_type_style_tabular(inkcell_fb_type_style(state, INKCELL_TYPE_BODY)),
+        inkcell_type_style_tabular(inkcell_fb_type_style(state, INKCELL_TYPE_LABEL))};
+    for (size_t i = 0U; i < sizeof styles / sizeof styles[0]; ++i) {
+        const struct inkcell_type_style *style = &styles[i];
+        if (style->scale <= 0) {
             continue;
         }
-        const int width = inkcell_fb_text_width(state, dial->label, scale);
-        const int height = inkcell_scale_px((int)inkcell_fb_font(state)->height, scale);
+        const int width = inkcell_fb_text_width_styled(state, dial->label, style);
+        const int height = inkcell_scale_px((int)inkcell_fb_font(state)->height, style->scale);
         if (width > room || height > room) {
             continue;
         }
         /* The glyph body is centred, not the line advance: the advance carries the gap accents
            hang in, and counting it would sit every figure low in its ring. */
-        inkcell_fb_draw_text(state, cx - width / 2, cy - height / 2, dial->label, scale,
-                             inkcell_fb_color(state, INKCELL_COLOR_TEXT),
-                             inkcell_fb_color(state, dial->ground));
+        inkcell_fb_draw_text_styled(state, cx - width / 2, cy - height / 2, dial->label, style,
+                                    inkcell_fb_color(state, INKCELL_COLOR_TEXT),
+                                    inkcell_fb_color(state, dial->ground));
         return;
     }
 }

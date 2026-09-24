@@ -472,6 +472,9 @@ INKCELL_TEST_CASE(ui_theme_states_its_geometry, unit) {
  * the last one has to come back to the first - a user who has stepped somewhere unreadable
  * gets home the same way they left.
  */
+/* The three roles a screen reaches for most, held here because this suite is where a theme's
+   tables are checked. The whole vocabulary - all seven roles, and the tracking, line height and
+   figures each carries - is ui_type.c's. */
 INKCELL_TEST_CASE(ui_theme_states_its_type_scale, unit) {
     for (size_t i = 0; i < inkcell_theme_count(); ++i) {
         const struct inkcell_theme *theme = inkcell_theme_at(i);

@@ -258,6 +258,18 @@ int inkcell_font_advance_cp(const struct inkcell_font *font, uint32_t codepoint,
 /* How tall a capital is drawn, in pixels - what anything standing beside the text matches. */
 int inkcell_font_cap(const struct inkcell_font *font, int scale);
 
+/*
+ * What one digit steps when the digits are being set in a column - the widest of the ten.
+ *
+ * A proportional face draws its figures to fit: in the UI face a '1' is two thirds the width of
+ * a '4'. Inside a word that is right and invisible; in a reading that updates, or in a column
+ * of them, it means the number moves sideways as its digits change and two rows do not line up.
+ * A style that says so (struct inkcell_type_style's `tabular`) steps every digit this far and
+ * centres the glyph in it, which is what a face's own tabular figures would do if this one had
+ * a second set of them.
+ */
+int inkcell_font_digit_advance(const struct inkcell_font *font, int scale);
+
 /* Safe wrappers: a NULL font, or one missing a hook, resolves to the default. */
 bool inkcell_font_glyph(const struct inkcell_font *font, uint32_t codepoint,
                         struct inkcell_glyph *out);

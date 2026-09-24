@@ -495,31 +495,184 @@ enum inkcell_space {
  * runtime, and a table of absolutes would silently stop being a scale the moment somebody asked
  * for larger text. An offset keeps the *relationship*, which is what a type scale is.
  *
- * Three roles for now, where Material names fifteen and iOS eleven - and the reason is no
- * longer arithmetic. It was: a scale was a whole multiplier over the font's cell, so the range
- * [2, 6] held five sizes and a vocabulary with more roles than that would have been a set of
- * synonyms. A scale counts quarter steps now (see INKCELL_SCALE_UNIT), which puts seventeen
+ * Seven roles, where Material names fifteen and iOS eleven - and the reason there were three
+ * is no longer arithmetic. It was: a scale was a whole multiplier over the font's cell, so the
+ * range [2, 6] held five sizes and a vocabulary with more roles than that would have been a set
+ * of synonyms. A scale counts quarter steps now (see INKCELL_SCALE_UNIT), which puts seventeen
  * sizes in the same range and about a pixel of cap height between neighbours - enough to place
- * a display, a headline, a title, a body and a label without two of them landing together.
+ * a display, a headline, a title, a body, a supporting body, a label and a caption without two
+ * of them landing together.
  *
- * What is left before this can carry Material's grid is the vocabulary itself: the roles, their
- * offsets, and a weight for each. The offsets below are stated in units, so a role may now sit
- * half a step above the body rather than a whole one, and a theme can say so.
+ * Seven rather than fifteen because a role nobody can name is a role nobody reaches for. Each
+ * of these is a sentence a screen can actually say about a line - "this is the reading", "this
+ * is the line under the line", "this is a timestamp" - and a vocabulary is only worth having
+ * while every word in it is one somebody would choose.
+ *
+ * A role is four facets, not one: how big, how heavy, how far apart the lines sit and how far
+ * apart the letters do. Size alone is what a "type scale" usually means and it is not enough -
+ * text set two steps up at the body's own letter-spacing reads loose, a caption set a step and
+ * a half down at the body's reads cramped, and a wrapping paragraph at a heading's line height
+ * reads as a list. Those are the corrections a designer makes by hand at each size, which is
+ * exactly the kind of decision this table exists to hold once. See struct inkcell_type_role.
  *
  * At the top of the range the roles still collapse towards each other, which is correct and is
- * what inkcell_theme_type_scale() clamping guarantees.
+ * what inkcell_theme_type_scale() clamping guarantees. They collapse in order: a display never
+ * lands below a headline, and a caption never above a label.
  */
 enum inkcell_type {
-    /* A screen's own heading. A whole step up, so a title is a title before it is read. */
-    INKCELL_TYPE_TITLE = 0,
+    /* The one thing a screen exists to show: the reading on a status panel, the figure in an
+       empty state, the count something is about. Two whole steps up, and the one role set
+       *tight* - a face's letter-spacing is drawn for text at reading size, and at twice that
+       the same gaps read as a word coming apart. */
+    INKCELL_TYPE_DISPLAY = 0,
+    /* A heading with a screen behind it rather than a bar: the question a dialog asks, the name
+       of the thing a detail screen is about. A step and a half, so it stands over a title
+       without reaching for a display's presence. */
+    INKCELL_TYPE_HEADLINE,
+    /* A screen's own heading, and a card's. A whole step up, so a title is a title before it is
+       read. */
+    INKCELL_TYPE_TITLE,
     /* The default: list rows, card values, chat bubbles, anything read rather than glanced at. */
     INKCELL_TYPE_BODY,
+    /* The line under the line: a row's second line, a field's current value, the sentence that
+       explains a setting. Half a step down with a looser line, because supporting text is the
+       part that wraps - and because the alternative, the body size in a dimmer colour, is
+       exactly the hierarchy-by-palette this scale exists to replace. */
+    INKCELL_TYPE_BODY_SOFT,
     /* Chrome and section labels: the tab strip, the footer, a card's heading, a counter. One
        step down - these are found, not read, and at the body scale each costs a whole row on a
        panel that has fifteen. */
     INKCELL_TYPE_LABEL,
+    /* Metadata beside something else: a timestamp, a unit, a signal reading, "3 of 12". A step
+       and a half down, set loose so that it survives being that small, and in tabular figures
+       because what is written in this role is mostly numbers that change while the reader is
+       looking at them. */
+    INKCELL_TYPE_CAPTION,
     INKCELL_TYPE_COUNT
 };
+
+/*
+ * How one role is set: the row of the type scale, as a theme states it.
+ *
+ * Four facets rather than a size, because the four are one decision. How far a title stands
+ * above the body is a question about size *and* weight; whether a caption is legible at a step
+ * and a half down is a question about its letter-spacing; whether a paragraph of supporting
+ * text reads as prose or as a list is a question about its line height. A theme that answered
+ * one of them here and left the rest in the renderers would be a theme that cannot actually
+ * restyle its own typography - which is the shape the two-array version had.
+ *
+ * Every facet is stated *relative* to something the theme does not own, so that the table stays
+ * true when the thing underneath it moves. The size is an offset from the body scale, which a
+ * preference and <PREFIX>_SCALE both override at runtime. The tracking is in scale units, so it
+ * grows with the text. The line height is a percentage of the font's own line, so a face with
+ * different proportions brings them with it rather than being overridden by a pixel count
+ * written for a different face. A table of absolutes would silently stop being a scale the
+ * moment somebody asked for larger text or another font.
+ */
+struct inkcell_type_role {
+    /* Size: scale units from the body scale. Signed - a title is above the body and a label
+       below it. INKCELL_SCALE(1) is a whole step, so a half-step role is INKCELL_SCALE(1) / 2
+       and not a rounding accident. */
+    int8_t offset;
+    /* Weight, as an enum inkcell_weight. A theme wanting a flat look sets every role REGULAR. */
+    uint8_t weight;
+    /*
+     * Tracking: extra space after every cell, in scale units, added to the face's own advance.
+     *
+     * Signed, and the sign is the whole point: large text wants less air between letters than
+     * the face was drawn with and small text wants more, which is why a display is negative
+     * here and a caption positive. Zero is the face exactly as it was drawn, which is what
+     * every role had before this field existed.
+     *
+     * In scale units rather than pixels so that it tracks the text: a quarter step at the body
+     * scale is one pixel on the Brick's panel and two at the top of the range, which is the
+     * same *proportion* of the letter it is spacing.
+     */
+    int8_t tracking;
+    /*
+     * Line height, as a percentage of the font's own line advance. 0 reads as 100, so a theme
+     * that states nothing draws exactly the lines it drew before.
+     *
+     * A percentage rather than pixels because the font already answers this question once - it
+     * declares a cell and a line gap - and a theme restating it in pixels would be a theme that
+     * silently overrides the next font it is pointed at. What a theme legitimately has an
+     * opinion about is the *ratio*: a heading set at the body's leading looks lost in its own
+     * row, and a wrapping paragraph set at a heading's looks like a list of lines.
+     */
+    uint8_t line_pct;
+    /*
+     * Whether digits step a common advance - tabular figures.
+     *
+     * The UI face is proportional and its digits are drawn to fit: '1' steps twelve master
+     * columns where '4' steps nineteen. That is correct inside a word and wrong in a column of
+     * readings, where it means a value re-rendered once a second moves sideways under the eye,
+     * and two numbers on consecutive rows do not line up at the decimal point. A role that is
+     * mostly numbers asks for the widest digit advance for all ten and centres each glyph in
+     * it, which is what a face's own tabular figures would do if this one had a second set.
+     */
+    bool tabular;
+};
+
+/*
+ * A role resolved against a body scale: what a renderer actually draws with.
+ *
+ * The role table is relative and the scale is not known until a frame is being drawn, so a
+ * screen asks inkcell_theme_type_style() once and hands the answer to every measurement and
+ * every draw of that run. Passing the struct rather than the four numbers is what keeps them
+ * together: a line measured at a role's size but drawn at the body's tracking is a line that
+ * does not fit the box its own layout reserved for it, and that is a bug no signature taking
+ * `int scale` can refuse to express.
+ */
+struct inkcell_type_style {
+    /* The glyph multiplier, in scale units, already clamped into the drawable range. */
+    int scale;
+    enum inkcell_weight weight;
+    /* As the theme stated it - scale units per cell, not pixels. inkcell_type_tracking_px()
+       does the conversion, and the fb layer does it once per run. */
+    int tracking;
+    uint8_t line_pct;
+    bool tabular;
+};
+
+/*
+ * `style`'s tracking in pixels, which may legitimately be none.
+ *
+ * Scale units in and pixels out, so the divide is by INKCELL_SCALE_UNIT twice: once because the
+ * tracking is stated in quarter steps like everything else on the role, and once because the
+ * scale is. INKCELL_SCALE(1) of tracking is a whole step of air after every letter, which is
+ * about a fifth of a cell and far more than any real face wants - the useful range is the
+ * quarter and half steps the table actually uses.
+ *
+ * Not inkcell_scale_px(): that one never rounds a request away to nothing, because a hairline a
+ * theme asked for is a hairline. Tracking is the opposite case - a quarter step of air at the
+ * smallest drawable size *is* nothing, and rounding it up to a whole pixel would space a
+ * caption further apart than a body. It truncates towards zero in both directions, so
+ * tightening and loosening stay symmetric.
+ */
+static inline int inkcell_type_tracking_px(const struct inkcell_type_style *style) {
+    if (style == NULL || style->tracking == 0 || style->scale <= 0) {
+        return 0;
+    }
+    const int magnitude = (style->tracking < 0 ? -style->tracking : style->tracking) *
+                          style->scale / (INKCELL_SCALE_UNIT * INKCELL_SCALE_UNIT);
+    return style->tracking < 0 ? -magnitude : magnitude;
+}
+
+/*
+ * `line` - a font's own line advance, in pixels - at `style`'s line height.
+ *
+ * Never nothing where the font asked for something: a line height of zero is a row of text
+ * drawn on top of the one before it, and a theme that states an absurd percentage should get an
+ * ugly frame rather than an unreadable one.
+ */
+static inline int inkcell_type_line_px(int line, const struct inkcell_type_style *style) {
+    const int pct = (style == NULL || style->line_pct == 0U) ? 100 : (int)style->line_pct;
+    if (line <= 0) {
+        return line;
+    }
+    const int scaled = line * pct / 100;
+    return scaled > 0 ? scaled : 1;
+}
 
 /*
  * The geometry a theme owns.
@@ -531,22 +684,20 @@ enum inkcell_type {
 struct inkcell_metrics {
     uint8_t margin; /* pixels between the panel edge and the body */
     uint8_t scale;  /* glyph multiplier for body text */
-    /* The type scale, as offsets from the body scale in *scale units*, indexed by enum
-       inkcell_type. Signed: a title is above the body and a label below it. INKCELL_SCALE(1) is
-       a whole step, so a half-step role is INKCELL_SCALE(1) / 2 and not a rounding accident.
-       Read through inkcell_theme_type_scale(), which does the addition and the clamp. */
-    int8_t type_offset[INKCELL_TYPE_COUNT];
     /*
-     * How heavily each role is set, indexed by enum inkcell_type. Read through
-     * inkcell_theme_type_weight().
+     * The type scale: one row per role, indexed by enum inkcell_type.
      *
-     * Beside the scale rather than decided at each drawing site, because the two are one
-     * decision: how far a title stands above the body is a question about size *and* weight,
-     * and a theme that answered one of them here and left the other in the renderers would be a
-     * theme that cannot actually restyle its own typography. A theme wanting the flat look this
-     * replaced sets every entry to REGULAR.
+     * Read through inkcell_theme_type_style(), which resolves a row against a body scale, or
+     * through inkcell_theme_type_scale() and inkcell_theme_type_weight() where only one facet
+     * is wanted. What each field means and why it is stated the way it is, is on struct
+     * inkcell_type_role.
+     *
+     * One array of rows rather than an array per facet, because a role is the unit a theme
+     * restyles: the size, the weight, the tracking and the line height of a caption are one
+     * paragraph of a design, and a theme that had to state them in four places four rows apart
+     * is a theme whose caption is four edits away from being one.
      */
-    uint8_t type_weight[INKCELL_TYPE_COUNT];
+    struct inkcell_type_role type[INKCELL_TYPE_COUNT];
     uint8_t bubble_width_pct; /* how much of the body a chat bubble may fill */
     uint8_t field_label_cols; /* preferred label column, in cells */
     uint8_t narrow_cols;      /* a body narrower than this halves the label column */
@@ -788,6 +939,43 @@ int inkcell_theme_scale(const struct inkcell_theme *theme);
  * registry cannot rasterise, and the vocabulary degrades instead of breaking.
  */
 int inkcell_theme_type_scale(const struct inkcell_theme *theme, enum inkcell_type type, int scale);
+
+/*
+ * The whole of `type`, resolved against a body scale - the one to reach for.
+ *
+ * A style rather than four calls because the facets only mean anything together: what is drawn
+ * has to be measured with the same tracking and laid out at the same line height, and a
+ * renderer that fetched the size here and forgot the tracking there would draw a line wider
+ * than the box it reserved. Ask once, at the top of a run, and hand the answer down.
+ *
+ * `scale` is the body scale - 0 or less means the theme's own, as everywhere else here.
+ */
+struct inkcell_type_style inkcell_theme_type_style(const struct inkcell_theme *theme,
+                                                   enum inkcell_type type, int scale);
+
+/*
+ * A style that is a size and a weight and nothing else: the face exactly as it was drawn, at
+ * the font's own line, with proportional figures.
+ *
+ * What every call site that names a scale rather than a role is doing, said out loud - the
+ * measurement primitives are written against a style now, and this is the style the plain
+ * forms of them build. A caller that has a role should not be using it.
+ */
+struct inkcell_type_style inkcell_type_style_plain(int scale, enum inkcell_weight weight);
+
+/*
+ * `style` with tabular figures, whatever its role says.
+ *
+ * A role answers for the *kind* of line - a caption is mostly numbers, so the table says so
+ * once - but some call sites know something the role cannot: that this particular string is a
+ * count, a reading, a clock, and that it is going to be redrawn while somebody is looking at
+ * it. A badge and a dial's label are both that, at whatever size their container asked for.
+ *
+ * There is deliberately no opposite. Turning a role's tabular figures back off is a call site
+ * overruling the theme about what a caption *is*, and if that is ever right the answer is a
+ * different role rather than a flag.
+ */
+struct inkcell_type_style inkcell_type_style_tabular(struct inkcell_type_style style);
 /* Clamps any multiplier into the accepted range; 0 or less means "the theme's own". */
 int inkcell_theme_clamp_scale(const struct inkcell_theme *theme, int scale);
 

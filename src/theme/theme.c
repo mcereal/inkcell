@@ -52,6 +52,30 @@
  * rectangle somebody sanded. Two steps is where the eye starts reading a shape with ends.
  */
 /*
+ * The type scale, which is the table below's longest row and its most opinionated.
+ *
+ * Sizes are offsets from the body in scale units - a whole step is INKCELL_SCALE(1), a half
+ * step is half of that - tracking is scale units of air after every cell, and the line height
+ * is a percentage of the font's own. What each facet means is on struct inkcell_type_role; why
+ * these particular numbers is here.
+ *
+ * The size falls in roughly even half-steps from the display to the caption, and the two
+ * corrections run the *other* way. Tracking goes from negative at the top of the scale to
+ * positive at the bottom, because a face is drawn to be read at one size: above it the same
+ * gaps read as a word coming apart, below it the letters close up. The line height opens only
+ * where text actually wraps - the supporting body - rather than everywhere, because the leading a
+ * heading does not need is leading that pushes the next row off a panel that has fifteen of
+ * them.
+ *
+ * The heavy roles are the ones that are not read as prose: the headings, and the chrome labels
+ * that have to be *found*. A label is heavier *instead* of larger - a step down in size on its
+ * own reads as text that got smaller rather than as a heading.
+ *
+ * Tabular figures on the display and the caption, which are the two roles that are mostly
+ * numbers: a reading that changes while it is being looked at, and the metadata beside it. A
+ * proportional '1' in either is a column that shifts under the eye every time it updates.
+ */
+/*
  * Taken as a parameter rather than restated in the table, so a theme that wants a deeper dim
  * says one number instead of a copy of everything above it. A second initializer for the same
  * member would have done it in fewer characters and is what -Woverride-init exists to catch:
@@ -59,19 +83,31 @@
  */
 #define INKCELL_METRICS_SCRIM_FIELDS(scrim)                                                        \
     .margin = 16U, .scale = INKCELL_SCALE(4), .bubble_width_pct = 75U,                             \
-    .type_offset =                                                                                 \
+    .type =                                                                                        \
         {                                                                                          \
-            [INKCELL_TYPE_TITLE] = INKCELL_SCALE(1),                                               \
-            [INKCELL_TYPE_BODY] = 0,                                                               \
-            [INKCELL_TYPE_LABEL] = -INKCELL_SCALE(1),                                              \
-    }, /* A title is heavier as well as larger, and a label is heavier *instead* of                \
-          larger: section headings and chrome are a step down in size, which on its own            \
-          reads as text that got smaller rather than as a heading. */                              \
-        .type_weight =                                                                             \
-            {                                                                                      \
-                [INKCELL_TYPE_TITLE] = INKCELL_WEIGHT_STRONG,                                      \
-                [INKCELL_TYPE_BODY] = INKCELL_WEIGHT_REGULAR,                                      \
-                [INKCELL_TYPE_LABEL] = INKCELL_WEIGHT_STRONG,                                      \
+            [INKCELL_TYPE_DISPLAY] = {.offset = INKCELL_SCALE(2),                                  \
+                                      .weight = INKCELL_WEIGHT_STRONG,                             \
+                                      .tracking = -(INKCELL_SCALE(1) / 4),                         \
+                                      .line_pct = 95U,                                             \
+                                      .tabular = true},                                            \
+            [INKCELL_TYPE_HEADLINE] = {.offset = INKCELL_SCALE(1) + INKCELL_SCALE(1) / 2,          \
+                                       .weight = INKCELL_WEIGHT_STRONG,                            \
+                                       .line_pct = 100U},                                          \
+            [INKCELL_TYPE_TITLE] = {.offset = INKCELL_SCALE(1),                                    \
+                                    .weight = INKCELL_WEIGHT_STRONG,                               \
+                                    .line_pct = 100U},                                             \
+            [INKCELL_TYPE_BODY] = {.weight = INKCELL_WEIGHT_REGULAR, .line_pct = 100U},            \
+            [INKCELL_TYPE_BODY_SOFT] = {.offset = -INKCELL_SCALE(1) / 2,                           \
+                                        .weight = INKCELL_WEIGHT_REGULAR,                          \
+                                        .line_pct = 110U},                                         \
+            [INKCELL_TYPE_LABEL] = {.offset = -INKCELL_SCALE(1),                                   \
+                                    .weight = INKCELL_WEIGHT_STRONG,                               \
+                                    .line_pct = 100U},                                             \
+            [INKCELL_TYPE_CAPTION] = {.offset = -INKCELL_SCALE(1) - INKCELL_SCALE(1) / 2,          \
+                                      .weight = INKCELL_WEIGHT_REGULAR,                            \
+                                      .tracking = INKCELL_SCALE(1) / 2,                            \
+                                      .line_pct = 100U,                                            \
+                                      .tabular = true},                                            \
     },                                                                                             \
     .space =                                                                                       \
         {                                                                                          \
@@ -865,34 +901,64 @@ int inkcell_theme_radius(const struct inkcell_theme *theme, enum inkcell_shape s
     return inkcell_scale_px((int)theme->metrics.shape[shape], scale);
 }
 
-enum inkcell_weight inkcell_theme_type_weight(const struct inkcell_theme *theme,
-                                              enum inkcell_type type) {
-    theme = theme_or_default(theme);
-    if ((int)type < 0 || (int)type >= (int)INKCELL_TYPE_COUNT) {
-        return INKCELL_WEIGHT_REGULAR;
-    }
-    return theme->metrics.type_weight[type] == (uint8_t)INKCELL_WEIGHT_STRONG
-               ? INKCELL_WEIGHT_STRONG
-               : INKCELL_WEIGHT_REGULAR;
+struct inkcell_type_style inkcell_type_style_plain(int scale, enum inkcell_weight weight) {
+    struct inkcell_type_style style = {
+        .scale = scale,
+        .weight = weight,
+        .tracking = 0,
+        .line_pct = 100U,
+        .tabular = false,
+    };
+    return style;
 }
 
-int inkcell_theme_type_scale(const struct inkcell_theme *theme, enum inkcell_type type, int scale) {
+struct inkcell_type_style inkcell_type_style_tabular(struct inkcell_type_style style) {
+    style.tabular = true;
+    return style;
+}
+
+struct inkcell_type_style inkcell_theme_type_style(const struct inkcell_theme *theme,
+                                                   enum inkcell_type type, int scale) {
     theme = theme_or_default(theme);
     const int body = inkcell_theme_clamp_scale(theme, scale);
     if ((int)type < 0 || (int)type >= (int)INKCELL_TYPE_COUNT) {
-        return body;
+        /* The body, exactly - the same answer inkcell_theme_type_scale() gives a role it does
+           not have, and for the same reason: a screen naming something this table has never
+           heard of gets readable text rather than a frame with a hole in it. */
+        return inkcell_type_style_plain(body, INKCELL_WEIGHT_REGULAR);
     }
-    const int wanted = body + (int)theme->metrics.type_offset[type];
-    /* Clamped rather than allowed out: at the top of the range a title collapses onto the body
-       and at the bottom a label does, which is the scale degrading rather than the font
+    const struct inkcell_type_role *role = &theme->metrics.type[type];
+
+    int wanted = body + (int)role->offset;
+    /* Clamped rather than allowed out: at the top of the range a display collapses onto the
+       body and at the bottom a caption does, which is the scale degrading rather than the font
        registry being asked for a size it cannot rasterise. */
     if (wanted < INKCELL_SCALE_MIN) {
-        return INKCELL_SCALE_MIN;
+        wanted = INKCELL_SCALE_MIN;
+    } else if (wanted > INKCELL_SCALE_MAX) {
+        wanted = INKCELL_SCALE_MAX;
     }
-    if (wanted > INKCELL_SCALE_MAX) {
-        return INKCELL_SCALE_MAX;
-    }
-    return wanted;
+
+    struct inkcell_type_style style = {
+        .scale = wanted,
+        .weight = role->weight == (uint8_t)INKCELL_WEIGHT_STRONG ? INKCELL_WEIGHT_STRONG
+                                                                 : INKCELL_WEIGHT_REGULAR,
+        .tracking = (int)role->tracking,
+        /* Zero is a theme that has not stated one, which is the font's own line - see the
+           field. Read here rather than at every use so that nothing below has to know. */
+        .line_pct = role->line_pct == 0U ? 100U : role->line_pct,
+        .tabular = role->tabular,
+    };
+    return style;
+}
+
+enum inkcell_weight inkcell_theme_type_weight(const struct inkcell_theme *theme,
+                                              enum inkcell_type type) {
+    return inkcell_theme_type_style(theme, type, 0).weight;
+}
+
+int inkcell_theme_type_scale(const struct inkcell_theme *theme, enum inkcell_type type, int scale) {
+    return inkcell_theme_type_style(theme, type, scale).scale;
 }
 
 int inkcell_theme_space(const struct inkcell_theme *theme, enum inkcell_space space, int scale) {
