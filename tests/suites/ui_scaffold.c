@@ -335,3 +335,46 @@ INKCELL_TEST_CASE(scaffold_detail_pane_title_badge_sits_on_the_pane_edge, unit) 
     inkcell_capture_close(capture);
     record_success(test_name);
 }
+
+/*
+ * A scaffold that names a compact bar keeps one row at the foot rather than two, gives the other
+ * back to the body, and hands the bar a layout that says which shape to draw - in every
+ * arrangement, the split's detail pane included, since both panes stand on the same foot.
+ */
+INKCELL_TEST_CASE(scaffold_compact_footer_keeps_one_row, unit) {
+    struct inkcell_draw_state *state = NULL;
+    struct inkcell_capture *capture =
+        scaffold_open(INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT, INKCELL_SCALE(4), &state);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+
+    struct inkcell_fb_scaffold scaffold = {
+        .destinations = k_destinations,
+        .count = SCAFFOLD_COUNT,
+        .compact_nav = INKCELL_FB_COMPACT_NAV_TOP,
+        .footer = true,
+    };
+    struct inkcell_fb_scaffold_frame full;
+    inkcell_fb_scaffold_begin(state, &scaffold, &full);
+    inkcell_fb_scaffold_end(state, &full, NULL);
+
+    scaffold.footer_kind = INKCELL_FB_FOOTER_COMPACT;
+    struct inkcell_fb_scaffold_frame compact;
+    inkcell_fb_scaffold_begin(state, &scaffold, &compact);
+    inkcell_fb_scaffold_end(state, &compact, NULL);
+
+    INKCELL_TEST_FAIL_IF_CLEANUP(full.layout.footer != INKCELL_FB_FOOTER_FULL,
+                                 inkcell_capture_close(capture),
+                                 "`footer` alone should still mean the full bar");
+    INKCELL_TEST_FAIL_IF_CLEANUP(compact.layout.footer != INKCELL_FB_FOOTER_COMPACT,
+                                 inkcell_capture_close(capture),
+                                 "the layout should carry the bar it was measured for");
+    INKCELL_TEST_FAIL_IF_CLEANUP(compact.layout.footer_y <= full.layout.footer_y,
+                                 inkcell_capture_close(capture),
+                                 "a compact bar should give rows back to the body");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_panel_height(state) - compact.layout.footer_y !=
+                                     inkcell_fb_action_bar_height(state, &compact.layout),
+                                 inkcell_capture_close(capture),
+                                 "the foot should be exactly one compact bar tall");
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}

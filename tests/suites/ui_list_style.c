@@ -396,3 +396,39 @@ INKCELL_TEST_CASE(list_style_inset_end_rows_register_out_to_the_section_edge, un
     style_harness_close(&h);
     record_success(test_name);
 }
+
+/*
+ * An accent list keeps its cue on the row: the row is still a target a press and a pointer
+ * reach, but it is not the frame's mark, so the travelling ring does not circle a row that has
+ * already said where the cursor is. A fill list, which has no capsule, still hands the ring the
+ * row.
+ */
+INKCELL_TEST_CASE(list_style_an_accent_row_is_not_the_frames_mark, unit) {
+    const enum inkcell_fb_list_focus looks[] = {INKCELL_FB_LIST_FOCUS_ACCENT,
+                                                INKCELL_FB_LIST_FOCUS_FILL};
+    for (size_t i = 0; i < sizeof looks / sizeof looks[0]; ++i) {
+        struct style_harness h;
+        INKCELL_TEST_FAIL_IF(!style_harness_open(&h, true), "the capture should open");
+        const struct inkcell_fb_list_style look = {.focus = looks[i]};
+        struct inkcell_fb_list list =
+            inkcell_fb_list_begin_styled(h.state, &h.layout, 2U, 1U, NULL, NULL, &look);
+        inkcell_fb_list_focus(&list, STYLE_ID_ROW);
+        uint32_t index = 0U;
+        while (inkcell_fb_list_next(&list, &index)) {
+            const struct inkcell_fb_list_item item = {.text = "row"};
+            inkcell_fb_list_item(h.state, &list, index, &item);
+        }
+        const bool registered = inkcell_focus_has(&h.map, STYLE_ID_ROW + 1U);
+        const uint32_t marked = inkcell_focus_marked(&h.map);
+        style_harness_close(&h);
+        INKCELL_TEST_FAIL_IF(!registered, "the cursor's row should still be a target");
+        if (looks[i] == INKCELL_FB_LIST_FOCUS_ACCENT) {
+            INKCELL_TEST_FAIL_IF(marked != INKCELL_FOCUS_NONE,
+                                 "an accent row should not be the frame's mark");
+        } else {
+            INKCELL_TEST_FAIL_IF(marked != STYLE_ID_ROW + 1U,
+                                 "a filled row should be the frame's mark");
+        }
+    }
+    record_success(test_name);
+}

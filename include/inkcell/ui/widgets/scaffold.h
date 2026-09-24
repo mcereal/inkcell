@@ -119,6 +119,16 @@ struct inkcell_fb_scaffold {
        then for the reason inkcell_fb_layout_begin() needs it: the body is laid out long before
        the bar is drawn. */
     bool footer;
+    /*
+     * Which action bar that is, when it is not the full one: INKCELL_FB_FOOTER_COMPACT keeps one
+     * row at the foot rather than two, and the body gets the other back. See
+     * inkcell_fb_layout_begin_footer().
+     *
+     * A second field rather than `footer` changing type, so that a scaffold declared before a
+     * compact bar existed still says what it said. Zero (NONE) defers to `footer`; anything else
+     * wins over it, since a frame that names a bar has plainly asked for one.
+     */
+    enum inkcell_fb_footer footer_kind;
     /* Whether B leaves - struct inkcell_fb_layout's `back`, asked once for the whole frame. */
     bool back;
     /*

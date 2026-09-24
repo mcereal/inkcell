@@ -107,7 +107,9 @@ enum inkcell_fb_list_density {
  *   - ACCENT is the lightest state layer (INKCELL_STATE_HOVERED - the layer a resting pointer
  *     gets, lighter than a focus fill) and a capsule at the row's leading edge in the primary,
  *     or in the row's own family when its tone names one - the rule `accent_edge` has always
- *     followed. A TV or console list, where the eye runs down the leading edge.
+ *     followed. A TV or console list, where the eye runs down the leading edge. The cue is the
+ *     row's own, so on a list registered with a focus map the row is a target but not the
+ *     frame's mark: the travelling ring stays off it rather than circling a capsule.
  *   - RING is no fill at all: an outline inside the row's box, in the primary, shaped to the
  *     row's place in its section. On a list registered with a focus map
  *     (inkcell_fb_list_focus()) the row draws nothing and leaves the cue to the frame's

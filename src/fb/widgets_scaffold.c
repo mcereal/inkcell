@@ -308,11 +308,20 @@ static enum inkcell_fb_nav_placement scaffold_placement(const struct inkcell_fb_
                                                                : INKCELL_FB_NAV_BOTTOM;
 }
 
+/* The bar the foot of the frame keeps room for: `footer_kind` when it names one, `footer`'s full
+   bar or none otherwise. */
+static enum inkcell_fb_footer scaffold_footer(const struct inkcell_fb_scaffold *scaffold) {
+    if (scaffold->footer_kind != INKCELL_FB_FOOTER_NONE) {
+        return scaffold->footer_kind;
+    }
+    return scaffold->footer ? INKCELL_FB_FOOTER_FULL : INKCELL_FB_FOOTER_NONE;
+}
+
 /* The layout a pane gets: the frame's own, with its top at the panes and its rows recounted. */
 static struct inkcell_fb_layout scaffold_pane_layout(const struct inkcell_draw_state *state,
                                                      const struct inkcell_fb_scaffold_frame *frame,
-                                                     bool footer, bool back) {
-    struct inkcell_fb_layout layout = inkcell_fb_layout_begin(state, footer, back);
+                                                     enum inkcell_fb_footer footer, bool back) {
+    struct inkcell_fb_layout layout = inkcell_fb_layout_begin_footer(state, footer, back);
     layout.nav_y = frame->layout.nav_y;
     layout.body_y = frame->panes_y;
     layout.rows = inkcell_fb_layout_rows(state, &layout);
@@ -363,7 +372,8 @@ void inkcell_fb_scaffold_begin(struct inkcell_draw_state *state,
      * any of the calls after them hearing about it.
      */
     (void)inkcell_fb_set_region(state, frame->content);
-    frame->layout = inkcell_fb_layout_begin(state, scaffold->footer, scaffold->back);
+    frame->layout =
+        inkcell_fb_layout_begin_footer(state, scaffold_footer(scaffold), scaffold->back);
     if (frame->nav == INKCELL_FB_NAV_TOP) {
         inkcell_fb_draw_nav_bar(state, &frame->layout, scaffold->destinations, scaffold->count,
                                 scaffold->active);
@@ -409,7 +419,8 @@ void inkcell_fb_scaffold_begin(struct inkcell_draw_state *state,
         frame->detail = panes[1];
 
         (void)inkcell_fb_set_region(state, frame->list);
-        frame->layout = scaffold_pane_layout(state, frame, scaffold->footer, scaffold->back);
+        frame->layout =
+            scaffold_pane_layout(state, frame, scaffold_footer(scaffold), scaffold->back);
         /* The rule between them, down the rows the panes share. */
         inkcell_fb_fill_rect(state, frame->list.x + frame->list.w, frame->panes_y, rule,
                              frame->layout.footer_y - frame->panes_y,
@@ -442,8 +453,8 @@ struct inkcell_fb_layout inkcell_fb_scaffold_detail(struct inkcell_draw_state *s
                                                             frame->detail.w, frame->content.h});
     /* `back` is false whatever the list pane says: with the list standing beside it, the detail
        is not somewhere B leaves - the thing it would go back to is already on the panel. */
-    const bool footer = frame->layout.footer_y < frame->content.y + frame->content.h;
-    struct inkcell_fb_layout layout = scaffold_pane_layout(state, frame, footer, false);
+    struct inkcell_fb_layout layout =
+        scaffold_pane_layout(state, frame, frame->layout.footer, false);
     if (bar != NULL) {
         inkcell_fb_draw_app_bar(state, &layout, bar);
     }
