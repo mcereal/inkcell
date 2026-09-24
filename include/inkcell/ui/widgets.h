@@ -69,6 +69,7 @@
 #include "inkcell/ui/widgets/list.h"
 #include "inkcell/ui/widgets/meter.h"
 #include "inkcell/ui/widgets/overlay.h"
+#include "inkcell/ui/widgets/scaffold.h"
 #include "inkcell/ui/widgets/scroll.h"
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_H */

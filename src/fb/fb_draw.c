@@ -174,7 +174,7 @@ int inkcell_fb_transition_offset(struct inkcell_draw_state *state) {
         state->slide_dir = 0;
         return 0;
     }
-    const int travel = inkcell_fb_panel_width(state) * INKCELL_FB_TRANSITION_TRAVEL_NUM /
+    const int travel = inkcell_fb_region(state).w * INKCELL_FB_TRANSITION_TRAVEL_NUM /
                        INKCELL_FB_TRANSITION_TRAVEL_DEN;
     return state->slide_dir * (int)(((int64_t)remaining * travel) / INKCELL_ANIM_ONE);
 }
@@ -186,6 +186,12 @@ void inkcell_fb_shift_begin(struct inkcell_draw_state *state, int dx, int top, i
     state->shift_x = dx;
     state->shift_top = top;
     state->shift_bottom = bottom;
+    /* Across, the band is the region: with a rail beside the body, a screen sliding in must
+       pass under the rail's edge rather than over the rail. Unnarrowed it is the surface, which
+       is the band this always was. */
+    const struct inkcell_box region = inkcell_fb_region(state);
+    state->shift_left = region.x;
+    state->shift_right = region.x + region.w;
     state->shift_active = true;
 }
 
@@ -675,12 +681,44 @@ int inkcell_fb_rail_gutter(const struct inkcell_draw_state *state) {
     return inkcell_fb_gutter(state);
 }
 
-struct inkcell_box inkcell_fb_content_column(const struct inkcell_draw_state *state) {
-    struct inkcell_box column = {
-        .x = inkcell_fb_margin(state),
+struct inkcell_box inkcell_fb_region(const struct inkcell_draw_state *state) {
+    const struct inkcell_box surface = {
+        .x = 0,
         .y = 0,
-        .w = inkcell_fb_panel_width(state) - 2 * inkcell_fb_margin(state),
+        .w = inkcell_fb_panel_width(state),
         .h = inkcell_fb_panel_height(state),
+    };
+    if (state == NULL || inkcell_box_is_empty(state->region)) {
+        return surface;
+    }
+    /* Clamped to the surface, so a region set against a panel that has since shrunk - a window
+       dragged smaller between two frames - is a smaller region rather than one off the edge. */
+    struct inkcell_box box = state->region;
+    const int right = box.x + box.w < surface.w ? box.x + box.w : surface.w;
+    const int bottom = box.y + box.h < surface.h ? box.y + box.h : surface.h;
+    box.x = box.x > 0 ? box.x : 0;
+    box.y = box.y > 0 ? box.y : 0;
+    box.w = right - box.x;
+    box.h = bottom - box.y;
+    return inkcell_box_is_empty(box) ? surface : box;
+}
+
+struct inkcell_box inkcell_fb_set_region(struct inkcell_draw_state *state, struct inkcell_box box) {
+    if (state == NULL) {
+        return (struct inkcell_box){0};
+    }
+    const struct inkcell_box was = state->region;
+    state->region = inkcell_box_is_empty(box) ? (struct inkcell_box){0} : box;
+    return was;
+}
+
+struct inkcell_box inkcell_fb_content_column(const struct inkcell_draw_state *state) {
+    const struct inkcell_box region = inkcell_fb_region(state);
+    struct inkcell_box column = {
+        .x = region.x + inkcell_fb_margin(state),
+        .y = region.y,
+        .w = region.w - 2 * inkcell_fb_margin(state),
+        .h = region.h,
     };
     if (column.w < 1) {
         column.w = 1;
@@ -916,7 +954,16 @@ static bool inkcell_fb_clip_box(const struct inkcell_draw_state *state, int x, i
         if (y + h > state->shift_bottom) {
             h = state->shift_bottom - y;
         }
-        if (h <= 0) {
+        if (x < state->shift_left) {
+            const int trimmed = state->shift_left - x;
+            w -= trimmed;
+            dx += trimmed;
+            x = state->shift_left;
+        }
+        if (x + w > state->shift_right) {
+            w = state->shift_right - x;
+        }
+        if (h <= 0 || w <= 0) {
             return false;
         }
     }
@@ -2675,11 +2722,11 @@ void inkcell_fb_scrim_rect(const struct inkcell_draw_state *state, struct inkcel
 
 /* Columns of text that fit between the margins at this scale. */
 size_t inkcell_fb_cols(const struct inkcell_draw_state *state, int scale) {
-    /* The panel inset by its margin, deliberately, and not the content column: this is what a
+    /* The region inset by its margin, deliberately, and not the content column: this is what a
        width class is *taken from* (see inkcell_fb_width_class), and a column that is itself
        capped by the class would be a circle. What a screen laying text out wants is
        inkcell_fb_row_cols(), which is measured inside the column. */
-    const int usable = inkcell_fb_panel_width(state) - 2 * inkcell_fb_margin(state);
+    const int usable = inkcell_fb_region(state).w - 2 * inkcell_fb_margin(state);
     if (usable <= 0) {
         return 1U;
     }

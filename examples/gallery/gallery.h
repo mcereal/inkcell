@@ -120,6 +120,11 @@ struct gallery_scene {
      * exactly the same place on every host.
      */
     uint32_t settle_ms;
+    /* The page's size, when it is not the handheld panel's - 0 for INKCELL_CAPTURE_WIDTH by
+       INKCELL_CAPTURE_HEIGHT. For the scenes whose subject is what a wider surface does, which
+       the panel's two scales cannot reach on their own: expanded needs about 120 columns. */
+    uint32_t width;
+    uint32_t height;
 };
 
 /* The table, in manifest order. */
@@ -150,6 +155,8 @@ void gallery_scene_layers(struct inkcell_draw_state *state);
 void gallery_scene_scroll(struct inkcell_draw_state *state);
 void gallery_scene_scroll_overscroll(struct inkcell_draw_state *state);
 void gallery_scene_scroll_title(struct inkcell_draw_state *state);
+void gallery_scene_scaffold(struct inkcell_draw_state *state);
+void gallery_scene_scaffold_top(struct inkcell_draw_state *state);
 
 /* ---- shared scene furniture --------------------------------------------------------------------
  *

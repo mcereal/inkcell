@@ -680,7 +680,8 @@ void inkcell_fb_list_glide(struct inkcell_draw_state *state, struct inkcell_fb_l
     /* The whole body is moving, so the whole body is this frame's to repaint - a partial redraw
        that took the window's word for what changed would leave the rows that slid. */
     const int top = list->track_y - inkcell_step_px(state->scale);
-    inkcell_fb_animation_damage(state, 0, top, inkcell_fb_panel_width(state), list->track_h);
+    inkcell_fb_animation_damage(state, inkcell_fb_region(state).x, top, inkcell_fb_region(state).w,
+                                list->track_h);
 }
 
 void inkcell_fb_list_focus(struct inkcell_fb_list *list, uint32_t base) {

@@ -81,7 +81,9 @@ static void gallery_render(struct inkcell_draw_state *state, const void *snapsho
 static int gallery_page(const struct gallery_scene *scene, const struct inkcell_theme *theme,
                         int scale, const char *out_dir, struct gallery_page *page) {
     struct inkcell_capture *capture = NULL;
-    int rc = inkcell_capture_open(&capture, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT, scale);
+    const uint32_t page_w = scene->width != 0U ? scene->width : INKCELL_CAPTURE_WIDTH;
+    const uint32_t page_h = scene->height != 0U ? scene->height : INKCELL_CAPTURE_HEIGHT;
+    int rc = inkcell_capture_open(&capture, page_w, page_h, scale);
     if (rc < 0) {
         return rc;
     }

@@ -20,42 +20,42 @@
  * renames nothing but reordering the file does change the order they are taken in. Append.
  */
 static const struct gallery_scene k_scenes[] = {
-    {"buttons", gallery_scene_buttons, 0U},
-    {"chrome", gallery_scene_chrome, 0U},
-    {"controls", gallery_scene_controls, 0U},
-    {"list", gallery_scene_list, 0U},
-    {"cards", gallery_scene_cards, 0U},
-    {"meters", gallery_scene_meters, 0U},
-    {"transcript", gallery_scene_transcript, 0U},
+    {"buttons", gallery_scene_buttons, 0U, 0U, 0U},
+    {"chrome", gallery_scene_chrome, 0U, 0U, 0U},
+    {"controls", gallery_scene_controls, 0U, 0U, 0U},
+    {"list", gallery_scene_list, 0U, 0U, 0U},
+    {"cards", gallery_scene_cards, 0U, 0U, 0U},
+    {"meters", gallery_scene_meters, 0U, 0U, 0U},
+    {"transcript", gallery_scene_transcript, 0U, 0U, 0U},
     /* The snackbar rises from off the panel, so this one is drawn twice with the motion's own
        duration between: long enough for it to have arrived, and taken from the theme rather
        than guessed at, so a theme with slower motion still gets a settled picture. */
-    {"overlays", gallery_scene_overlays, 400U},
+    {"overlays", gallery_scene_overlays, 400U, 0U, 0U},
     /* Three layers at once, settled. Same reason the overlays page steps the clock: a sheet
        and a menu both arrive from somewhere, so the frame that introduces them is a picture of
        them on their way rather than of what they look like. */
-    {"layers", gallery_scene_layers, 400U},
+    {"layers", gallery_scene_layers, 400U, 0U, 0U},
     /*
      * A body at three positions a row-index window cannot hold: between two rows, past the
      * end, and with the heading collapsed into the bar. No settle - each of these is a
      * *position* rather than a travel, and the scene puts the scroll at it and reads the
      * clock well past every duration in src/scroll.c.
      */
-    {"scroll", gallery_scene_scroll, 0U},
-    {"scroll_overscroll", gallery_scene_scroll_overscroll, 0U},
-    {"scroll_title", gallery_scene_scroll_title, 0U},
-    {"typography", gallery_scene_typography, 0U},
-    {"palette", gallery_scene_palette, 0U},
-    {"shapes", gallery_scene_shapes, 0U},
+    {"scroll", gallery_scene_scroll, 0U, 0U, 0U},
+    {"scroll_overscroll", gallery_scene_scroll_overscroll, 0U, 0U, 0U},
+    {"scroll_title", gallery_scene_scroll_title, 0U, 0U, 0U},
+    {"typography", gallery_scene_typography, 0U, 0U, 0U},
+    {"palette", gallery_scene_palette, 0U, 0U, 0U},
+    {"shapes", gallery_scene_shapes, 0U, 0U, 0U},
     /* Two pictures of one widget: the character grid sets its keycaps as text and the emoji
        panel draws them as sprites at the size of the key, which is a different path through the
        button and the one that looks wrong first. */
-    {"keyboard", gallery_scene_keyboard, 0U},
-    {"keyboard_emoji", gallery_scene_keyboard_emoji, 0U},
+    {"keyboard", gallery_scene_keyboard, 0U, 0U, 0U},
+    {"keyboard_emoji", gallery_scene_keyboard_emoji, 0U, 0U, 0U},
     /* Not a component at all: the four presses from one cell of a ragged screen, drawn as the
        finder answered them. Appended last for the manifest's sake - the table's order names the
        pictures. */
-    {"focus", gallery_scene_focus, 0U},
+    {"focus", gallery_scene_focus, 0U, 0U, 0U},
     /*
      * The ring, caught in the middle of a move. A seventh of the motion token rather than half:
      * the curve is an ease-out, so it covers most of the ground early, and a picture taken at
@@ -63,14 +63,14 @@ static const struct gallery_scene k_scenes[] = {
      * corridor between the two rows, which is the only place a still can show it travelling
      * rather than sitting on something.
      */
-    {"focus_ring", gallery_scene_focus_ring, 20U},
+    {"focus_ring", gallery_scene_focus_ring, 20U, 0U, 0U},
     /*
      * A list between two windows, caught early. The curve is an ease-out and most of the
      * distance is gone within the first third of it, so a picture has to be taken while the
      * rows are still well out of place - and off a row boundary, because the tell that says a
      * list is moving rather than sitting is the half-row the body cuts at its top edge.
      */
-    {"glide", gallery_scene_glide, 54U},
+    {"glide", gallery_scene_glide, 54U, 0U, 0U},
     /*
      * The FAB, with one of its specimens caught half way back to a disc. Under a third of the
      * exit token, for the focus ring's reason: the curve is an ease-out, so most of the ground
@@ -78,22 +78,32 @@ static const struct gallery_scene k_scenes[] = {
      * finished shrinking. The page's other five are at rest - the scene starts that one's
      * collapse inside the first frame, which is what leaves anything to photograph at all.
      */
-    {"fab", gallery_scene_fab, 40U},
+    {"fab", gallery_scene_fab, 40U, 0U, 0U},
     /*
      * The grid, twice, and appended for the manifest's sake like the pages above it. A home
      * screen scrolled off its first row, so the rail beside it has something to report; and a
      * shelf of covers ending on a short row, which is the shape a list cannot have and the
      * reason a press has a second axis.
      */
-    {"grid", gallery_scene_grid, 0U},
-    {"grid_covers", gallery_scene_grid_covers, 0U},
+    {"grid", gallery_scene_grid, 0U, 0U, 0U},
+    {"grid_covers", gallery_scene_grid_covers, 0U, 0U, 0U},
     /*
      * The stack, appended for the same reason as the pages above it. It is the one page that is
      * a picture of arithmetic rather than of a component, and it is also where the width class
      * has its only picture - which it gets free, because the two scales this sheet is rendered
      * at fall either side of a threshold on a 1024-pixel panel.
      */
-    {"stack", gallery_scene_stack, 0U},
+    {"stack", gallery_scene_stack, 0U, 0U, 0U},
+    /*
+     * The scaffold, three ways. On the panel it is compact at the body scale and medium at the
+     * smaller one, so the first page is a bottom bar and a rail; the second keeps the tab strip
+     * on a compact frame, which is the arrangement a device with shoulder buttons keeps; and the
+     * wide page is the only one past 120 columns at both scales, so it is the split. Appended for
+     * the manifest's sake.
+     */
+    {"scaffold", gallery_scene_scaffold, 0U, 0U, 0U},
+    {"scaffold_top", gallery_scene_scaffold_top, 0U, 0U, 0U},
+    {"scaffold_wide", gallery_scene_scaffold, 0U, 2240U, 1260U},
 };
 
 const struct gallery_scene *gallery_scenes(size_t *count) {
