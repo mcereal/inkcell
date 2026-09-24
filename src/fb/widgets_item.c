@@ -878,10 +878,13 @@ static void inkcell_fb_item_piece(struct inkcell_draw_state *state, int x, int y
     inkcell_line_fit(&line, cols);
     char fitted[INKCELL_LINE_MAX];
     snprintf(fitted, sizeof fitted, "%s", inkcell_line_text(&line));
+    /* Down to nothing if it has to be: one character wider than a one-cell room is still
+       wider than the room, and an empty piece is the answer to a column too narrow for it. */
     const int room = (int)cols * inkcell_fb_char_adv(state, state->scale);
-    while (inkcell_fb_text_width(state, fitted, state->scale) > room) {
+    while (fitted[0] != '\0' && inkcell_fb_text_width(state, fitted, state->scale) > room) {
         const size_t cells = inkcell_text_cells(fitted);
-        if (cells <= 1U) {
+        if (cells == 0U) {
+            fitted[0] = '\0';
             break;
         }
         inkcell_text_cell_truncate(fitted, cells - 1U);
@@ -909,9 +912,10 @@ static void inkcell_fb_item_piece_styled(struct inkcell_draw_state *state, int x
     }
     char fitted[INKCELL_LINE_MAX];
     snprintf(fitted, sizeof fitted, "%s", text != NULL ? text : "");
-    while (inkcell_fb_text_width_styled(state, fitted, style) > max_w) {
+    while (fitted[0] != '\0' && inkcell_fb_text_width_styled(state, fitted, style) > max_w) {
         const size_t cells = inkcell_text_cells(fitted);
-        if (cells <= 1U) {
+        if (cells == 0U) {
+            fitted[0] = '\0';
             break;
         }
         inkcell_text_cell_truncate(fitted, cells - 1U);
