@@ -115,6 +115,20 @@ enum inkcell_fb_trailing_kind {
      * always does.
      */
     INKCELL_FB_TRAILING_SEGMENTED,
+    /*
+     * A state, said as a capsule against the trailing edge - see inkcell_fb_draw_state_chip().
+     *
+     * `value_chip` is the same capsule in a label/value row's value column, and this is its
+     * form on a row that has no column: a device row whose trailing edge says "Connected", a
+     * key row that says "Verified". The capsule's family is `tone`'s, and the outlined neutral
+     * chip where the tone names none, so the row states once what the state *means* and the
+     * pill is the picture of it.
+     *
+     * The same bar as value_chip, and for the same reason: a pill round a measurement is a pill
+     * that shouts a number, and a column in which every row carries one is a column of colour
+     * reporting nothing. A figure is INKCELL_FB_TRAILING_TEXT.
+     */
+    INKCELL_FB_TRAILING_STATUS,
 };
 
 struct inkcell_fb_trailing {
@@ -122,7 +136,10 @@ struct inkcell_fb_trailing {
     /* BADGE: which family the capsule is filled with. Zero is INKCELL_FAMILY_PRIMARY - an
        unread count - and a row counting failures can name the error family instead. */
     enum inkcell_family family;
-    const char *text;             /* TEXT and BADGE, and the quiet figure beside SIGNAL */
+    /* STATUS: what the state means, which picks the capsule's family. Zero is the neutral,
+       outlined chip - a state worth checking rather than one worth reporting. */
+    enum inkcell_tone tone;
+    const char *text;             /* TEXT, BADGE and STATUS, and the quiet figure beside SIGNAL */
     enum inkcell_icon icon;       /* ICON */
     struct inkcell_fb_switch *sw; /* SWITCH. Its rect is filled in by the row: where the value
                              column ends is the row's business, not the caller's. */
@@ -151,6 +168,37 @@ struct inkcell_fb_trailing {
  * trailing age is quiet. A screen that wants an icon to shout says so by giving the *row* a
  * tone - which is the same sentence it was already making about the words.
  */
+
+/*
+ * The mark in a row's last cell, which says what a press on the row *does*.
+ *
+ * Three kinds of row share a list and a reader has to be able to tell them apart before
+ * pressing, which is the distinction Apple's list guidance leans on hardest:
+ *
+ *   - a **navigation** row opens something - another screen, a picker - and ends in a
+ *     disclosure chevron;
+ *   - an **option** row is one choice among the rows around it, and the chosen one ends in a
+ *     check. Its siblings end in nothing, in the same column;
+ *   - a **control** row is changed where it stands - a switch, a stepper, a segmented button -
+ *     and its control is the offer, so it ends in no accessory at all.
+ *
+ * A chevron on an option row promises a screen the press will not open, and a check drawn in
+ * the trailing slot of a navigation row reads as a setting that is on - so the kinds are not
+ * interchangeable marks, and none of them is a trailing slot. The trailing slot is what the row
+ * *says* (a figure, a state, a control); the accessory is what it *does*, in its own column
+ * against the edge, and the trailing slot stands to the left of it. That is what keeps a value
+ * on a navigation row and a value on a control row in one column: neither is displaced by the
+ * other's accessory, because both lists reserved it.
+ *
+ * INKCELL_FB_TRAILING_ICON with INKCELL_ICON_CHEVRON still draws, and still means what it
+ * always did. It is simply the chevron in the wrong column - against the edge on its own rows
+ * and nowhere on the others - which is why this exists.
+ */
+enum inkcell_fb_accessory {
+    INKCELL_FB_ACCESSORY_NONE = 0,
+    INKCELL_FB_ACCESSORY_DISCLOSURE, /* opens something: INKCELL_ICON_CHEVRON, quiet ink */
+    INKCELL_FB_ACCESSORY_CHECK,      /* the chosen option: INKCELL_ICON_CHECK, primary ink */
+};
 
 struct inkcell_fb_list_item {
     struct inkcell_fb_leading leading;
@@ -302,6 +350,21 @@ struct inkcell_fb_list_item {
      */
     bool value_chip;
     struct inkcell_fb_trailing trailing;
+    /*
+     * The accessory column, and whether this row reserves it when it has nothing to put there.
+     *
+     * Reserved rather than taken per row, on the terms `marker_slot` and the leading icon slot
+     * already keep: a list whose navigation rows end a cell further left than its control rows
+     * is a list whose values stand in two columns. So a list that has an accessory on any row
+     * sets `accessory_slot` on every row, and the option that is not chosen is simply a row
+     * with an empty column. `accessory` alone reserves its own column and nobody else's.
+     *
+     * Drawn centred on the headline, in the quiet ink for a disclosure and the primary for a
+     * check - the chosen option is the one thing on an option list worth a colour, and the
+     * chevron is furniture the eye passes on its way down, exactly as a trailing age is.
+     */
+    enum inkcell_fb_accessory accessory;
+    bool accessory_slot;
 
     /*
      * The supporting line. Non-NULL is what makes this a two-row item.
@@ -358,7 +421,10 @@ struct inkcell_fb_list_item {
     bool accent_edge;
     /* An inset hairline below, between this item and the next. Skipped under the cursor, whose
        fill is already doing that job, and below the last item on screen - a rule separates two
-       things, and under the last one there is nothing to separate it from. */
+       things, and under the last one there is nothing to separate it from.
+
+       Not drawn on a list opened with `separators` in its style, which draws one of its own on
+       the same boundary and knows where a group ends - see struct inkcell_fb_list_style. */
     bool divider;
 };
 

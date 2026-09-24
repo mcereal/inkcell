@@ -25,6 +25,156 @@
 #include <stdint.h>
 
 /*
+ * ---- the list's look ----
+ *
+ * Five decisions a list makes about itself rather than about any one row, stated once when it
+ * is opened (inkcell_fb_list_begin_styled()) and read by every row drawn into it.
+ *
+ * They are a list's and not an item's for the reason the heights are: a row that picked its own
+ * density would be a row the window was not told about, and a column in which some rows focus as
+ * a fill and others as a ring is a cursor that changes kind as it walks. So the rows stay what
+ * they were - slots and content - and the list says how all of them are set.
+ *
+ * **The zero of every field is what a list was before this existed.** A list opened any other
+ * way, or opened here with a zeroed style, draws the same pixels it always did, which is what
+ * lets a screen move to a style one list at a time rather than all at once.
+ */
+
+/*
+ * How a list's groups stand on the panel.
+ *
+ * The grouping itself is the card array's (see the card-list note below) - one ordinal per item,
+ * runs of the same ordinal being one group. This is only how a group is *drawn*, which is why
+ * one array serves all three: the same screen can be a plain list on a narrow panel and an
+ * inset-grouped one where there is room, without rebuilding anything but this enum.
+ *
+ * The distinction worth keeping is between the last two. An inset group is a *section*: a surface
+ * with no edge of its own, one step off the ground, rounded at the section's ends and nowhere
+ * else, rows running into each other with at most a hairline between them. It says "these rows
+ * belong together" and nothing more, which is what a settings screen is. A card group is an
+ * *object*: an outlined panel with a heading that is its title, which says "this is a thing" -
+ * a node's identity, its signal - and is what a detail screen is. Apple draws the first and
+ * Material the second, and they are both right about different screens.
+ */
+enum inkcell_fb_list_appearance {
+    /* Cards when the list was handed a card array, the bare panel otherwise: what every list
+       did before it could say. */
+    INKCELL_FB_LIST_APPEARANCE_AUTO = 0,
+    /* Rows on the panel. A card array still groups them - a separator does not run across the
+       break between two groups - but paints nothing. */
+    INKCELL_FB_LIST_PLAIN,
+    /* Sections: an edgeless surface per group, the section's corners on its first and last
+       rows and square corners between them. See inkcell_fb_list_section_ends(). */
+    INKCELL_FB_LIST_INSET_GROUPED,
+    /* Cards: an outlined surface per group, its heading in the primary. The look a card array
+       has always had. */
+    INKCELL_FB_LIST_CARD_GROUP,
+};
+
+/*
+ * How much air a row is given around its words.
+ *
+ * Compact is one line advance per step - the row a handheld's list has always been, and the
+ * right one on a panel fifteen rows tall. Comfortable adds INKCELL_SPACE_LG to every step, split
+ * above and below the words, which is the room a row wants once the panel is wide enough that
+ * the list is a column in a window rather than the whole of the screen.
+ *
+ * Density is a *step* height, not a row decoration, and that is the whole reason it is the
+ * list's to set. The model counts steps and places the window with them, the cards measure their
+ * surfaces in them, the rail reports them and the glide slides by them; a density applied by the
+ * row alone would be a row taller than the step the window reserved for it. So the list's `line`
+ * *is* the step, and every one of those measures is right without knowing density exists.
+ */
+enum inkcell_fb_list_density {
+    INKCELL_FB_LIST_COMPACT = 0,
+    INKCELL_FB_LIST_COMFORTABLE,
+};
+
+/*
+ * How the row the cursor is on says so.
+ *
+ * FILL is the theme's answer, and what every list did before: a lift one tone off the ground,
+ * or - on a theme that asks for it - the saturated cursor fill with its own ink pair. It is the
+ * loudest of the three and on a small panel in sunlight the most findable, which is why it is
+ * the default.
+ *
+ * ACCENT and RING never take the saturated fill, and that is the point of them. A row that
+ * turns into a slab of colour is a row whose words have to change ink to stay legible, so the
+ * cursor moving *changes what the row looks like* rather than marking it; on a list of options
+ * the reader is choosing between, that is the row they are reading repainted under their eye.
+ * Both keep the row's own inks:
+ *
+ *   - ACCENT is the lightest state layer (INKCELL_STATE_HOVERED - the layer a resting pointer
+ *     gets, lighter than a focus fill) and a capsule at the row's leading edge in the primary,
+ *     or in the row's own family when its tone names one - the rule `accent_edge` has always
+ *     followed. A TV or console list, where the eye runs down the leading edge.
+ *   - RING is no fill at all: an outline inside the row's box, in the primary, shaped to the
+ *     row's place in its section. On a list registered with a focus map
+ *     (inkcell_fb_list_focus()) the row draws nothing and leaves the cue to the frame's
+ *     travelling ring (inkcell/ui/widgets/focus.h), because a cursor is one ring and two rings
+ *     on one row is a cursor saying where it is twice.
+ *
+ * Under ACCENT and RING nothing inside the row changes when the cursor lands on it, controls
+ * included: a switch still draws its own focus state, since the switch is told it is focused
+ * either way.
+ */
+enum inkcell_fb_list_focus {
+    INKCELL_FB_LIST_FOCUS_FILL = 0,
+    INKCELL_FB_LIST_FOCUS_ACCENT,
+    INKCELL_FB_LIST_FOCUS_RING,
+};
+
+/*
+ * How a row's words are set.
+ *
+ * UNIFORM is every line of a row at the body role - what a list has always drawn, the headline,
+ * the supporting line and a trailing figure all the same size, told apart by ink alone. That is
+ * hierarchy by palette, which is the thing the type scale landed to stop, and a list is where it
+ * never reached.
+ *
+ * TIERED sets the three tiers in three roles:
+ *
+ *   - **primary** - the headline and a label/value row's two columns - at INKCELL_TYPE_BODY,
+ *     unchanged, because it is what the list is *of*;
+ *   - **supporting** - the second line - at INKCELL_TYPE_BODY_SOFT, half a step down, which is
+ *     the role that exists for exactly this line;
+ *   - **metadata** - a trailing figure (INKCELL_FB_TRAILING_TEXT), and the figure beside a
+ *     signal staircase - at INKCELL_TYPE_CAPTION, with the role's tabular figures, seated on
+ *     the headline's baseline. An age, a count, a reading: the things that change while a list
+ *     is being read and which a column of should line up down its digits.
+ *
+ * Measured and drawn in the tier's own style, both, and fitted to pixels rather than cells: a
+ * smaller role clipped to a body-cell count would stop short of the room it was given.
+ */
+enum inkcell_fb_list_type {
+    INKCELL_FB_LIST_TYPE_UNIFORM = 0,
+    INKCELL_FB_LIST_TYPE_TIERED,
+};
+
+struct inkcell_fb_list_style {
+    enum inkcell_fb_list_appearance appearance;
+    enum inkcell_fb_list_density density;
+    enum inkcell_fb_list_focus focus;
+    enum inkcell_fb_list_type type;
+    /*
+     * A hairline between every two rows of one group, inset to where the words start.
+     *
+     * The list's rather than each item's `divider`, because on a grouped list a separator is a
+     * fact about *where a row stands* - between two rows of one section - and the item is the one
+     * thing that cannot see its neighbours. So none is drawn under a group's last row (the
+     * group's end already says it), none across the break between two groups, none touching the
+     * row the cursor is on, whose fill or ring is already an edge. An item's own `divider` gives
+     * way to it, so a boundary never carries two.
+     *
+     * A companion to INKCELL_FB_LIST_COMFORTABLE rather than to every density. A compact step is
+     * a line advance with its leading at the top, so the bottom of a row is where its descenders
+     * end: a hairline there has no air to stand in and reads as the row's words underlined. The
+     * list draws what it is asked to either way; the gallery's pages show both.
+     */
+    bool separators;
+};
+
+/*
  * A scrolling list of rows, drawn top to bottom.
  *
  * Owns the window arithmetic (via struct inkcell_list) and the y cursor, which is the whole of
@@ -39,8 +189,10 @@
  */
 struct inkcell_fb_list {
     struct inkcell_list model;
-    int y;    /* next row's baseline */
-    int line; /* one step's advance - a body row */
+    int y; /* next row's baseline */
+    /* One step's advance: a body row, plus whatever the density adds (`pad` above and below).
+       Every row, surface and window measure in the list is a count of these. */
+    int line;
     /* The body the list was opened against, for the scroll rail: where it starts and how tall
        it is. Taken from the layout at inkcell_fb_list_begin*() rather than accumulated as rows are
        drawn, because a rail has to be the length of the *window* whether or not the items
@@ -95,6 +247,16 @@ struct inkcell_fb_list {
     uint32_t tail_count;
     uint32_t lead_pending;
     uint32_t tail_pending;
+    /*
+     * ---- the look ----
+     *
+     * The style the list was opened with, resolved: `appearance` is never AUTO once a list is
+     * open, so nothing downstream has to know that AUTO means "look at the card array".
+     */
+    struct inkcell_fb_list_style style;
+    /* Air above and below the words of every step, in pixels: half of what the density added
+       to `line`. Zero on a compact list, which is every list that did not ask. */
+    int pad;
 };
 
 /* One row per item, filling the body. */
@@ -221,6 +383,55 @@ struct inkcell_fb_list inkcell_fb_list_begin_focus(const struct inkcell_fb_layou
                                                    uint32_t count, uint32_t cursor,
                                                    const uint8_t *heights, const uint8_t *cards,
                                                    uint32_t first, uint32_t last, bool card);
+
+/*
+ * A list with a look: inkcell_fb_list_begin_cards() and a struct inkcell_fb_list_style.
+ *
+ * `heights` and `cards` are borrowed exactly as they are there, and either may be NULL. `style`
+ * may be NULL too, which is a zeroed style and therefore inkcell_fb_list_begin_cards() to the
+ * pixel. See the note on the list's look above for what each field decides.
+ *
+ * A grouped appearance with no card array is one group - the whole list is a single section.
+ *
+ * Takes the state, which no other entry point here does, because a density is a gap on the
+ * theme's space scale at the frame's glyph scale, and the layout carries neither.
+ *
+ * The window is placed against the *styled* step, so a comfortable list shows fewer rows than a
+ * compact one in the same body - the model is told the number of steps that fit, and every row,
+ * surface, rail and glide measure follows from that.
+ *
+ *     const struct inkcell_fb_list_style look = {
+ *         .appearance = INKCELL_FB_LIST_INSET_GROUPED,
+ *         .density = INKCELL_FB_LIST_COMFORTABLE,
+ *         .focus = INKCELL_FB_LIST_FOCUS_ACCENT,
+ *         .type = INKCELL_FB_LIST_TYPE_TIERED,
+ *         .separators = true,
+ *     };
+ *     struct inkcell_fb_list list =
+ *         inkcell_fb_list_begin_styled(state, layout, count, cursor, heights, sections, &look);
+ */
+struct inkcell_fb_list inkcell_fb_list_begin_styled(const struct inkcell_draw_state *state,
+                                                    const struct inkcell_fb_layout *layout,
+                                                    uint32_t count, uint32_t cursor,
+                                                    const uint8_t *heights, const uint8_t *cards,
+                                                    const struct inkcell_fb_list_style *style);
+
+/*
+ * Whether item `index` opens its group, closes it, or both - which is what decides which of its
+ * corners are rounded on a sectioned list.
+ *
+ * An item with no group (INKCELL_FB_LIST_NO_CARD, or a list with no card array) is both: it
+ * stands alone and is rounded all round. Asked of the card array rather than of the window, so a
+ * section cut by the edge of the body still knows its first row is not the row at the cut - the
+ * surface keeps a square end there (see the card-list note) and the cursor's fill has to agree
+ * with it.
+ *
+ * Public because a screen drawing its own mark beside a row - a second column, a custom
+ * highlight - has to shape it the way the row's own fill is shaped, or the two disagree about
+ * where the section's corner is on precisely the row that has one.
+ */
+void inkcell_fb_list_section_ends(const struct inkcell_fb_list *list, uint32_t index, bool *first,
+                                  bool *last);
 
 /*
  * The colour item `index` is standing on: a card's surface, or the panel's background.

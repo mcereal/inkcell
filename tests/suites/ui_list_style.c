@@ -1,0 +1,354 @@
+#define _POSIX_C_SOURCE 200809L
+
+/*
+ * A list's look: what inkcell_fb_list_begin_styled() promises, held here rather than in the
+ * gallery's pictures.
+ *
+ * The golden sheet is what shows the looks are *right*; this is what holds the arithmetic they
+ * rest on, which a picture can agree with by accident. Three promises matter most:
+ *
+ *   - a zeroed style is the list every screen already had, field for field - the whole reason
+ *     a screen can move to a look one list at a time;
+ *   - a density is a step, so the window and every row measure from it rather than from a row
+ *     that grew on its own;
+ *   - the accessory column and a section's corners are properties of *where a row stands*, and
+ *     every row in the same place answers the same.
+ */
+
+#include "framework/inkcell_test.h"
+
+#include "inkcell/ui/fb.h"
+#include "inkcell/ui/fb_capture.h"
+#include "inkcell/ui/focus.h"
+#include "inkcell/ui/widgets.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+#define STYLE_FOCUS_STORAGE 32U
+
+enum { STYLE_ID_ROW = 1000 };
+
+struct style_harness {
+    struct inkcell_capture *capture;
+    struct inkcell_draw_state *state;
+    struct inkcell_fb_layout layout;
+    struct inkcell_focus_item storage[STYLE_FOCUS_STORAGE];
+    struct inkcell_focus_map map;
+};
+
+static bool style_harness_open(struct style_harness *h, bool with_map) {
+    h->capture = NULL;
+    if (inkcell_capture_open(&h->capture, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT,
+                             INKCELL_SCALE(2)) < 0) {
+        return false;
+    }
+    h->state = inkcell_capture_state(h->capture);
+    if (with_map) {
+        inkcell_focus_begin(&h->map, h->storage, STYLE_FOCUS_STORAGE);
+        inkcell_fb_set_focus_map(h->state, &h->map);
+    }
+    inkcell_fb_clear(h->state, inkcell_fb_color(h->state, INKCELL_COLOR_BG));
+    h->layout = inkcell_fb_layout_begin(h->state, false, false);
+    return true;
+}
+
+static void style_harness_close(struct style_harness *h) {
+    inkcell_capture_close(h->capture);
+}
+
+/* The colour at one pixel of the page, read back through the capture's own format. */
+static struct inkcell_rgb style_pixel(const struct style_harness *h, int x, int y) {
+    uint32_t width = 0U;
+    uint32_t height = 0U;
+    size_t stride = 0U;
+    const uint8_t *pixels = inkcell_capture_pixels(h->capture, &width, &height, &stride);
+    const uint8_t *p = pixels + (size_t)y * stride + (size_t)x * 4U;
+    return (struct inkcell_rgb){.r = p[2], .g = p[1], .b = p[0]};
+}
+
+static bool style_same_rgb(struct inkcell_rgb a, struct inkcell_rgb b) {
+    return a.r == b.r && a.g == b.g && a.b == b.b;
+}
+
+/* ---- opening ------------------------------------------------------------------------------ */
+
+INKCELL_TEST_CASE(list_style_zero_style_is_the_card_list_it_always_was, unit) {
+    struct style_harness h;
+    INKCELL_TEST_FAIL_IF(!style_harness_open(&h, false), "the capture should open");
+
+    const uint8_t cards[] = {INKCELL_FB_LIST_NO_CARD, 0U, 0U, 0U, INKCELL_FB_LIST_NO_CARD, 1U};
+    const uint32_t count = (uint32_t)sizeof cards;
+    const struct inkcell_fb_list_style zero = {0};
+    const struct inkcell_fb_list styled =
+        inkcell_fb_list_begin_styled(h.state, &h.layout, count, 2U, NULL, cards, &zero);
+    const struct inkcell_fb_list plain =
+        inkcell_fb_list_begin_cards(&h.layout, count, 2U, NULL, cards);
+
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        styled.line != plain.line || styled.y != plain.y || styled.pad != 0,
+        style_harness_close(&h), "a zeroed style should place its rows where a card list does");
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        styled.model.first != plain.model.first || styled.model.visible != plain.model.visible,
+        style_harness_close(&h), "a zeroed style should open the same window");
+    INKCELL_TEST_FAIL_IF_CLEANUP(styled.style.appearance != INKCELL_FB_LIST_CARD_GROUP ||
+                                     plain.style.appearance != INKCELL_FB_LIST_CARD_GROUP,
+                                 style_harness_close(&h),
+                                 "a card array with no look asked for is a column of cards");
+    for (uint32_t i = 0U; i < count; ++i) {
+        INKCELL_TEST_FAIL_IF_CLEANUP(
+            inkcell_fb_list_ground(&styled, i) != inkcell_fb_list_ground(&plain, i),
+            style_harness_close(&h), "every item should stand on the ground it always did");
+    }
+    style_harness_close(&h);
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(list_style_a_list_with_no_cards_resolves_to_plain, unit) {
+    struct style_harness h;
+    INKCELL_TEST_FAIL_IF(!style_harness_open(&h, false), "the capture should open");
+    const struct inkcell_fb_list styled =
+        inkcell_fb_list_begin_styled(h.state, &h.layout, 4U, 0U, NULL, NULL, NULL);
+    const struct inkcell_fb_list plain = inkcell_fb_list_begin(&h.layout, 4U, 0U);
+    INKCELL_TEST_FAIL_IF_CLEANUP(styled.style.appearance != INKCELL_FB_LIST_PLAIN ||
+                                     plain.style.appearance != INKCELL_FB_LIST_PLAIN,
+                                 style_harness_close(&h), "no array and no look is the bare panel");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_list_ground(&styled, 0U) != INKCELL_COLOR_BG,
+                                 style_harness_close(&h), "a plain row stands on the panel");
+    style_harness_close(&h);
+    record_success(test_name);
+}
+
+/* ---- density ------------------------------------------------------------------------------ */
+
+INKCELL_TEST_CASE(list_style_comfortable_steps_are_taller_and_fewer, unit) {
+    struct style_harness h;
+    INKCELL_TEST_FAIL_IF(!style_harness_open(&h, false), "the capture should open");
+
+    const struct inkcell_fb_list_style comfortable = {.density = INKCELL_FB_LIST_COMFORTABLE};
+    const struct inkcell_fb_list roomy =
+        inkcell_fb_list_begin_styled(h.state, &h.layout, 400U, 0U, NULL, NULL, &comfortable);
+    const struct inkcell_fb_list tight = inkcell_fb_list_begin(&h.layout, 400U, 0U);
+
+    INKCELL_TEST_FAIL_IF_CLEANUP(roomy.pad <= 0, style_harness_close(&h),
+                                 "a comfortable list should have air round its words");
+    INKCELL_TEST_FAIL_IF_CLEANUP(roomy.line != tight.line + 2 * roomy.pad, style_harness_close(&h),
+                                 "the step should be a text line with the air above and below");
+    INKCELL_TEST_FAIL_IF_CLEANUP(roomy.y != tight.y + roomy.pad, style_harness_close(&h),
+                                 "the first baseline should sit a pad below a compact one's");
+    INKCELL_TEST_FAIL_IF_CLEANUP(roomy.model.visible >= tight.model.visible,
+                                 style_harness_close(&h),
+                                 "the same body should hold fewer comfortable steps");
+    INKCELL_TEST_FAIL_IF_CLEANUP((int)roomy.model.visible * roomy.line > roomy.track_h,
+                                 style_harness_close(&h),
+                                 "the steps the window holds should fit inside the body");
+    INKCELL_TEST_FAIL_IF_CLEANUP(roomy.track_h != tight.track_h, style_harness_close(&h),
+                                 "the rail measures the body, which a density does not move");
+    style_harness_close(&h);
+    record_success(test_name);
+}
+
+/* ---- sections ----------------------------------------------------------------------------- */
+
+INKCELL_TEST_CASE(list_style_section_ends_follow_the_card_array, unit) {
+    struct style_harness h;
+    INKCELL_TEST_FAIL_IF(!style_harness_open(&h, false), "the capture should open");
+
+    /* A heading, a section of three, a heading, a section of one. */
+    const uint8_t cards[] = {INKCELL_FB_LIST_NO_CARD, 0U, 0U, 0U, INKCELL_FB_LIST_NO_CARD, 1U};
+    const bool want_first[] = {true, true, false, false, true, true};
+    const bool want_last[] = {true, false, false, true, true, true};
+    const struct inkcell_fb_list_style inset = {.appearance = INKCELL_FB_LIST_INSET_GROUPED};
+    const struct inkcell_fb_list list = inkcell_fb_list_begin_styled(
+        h.state, &h.layout, (uint32_t)sizeof cards, 0U, NULL, cards, &inset);
+    for (uint32_t i = 0U; i < (uint32_t)sizeof cards; ++i) {
+        bool first = false;
+        bool last = false;
+        inkcell_fb_list_section_ends(&list, i, &first, &last);
+        INKCELL_TEST_FAIL_IF_CLEANUP(first != want_first[i] || last != want_last[i],
+                                     style_harness_close(&h),
+                                     "a row's ends should be where its section's are");
+    }
+    style_harness_close(&h);
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(list_style_a_grouped_list_with_no_array_is_one_section, unit) {
+    struct style_harness h;
+    INKCELL_TEST_FAIL_IF(!style_harness_open(&h, false), "the capture should open");
+
+    const struct inkcell_fb_list_style inset = {.appearance = INKCELL_FB_LIST_INSET_GROUPED};
+    const struct inkcell_fb_list list =
+        inkcell_fb_list_begin_styled(h.state, &h.layout, 3U, 0U, NULL, NULL, &inset);
+    bool first = false;
+    bool last = false;
+    inkcell_fb_list_section_ends(&list, 1U, &first, &last);
+    INKCELL_TEST_FAIL_IF_CLEANUP(first || last, style_harness_close(&h),
+                                 "the middle row of a one-section list opens and closes nothing");
+    inkcell_fb_list_section_ends(&list, 0U, &first, &last);
+    INKCELL_TEST_FAIL_IF_CLEANUP(!first || last, style_harness_close(&h),
+                                 "the first row opens the section");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_list_ground(&list, 1U) != INKCELL_COLOR_SURFACE,
+                                 style_harness_close(&h), "a section's rows stand on its surface");
+    style_harness_close(&h);
+    record_success(test_name);
+}
+
+/*
+ * The frame's ring lands on a section's end row in the section's corner, and on a middle row in
+ * the row's. A ring that disagreed with the surface under it would be round where the section
+ * is square, or square where it is round, on precisely the row the reader is looking at.
+ */
+INKCELL_TEST_CASE(list_style_inset_ends_register_the_section_corner, unit) {
+    struct style_harness h;
+    INKCELL_TEST_FAIL_IF(!style_harness_open(&h, true), "the capture should open");
+
+    const struct inkcell_fb_list_style inset = {.appearance = INKCELL_FB_LIST_INSET_GROUPED};
+    struct inkcell_fb_list list =
+        inkcell_fb_list_begin_styled(h.state, &h.layout, 3U, 0U, NULL, NULL, &inset);
+    inkcell_fb_list_focus(&list, STYLE_ID_ROW);
+    uint32_t index = 0U;
+    while (inkcell_fb_list_next(&list, &index)) {
+        const struct inkcell_fb_list_item item = {.text = "row"};
+        inkcell_fb_list_item(h.state, &list, index, &item);
+    }
+    const int md = inkcell_fb_radius(h.state, INKCELL_SHAPE_MD);
+    const int sm = inkcell_fb_radius(h.state, INKCELL_SHAPE_SM);
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_focus_radius_of(&h.map, STYLE_ID_ROW) != md ||
+                                     inkcell_focus_radius_of(&h.map, STYLE_ID_ROW + 2U) != md,
+                                 style_harness_close(&h),
+                                 "a section's end rows should register its corner");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_focus_radius_of(&h.map, STYLE_ID_ROW + 1U) != sm,
+                                 style_harness_close(&h),
+                                 "a middle row should register the row's own corner");
+    style_harness_close(&h);
+    record_success(test_name);
+}
+
+/* ---- the accessory column ----------------------------------------------------------------- */
+
+/*
+ * A switch on a row that reserves the accessory column stands exactly where it does on a row
+ * that fills it with a chevron, and further in than on a row that reserves nothing. The switch
+ * writes its rect back, which is what makes the column readable from here.
+ */
+INKCELL_TEST_CASE(list_style_the_accessory_column_is_one_column, unit) {
+    struct style_harness h;
+    INKCELL_TEST_FAIL_IF(!style_harness_open(&h, false), "the capture should open");
+
+    struct inkcell_fb_switch switches[3];
+    memset(switches, 0, sizeof switches);
+    for (uint32_t i = 0U; i < 3U; ++i) {
+        switches[i].id = 0x5100U + i;
+        switches[i].family = INKCELL_FAMILY_PRIMARY;
+    }
+    const struct inkcell_fb_list_item items[3] = {
+        {.text = "reserved",
+         .trailing = {.kind = INKCELL_FB_TRAILING_SWITCH, .sw = &switches[0]},
+         .accessory_slot = true},
+        {.text = "disclosed",
+         .trailing = {.kind = INKCELL_FB_TRAILING_SWITCH, .sw = &switches[1]},
+         .accessory = INKCELL_FB_ACCESSORY_DISCLOSURE},
+        {.text = "bare", .trailing = {.kind = INKCELL_FB_TRAILING_SWITCH, .sw = &switches[2]}},
+    };
+    struct inkcell_fb_list list = inkcell_fb_list_begin(&h.layout, 3U, 0U);
+    uint32_t index = 0U;
+    while (inkcell_fb_list_next(&list, &index)) {
+        inkcell_fb_list_item(h.state, &list, index, &items[index]);
+    }
+    INKCELL_TEST_FAIL_IF_CLEANUP(switches[0].rect.x != switches[1].rect.x, style_harness_close(&h),
+                                 "a reserved column and a filled one should be the same column");
+    INKCELL_TEST_FAIL_IF_CLEANUP(switches[2].rect.x <= switches[0].rect.x, style_harness_close(&h),
+                                 "a row reserving no column should put its control at the edge");
+    style_harness_close(&h);
+    record_success(test_name);
+}
+
+/* ---- focus -------------------------------------------------------------------------------- */
+
+/* Where a focused one-line row's box is on the panel: its left edge and its middle. */
+static void style_row_probe(const struct style_harness *h, const struct inkcell_fb_list *list,
+                            int *x, int *y) {
+    const struct inkcell_fb_row_box box = inkcell_fb_row_box(h->state);
+    *x = box.x;
+    *y = list->y - inkcell_step_px(h->state->scale) - list->pad + list->line / 2;
+}
+
+/* Draws one focused row on a list with `focus`, and reports the colour at its left edge and at
+   a point inside it that no word reaches. */
+static bool style_focused_row(enum inkcell_fb_list_focus focus, bool with_map,
+                              struct inkcell_rgb *edge, struct inkcell_rgb *inside,
+                              struct inkcell_rgb *bg) {
+    struct style_harness h;
+    if (!style_harness_open(&h, with_map)) {
+        return false;
+    }
+    const struct inkcell_fb_list_style look = {.focus = focus};
+    struct inkcell_fb_list list =
+        inkcell_fb_list_begin_styled(h.state, &h.layout, 1U, 0U, NULL, NULL, &look);
+    if (with_map) {
+        inkcell_fb_list_focus(&list, STYLE_ID_ROW);
+    }
+    int x = 0;
+    int y = 0;
+    style_row_probe(&h, &list, &x, &y);
+    const struct inkcell_fb_row_box box = inkcell_fb_row_box(h.state);
+    uint32_t index = 0U;
+    while (inkcell_fb_list_next(&list, &index)) {
+        const struct inkcell_fb_list_item item = {.text = "r"};
+        inkcell_fb_list_item(h.state, &list, index, &item);
+    }
+    *edge = style_pixel(&h, x, y);
+    *inside = style_pixel(&h, box.x + (box.w * 3) / 4, y);
+    *bg = inkcell_fb_color(h.state, INKCELL_COLOR_BG);
+    style_harness_close(&h);
+    return true;
+}
+
+INKCELL_TEST_CASE(list_style_a_ring_leaves_the_row_its_own_ground, unit) {
+    struct inkcell_rgb edge;
+    struct inkcell_rgb inside;
+    struct inkcell_rgb bg;
+    INKCELL_TEST_FAIL_IF(!style_focused_row(INKCELL_FB_LIST_FOCUS_RING, false, &edge, &inside, &bg),
+                         "the capture should open");
+    INKCELL_TEST_FAIL_IF(!style_same_rgb(inside, bg),
+                         "a ring should lay nothing under the row's words");
+    INKCELL_TEST_FAIL_IF(style_same_rgb(edge, bg), "a ring should be drawn at the row's edge");
+
+    INKCELL_TEST_FAIL_IF(!style_focused_row(INKCELL_FB_LIST_FOCUS_FILL, false, &edge, &inside, &bg),
+                         "the capture should open");
+    INKCELL_TEST_FAIL_IF(style_same_rgb(inside, bg), "a fill should be laid under the words");
+    record_success(test_name);
+}
+
+/* One cursor, one ring: a list registered with a focus map leaves the ring to the frame. */
+INKCELL_TEST_CASE(list_style_a_ring_yields_to_the_frames_ring, unit) {
+    struct inkcell_rgb edge;
+    struct inkcell_rgb inside;
+    struct inkcell_rgb bg;
+    INKCELL_TEST_FAIL_IF(!style_focused_row(INKCELL_FB_LIST_FOCUS_RING, true, &edge, &inside, &bg),
+                         "the capture should open");
+    INKCELL_TEST_FAIL_IF(!style_same_rgb(edge, bg) || !style_same_rgb(inside, bg),
+                         "a row on a focus map should draw no ring of its own");
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(list_style_an_accent_is_lighter_than_a_fill, unit) {
+    struct inkcell_rgb edge;
+    struct inkcell_rgb accent;
+    struct inkcell_rgb fill;
+    struct inkcell_rgb bg;
+    INKCELL_TEST_FAIL_IF(
+        !style_focused_row(INKCELL_FB_LIST_FOCUS_ACCENT, false, &edge, &accent, &bg),
+        "the capture should open");
+    INKCELL_TEST_FAIL_IF(!style_focused_row(INKCELL_FB_LIST_FOCUS_FILL, false, &edge, &fill, &bg),
+                         "the capture should open");
+    const int accent_d = abs((int)accent.r - (int)bg.r) + abs((int)accent.g - (int)bg.g) +
+                         abs((int)accent.b - (int)bg.b);
+    const int fill_d =
+        abs((int)fill.r - (int)bg.r) + abs((int)fill.g - (int)bg.g) + abs((int)fill.b - (int)bg.b);
+    INKCELL_TEST_FAIL_IF(accent_d == 0, "an accent row should still be lifted off the ground");
+    INKCELL_TEST_FAIL_IF(accent_d >= fill_d,
+                         "an accent row's layer should sit nearer the ground than a fill");
+    record_success(test_name);
+}
