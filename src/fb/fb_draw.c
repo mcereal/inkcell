@@ -438,6 +438,13 @@ void inkcell_fb_focus_mark(const struct inkcell_draw_state *state, uint32_t id) 
     inkcell_focus_mark(state->focus, id);
 }
 
+void inkcell_fb_focus_mark_cued(const struct inkcell_draw_state *state, uint32_t id) {
+    if (state == NULL || !inkcell_focus_has(state->focus, id)) {
+        return;
+    }
+    inkcell_focus_mark_cued(state->focus, id);
+}
+
 void inkcell_fb_target_register(const struct inkcell_draw_state *state, uint32_t id,
                                 const struct inkcell_fb_rect *rect) {
     inkcell_fb_focus_put(state, id, rect, 0, true);

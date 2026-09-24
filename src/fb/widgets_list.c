@@ -1072,13 +1072,17 @@ void inkcell_fb_list_focus_row(const struct inkcell_draw_state *state,
        a cursor, which is why this is a mark rather than a claim: the sheet's rows come later and
        take it.
 
-       Not on an ACCENT list, whose row has already said where the cursor is with its own layer
-       and capsule. RING leaves the cue to the frame, ACCENT keeps it on the row, and a row that
-       did both would be a cursor saying where it is twice - the same argument RING makes the
-       other way round. The row is still registered, so a press and a pointer reach it. */
-    if (inkcell_fb_list_is_cursor(list, index) &&
-        list->style.focus != INKCELL_FB_LIST_FOCUS_ACCENT) {
-        inkcell_fb_focus_mark(state, list->focus_base + index);
+       An ACCENT list's row has already said where the cursor is with its own layer and
+       capsule, so it takes the mark as a *cued* one: the cursor moves here, off whatever was
+       marked beneath - a sheet of accent rows over a filled list is the case - and the frame's
+       ring has nothing to go round. RING leaves the cue to the frame, ACCENT keeps it on the
+       row, and a row that did both would be a cursor saying where it is twice. */
+    if (inkcell_fb_list_is_cursor(list, index)) {
+        if (list->style.focus == INKCELL_FB_LIST_FOCUS_ACCENT) {
+            inkcell_fb_focus_mark_cued(state, list->focus_base + index);
+        } else {
+            inkcell_fb_focus_mark(state, list->focus_base + index);
+        }
     }
 }
 

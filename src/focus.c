@@ -204,6 +204,7 @@ void inkcell_focus_begin(struct inkcell_focus_map *map, struct inkcell_focus_ite
     map->capacity = (storage != NULL) ? capacity : 0U;
     map->dropped = 0U;
     map->focused = INKCELL_FOCUS_NONE;
+    map->cued = false;
 }
 
 void inkcell_focus_mark(struct inkcell_focus_map *map, uint32_t id) {
@@ -211,10 +212,19 @@ void inkcell_focus_mark(struct inkcell_focus_map *map, uint32_t id) {
         return;
     }
     map->focused = id;
+    map->cued = false;
+}
+
+void inkcell_focus_mark_cued(struct inkcell_focus_map *map, uint32_t id) {
+    if (map == NULL || id == INKCELL_FOCUS_NONE) {
+        return;
+    }
+    map->focused = id;
+    map->cued = true;
 }
 
 uint32_t inkcell_focus_marked(const struct inkcell_focus_map *map) {
-    return map != NULL ? map->focused : INKCELL_FOCUS_NONE;
+    return (map != NULL && !map->cued) ? map->focused : INKCELL_FOCUS_NONE;
 }
 
 bool inkcell_focus_add(struct inkcell_focus_map *map, uint32_t id, int x, int y, int w, int h) {
