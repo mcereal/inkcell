@@ -872,14 +872,13 @@ static void inkcell_fb_item_piece(struct inkcell_draw_state *state, int x, int y
     if (cols == 0U) {
         return;
     }
-    struct inkcell_line line;
-    inkcell_line_reset(&line);
-    inkcell_line_printf(&line, "%s", text != NULL ? text : "");
-    inkcell_line_fit(&line, cols);
+    /* Fitted to the room's pixels and nothing else. It used to be clipped to `cols` characters
+       first, which is a count: on a proportional face six narrow letters are fewer than six
+       cells of ink, and "Filter" in a column measured to hold it came out "Filt". Down to
+       nothing if it has to be: one character wider than a one-cell room is still wider than
+       the room, and an empty piece is the answer to a column too narrow for it. */
     char fitted[INKCELL_LINE_MAX];
-    snprintf(fitted, sizeof fitted, "%s", inkcell_line_text(&line));
-    /* Down to nothing if it has to be: one character wider than a one-cell room is still
-       wider than the room, and an empty piece is the answer to a column too narrow for it. */
+    snprintf(fitted, sizeof fitted, "%s", text != NULL ? text : "");
     const int room = (int)cols * inkcell_fb_char_adv(state, state->scale);
     while (fitted[0] != '\0' && inkcell_fb_text_width(state, fitted, state->scale) > room) {
         const size_t cells = inkcell_text_cells(fitted);

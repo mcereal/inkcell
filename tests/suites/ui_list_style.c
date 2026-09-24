@@ -328,6 +328,47 @@ INKCELL_TEST_CASE(list_style_a_fitted_label_column_holds_its_widest_label, unit)
     record_success(test_name);
 }
 
+/* The ink one plain row's label leaves on the panel, with the label column `cols` cells wide. */
+static long style_label_ink(const char *label, size_t cols) {
+    struct style_harness h;
+    if (!style_harness_open(&h, false)) {
+        return -1;
+    }
+    const struct inkcell_fb_list_item item = {.label = label, .label_cols = cols, .value = ""};
+    struct inkcell_fb_list list = inkcell_fb_list_begin(&h.layout, 1U, 0U);
+    uint32_t index = 0U;
+    while (inkcell_fb_list_next(&list, &index)) {
+        inkcell_fb_list_item(h.state, &list, index, &item);
+    }
+    /* Against the row's own ground, sampled at its far end where the empty value leaves it
+       bare: the row is the cursor's, so its fill is not the panel's. */
+    const struct inkcell_fb_row_box box = inkcell_fb_row_box(h.state);
+    long ink = 0;
+    const int top = h.layout.body_y;
+    for (int y = top; y < top + h.layout.line && y < (int)INKCELL_CAPTURE_HEIGHT; ++y) {
+        const struct inkcell_rgb ground = style_pixel(&h, box.x + box.w - 2, y);
+        for (int x = box.x; x < box.x + box.w && x < (int)INKCELL_CAPTURE_WIDTH; ++x) {
+            ink += style_same_rgb(style_pixel(&h, x, y), ground) ? 0 : 1;
+        }
+    }
+    style_harness_close(&h);
+    return ink;
+}
+
+INKCELL_TEST_CASE(list_style_a_label_is_fitted_by_ink_not_by_count, unit) {
+    /* Six narrow letters in a column of four cells: they fit by ink and would not by count, so a
+       count cut them to the four a shorter label draws. */
+    struct style_harness h;
+    INKCELL_TEST_FAIL_IF(!style_harness_open(&h, false), "the capture should open");
+    const int room = 4 * inkcell_fb_char_adv(h.state, h.state->scale);
+    const int six = inkcell_fb_text_width(h.state, "iiiiii", h.state->scale);
+    style_harness_close(&h);
+    INKCELL_TEST_FAIL_IF(six > room, "the premise: six narrow letters fit four cells of ink");
+    INKCELL_TEST_FAIL_IF(style_label_ink("iiiiii", 4U) <= style_label_ink("iiii", 4U),
+                         "a label that fits its column by ink should be drawn whole");
+    record_success(test_name);
+}
+
 /* Draws one plain row whose label column is one cell wide, and copies out the band just past
    that cell: whatever a one-cell label spilled into. */
 static bool style_one_cell_label(const char *label, struct inkcell_rgb *band, size_t band_len,
