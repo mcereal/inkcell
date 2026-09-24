@@ -149,12 +149,16 @@ struct inkcell_fb_large_title {
     /* What the screen is. Drawn twice: large on its own line at the top, and small in the bar
        once it has collapsed. */
     const char *title;
-    /* A fact about the screen, beside the large title only: a count, a unit. It is the first
-       thing to go, because it is the least of the three things on the bar and the collapsed
-       bar has room for a title and a badge rather than for all three. NULL for none. */
+    /* A fact about the screen, beside the large title only: a count, a unit. Set at
+       INKCELL_TYPE_CAPTION, which is the role for metadata beside something else and carries
+       the tabular figures such a line wants. It is the first thing to go, because it is the
+       least of the three things on the bar and the collapsed bar has room for a title and a
+       badge rather than for all three. NULL for none. */
     const char *detail;
     /* The trailing capsule, on both sizes of the bar - a badge is a state rather than a
-       decoration, so it is the thing that must not disappear when the heading shrinks. */
+       decoration, so it is the thing that must not disappear when the heading shrinks. Set in
+       tabular figures, because a badge is usually a count and a capsule that changed width as
+       its number ticked would read as the bar twitching. */
     const char *badge;
     enum inkcell_family badge_family;
 };
@@ -165,7 +169,8 @@ struct inkcell_fb_large_title {
  * The difference between the two bars' heights: the large title has exactly its own extra row
  * to give back, so the collapse finishes at the moment the room it was using is gone. A
  * constant here would be a number that stops matching the type scale the first time a theme
- * changes it.
+ * changes it. The heading is INKCELL_TYPE_DISPLAY, so its row is that role's line - which the
+ * theme may set tighter than the font's, and does.
  */
 int inkcell_fb_large_title_travel(const struct inkcell_draw_state *state);
 

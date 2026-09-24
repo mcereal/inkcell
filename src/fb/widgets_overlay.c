@@ -244,6 +244,14 @@ struct inkcell_fb_dialog_metrics {
     int scale, line, pad, edge, adv, gap;
     int text_w;
     size_t text_budget, text_cols;
+    /* The two roles the panel is set in: the question, and the explanation under it. Held as
+       styles rather than as scales because both are measured and drawn several times below,
+       and a paragraph wrapped in one style and drawn in another is a paragraph that overruns
+       the panel it was sized to fit. */
+    struct inkcell_type_style head_style, text_style;
+    /* The explanation's own line advance - the supporting role's, which is not the body's. */
+    int text_line;
+    size_t head_cols;
     bool has_icon, has_headline, stacked;
     int icon_scale, icon_h, head_h, button_h, actions_h;
     int accept_w, cancel_w;
@@ -275,13 +283,35 @@ inkcell_fb_dialog_measure(const struct inkcell_draw_state *state,
     m.text_budget = m.text_w > 0 ? (size_t)m.text_w : 1U;
     m.text_cols = m.text_w > m.adv ? (size_t)(m.text_w / m.adv) : 1U;
 
+    /*
+     * The question is a headline and the explanation is supporting body, which is the whole of
+     * what tells them apart now.
+     *
+     * They used to be the same glyph size in the same face, and the gap between them was the
+     * only thing saying which was which - a dialog whose question and whose reasoning read as
+     * one paragraph broken in two. The headline role is half a step over the body and set
+     * heavier; the supporting role is half a step under it with a looser line, which is the
+     * leading a paragraph that wraps actually wants.
+     */
+    m.head_style = inkcell_fb_type_style(state, INKCELL_TYPE_HEADLINE);
+    m.text_style = inkcell_fb_type_style(state, INKCELL_TYPE_BODY_SOFT);
+    m.text_line = inkcell_fb_line_adv_styled(state, &m.text_style);
+    /* The headline's clip counts *its* cells, not the body's: bigger glyphs mean fewer of them
+       across the same panel, and a question fitted to the body's column count is a question
+       that runs off the panel edge. */
+    const int head_adv = inkcell_fb_char_adv(state, m.head_style.scale);
+    m.head_cols = (head_adv > 0 && m.text_w > head_adv) ? (size_t)(m.text_w / head_adv) : 1U;
+
     m.icon_scale = m.scale * INKCELL_FB_DIALOG_ICON_SCALE;
     m.has_icon = inkcell_icon_is_valid(dialog->icon);
     m.icon_h = m.has_icon ? inkcell_fb_line_adv(state, m.icon_scale) : 0;
     m.has_headline = dialog->headline != NULL && dialog->headline[0] != '\0';
-    /* A little more than a line: the headline and the paragraph under it are the same glyph
-       size, so the gap is the only thing distinguishing a question from its explanation. */
-    m.head_h = m.has_headline ? m.line + inkcell_step_px(m.scale) : 0;
+    /* A little more than its own line. The step is still here now that the two roles differ in
+       size - it is the gap between a question and its answer's reasoning, not the thing that
+       distinguishes them. */
+    m.head_h = m.has_headline
+                   ? inkcell_fb_line_adv_styled(state, &m.head_style) + inkcell_step_px(m.scale)
+                   : 0;
     m.button_h = m.line + inkcell_fb_space(state, INKCELL_SPACE_MD);
 
     /*
@@ -314,14 +344,16 @@ inkcell_fb_dialog_measure(const struct inkcell_draw_state *state,
      */
     const int fixed = m.pad + m.icon_h + m.head_h + m.line / 2 + m.actions_h + m.pad;
     const int text_room = room - fixed;
-    const uint32_t fits = text_room > 0 ? (uint32_t)(text_room / m.line) : 0U;
-    m.text_lines = (dialog->text != NULL && dialog->text[0] != '\0')
-                       ? inkcell_fb_wrapped_lines(state, dialog->text, m.text_budget, m.scale)
-                       : 0U;
+    const uint32_t fits =
+        (text_room > 0 && m.text_line > 0) ? (uint32_t)(text_room / m.text_line) : 0U;
+    m.text_lines =
+        (dialog->text != NULL && dialog->text[0] != '\0')
+            ? inkcell_fb_wrapped_lines_styled(state, dialog->text, m.text_budget, &m.text_style)
+            : 0U;
     if (m.text_lines > fits) {
         m.text_lines = fits;
     }
-    m.height = fixed + (int)m.text_lines * m.line;
+    m.height = fixed + (int)m.text_lines * m.text_line;
     if (m.height > room) {
         m.height = room;
     }
@@ -374,19 +406,18 @@ void inkcell_fb_draw_dialog_at(const struct inkcell_draw_state *state, struct in
         struct inkcell_line headline;
         inkcell_line_reset(&headline);
         inkcell_line_printf(&headline, "%s", dialog->headline);
-        inkcell_line_fit(&headline, m.text_cols);
-        inkcell_fb_draw_text_weight(state, content_x, y, inkcell_line_text(&headline), m.scale,
-                                    inkcell_fb_type_weight(state, INKCELL_TYPE_TITLE),
-                                    inkcell_fb_tone_color(state, accent_tone),
+        inkcell_line_fit(&headline, m.head_cols);
+        inkcell_fb_draw_text_styled(state, content_x, y, inkcell_line_text(&headline),
+                                    &m.head_style, inkcell_fb_tone_color(state, accent_tone),
                                     inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
         y += m.head_h;
     }
 
     if (m.text_lines > 0U) {
-        inkcell_fb_draw_wrapped_at(state, content_x, y, dialog->text, m.text_budget,
-                                   (int)m.text_lines,
-                                   inkcell_fb_tone_color(state, INKCELL_TONE_NORMAL),
-                                   inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
+        inkcell_fb_draw_wrapped_styled(state, content_x, y, dialog->text, m.text_budget,
+                                       (int)m.text_lines, &m.text_style,
+                                       inkcell_fb_tone_color(state, INKCELL_TONE_NORMAL),
+                                       inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
     }
 
     /*
@@ -828,14 +859,18 @@ struct inkcell_fb_rect inkcell_fb_draw_sheet(const struct inkcell_draw_state *st
         int right = box.x + box.w - pad;
         if (sheet->detail != NULL && sheet->detail[0] != '\0') {
             /* Against the trailing edge and in the quiet ink: a fact about the sheet rather
-               than part of its name, which is the app bar's badge slot read one surface down. */
-            const int small = inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL);
-            const int w = inkcell_fb_text_width(state, sheet->detail, small);
-            const int lift =
-                (inkcell_fb_line_adv(state, title_scale) - inkcell_fb_line_adv(state, small)) / 2;
-            inkcell_fb_draw_text(state, right - w, y + lift, sheet->detail, small,
-                                 inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM),
-                                 inkcell_fb_color(state, ground));
+               than part of its name, which is the app bar's badge slot read one surface down.
+               A caption, because that is what this is - "3 of 12", a size, a time - and the
+               role's tabular figures are what stop such a line shifting as its number does. */
+            const struct inkcell_type_style caption =
+                inkcell_fb_type_style(state, INKCELL_TYPE_CAPTION);
+            const int w = inkcell_fb_text_width_styled(state, sheet->detail, &caption);
+            const int lift = (inkcell_fb_line_adv(state, title_scale) -
+                              inkcell_fb_line_adv_styled(state, &caption)) /
+                             2;
+            inkcell_fb_draw_text_styled(state, right - w, y + lift, sheet->detail, &caption,
+                                        inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM),
+                                        inkcell_fb_color(state, ground));
             right -= w + inkcell_fb_space(state, INKCELL_SPACE_SM);
         }
         const int left = box.x + pad;

@@ -643,6 +643,12 @@ enum inkcell_weight inkcell_fb_type_weight(const struct inkcell_draw_state *stat
     return inkcell_theme_type_weight(state->theme, type);
 }
 
+struct inkcell_type_style inkcell_fb_type_style(const struct inkcell_draw_state *state,
+                                                enum inkcell_type type) {
+    return inkcell_theme_type_style(state != NULL ? state->theme : NULL, type,
+                                    state != NULL ? state->scale : 0);
+}
+
 int inkcell_fb_gutter(const struct inkcell_draw_state *state) {
     const int margin = inkcell_fb_margin(state);
     return margin > 1 ? margin / 2 : margin;
@@ -1433,10 +1439,96 @@ int inkcell_fb_text_width(const struct inkcell_draw_state *state, const char *te
 
 int inkcell_fb_text_width_weight(const struct inkcell_draw_state *state, const char *text,
                                  int scale, enum inkcell_weight weight) {
+    const struct inkcell_type_style style = inkcell_type_style_plain(scale, weight);
+    return inkcell_fb_text_width_styled(state, text, &style);
+}
+
+/*
+ * A style resolved against this state's font, once, for the length of one run.
+ *
+ * Everything a walk over a string needs and nothing it would have to work out per character:
+ * which cut of the face to ask, the tracking in pixels, and - where the style asked for tabular
+ * figures - the advance every digit is to step. The digit advance is ten table lookups, so
+ * resolving it here is the difference between paying for it once a string and once a character.
+ *
+ * `digit` of 0 means proportional figures, which is the plain style and every role that has not
+ * said otherwise.
+ */
+struct fb_text_run {
+    const struct inkcell_font *font;
+    int scale;
+    int tracking;
+    int digit;
+};
+
+static struct fb_text_run fb_text_run(const struct inkcell_draw_state *state,
+                                      const struct inkcell_type_style *style) {
+    struct fb_text_run run = {NULL, 0, 0, 0};
+    const struct inkcell_type_style plain = inkcell_type_style_plain(
+        state != NULL ? state->scale : INKCELL_SCALE_MIN, INKCELL_WEIGHT_REGULAR);
+    if (style == NULL) {
+        style = &plain;
+    }
+    run.font = inkcell_font_at_weight(inkcell_fb_font(state), style->weight);
+    run.scale = style->scale;
+    run.tracking = inkcell_type_tracking_px(style);
+    run.digit = style->tabular ? inkcell_font_digit_advance(run.font, style->scale) : 0;
+    return run;
+}
+
+/* Whether this cell is one of the ten the tabular advance applies to. A cell rather than a
+   codepoint because an emoji sequence may begin with a digit - the keycap emoji are exactly
+   that - and those step a sprite's box, not a figure's. */
+static bool fb_text_run_is_digit(const struct fb_text_run *run,
+                                 const struct inkcell_text_cell *cell) {
+    return run->digit > 0 && !cell->is_emoji && cell->codepoint >= (uint32_t)'0' &&
+           cell->codepoint <= (uint32_t)'9';
+}
+
+/*
+ * How far `cell` steps in this run, tracking included.
+ *
+ * The one place the three cases live: an emoji steps its own square box, a digit in a tabular
+ * run steps the common advance, and everything else steps what the face drew it at. Both the
+ * measuring walk and the drawing walk call it, which is what keeps a line exactly as wide as it
+ * draws - the property every layout in this toolkit is built on.
+ */
+static int fb_text_run_advance(const struct inkcell_draw_state *state,
+                               const struct fb_text_run *run,
+                               const struct inkcell_text_cell *cell) {
+    int advance;
+    if (cell->is_emoji) {
+        advance = inkcell_fb_char_adv(state, run->scale);
+    } else if (fb_text_run_is_digit(run, cell)) {
+        advance = run->digit;
+    } else {
+        advance = inkcell_font_advance_cp(run->font, cell->codepoint, run->scale);
+    }
+    advance += run->tracking;
+    /* Tracking is allowed to tighten a run and not to close it: a cell that steps nothing is a
+       pile of glyphs on one another, and a theme with an absurd tracking should get an ugly
+       line rather than an unreadable one. */
+    return advance > 0 ? advance : 1;
+}
+
+/* Where inside a tabular cell the glyph sits: centred, so a column of readings lines up on its
+   digits rather than on its left edge. Zero for everything else, which is drawn at the pen. */
+static int fb_text_run_bearing(const struct fb_text_run *run,
+                               const struct inkcell_text_cell *cell) {
+    if (!fb_text_run_is_digit(run, cell)) {
+        return 0;
+    }
+    const int drawn = inkcell_font_advance_cp(run->font, cell->codepoint, run->scale);
+    const int slack = run->digit - drawn;
+    return slack > 0 ? slack / 2 : 0;
+}
+
+int inkcell_fb_text_width_styled(const struct inkcell_draw_state *state, const char *text,
+                                 const struct inkcell_type_style *style) {
     if (text == NULL) {
         return 0;
     }
-    const struct inkcell_font *font = inkcell_font_at_weight(inkcell_fb_font(state), weight);
+    const struct fb_text_run run = fb_text_run(state, style);
     int width = 0;
     int widest = 0;
     size_t offset = 0;
@@ -1450,14 +1542,24 @@ int inkcell_fb_text_width_weight(const struct inkcell_draw_state *state, const c
             width = 0;
             continue;
         }
-        width += cell.is_emoji ? inkcell_font_advance(font, scale)
-                               : inkcell_font_advance_cp(font, cell.codepoint, scale);
+        width += fb_text_run_advance(state, &run, &cell);
         if (width > widest) {
             widest = width;
         }
     }
-    return widest;
+    /*
+     * The last cell's tracking is not part of the line, in either direction. Air after the
+     * final letter would put a gap inside the right edge of every box measured this way and
+     * pull every centred line a pixel to the left; and where the run is *tight*, the pen has
+     * been drawn back past ink that is still on the panel, so the right edge is further out
+     * than the pen is. Both are the same correction.
+     */
+    if (widest > 0) {
+        widest -= run.tracking;
+    }
+    return widest > 0 ? widest : 0;
 }
+
 /*
  * How many nominal cells `text` needs - its measured width, rounded up to the grid.
  *
@@ -1492,19 +1594,39 @@ static int inkcell_fb_wrap_cell(const struct inkcell_text_cell *cell, void *ctx)
     if (cell == NULL || wrap == NULL) {
         return 0;
     }
-    return cell->is_emoji ? inkcell_fb_char_adv(wrap->state, wrap->scale)
-                          : inkcell_fb_cell_adv(wrap->state, cell->codepoint, wrap->scale);
+    /* Rebuilt from what the metric already resolved rather than from the style, so that a walk
+       over a paragraph does not re-answer the same two questions per character. */
+    const struct fb_text_run run = {
+        .font = inkcell_font_at_weight(inkcell_fb_font(wrap->state), wrap->style.weight),
+        .scale = wrap->style.scale,
+        .tracking = wrap->tracking_px,
+        .digit = wrap->digit_adv,
+    };
+    return fb_text_run_advance(wrap->state, &run, cell);
 }
 
 struct inkcell_wrap_metric inkcell_fb_wrap_metric(struct inkcell_fb_wrap_ctx *ctx,
                                                   const struct inkcell_draw_state *state,
                                                   int scale) {
+    const struct inkcell_type_style style = inkcell_type_style_plain(scale, INKCELL_WEIGHT_REGULAR);
+    return inkcell_fb_wrap_metric_styled(ctx, state, &style);
+}
+
+struct inkcell_wrap_metric inkcell_fb_wrap_metric_styled(struct inkcell_fb_wrap_ctx *ctx,
+                                                         const struct inkcell_draw_state *state,
+                                                         const struct inkcell_type_style *style) {
     struct inkcell_wrap_metric metric = {NULL, NULL};
     if (ctx == NULL) {
         return metric;
     }
     ctx->state = state;
-    ctx->scale = scale;
+    ctx->style = style != NULL ? *style
+                               : inkcell_type_style_plain(state != NULL ? state->scale : 0,
+                                                          INKCELL_WEIGHT_REGULAR);
+    ctx->scale = ctx->style.scale;
+    const struct fb_text_run run = fb_text_run(state, &ctx->style);
+    ctx->tracking_px = run.tracking;
+    ctx->digit_adv = run.digit;
     metric.cell = inkcell_fb_wrap_cell;
     metric.ctx = ctx;
     return metric;
@@ -1512,6 +1634,22 @@ struct inkcell_wrap_metric inkcell_fb_wrap_metric(struct inkcell_fb_wrap_ctx *ct
 
 int inkcell_fb_line_adv(const struct inkcell_draw_state *state, int scale) {
     return inkcell_font_line(inkcell_fb_font(state), scale);
+}
+
+int inkcell_fb_line_adv_styled(const struct inkcell_draw_state *state,
+                               const struct inkcell_type_style *style) {
+    const int scale = style != NULL ? style->scale : (state != NULL ? state->scale : 0);
+    /* The font's own line, at the role's line height - which is a percentage rather than a
+       pixel count precisely so that this one call is where the two meet. */
+    return inkcell_type_line_px(inkcell_font_line(inkcell_fb_font(state), scale), style);
+}
+
+int inkcell_fb_cell_adv_styled(const struct inkcell_draw_state *state, uint32_t codepoint,
+                               const struct inkcell_type_style *style) {
+    const struct fb_text_run run = fb_text_run(state, style);
+    const struct inkcell_text_cell cell = {
+        .codepoint = codepoint, .bytes = 1U, .is_emoji = false, .sprite = 0U};
+    return fb_text_run_advance(state, &run, &cell);
 }
 
 /* The widest cell inkcell_fb_draw_glyph() will resample into: the largest cell a font may declare,
@@ -2055,7 +2193,14 @@ void inkcell_fb_draw_text(const struct inkcell_draw_state *state, int x, int y, 
 void inkcell_fb_draw_text_weight(const struct inkcell_draw_state *state, int x, int y,
                                  const char *text, int scale, enum inkcell_weight weight,
                                  struct inkcell_rgb ink, struct inkcell_rgb ground) {
-    const struct inkcell_font *font = inkcell_font_at_weight(inkcell_fb_font(state), weight);
+    const struct inkcell_type_style style = inkcell_type_style_plain(scale, weight);
+    inkcell_fb_draw_text_styled(state, x, y, text, &style, ink, ground);
+}
+
+void inkcell_fb_draw_text_styled(const struct inkcell_draw_state *state, int x, int y,
+                                 const char *text, const struct inkcell_type_style *style,
+                                 struct inkcell_rgb ink, struct inkcell_rgb ground) {
+    const struct fb_text_run run = fb_text_run(state, style);
     /* One ramp for the whole run: every character in it is the same ink over the same ground,
        and building the table per glyph would cost more than drawing one. */
     uint32_t blend[INKCELL_FB_BLEND_STEPS];
@@ -2071,19 +2216,20 @@ void inkcell_fb_draw_text_weight(const struct inkcell_draw_state *state, int x, 
         offset += cell.bytes;
 
         if (cell.is_emoji) {
-            inkcell_fb_draw_emoji(state, cursor, y, cell.sprite, scale);
-            /* An emoji is a square sprite, not a letter: it steps its own box whatever the
-               face beside it does, which is the nominal advance. */
-            cursor += inkcell_fb_char_adv(state, scale);
+            inkcell_fb_draw_emoji(state, cursor, y, cell.sprite, run.scale);
+            cursor += fb_text_run_advance(state, &run, &cell);
             continue;
         }
         if (cell.codepoint == (uint32_t)'\n') {
-            y += inkcell_fb_line_adv(state, scale);
+            y += inkcell_fb_line_adv_styled(state, style);
             cursor = x;
             continue;
         }
-        inkcell_fb_draw_glyph_ramp(state, cursor, y, cell.codepoint, scale, font, blend);
-        cursor += inkcell_font_advance_cp(font, cell.codepoint, scale);
+        /* The bearing is zero for everything but a digit in a tabular run, where it is what
+           centres the narrower figures in the common cell. */
+        inkcell_fb_draw_glyph_ramp(state, cursor + fb_text_run_bearing(&run, &cell), y,
+                                   cell.codepoint, run.scale, run.font, blend);
+        cursor += fb_text_run_advance(state, &run, &cell);
     }
 }
 
@@ -2659,15 +2805,28 @@ void inkcell_fb_format_clock(uint32_t rx_time, char *out, size_t out_len) {
 int inkcell_fb_draw_wrapped_at(const struct inkcell_draw_state *state, int x, int y,
                                const char *text, size_t width, int max_lines,
                                struct inkcell_rgb color, struct inkcell_rgb ground) {
+    const struct inkcell_type_style style =
+        inkcell_type_style_plain(state->scale, INKCELL_WEIGHT_REGULAR);
+    return inkcell_fb_draw_wrapped_styled(state, x, y, text, width, max_lines, &style, color,
+                                          ground);
+}
+
+int inkcell_fb_draw_wrapped_styled(const struct inkcell_draw_state *state, int x, int y,
+                                   const char *text, size_t width, int max_lines,
+                                   const struct inkcell_type_style *style, struct inkcell_rgb color,
+                                   struct inkcell_rgb ground) {
     struct inkcell_fb_wrap_ctx wctx;
-    const struct inkcell_wrap_metric metric = inkcell_fb_wrap_metric(&wctx, state, state->scale);
+    const struct inkcell_wrap_metric metric = inkcell_fb_wrap_metric_styled(&wctx, state, style);
     struct inkcell_wrap wrap;
     inkcell_wrap_begin_measured(&wrap, text, width, &metric);
 
+    /* The role's line, not the font's: a paragraph is the one place a line height is visible at
+       all, and a supporting body that loosened its leading did so for exactly this call. */
+    const int line = inkcell_fb_line_adv_styled(state, style);
     int lines = 0;
     while (lines < max_lines && inkcell_wrap_next(&wrap)) {
-        inkcell_fb_draw_text(state, x, y, wrap.line, state->scale, color, ground);
-        y += inkcell_fb_line_adv(state, state->scale);
+        inkcell_fb_draw_text_styled(state, x, y, wrap.line, style, color, ground);
+        y += line;
         ++lines;
     }
     return lines;
@@ -2714,7 +2873,13 @@ int inkcell_fb_draw_wrapped(const struct inkcell_draw_state *state, int y, const
 
 uint32_t inkcell_fb_wrapped_lines(const struct inkcell_draw_state *state, const char *text,
                                   size_t width, int scale) {
+    const struct inkcell_type_style style = inkcell_type_style_plain(scale, INKCELL_WEIGHT_REGULAR);
+    return inkcell_fb_wrapped_lines_styled(state, text, width, &style);
+}
+
+uint32_t inkcell_fb_wrapped_lines_styled(const struct inkcell_draw_state *state, const char *text,
+                                         size_t width, const struct inkcell_type_style *style) {
     struct inkcell_fb_wrap_ctx wctx;
-    const struct inkcell_wrap_metric metric = inkcell_fb_wrap_metric(&wctx, state, scale);
+    const struct inkcell_wrap_metric metric = inkcell_fb_wrap_metric_styled(&wctx, state, style);
     return inkcell_wrap_lines_measured(text, width, &metric);
 }

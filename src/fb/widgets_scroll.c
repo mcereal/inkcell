@@ -202,11 +202,19 @@ static int inkcell_fb_large_title_collapsed(const struct inkcell_draw_state *sta
     return inkcell_fb_app_bar_height(state, layout, 0U);
 }
 
+/* The role the large heading is set in, which is what the whole shape is *for*: a heading that
+   is merely the title size on its own row is a title with a gap over it. The display role is
+   two steps over the body, which is exactly where this used to reach by hand - and it brings
+   the rest of a display's setting with it, the tighter tracking a heading at that size needs
+   and the tighter line that keeps the expanded bar from eating a row it does not use. */
+static struct inkcell_type_style
+inkcell_fb_large_title_style(const struct inkcell_draw_state *state) {
+    return inkcell_fb_type_style(state, INKCELL_TYPE_DISPLAY);
+}
+
 static int inkcell_fb_large_title_line(const struct inkcell_draw_state *state) {
-    /* One step above the title role, which is the size the whole shape is *for*: a heading
-       that is merely the title size on its own row is a title with a gap over it. */
-    return inkcell_fb_line_adv(state,
-                               inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE) + INKCELL_SCALE(1));
+    const struct inkcell_type_style style = inkcell_fb_large_title_style(state);
+    return inkcell_fb_line_adv_styled(state, &style);
 }
 
 int inkcell_fb_large_title_travel(const struct inkcell_draw_state *state) {
@@ -252,7 +260,11 @@ void inkcell_fb_draw_large_title(const struct inkcell_draw_state *state,
     const int margin = inkcell_fb_content_x(state);
     const int small = inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL);
     const int title_scale = inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE);
-    const int large_scale = title_scale + INKCELL_SCALE(1);
+    const struct inkcell_type_style large = inkcell_fb_large_title_style(state);
+    /* The detail beside the heading is metadata - a count, a time, a distance - which is the
+       caption role and the second place in this toolkit that wants figures that do not move
+       under the reader. */
+    const struct inkcell_type_style caption = inkcell_fb_type_style(state, INKCELL_TYPE_CAPTION);
     const struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_BG);
 
     /* The bar's own ground, so the two titles have something honest to fade against - a fade
@@ -327,23 +339,22 @@ void inkcell_fb_draw_large_title(const struct inkcell_draw_state *state,
         if (bar->detail != NULL && bar->detail[0] != '\0') {
             const struct inkcell_rgb dim =
                 inkcell_fb_fade(inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM), ground, progress);
-            const int w = inkcell_fb_text_width(state, bar->detail, small);
-            const int lift =
-                (inkcell_fb_line_adv(state, large_scale) - inkcell_fb_line_adv(state, small)) / 2;
-            inkcell_fb_draw_text(state, large_right - w, y + lift, bar->detail, small, dim, ground);
+            const int w = inkcell_fb_text_width_styled(state, bar->detail, &caption);
+            const int lift = (large_line - inkcell_fb_line_adv_styled(state, &caption)) / 2;
+            inkcell_fb_draw_text_styled(state, large_right - w, y + lift, bar->detail, &caption,
+                                        dim, ground);
             large_right -= w + inkcell_fb_space(state, INKCELL_SPACE_SM);
         }
         char fitted[INKCELL_LINE_MAX];
         inkwell_str_copy(fitted, sizeof fitted, bar->title);
-        while (inkcell_fb_text_width(state, fitted, large_scale) > large_right - margin) {
+        while (inkcell_fb_text_width_styled(state, fitted, &large) > large_right - margin) {
             const size_t cells = inkcell_text_cells(fitted);
             if (cells <= 1U) {
                 break;
             }
             inkcell_text_cell_truncate(fitted, cells - 1U);
         }
-        inkcell_fb_draw_text_weight(state, margin, y, fitted, large_scale,
-                                    inkcell_fb_type_weight(state, INKCELL_TYPE_TITLE), ink, ground);
+        inkcell_fb_draw_text_styled(state, margin, y, fitted, &large, ink, ground);
     }
 
     /*

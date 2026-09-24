@@ -123,6 +123,37 @@ int inkcell_font_advance_cp(const struct inkcell_font *font, uint32_t codepoint,
     return advance > 0 ? advance : 1;
 }
 
+/*
+ * The advance every digit steps when a style asks for tabular figures.
+ *
+ * The widest of the ten, so that no digit has to be squeezed into a cell narrower than it was
+ * drawn - a '4' pulled in a pixel is a '4' with its crossbar touching its stem, and the
+ * alternative to the widest is picking which digit gets damaged. A face whose digits already
+ * share an advance answers with that advance and nothing changes, which is every monospace one.
+ *
+ * Walked rather than stored on the font because it is ten bisects of a table that is sorted by
+ * codepoint, the run of digits is contiguous, and the answer is wanted once per text run rather
+ * than once per character. A face that made this expensive would be a face with a real tabular
+ * cut, and that is a field on the font rather than a cache here.
+ */
+int inkcell_font_digit_advance(const struct inkcell_font *font, int scale) {
+    font = font_or_default(font);
+    if (font == NULL || scale <= 0) {
+        return 1;
+    }
+    if (!font->proportional || font->advance == NULL) {
+        return inkcell_font_advance(font, scale);
+    }
+    int widest = 0;
+    for (uint32_t digit = (uint32_t)'0'; digit <= (uint32_t)'9'; ++digit) {
+        const int advance = inkcell_font_advance_cp(font, digit, scale);
+        if (advance > widest) {
+            widest = advance;
+        }
+    }
+    return widest > 0 ? widest : inkcell_font_advance(font, scale);
+}
+
 int inkcell_font_line(const struct inkcell_font *font, int scale) {
     font = font_or_default(font);
     if (font == NULL || scale <= 0) {

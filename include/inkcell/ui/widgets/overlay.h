@@ -59,8 +59,14 @@ struct inkcell_fb_dialog {
        `destructive`. INKCELL_ICON_NONE for none, and the panel closes up the room it would
        have taken. */
     enum inkcell_icon icon;
+    /* The question, at INKCELL_TYPE_HEADLINE. */
     const char *headline;
-    /* The supporting paragraph, wrapped across the panel. "" for a question that needs none. */
+    /* The reasoning under it, wrapped across the panel at INKCELL_TYPE_BODY_SOFT. "" for a
+       question that needs none.
+
+       The two roles are what tells them apart. They used to be the same glyph size in the same
+       weight with a gap between them, which read as one paragraph broken in two - a dialog
+       where the thing being asked and the thing being explained had equal standing. */
     const char *text;
     const char *accept;
     const char *cancel;

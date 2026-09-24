@@ -5,7 +5,7 @@ to a desktop window, on Linux, macOS and Windows.
 
 "Handheld" is the design constraint, not the platform. Everything here is shaped by a screen a
 few inches across and a pad with no pointer: focus answered against the rectangles actually
-drawn, width measured in columns of text rather than pixels, a type scale in quarter steps, a
+drawn, width measured in columns of text rather than pixels, a type scale in quarter steps whose roles carry their own tracking and leading, a
 d-pad that always lands somewhere. The same interface then runs unchanged on a TrimUI Brick's
 `/dev/fb0` and in a resizable window on a laptop, and a window dragged wide gets a layout that
 used the width rather than a magnified handheld. Think of it as a console or TV UI toolkit that
@@ -26,6 +26,7 @@ that a platform layer has to depend on to write a log line has its arrows the wr
 |---|---|
 | **Themes** | Colours by *role*, not by name. Four themes ship; a new one is a table. |
 | **Fonts** | A 5x7 pixel face and a proportional UI face in two weights, all as coverage rather than 1-bit masks, resampled into whatever cell the theme asks for. |
+| **Type** | Seven roles - display, headline, title, body, supporting body, label, caption - and a role is a size, a weight, a letter-spacing and a line height together, not a size with the rest left to the renderer. Sizes are offsets from the body scale, so a reader who turns the text up keeps the hierarchy. Figures can be set tabular, so a reading redrawn once a second does not move sideways under the eye. |
 | **Glyphs** | Emoji, icons and font tables, generated (`scripts/gen-*.py`) and committed. |
 | **Layout** | Lines measured in *cells*, scroll windows, text wrapping done once for both the measure and the draw pass. |
 | **The content column** | One answer to "how wide should this be", which stopped being "how wide is the surface" the moment a window could be dragged. Content sits in a column capped at the reading measure; fills still bleed edge to edge. |
