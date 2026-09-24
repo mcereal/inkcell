@@ -44,7 +44,8 @@ struct inkcell_fb_layout inkcell_fb_layout_begin(const struct inkcell_draw_state
     /* The body starts at the edge the whole frame stands off. Nothing has been drawn above it,
        so the first body row and the first row below the navigation bar are the same row; the
        nav bar moves both when it draws. */
-    layout.body_y = inkcell_fb_edge(state);
+    const struct inkcell_box region = inkcell_fb_region(state);
+    layout.body_y = region.y + inkcell_fb_edge(state);
     layout.nav_y = layout.body_y;
 
     /*
@@ -54,7 +55,7 @@ struct inkcell_fb_layout inkcell_fb_layout_begin(const struct inkcell_draw_state
      * to be missing from the body's count from the start. Reserving it here and drawing the bar
      * at `footer_y` is what keeps a full list's last row off the keycaps.
      */
-    layout.footer_y = inkcell_fb_panel_height(state);
+    layout.footer_y = region.y + region.h;
     if (footer) {
         layout.footer_y -= inkcell_fb_action_bar_height(state, &layout);
         if (layout.footer_y < layout.body_y) {
@@ -111,8 +112,9 @@ struct inkcell_box inkcell_fb_body_box(const struct inkcell_draw_state *state,
 struct inkcell_box inkcell_fb_full_box(const struct inkcell_draw_state *state,
                                        const struct inkcell_fb_layout *layout) {
     struct inkcell_box box = inkcell_fb_body_box(state, layout);
-    box.x = inkcell_fb_margin(state);
-    box.w = inkcell_fb_panel_width(state) - 2 * box.x;
+    const struct inkcell_box region = inkcell_fb_region(state);
+    box.x = region.x + inkcell_fb_margin(state);
+    box.w = region.w - 2 * inkcell_fb_margin(state);
     if (box.w < 1) {
         box.w = 1;
     }
@@ -133,9 +135,10 @@ void inkcell_fb_draw_nav_bar(const struct inkcell_draw_state *state,
     /* A step's worth of air over the tabs, at the chrome scale. One *step*, not one scale: the
        two were the same number while a scale was a whole multiplier, and adding the scale itself
        to a pixel gutter was the same arithmetic by accident. */
-    const int y = inkcell_fb_gutter(state) + inkcell_scale_px(1, small);
-    const int bar_h = inkcell_fb_nav_bar_height(state, small);
-    const int width = inkcell_fb_panel_width(state);
+    const struct inkcell_box region = inkcell_fb_region(state);
+    const int y = region.y + inkcell_fb_gutter(state) + inkcell_scale_px(1, small);
+    const int bar_h = region.y + inkcell_fb_nav_bar_height(state, small);
+    const int width = region.w;
     /* Whatever of the host's inset the gutter does not already cover, taken off the strip's
        room as well as its start - so the strip fits its labels to what is actually left, and a
        frame with no inset is the frame it always was. */
@@ -152,13 +155,13 @@ void inkcell_fb_draw_nav_bar(const struct inkcell_draw_state *state,
     const int strip_x = inkcell_fb_content_x(state) - gutter;
     const int strip_w = inkcell_fb_content_w(state) + gutter;
 
-    inkcell_fb_fill_rect(state, 0, 0, width, bar_h,
+    inkcell_fb_fill_rect(state, region.x, region.y, width, bar_h - region.y,
                          inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
     /* The bar under them, not the body ground: an unselected tab draws no fill of its own, and
        its icon has to blend into what the bar filled behind it. */
     (void)inkcell_fb_draw_chip_strip(state, strip_x + shift, y, tabs, count, active,
                                      strip_x + strip_w - shift, INKCELL_COLOR_SURFACE_LOW, small);
-    inkcell_fb_draw_rule(state, 0, bar_h, width, small, INKCELL_COLOR_RULE_STRONG);
+    inkcell_fb_draw_rule(state, region.x, bar_h, width, small, INKCELL_COLOR_RULE_STRONG);
 
     layout->nav_y = bar_h + inkcell_fb_rule_height(state, small);
     layout->body_y =
@@ -208,7 +211,10 @@ void inkcell_fb_draw_progress(struct inkcell_draw_state *state,
      * mistake the tab strip made before it was given a surface of its own.
      */
     struct inkcell_fb_meter meter = {
-        .rect = {.x = 0, .y = layout->nav_y, .w = inkcell_fb_panel_width(state), .h = height},
+        .rect = {.x = inkcell_fb_region(state).x,
+                 .y = layout->nav_y,
+                 .w = inkcell_fb_region(state).w,
+                 .h = height},
         .kind = INKCELL_FB_METER_INDETERMINATE,
         .tone = INKCELL_TONE_PRIMARY,
         .id = INKCELL_FB_ANIM_ID_PROGRESS,
@@ -432,15 +438,16 @@ void inkcell_fb_draw_action_bar(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_layout *layout,
                                 const struct inkcell_fb_action_bar *bar) {
     const int small = layout->small;
-    const int width = inkcell_fb_panel_width(state);
+    const struct inkcell_box region = inkcell_fb_region(state);
+    const int width = region.w;
     const int top = layout->footer_y;
 
     /* The mirror of the navigation bar: the same recessed tier, the same rule, on the other
        edge. Chrome that is a surface at the top and bare ground at the bottom reads as a frame
        with one side missing. */
-    inkcell_fb_fill_rect(state, 0, top, width, inkcell_fb_panel_height(state) - top,
+    inkcell_fb_fill_rect(state, region.x, top, width, region.y + region.h - top,
                          inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
-    inkcell_fb_draw_rule(state, 0, top, width, small, INKCELL_COLOR_RULE_STRONG);
+    inkcell_fb_draw_rule(state, region.x, top, width, small, INKCELL_COLOR_RULE_STRONG);
 
     const int keys_y =
         top + inkcell_fb_space_at(state, INKCELL_SPACE_SM, small) + inkcell_step_px(small);
@@ -738,7 +745,8 @@ void inkcell_fb_draw_empty(const struct inkcell_draw_state *state,
     const uint32_t cost = 4U; /* three rows for the symbol, one of air under it */
     if (inkcell_icon_is_valid(icon) && big <= INKCELL_FB_ICON_SCALE_MAX && rows > cost + 1U) {
         const int box = inkcell_fb_icon_box(state, big);
-        inkcell_fb_draw_icon(state, (inkcell_fb_panel_width(state) - box) / 2, y, icon, big,
+        const struct inkcell_box region = inkcell_fb_region(state);
+        inkcell_fb_draw_icon(state, region.x + (region.w - box) / 2, y, icon, big,
                              inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
                              inkcell_fb_color(state, INKCELL_COLOR_BG));
         y += (int)cost * layout->line;

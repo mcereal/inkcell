@@ -116,6 +116,7 @@ add_library(inkcell STATIC
     src/fb/widgets_keyboard.c
     src/fb/widgets_list.c
     src/fb/widgets_meter.c
+    src/fb/widgets_scaffold.c
     src/fb/widgets_scroll.c
     src/fb/widgets_overlay.c
     # the window backend: the same frame, uploaded to a texture instead of copied to a panel.

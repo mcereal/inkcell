@@ -269,9 +269,13 @@ void inkcell_fb_draw_large_title(const struct inkcell_draw_state *state,
 
     /* The bar's own ground, so the two titles have something honest to fade against - a fade
        towards a colour that is not what is actually behind the glyph is a glyph with a halo. */
-    inkcell_fb_fill_rect(state, 0, layout->body_y, inkcell_fb_panel_width(state), height, ground);
+    const struct inkcell_box region = inkcell_fb_region(state);
+    inkcell_fb_fill_rect(state, region.x, layout->body_y, region.w, height, ground);
 
-    int right = inkcell_fb_panel_width(state) - margin;
+    /* The column's own trailing edge, absolute: `margin` is where the column *starts*, which is
+       only the same distance from the far edge while the column is centred on the whole surface. */
+    const int column_right = margin + inkcell_fb_content_w(state);
+    int right = column_right;
     /*
      * The badge sits on both sizes of the bar and never fades.
      *
@@ -335,7 +339,7 @@ void inkcell_fb_draw_large_title(const struct inkcell_draw_state *state,
         const int y = layout->body_y + collapsed_h + extra - large_line;
         const struct inkcell_rgb ink =
             inkcell_fb_fade(inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY), ground, progress);
-        int large_right = inkcell_fb_panel_width(state) - margin;
+        int large_right = column_right;
         if (bar->detail != NULL && bar->detail[0] != '\0') {
             const struct inkcell_rgb dim =
                 inkcell_fb_fade(inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM), ground, progress);
@@ -370,8 +374,9 @@ void inkcell_fb_draw_large_title(const struct inkcell_draw_state *state,
     if (progress > 0) {
         const struct inkcell_rgb rule = inkcell_fb_fade(inkcell_fb_color(state, INKCELL_COLOR_RULE),
                                                         ground, INKCELL_ANIM_ONE - progress);
-        inkcell_fb_fill_rect(state, 0, layout->body_y + height - inkcell_fb_rule_height(state, 1),
-                             inkcell_fb_panel_width(state), inkcell_fb_rule_height(state, 1), rule);
+        inkcell_fb_fill_rect(state, region.x,
+                             layout->body_y + height - inkcell_fb_rule_height(state, 1), region.w,
+                             inkcell_fb_rule_height(state, 1), rule);
     }
 
     /*

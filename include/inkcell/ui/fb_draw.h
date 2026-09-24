@@ -487,6 +487,8 @@ struct inkcell_draw_state {
     int shift_x;
     int shift_top;
     int shift_bottom;
+    int shift_left;
+    int shift_right;
     bool shift_active;
     /*
      * The view stack: the nested translations and clips pushed by
@@ -517,6 +519,14 @@ struct inkcell_draw_state {
      * of the frame is below it.
      */
     int top_leading_inset;
+    /*
+     * The part of the surface the frame is laid out in, or an empty box for all of it.
+     *
+     * Set by the scaffold (inkcell/ui/widgets/scaffold.h) while it draws something *beside* the
+     * content rather than above or below it - a navigation rail, the other pane of a split - and
+     * read through inkcell_fb_region(), never here. See that function for what it moves.
+     */
+    struct inkcell_box region;
 };
 
 /*
@@ -588,7 +598,9 @@ int inkcell_fb_transition_offset(struct inkcell_draw_state *state);
  * and the action bar are the same on both sides of a move, and chrome that slid with the body
  * would be the client claiming the whole application had been replaced. It is stated in rows
  * rather than derived from the layout because the caller is the only thing that knows where the
- * body it is about to draw begins and ends.
+ * body it is about to draw begins and ends. Across, it is the region (inkcell_fb_region()) as it
+ * stands at this call - the whole surface unless a scaffold has put a rail beside the body, in
+ * which case the rail is chrome for exactly the reason the two bars are.
  *
  * Not nestable, deliberately: there is one transform per frame and a second would be a second
  * opinion about where the body is.
@@ -914,6 +926,39 @@ struct inkcell_fb_layout {
  * is left vertically is the layout's, and `inkcell_fb_body_box()` is where the two meet.
  */
 struct inkcell_box inkcell_fb_content_column(const struct inkcell_draw_state *state);
+
+/*
+ * The part of the surface the frame is being laid out in: the whole of it, unless something is
+ * standing beside the content.
+ *
+ * Every question above - where the column is, which width class this is, how far a fill bleeds
+ * - used to be asked of the surface, and while the only chrome was a bar at each end that was
+ * the same question. A navigation rail breaks it: the rail takes the leading edge for the whole
+ * height of the frame, so "the surface" and "the room content has" are two different boxes, and
+ * a list that took its column from the first would be drawn under the rail. A split breaks it
+ * twice over, because a screen drawing its detail pane needs every one of those answers again
+ * for a box that is not even at the leading edge.
+ *
+ * So the answers are taken from this instead, and a scaffold narrows it. The column, the width
+ * class, the full box, the layout's top and bottom and every fill that bleeds - the navigation
+ * bar's tier, the action bar's, the progress hairline, the scrolling title's ground - are all
+ * measured against it. What is *not* is anything over the whole frame: a scrim, a dialog and a
+ * snackbar belong to the window rather than to a pane, which is the same line overlay.h draws.
+ *
+ * Unset, it is the surface, so a frame nobody narrowed is the frame it always was - to the
+ * pixel, which is what the golden sheet holds.
+ */
+struct inkcell_box inkcell_fb_region(const struct inkcell_draw_state *state);
+
+/*
+ * Narrows the frame to `box` and hands back what it was, for the caller to put back.
+ *
+ * Handed back rather than kept on a stack, because the one caller that nests - the scaffold,
+ * moving from the frame to a pane and back - already has somewhere to keep it, and a stack here
+ * would be a depth to overflow for a question that only ever goes one level down. An empty box
+ * is "all of it".
+ */
+struct inkcell_box inkcell_fb_set_region(struct inkcell_draw_state *state, struct inkcell_box box);
 
 /*
  * The column's leading edge and its width, for the callers that want one number.
