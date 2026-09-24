@@ -84,6 +84,6 @@ void inkcell_fb_draw_list_rail(const struct inkcell_draw_state *state,
 /* The ink a row's text takes: its tone, or the cursor's, or the quiet pairing for the slots
    that are deliberately secondary. */
 struct inkcell_rgb inkcell_fb_item_ink(const struct inkcell_draw_state *state,
-                                       enum inkcell_tone tone, bool selected, bool quiet);
+                                       enum inkcell_tone tone, bool focused, bool quiet);
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_LIST_INTERNAL_H */

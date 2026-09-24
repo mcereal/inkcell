@@ -85,12 +85,12 @@ static bool inkcell_fb_bubble_has(const char *text) {
  *
  * This replaced five roles - three fills, two more for the same fills under the cursor - that
  * every theme had to state and match by eye against each other. The pairs it answers with are
- * the ones inkcell_theme_validate() already holds, selected included.
+ * the ones inkcell_theme_validate() already holds, focused included.
  */
 static struct inkcell_paint inkcell_fb_bubble_paint(const struct inkcell_draw_state *state,
                                                     const struct inkcell_fb_bubble *bubble) {
     const enum inkcell_state ui_state =
-        bubble->selected ? INKCELL_STATE_SELECTED : INKCELL_STATE_REST;
+        bubble->focused ? INKCELL_STATE_FOCUSED : INKCELL_STATE_REST;
     if (bubble->failed) {
         return inkcell_fb_paint(state, INKCELL_FAMILY_ERROR, INKCELL_SLOT_CONTAINER, ui_state);
     }
@@ -109,7 +109,7 @@ static struct inkcell_paint inkcell_fb_bubble_paint(const struct inkcell_draw_st
  * beside it on any of them.
  *
  * Dim while the bubble sits at rest, and the bubble's own ink once the cursor is on it or the
- * fill has gone red. The selected fills are a step towards their ink by design, and dim over
+ * fill has gone red. The focused fills are a step towards their ink by design, and dim over
  * one of those is the pairing a theme has least room for: on the dark palette it measured
  * 1.9:1, well under the 3:1 a secondary line is held to, and the bubble's own ink is a pair the
  * theme is validated on by construction.
@@ -123,7 +123,7 @@ static struct inkcell_paint inkcell_fb_bubble_paint(const struct inkcell_draw_st
 static struct inkcell_rgb inkcell_fb_bubble_quiet(const struct inkcell_draw_state *state,
                                                   const struct inkcell_fb_bubble *bubble,
                                                   struct inkcell_paint paint) {
-    if (bubble->selected || bubble->failed) {
+    if (bubble->focused || bubble->failed) {
         return paint.ink;
     }
     return inkcell_fb_tone_color(state, INKCELL_TONE_DIM);
@@ -404,13 +404,13 @@ void inkcell_fb_draw_bubble(const struct inkcell_draw_state *state,
      * off. The three edges the two shapes share leave no accent showing on them.
      */
     const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_MD);
-    if (bubble->selected) {
+    if (bubble->focused) {
         inkcell_fb_fill_round_rect(state, box_x, y - inkcell_step_px(scale), box_w, box_h, radius,
                                    inkcell_fb_color(state, INKCELL_COLOR_PRIMARY));
     }
     const int fill_x =
-        (bubble->selected && !bubble->outbound) ? box_x + inkcell_step_px(scale) : box_x;
-    const int fill_w = bubble->selected ? box_w - inkcell_step_px(scale) : box_w;
+        (bubble->focused && !bubble->outbound) ? box_x + inkcell_step_px(scale) : box_x;
+    const int fill_w = bubble->focused ? box_w - inkcell_step_px(scale) : box_w;
     inkcell_fb_fill_round_rect(state, fill_x, y - inkcell_step_px(scale), fill_w, box_h, radius,
                                fill);
 

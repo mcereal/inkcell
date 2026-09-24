@@ -106,7 +106,7 @@ void inkcell_fb_draw_meter(struct inkcell_draw_state *state, const struct inkcel
      * the cursor fill. Without this the track would disappear on precisely the row being
      * pointed at, leaving a fill floating in space with no length to be read against.
      */
-    if (meter->selected) {
+    if (meter->focused) {
         const int pad = inkcell_fb_space(state, INKCELL_SPACE_XS);
         inkcell_fb_fill_round_rect(state, r.x - pad, r.y - pad, r.w + 2 * pad, r.h + 2 * pad,
                                    radius + pad, inkcell_fb_color(state, meter->ground));
@@ -202,7 +202,7 @@ void inkcell_fb_draw_meter(struct inkcell_draw_state *state, const struct inkcel
      * contracts every theme would have to satisfy to say something the absence of ink already
      * says.
      *
-     * Same ground the widget lays under a selected track above, for the same reason: that is
+     * Same ground the widget lays under a focused track above, for the same reason: that is
      * what is behind the bar on the row the cursor is on.
      */
     const int notch = inkcell_fb_space(state, INKCELL_SPACE_XS) > 0
@@ -337,7 +337,7 @@ void inkcell_fb_draw_dial(struct inkcell_draw_state *state, const struct inkcell
      * of the four themes it *is* that fill. Without this the ring would vanish on precisely the
      * row being pointed at.
      */
-    if (dial->selected) {
+    if (dial->focused) {
         const int pad = inkcell_fb_space(state, INKCELL_SPACE_XS);
         const int disc = side + 2 * pad;
         inkcell_fb_fill_round_rect(state, cx - disc / 2, cy - disc / 2, disc, disc, disc / 2,
@@ -486,7 +486,7 @@ void inkcell_fb_draw_slider(struct inkcell_draw_state *state,
      * The whole box rather than the track, because the handle stands outside the track and the
      * gaps that separate it from the fill are drawn in this colour.
      */
-    if (slider->selected) {
+    if (slider->focused) {
         const int pad = inkcell_fb_space(state, INKCELL_SPACE_XS);
         inkcell_fb_fill_round_rect(state, box.x - pad, box.y - pad, box.w + 2 * pad,
                                    box.h + 2 * pad, radius + pad, ground);
@@ -549,7 +549,7 @@ void inkcell_fb_draw_slider(struct inkcell_draw_state *state,
      */
     const int handle_h =
         thickness *
-        (slider->selected ? INKCELL_FB_SLIDER_HANDLE_FOCUS : INKCELL_FB_SLIDER_HANDLE_REST) / 2;
+        (slider->focused ? INKCELL_FB_SLIDER_HANDLE_FOCUS : INKCELL_FB_SLIDER_HANDLE_REST) / 2;
     const int handle_y = box.y + (box.h - handle_h) / 2;
     /* Wide enough to be a gap rather than a seam: the handle and the fill it ends are one ink,
        so this is the whole of what separates them. */
@@ -696,14 +696,14 @@ void inkcell_fb_draw_sparkline(const struct inkcell_draw_state *state,
      * that role would vanish on precisely the row being pointed at.
      */
     const struct inkcell_rgb floor_ink =
-        spark->selected ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL_DIM)
-                        : inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK);
+        spark->focused ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL_DIM)
+                       : inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK);
     inkcell_fb_fill_rect(state, r.x, r.y + r.h - stroke, r.w, stroke, floor_ink);
 
     /*
      * The line.
      *
-     * Its tone on the ground, and the row's selected ink under the cursor - which is the
+     * Its tone on the ground, and the row's focused ink under the cursor - which is the
      * staircase's rule, not a second one. A family tone is validated against the body and
      * against a card; it is not validated against the cursor fill, and on the contrast theme
      * that fill is white while the primary is yellow, so a stroke drawn in the tone there is a
@@ -712,8 +712,8 @@ void inkcell_fb_draw_sparkline(const struct inkcell_draw_state *state,
      * a stroke among the row's words - so it takes the pairing those words take.
      */
     const struct inkcell_rgb ink =
-        spark->selected ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL)
-                        : inkcell_fb_tone_color(state, inkcell_fb_meter_tone(spark->tone));
+        spark->focused ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL)
+                       : inkcell_fb_tone_color(state, inkcell_fb_meter_tone(spark->tone));
     int previous_x = 0;
     int previous_y = 0;
     for (uint32_t i = 0U; i < points->count && i < INKCELL_SERIES_MAX; ++i) {
@@ -791,8 +791,8 @@ void inkcell_fb_draw_proportion(const struct inkcell_draw_state *state,
     }
 
     const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_FULL);
-    /* The meter's ground under a cursor fill, for the meter's reason - see `selected`. */
-    if (bar->selected) {
+    /* The meter's ground under a cursor fill, for the meter's reason - see `focused`. */
+    if (bar->focused) {
         const int pad = inkcell_fb_space(state, INKCELL_SPACE_XS);
         inkcell_fb_fill_round_rect(state, r.x - pad, r.y - pad, r.w + 2 * pad, r.h + 2 * pad,
                                    radius + pad, inkcell_fb_color(state, INKCELL_COLOR_BG));
@@ -843,7 +843,7 @@ void inkcell_fb_draw_proportion(const struct inkcell_draw_state *state,
                         ? inkcell_fb_space(state, INKCELL_SPACE_XS)
                         : 1;
     const struct inkcell_rgb ground =
-        bar->selected ? inkcell_fb_color(state, INKCELL_COLOR_BG) : bar->ground;
+        bar->focused ? inkcell_fb_color(state, INKCELL_COLOR_BG) : bar->ground;
     int boundary = 0;
     for (uint32_t i = 0; i + 1U < parts; ++i) {
         boundary += widths[i];

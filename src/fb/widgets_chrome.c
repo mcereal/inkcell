@@ -992,7 +992,7 @@ struct inkcell_fb_rect inkcell_fb_draw_fab(struct inkcell_draw_state *state,
      * here exactly as a tonal control does there. See inkcell_fb_button_paint().
      */
     const struct inkcell_fb_button spec = {
-        .selected = fab->selected,
+        .focused = fab->focused,
         .variant = INKCELL_FB_BUTTON_TONAL,
         .family = fab->family,
     };
@@ -1003,6 +1003,9 @@ struct inkcell_fb_rect inkcell_fb_draw_fab(struct inkcell_draw_state *state,
        what colour it came out. With its shape, so a ring that lands here is the curve the FAB
        was filled with. */
     inkcell_fb_focus_register_shaped(state, fab->focus_id, &box, INKCELL_SHAPE_FULL);
+    if (fab->focused) {
+        inkcell_fb_focus_mark(state, fab->focus_id);
+    }
 
     /*
      * Where it is moving, said before it draws - the switch's rule, and every other component

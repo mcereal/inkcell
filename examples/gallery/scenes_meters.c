@@ -94,14 +94,14 @@ void gallery_scene_meters(struct inkcell_draw_state *state) {
     /* The slider: a meter you can move, so it has a handle and a resting size that does not
        change when the cursor arrives - see the note about the card's focus ring. */
     const int slider_h = inkcell_fb_slider_height(state, scale);
-    for (int selected = 0; selected < 2; ++selected) {
+    for (int focused = 0; focused < 2; ++focused) {
         const struct inkcell_fb_slider slider = {
-            .rect = {.x = box.text_x + selected * (width + gap), .y = y, .w = width, .h = slider_h},
-            .id = (uint32_t)(GALLERY_ANIM_SLIDER + selected),
+            .rect = {.x = box.text_x + focused * (width + gap), .y = y, .w = width, .h = slider_h},
+            .id = (uint32_t)(GALLERY_ANIM_SLIDER + focused),
             .position = 620,
             .stops = 5U,
             .tone = INKCELL_TONE_PRIMARY,
-            .selected = selected != 0,
+            .focused = focused != 0,
         };
         inkcell_fb_draw_slider(state, &slider);
     }
@@ -184,7 +184,7 @@ void gallery_scene_meters(struct inkcell_draw_state *state) {
         .scale = k_permille,
         .band = &k_band,
         .tone = INKCELL_TONE_PRIMARY,
-        .selected = true,
+        .focused = true,
         .ground = INKCELL_COLOR_BG,
         .label = "62%",
     };
@@ -212,12 +212,12 @@ void gallery_scene_meters(struct inkcell_draw_state *state) {
     gallery_series(&series, &points, k_permille);
 
     const int spark_h = inkcell_fb_sparkline_height(state, scale);
-    for (int selected = 0; selected < 2; ++selected) {
+    for (int focused = 0; focused < 2; ++focused) {
         const struct inkcell_fb_sparkline spark = {
-            .rect = {.x = box.text_x + selected * (width + gap), .y = y, .w = width, .h = spark_h},
+            .rect = {.x = box.text_x + focused * (width + gap), .y = y, .w = width, .h = spark_h},
             .points = &points,
             .tone = INKCELL_TONE_PRIMARY,
-            .selected = selected != 0,
+            .focused = focused != 0,
         };
         inkcell_fb_draw_sparkline(state, &spark);
     }

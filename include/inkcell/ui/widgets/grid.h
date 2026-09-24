@@ -299,7 +299,7 @@ uint32_t inkcell_fb_grid_cols(const struct inkcell_fb_grid *grid);
    tile and hand the next straight back to inkcell_fb_grid_tile(). */
 struct inkcell_fb_rect inkcell_fb_grid_tile_box(const struct inkcell_fb_grid *grid);
 
-/* Whether `index` is the tile the cursor is on: the one drawn with the container's selected
+/* Whether `index` is the tile the cursor is on: the one drawn with the container's focused
    fill, and the one the ring is over. */
 bool inkcell_fb_grid_is_cursor(const struct inkcell_fb_grid *grid, uint32_t index);
 

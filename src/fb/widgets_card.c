@@ -36,7 +36,7 @@ struct inkcell_fb_card_metrics {
        so a ring that widened it would move the card's text and shift every card below it by a
        few pixels for no reason but the cursor arriving. The ring grows *inward*, into the
        padding, which is what keeps the outer geometry a fact about the card rather than about
-       what is selected. */
+       what is focused. */
     int ring;
     int radius; /* corner radius, clamped by inkcell_fb_fill_round_rect() anyway */
     /* The header line: the heading, and the verbs against its far edge. 0 when there is
@@ -49,7 +49,7 @@ struct inkcell_fb_card_metrics {
     size_t label_cols;
     int gap;                     /* to the next card */
     enum inkcell_color fill;     /* the variant's surface */
-    struct inkcell_rgb edge_ink; /* the hairline, or the focus ring when a verb is selected */
+    struct inkcell_rgb edge_ink; /* the hairline, or the focus ring when a verb is focused */
 };
 
 static struct inkcell_fb_card_metrics
@@ -90,7 +90,7 @@ inkcell_fb_card_measure(const struct inkcell_draw_state *state,
         break;
     }
     /*
-     * The focus ring. A card holding the selected verb is the one the next press acts on, and
+     * The focus ring. A card holding the focused verb is the one the next press acts on, and
      * that has to be findable before any of it is read - so it is the edge that changes rather
      * than the fill, drawn in the accent and at twice the thickness. See inkcell_fb_draw_card().
      *
@@ -103,7 +103,7 @@ inkcell_fb_card_measure(const struct inkcell_draw_state *state,
      */
     bool focused = false;
     for (uint32_t i = 0U; i < card->action_count && i < INKCELL_FB_CARD_ACTIONS_MAX; ++i) {
-        focused = focused || card->actions[i].selected;
+        focused = focused || card->actions[i].focused;
     }
     /*
      * A filled card has no edge.
@@ -413,7 +413,7 @@ void inkcell_fb_card_note(struct inkcell_fb_card *card, enum inkcell_tone tone, 
     inkwell_text_sanitise_str(text, row->value, sizeof row->value);
 }
 
-void inkcell_fb_card_action(struct inkcell_fb_card *card, inkcell_str_id label, bool selected) {
+void inkcell_fb_card_action(struct inkcell_fb_card *card, inkcell_str_id label, bool focused) {
     if (card == NULL || card->action_count >= INKCELL_FB_CARD_ACTIONS_MAX ||
         label == INKCELL_STR_NONE) {
         return;
@@ -421,7 +421,7 @@ void inkcell_fb_card_action(struct inkcell_fb_card *card, inkcell_str_id label, 
     struct inkcell_fb_card_action *action = &card->actions[card->action_count++];
     memset(action, 0, sizeof *action);
     inkwell_text_sanitise_str(inkcell_str(label), action->label, sizeof action->label);
-    action->selected = selected;
+    action->focused = focused;
 }
 
 bool inkcell_fb_card_is_empty(const struct inkcell_fb_card *card) {
@@ -681,7 +681,7 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_draw_state *state,
      * is every fill a variant can put behind it - and the outlined variant, whose fill *is* the
      * ground, is why it has to hold against all three rather than against the panel's own.
      *
-     * On the card holding the selected verb both of those change: the ink is the accent and the
+     * On the card holding the focused verb both of those change: the ink is the accent and the
      * painted thickness is doubled, which is the focus ring. Only the *painted* thickness - the
      * panel is the same size and its content starts in the same place either way, so the ring
      * grows inward into the padding. See inkcell_fb_card_measure().
@@ -707,7 +707,7 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_draw_state *state,
      * the screen cursor walks them in - a strip that packed from the left would have reversed
      * that on any card with two. They are text buttons: a word in the accent, and a fill only
      * under the cursor, which is what keeps three cards' worth of verbs from competing with the
-     * numbers they are about and makes the selected one unmistakable with no second cue.
+     * numbers they are about and makes the focused one unmistakable with no second cue.
      */
     const int content_right = m.content_x + (int)m.cols * inkcell_fb_char_adv(state, state->scale);
     const int gap = inkcell_fb_space(state, INKCELL_SPACE_XS);
@@ -742,7 +742,7 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_draw_state *state,
                 .rect = {.x = actions_x, .y = row_y, .w = width, .h = m.button_h},
                 .icon = INKCELL_ICON_NONE,
                 .label = card->actions[i].label,
-                .selected = card->actions[i].selected,
+                .focused = card->actions[i].focused,
                 .variant = INKCELL_FB_BUTTON_TEXT,
                 .shape = INKCELL_SHAPE_FULL,
                 .idle_tone = INKCELL_TONE_PRIMARY,

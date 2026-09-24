@@ -470,7 +470,7 @@ static void inkcell_fb_item_piece(struct inkcell_draw_state *state, int x, int y
  * the row's **resting** ground under itself precisely to escape that fill: both are contracted
  * against what the row rests on, and on two of the four themes the cursor fill is the resting
  * track's own colour, so a patch in it would make the control vanish on exactly the row being
- * pointed at. `selected` is already here, so the ink's ground is derived rather than passed and
+ * pointed at. `focused` is already here, so the ink's ground is derived rather than passed and
  * the two cannot be handed the wrong way round.
  */
 /* `value_ink` is the ink the row's own value column is written in, and only the segmented
@@ -478,10 +478,10 @@ static void inkcell_fb_item_piece(struct inkcell_draw_state *state, int x, int y
 static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
                                      const struct inkcell_fb_item_geom *g, size_t reserved,
                                      const struct inkcell_fb_trailing *trailing, int baseline,
-                                     int slot_top, bool selected, enum inkcell_color rest_role,
+                                     int slot_top, bool focused, enum inkcell_color rest_role,
                                      struct inkcell_rgb value_ink) {
     const struct inkcell_rgb ground =
-        inkcell_fb_color(state, selected ? INKCELL_COLOR_SURFACE_SEL : rest_role);
+        focused ? inkcell_fb_focus_fill(state, rest_role) : inkcell_fb_color(state, rest_role);
     const int scale = state->scale;
     const int adv = inkcell_fb_char_adv(state, scale);
     const size_t cells = trailing->kind == INKCELL_FB_TRAILING_TEXT
@@ -497,8 +497,8 @@ static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
            something the eye glances at on its way past, never the row's own words. */
         inkcell_fb_draw_text(state, g->text_right - (int)cells * adv, baseline, trailing->text,
                              scale,
-                             selected ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL_DIM)
-                                      : inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
+                             focused ? inkcell_fb_focus_ink(state, INKCELL_TONE_DIM, true)
+                                     : inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
                              ground);
         return;
     case INKCELL_FB_TRAILING_BADGE: {
@@ -516,8 +516,8 @@ static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
            eye passes on its way down the list, never one of the row's own words. */
         inkcell_fb_draw_icon(state, g->text_right - inkcell_fb_icon_box(state, scale), baseline,
                              trailing->icon, scale,
-                             selected ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL_DIM)
-                                      : inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
+                             focused ? inkcell_fb_focus_ink(state, INKCELL_TONE_DIM, true)
+                                     : inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
                              ground);
         return;
     case INKCELL_FB_TRAILING_SWITCH: {
@@ -536,8 +536,8 @@ static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
         trailing->sw->rect.h = height;
         trailing->sw->rect.x = g->text_right - width;
         trailing->sw->rect.y = g->fill_top + (g->fill_h - height) / 2;
-        trailing->sw->selected = selected;
-        /* The row's resting ground, written here for the reason `selected` is: what a control
+        trailing->sw->focused = focused;
+        /* The row's resting ground, written here for the reason `focused` is: what a control
            is standing on is a fact about the row, and a screen asked to remember it is a screen
            that would forget on one list out of nine. Resting rather than current, because the
            ring exists to get the control *out* from under the cursor fill. */
@@ -560,7 +560,7 @@ static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
         trailing->sel->rect.h = height;
         trailing->sel->rect.x = g->text_right - width;
         trailing->sel->rect.y = g->fill_top + (g->fill_h - height) / 2;
-        trailing->sel->selected = selected;
+        trailing->sel->focused = focused;
         /* Set from the kind, so a caller cannot name a radio and be handed a checkbox. There is
            one statement about which of the two this is and it is the slot's. */
         trailing->sel->shape = trailing->kind == INKCELL_FB_TRAILING_RADIO
@@ -602,8 +602,8 @@ static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
                 state,
                 g->text_right - inkcell_fb_text_width(state, trailing->segmented->value, scale),
                 baseline, trailing->segmented->value, scale,
-                selected ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL_DIM)
-                         : inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
+                focused ? inkcell_fb_focus_ink(state, INKCELL_TONE_DIM, true)
+                        : inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
                 ground);
             return;
         }
@@ -617,7 +617,7 @@ static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
                                             .y = g->fill_top + (g->fill_h - height) / 2,
                                             .w = width,
                                             .h = height};
-        inkcell_fb_draw_segmented(state, &box, trailing->segmented, selected, rest_role, seg_scale);
+        inkcell_fb_draw_segmented(state, &box, trailing->segmented, focused, rest_role, seg_scale);
         return;
     }
     case INKCELL_FB_TRAILING_METER: {
@@ -631,7 +631,7 @@ static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
         trailing->meter->rect.h = height;
         trailing->meter->rect.x = g->text_right - trailing->meter->rect.w;
         trailing->meter->rect.y = g->fill_top + (g->fill_h - height) / 2;
-        trailing->meter->selected = selected;
+        trailing->meter->focused = focused;
         trailing->meter->ground = rest_role;
         inkcell_fb_draw_meter(state, trailing->meter);
         return;
@@ -648,11 +648,12 @@ static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
          * list, not one of the row's words, and giving quality a colour of its own would put a
          * third statement about the link on a row that has made two.
          */
-        const struct inkcell_rgb quiet =
-            selected ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL_DIM)
-                     : inkcell_fb_tone_color(state, INKCELL_TONE_DIM);
-        const struct inkcell_rgb ink =
-            inkcell_fb_color(state, selected ? INKCELL_COLOR_TEXT_ON_SEL : INKCELL_COLOR_TEXT);
+        const struct inkcell_rgb quiet = focused
+                                             ? inkcell_fb_focus_ink(state, INKCELL_TONE_DIM, true)
+                                             : inkcell_fb_tone_color(state, INKCELL_TONE_DIM);
+        const struct inkcell_rgb ink = focused
+                                           ? inkcell_fb_focus_ink(state, INKCELL_TONE_NORMAL, false)
+                                           : inkcell_fb_tone_color(state, INKCELL_TONE_NORMAL);
         /*
          * An unlit rung is the meter's track and not the dim text colour, which is what it was
          * first drawn as. The two are different jobs: dim text is held *above* the ground so it
@@ -667,7 +668,7 @@ static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
          * ground to lay, so they take the pairing the cursor does validate.
          */
         const struct inkcell_rgb unlit =
-            selected ? quiet : inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK);
+            focused ? quiet : inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK);
         const int width = (int)INKCELL_FB_SIGNAL_CELLS * adv;
         const int height = inkcell_fb_icon_box(state, scale);
         const struct inkcell_fb_rect box = {
@@ -706,7 +707,7 @@ static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
         trailing->spark->rect.h = height;
         trailing->spark->rect.x = g->text_right - trailing->spark->rect.w;
         trailing->spark->rect.y = slot_top;
-        trailing->spark->selected = selected;
+        trailing->spark->focused = focused;
         inkcell_fb_draw_sparkline(state, trailing->spark);
         return;
     }
@@ -747,11 +748,21 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
     inkcell_fb_list_chrome(state, list);
     const bool band = inkcell_fb_list_band_begin(list);
     const int scale = state->scale;
-    const bool selected = inkcell_fb_list_is_cursor(list, index);
+    const bool focused = inkcell_fb_list_is_cursor(list, index);
     const uint32_t rows = inkcell_fb_list_row_height(list, index);
     const struct inkcell_fb_item_geom g = inkcell_fb_item_measure(state, list, item, index, rows);
 
-    if (selected) {
+    /* What every icon on this row is blended against: the fill if the cursor laid one down, and
+       otherwise whatever the row is standing on - the panel, or the surface of the card its
+       group was drawn on. Asked of the list rather than assumed, because a glyph carries
+       coverage and not a mask: text told the wrong ground keeps its shape and gains a halo of a
+       colour that is nowhere near it. The focused fill is derived from it too - a lift is a lift
+       off whatever is underneath. */
+    const enum inkcell_color rest_role = inkcell_fb_list_ground(list, index);
+    const struct inkcell_rgb ground =
+        focused ? inkcell_fb_focus_fill(state, rest_role) : inkcell_fb_color(state, rest_role);
+
+    if (focused) {
         const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_SM);
         const int row_x = g.fill_x;
         const int row_w = g.fill_w;
@@ -770,11 +781,9 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
                                                  ? item->tone
                                                  : INKCELL_TONE_PRIMARY));
             inkcell_fb_fill_round_rect(state, row_x + inkcell_step_px(scale), g.fill_top,
-                                       row_w - inkcell_step_px(scale), g.fill_h, radius,
-                                       inkcell_fb_color(state, INKCELL_COLOR_SURFACE_SEL));
+                                       row_w - inkcell_step_px(scale), g.fill_h, radius, ground);
         } else {
-            inkcell_fb_fill_round_rect(state, row_x, g.fill_top, row_w, g.fill_h, radius,
-                                       inkcell_fb_color(state, INKCELL_COLOR_SURFACE_SEL));
+            inkcell_fb_fill_round_rect(state, row_x, g.fill_top, row_w, g.fill_h, radius, ground);
         }
     }
 
@@ -787,15 +796,7 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
        inkcell_fb_list_item.label_plain. Resolved once here so the plain row below and the label
        column further down cannot disagree about it. */
     const enum inkcell_tone text_tone = item->label_plain ? INKCELL_TONE_NORMAL : item->tone;
-    const struct inkcell_rgb head_ink = inkcell_fb_item_ink(state, text_tone, selected, false);
-    /* What every icon on this row is blended against: the fill if the cursor laid one down, and
-       otherwise whatever the row is standing on - the panel, or the surface of the card its
-       group was drawn on. Asked of the list rather than assumed, because a glyph carries
-       coverage and not a mask: text told the wrong ground keeps its shape and gains a halo of a
-       colour that is nowhere near it. */
-    const enum inkcell_color rest_role = inkcell_fb_list_ground(list, index);
-    const struct inkcell_rgb ground =
-        inkcell_fb_color(state, selected ? INKCELL_COLOR_SURFACE_SEL : rest_role);
+    const struct inkcell_rgb head_ink = inkcell_fb_item_ink(state, text_tone, focused, false);
 
     if (item->leading.kind == INKCELL_FB_LEADING_AVATAR ||
         item->leading.kind == INKCELL_FB_LEADING_TONAL) {
@@ -822,15 +823,17 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
          * worse rather than better, because a layer can only move a fill towards its own ink.
          *
          * The base is the one half of a family the theme already holds to being findable on
-         * that fill: it is the pair the marker bar down a selected row is checked as. So the
-         * focused row's disc brightens instead of disappearing, and no palette had to move.
+         * that fill: it is the pair the marker bar down a focused row is checked as. So the
+         * focused row's disc brightens instead of disappearing, and no palette had to move -
+         * and on a theme that lifts rather than fills, it is the one part of the row that
+         * changes by more than a tone, which is the tile-brightening a console cursor does.
          */
         struct inkcell_paint disc;
         if (item->leading.kind == INKCELL_FB_LEADING_TONAL) {
             const enum inkcell_family family = inkcell_tone_family(item->tone);
             disc = inkcell_fb_paint(
                 state, family != INKCELL_FAMILY_COUNT ? family : INKCELL_FAMILY_PRIMARY,
-                selected ? INKCELL_SLOT_BASE : INKCELL_SLOT_CONTAINER, INKCELL_STATE_REST);
+                focused ? INKCELL_SLOT_BASE : INKCELL_SLOT_CONTAINER, INKCELL_STATE_REST);
         } else {
             disc =
                 (struct inkcell_paint){item->leading.role < INKCELL_COLOR_COUNT
@@ -874,7 +877,7 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
         const enum inkcell_tone label_tone = item->label_quiet ? INKCELL_TONE_DIM : text_tone;
         const size_t label_cols = item->label_cols < head_cols ? item->label_cols : head_cols;
         inkcell_fb_item_piece(state, g.text_x, g.head_y, item->label, label_cols,
-                              inkcell_fb_item_ink(state, label_tone, selected, item->label_quiet),
+                              inkcell_fb_item_ink(state, label_tone, focused, item->label_quiet),
                               ground);
         const size_t gutter = item->label_cols + INKCELL_FB_ITEM_MARKER_CELLS;
         if (head_cols > gutter) {
@@ -890,7 +893,7 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
             if (chip_w > 0 && chip_w <= (int)value_cols * inkcell_fb_char_adv(state, scale)) {
                 const struct inkcell_fb_rect box = {value_x, g.head_slot_top, chip_w, g.slot_h};
                 inkcell_fb_draw_state_chip(state, &box, g.head_y, item->value, item->tone,
-                                           selected ? INKCELL_COLOR_SURFACE_SEL : rest_role,
+                                           focused ? INKCELL_COLOR_SURFACE_SEL : rest_role,
                                            head_ink, scale);
             } else {
                 inkcell_fb_item_piece(state, value_x, g.head_y, item->value, value_cols, head_ink,
@@ -931,12 +934,12 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
     }
     if (head_take > 0U) {
         inkcell_fb_draw_trailing(state, &g, reserved, &item->trailing, g.head_y, g.head_slot_top,
-                                 selected, rest_role, head_ink);
+                                 focused, rest_role, head_ink);
     }
 
     if (g.rows >= 2U && item->supporting != NULL) {
         const struct inkcell_rgb supp_ink =
-            inkcell_fb_item_ink(state, item->supporting_tone, selected, item->supporting_quiet);
+            inkcell_fb_item_ink(state, item->supporting_tone, focused, item->supporting_quiet);
         /* Nothing reserved: a supporting line has no label column, and the icon that may take
            its first cell is tested against what the slot leaves rather than before it. */
         const size_t supp_take =
@@ -954,7 +957,7 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
                               g.cols - supp_take - (supp_icon ? 1U : 0U), supp_ink, ground);
         if (supp_take > 0U) {
             inkcell_fb_draw_trailing(state, &g, 0U, &item->supporting_trailing, g.supp_y,
-                                     g.supp_slot_top, selected, rest_role, supp_ink);
+                                     g.supp_slot_top, focused, rest_role, supp_ink);
         }
     }
 
@@ -972,7 +975,7 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
         item->meter->rect.w = g.text_right - g.text_x;
         item->meter->rect.h = g.bar_h;
         item->meter->rect.y = g.bar_y;
-        item->meter->selected = selected;
+        item->meter->focused = focused;
         item->meter->ground = rest_role;
         inkcell_fb_draw_meter(state, item->meter);
     } else if (item->slider != NULL && g.bar_h > 0) {
@@ -983,7 +986,7 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
         item->slider->rect.w = g.text_right - g.text_x;
         item->slider->rect.h = g.bar_h;
         item->slider->rect.y = g.bar_y;
-        item->slider->selected = selected;
+        item->slider->focused = focused;
         inkcell_fb_draw_slider(state, item->slider);
     }
 
@@ -997,7 +1000,7 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
        window alone would drop the separator at the seam for the length of every scroll. */
     const uint32_t end = list->model.first + list->model.visible + list->tail_count;
     const bool last = (index + 1U >= list->model.count) || (index + 1U >= end);
-    if (item->divider && !selected && !last) {
+    if (item->divider && !focused && !last) {
         inkcell_fb_draw_rule(state, g.text_x,
                              g.fill_top + g.fill_h + inkcell_fb_space(state, INKCELL_SPACE_XS),
                              g.text_right - g.text_x, scale, INKCELL_COLOR_RULE);

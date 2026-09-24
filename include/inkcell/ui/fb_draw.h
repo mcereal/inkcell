@@ -1232,10 +1232,33 @@ size_t inkcell_fb_cols(const struct inkcell_draw_state *state, int scale);
  */
 void inkcell_fb_draw_glyph(const struct inkcell_draw_state *state, int x, int y, uint32_t codepoint,
                            int scale, struct inkcell_rgb ink, struct inkcell_rgb ground);
+/*
+ * What a focused row is filled with, when it stands on `ground`.
+ *
+ * On most themes it is a *lift*: `ground` with the body ink mixed in by the focused state layer,
+ * so the row rises a tone off whatever it is on - the panel or a card - and the focus ring does
+ * the finding. That is the difference between a console's cursor and a utility's: a solid bar
+ * is findable, but it is also the loudest thing on the screen on every screen, and it says
+ * nothing a ring that travels does not say better. A theme that sets `focus_fill` gets
+ * SURFACE_SEL instead, whatever the ground - the high-contrast theme's inverse video.
+ */
+struct inkcell_rgb inkcell_fb_focus_fill(const struct inkcell_draw_state *state,
+                                         enum inkcell_color ground);
+
+/*
+ * The ink a tier of a focused row is written in, over inkcell_fb_focus_fill().
+ *
+ * A lift keeps the row's own inks - the whole point of it is that the row is still itself, a
+ * little nearer - and inkcell_theme_validate() holds those inks to the lifted grounds. A filled
+ * theme takes the cursor's own pair, TEXT_ON_SEL or TEXT_ON_SEL_DIM when the tier is `quiet`.
+ */
+struct inkcell_rgb inkcell_fb_focus_ink(const struct inkcell_draw_state *state,
+                                        enum inkcell_tone tone, bool quiet);
+
 /* A whole row from the body margin, drawing its own cursor fill - so it knows its own ground
    and does not take one. */
 /*
- * The fill a selected row lays down, and the ground everything on that row is then drawn
+ * The fill a focused row lays down, and the ground everything on that row is then drawn
  * against - the background colour when the row is not the cursor's.
  *
  * Shared rather than written out per row shape because a list mixes them: a plain row and a
@@ -1243,22 +1266,22 @@ void inkcell_fb_draw_glyph(const struct inkcell_draw_state *state, int x, int y,
  * cursor that changes shape as it walks, which is exactly what a duplicated `y - scale` and a
  * duplicated height produced. `rows` is how many body rows the row occupies.
  *
- * `ground` is what the row is standing on when it is *not* selected, which is the background on
+ * `ground` is what the row is standing on when it is *not* focused, which is the background on
  * every list that draws straight onto the panel and a card's surface on one whose groups are
  * drawn as cards. It is asked for rather than assumed because a glyph carries coverage rather
  * than a mask: text blended against the wrong ground keeps its shape and gains a faint halo of
  * the colour it was told about, which is the same fact inkcell_fb_draw_glyph() is documented on.
  */
 struct inkcell_rgb inkcell_fb_draw_row_fill_on(const struct inkcell_draw_state *state, int y,
-                                               uint32_t rows, bool selected,
+                                               uint32_t rows, bool focused,
                                                enum inkcell_color ground);
 
 /* The same on the panel's own background, which is every list that is not a column of cards. */
 struct inkcell_rgb inkcell_fb_draw_row_fill(const struct inkcell_draw_state *state, int y,
-                                            uint32_t rows, bool selected);
+                                            uint32_t rows, bool focused);
 
 void inkcell_fb_draw_row(const struct inkcell_draw_state *state, int y, const char *text,
-                         struct inkcell_rgb color, bool selected);
+                         struct inkcell_rgb color, bool focused);
 void inkcell_fb_draw_text(const struct inkcell_draw_state *state, int x, int y, const char *text,
                           int scale, struct inkcell_rgb ink, struct inkcell_rgb ground);
 /* The same at a weight. The plain form is INKCELL_WEIGHT_REGULAR, which is what body text and
@@ -1378,7 +1401,7 @@ void inkcell_fb_blit_bgra(const struct inkcell_draw_state *state, int x, int y, 
                           const uint8_t *pixels, size_t stride);
 /*
  * The same box with its corners taken off, `radius` pixels each - the shape an avatar disc, a
- * count pill and a selected row are. A radius of half the shorter side is a circle (or a
+ * count pill and a focused row are. A radius of half the shorter side is a circle (or a
  * capsule); anything larger is clamped to that, so a caller can ask for "as round as it goes"
  * without measuring first.
  *
@@ -1492,6 +1515,19 @@ void inkcell_fb_focus_register(const struct inkcell_draw_state *state, uint32_t 
  */
 void inkcell_fb_focus_register_shaped(const struct inkcell_draw_state *state, uint32_t id,
                                       const struct inkcell_fb_rect *rect, enum inkcell_shape shape);
+
+/*
+ * Says the box registered under `id` is the one drawn as focused, so the frame's focus ring
+ * goes there - see inkcell_focus_mark(). Ignored when there is no map, or when `id` did not make
+ * it into this one: a row the view clipped away is not somewhere a ring can be honest about.
+ *
+ * Components call this themselves - the list for its cursor row, a button whose `focused` is
+ * set - so a screen that draws them gets the ring's target for free and hands it over at the
+ * end of the frame:
+ *
+ *     inkcell_fb_draw_focus_ring(state, &map, inkcell_focus_marked(&map));
+ */
+void inkcell_fb_focus_mark(const struct inkcell_draw_state *state, uint32_t id);
 
 /*
  * Registers `rect` as a pointer target under `id`: something a click can press and the d-pad

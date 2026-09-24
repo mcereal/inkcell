@@ -4,7 +4,7 @@
  * Buttons, chips and badges: the shapes a press lands on.
  *
  * Laid out as a grid rather than as a screen, because the point of this sheet is the *axes* -
- * three variants down, the resting and selected states across, and the families the theme
+ * three variants down, the resting and focused states across, and the families the theme
  * answers for each. A picture that showed one button in one state would not show that a tonal
  * button and a filled one are two different promises about what the key does.
  */
@@ -16,7 +16,7 @@ static int button_height(const struct inkcell_draw_state *state, int scale) {
            2 * inkcell_fb_space_at(state, INKCELL_SPACE_SM, scale);
 }
 
-/* One row of the grid: the same variant and family, at rest and then selected. */
+/* One row of the grid: the same variant and family, at rest and then focused. */
 static int button_row(const struct inkcell_draw_state *state, int x, int y, int scale,
                       enum inkcell_fb_button_variant variant, enum inkcell_family family,
                       enum gallery_str_id label, enum inkcell_icon icon) {
@@ -24,7 +24,7 @@ static int button_row(const struct inkcell_draw_state *state, int x, int y, int 
     const int gap = inkcell_fb_space(state, INKCELL_SPACE_SM);
     const char *text = gallery_text(label);
 
-    for (int selected = 0; selected < 2; ++selected) {
+    for (int focused = 0; focused < 2; ++focused) {
         const struct inkcell_fb_button button = {
             .rect = {.x = x,
                      .y = y,
@@ -33,7 +33,7 @@ static int button_row(const struct inkcell_draw_state *state, int x, int y, int 
                      .h = h},
             .icon = icon,
             .label = text,
-            .selected = selected != 0,
+            .focused = focused != 0,
             .variant = variant,
             .family = family,
             .shape = INKCELL_SHAPE_FULL,
@@ -55,7 +55,7 @@ void gallery_scene_buttons(struct inkcell_draw_state *state) {
 
     y = gallery_section(state, &layout, y, GALLERY_STR_HEAD_BUTTONS);
 
-    /* The three variants, each at rest and selected. The family stays primary so that what
+    /* The three variants, each at rest and focused. The family stays primary so that what
        changes down the column is the variant alone. */
     y = button_row(state, box.text_x, y, scale, INKCELL_FB_BUTTON_FILLED, INKCELL_FAMILY_PRIMARY,
                    GALLERY_STR_ACT_SEND, INKCELL_ICON_SEND);

@@ -41,11 +41,12 @@ void gallery_scene_palette(struct inkcell_draw_state *state) {
      * The families, one per row, and each family's four slots across.
      *
      * Base and container are the two weights a family comes in - a filled button and a tonal
-     * one - and each is drawn twice: once in its own ink, and once with the state layer a
-     * selected control wears over it. That last column is the one worth staring at, because it
-     * is the combination the contrast contract has the least room in.
+     * one - and each is drawn once per interaction state: at rest, hovered, focused and pressed.
+     * The container's last columns are the ones worth staring at, because they are the
+     * combinations the contrast contract has the least room in. A base never moves: see
+     * inkcell_theme_paint() for why a layer goes on a container and nowhere else.
      */
-    const int cols = 6;
+    const int cols = 2 * (int)INKCELL_STATE_COUNT;
     const int cell_w = (box.text_right - box.text_x - (cols - 1) * gap) / cols;
     const int cell_h = inkcell_fb_line_adv(state, scale) + 2 * gap;
 

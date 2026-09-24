@@ -21,7 +21,7 @@
  */
 struct inkcell_fb_button_paint inkcell_fb_button_paint(const struct inkcell_draw_state *state,
                                                        const struct inkcell_fb_button *button) {
-    const bool selected = button->selected;
+    const bool focused = button->focused;
     switch (button->variant) {
     case INKCELL_FB_BUTTON_FILLED:
         /* The neutral cursor surface, not a family: a keyboard key is a place to press, not a
@@ -29,7 +29,7 @@ struct inkcell_fb_button_paint inkcell_fb_button_paint(const struct inkcell_draw
         return (struct inkcell_fb_button_paint){
             true,
             {inkcell_fb_color(state,
-                              selected ? INKCELL_COLOR_SURFACE_ACTIVE : INKCELL_COLOR_SURFACE_SEL),
+                              focused ? INKCELL_COLOR_SURFACE_ACTIVE : INKCELL_COLOR_SURFACE_SEL),
              inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL)}};
     case INKCELL_FB_BUTTON_TONAL:
         /* Under the cursor a tonal control commits to the family's full strength: the container
@@ -38,20 +38,19 @@ struct inkcell_fb_button_paint inkcell_fb_button_paint(const struct inkcell_draw
            halves of the family. */
         return (struct inkcell_fb_button_paint){
             true, inkcell_fb_paint(state, button->family,
-                                   selected ? INKCELL_SLOT_BASE : INKCELL_SLOT_CONTAINER,
+                                   focused ? INKCELL_SLOT_BASE : INKCELL_SLOT_CONTAINER,
                                    INKCELL_STATE_REST)};
     case INKCELL_FB_BUTTON_TEXT:
     default:
-        return selected
-                   ? (struct inkcell_fb_button_paint){true,
-                                                      {inkcell_fb_color(
-                                                           state, INKCELL_COLOR_SURFACE_ACTIVE),
-                                                       inkcell_fb_color(state,
-                                                                        INKCELL_COLOR_TEXT_ON_SEL)}}
-                   : (struct inkcell_fb_button_paint){
-                         false,
-                         {inkcell_fb_color(state, INKCELL_COLOR_BG),
-                          inkcell_fb_color(state, INKCELL_COLOR_TEXT)}};
+        return focused ? (struct inkcell_fb_button_paint){true,
+                                                          {inkcell_fb_color(
+                                                               state, INKCELL_COLOR_SURFACE_ACTIVE),
+                                                           inkcell_fb_color(
+                                                               state, INKCELL_COLOR_TEXT_ON_SEL)}}
+                       : (struct inkcell_fb_button_paint){
+                             false,
+                             {inkcell_fb_color(state, INKCELL_COLOR_BG),
+                              inkcell_fb_color(state, INKCELL_COLOR_TEXT)}};
     }
 }
 
@@ -99,6 +98,9 @@ void inkcell_fb_draw_button(const struct inkcell_draw_state *state,
        - a pill on a chip, a rounded square on a keycap - rather than a rectangle the ring
        guessed at. */
     inkcell_fb_focus_register_shaped(state, button->focus_id, &button->rect, button->shape);
+    if (button->focused) {
+        inkcell_fb_focus_mark(state, button->focus_id);
+    }
 
     const struct inkcell_fb_button_paint paint = inkcell_fb_button_paint(state, button);
     if (paint.has_fill) {
@@ -210,7 +212,7 @@ int inkcell_fb_draw_chip(const struct inkcell_draw_state *state, int x, int y,
         .rect = inkcell_fb_chip_box(state, x, y, icon, label, scale),
         .icon = icon,
         .label = label,
-        .selected = false,
+        .focused = false,
         .variant = active ? INKCELL_FB_BUTTON_TONAL : INKCELL_FB_BUTTON_TEXT,
         .shape = INKCELL_SHAPE_FULL,
         .idle_tone = INKCELL_TONE_DIM,

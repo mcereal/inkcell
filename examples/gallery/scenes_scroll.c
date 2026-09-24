@@ -48,7 +48,7 @@
  * it is on the panel or four hundred rows above it, and the view decides which.
  */
 static void gallery_scroll_row(struct inkcell_draw_state *state, uint32_t index, int y, int line,
-                               bool selected) {
+                               bool focused) {
     static const enum gallery_str_id k_rows[] = {
         GALLERY_STR_ROW_DISPLAY, GALLERY_STR_ROW_SOUND,   GALLERY_STR_ROW_STORAGE,
         GALLERY_STR_ROW_NETWORK, GALLERY_STR_ROW_BATTERY, GALLERY_STR_ROW_SECURITY,
@@ -59,9 +59,9 @@ static void gallery_scroll_row(struct inkcell_draw_state *state, uint32_t index,
     const int scale = state->scale;
 
     struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_BG);
-    if (selected) {
+    if (focused) {
         ground = inkcell_fb_state_layer(state, INKCELL_COLOR_BG, INKCELL_COLOR_TEXT,
-                                        INKCELL_STATE_SELECTED);
+                                        INKCELL_STATE_FOCUSED);
         inkcell_fb_fill_round_rect(state, box.x, y, box.w, line,
                                    inkcell_fb_radius(state, INKCELL_SHAPE_SM), ground);
     }

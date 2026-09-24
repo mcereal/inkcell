@@ -431,6 +431,13 @@ void inkcell_fb_focus_register_shaped(const struct inkcell_draw_state *state, ui
     inkcell_fb_focus_put(state, id, rect, inkcell_fb_radius(state, shape), false);
 }
 
+void inkcell_fb_focus_mark(const struct inkcell_draw_state *state, uint32_t id) {
+    if (state == NULL || !inkcell_focus_has(state->focus, id)) {
+        return;
+    }
+    inkcell_focus_mark(state->focus, id);
+}
+
 void inkcell_fb_target_register(const struct inkcell_draw_state *state, uint32_t id,
                                 const struct inkcell_fb_rect *rect) {
     inkcell_fb_focus_put(state, id, rect, 0, true);
@@ -2009,7 +2016,7 @@ void inkcell_fb_draw_emoji_box(const struct inkcell_draw_state *state, int x, in
      * whole multiple inside it and centred in what was asked for. The alternative was the bug
      * this replaced: the bound sat above this path although this path has no use for the map,
      * so on a panel with room for a key over INKCELL_FB_EMOJI_BOX_MAX across - which the capture
-     * tool will render - every emoji keycap drew nothing at all and the selected one drew a bare
+     * tool will render - every emoji keycap drew nothing at all and the focused one drew a bare
      * fill. A cap costing a shift of at most fifteen pixels at that size is one nobody sees.
      */
     const int drawn = box > INKCELL_FB_EMOJI_BOX_MAX ? inkcell_fb_emoji_box_fit(box) : box;
@@ -2154,8 +2161,8 @@ static int inkcell_fb_icon_step(const uint8_t *row0, const uint8_t *row1, int32_
  * Draw one icon sprite into the cell, in `ink` over `ground`.
  *
  * The two colours are the whole difference from inkcell_fb_draw_emoji(). An emoji carries its own
- * palette; an icon carries coverage only and is *tinted*, so a chevron on a selected row is the
- * selected row's ink and a warning is the bad tone - it is themed like the text it stands
+ * palette; an icon carries coverage only and is *tinted*, so a chevron on a focused row is the
+ * focused row's ink and a warning is the bad tone - it is themed like the text it stands
  * beside, because it is doing that text's job.
  *
  * `ground` is what it is blended against, and it has to be passed in for the same reason
@@ -2767,6 +2774,29 @@ size_t inkcell_fb_width(const char *line) {
     return inkcell_text_cells(line);
 }
 
+static bool inkcell_fb_theme_focus_fill(const struct inkcell_draw_state *state) {
+    const struct inkcell_theme *theme =
+        (state != NULL && state->theme != NULL) ? state->theme : inkcell_theme_default();
+    return theme != NULL && theme->focus_fill;
+}
+
+struct inkcell_rgb inkcell_fb_focus_fill(const struct inkcell_draw_state *state,
+                                         enum inkcell_color ground) {
+    if (inkcell_fb_theme_focus_fill(state)) {
+        return inkcell_fb_color(state, INKCELL_COLOR_SURFACE_SEL);
+    }
+    return inkcell_fb_state_layer(state, ground, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED);
+}
+
+struct inkcell_rgb inkcell_fb_focus_ink(const struct inkcell_draw_state *state,
+                                        enum inkcell_tone tone, bool quiet) {
+    if (!inkcell_fb_theme_focus_fill(state)) {
+        return inkcell_fb_tone_color(state, tone);
+    }
+    return inkcell_fb_color(state,
+                            quiet ? INKCELL_COLOR_TEXT_ON_SEL_DIM : INKCELL_COLOR_TEXT_ON_SEL);
+}
+
 /*
  * The cursor's highlight, and the ground everything on the row is drawn against.
  *
@@ -2781,16 +2811,16 @@ size_t inkcell_fb_width(const char *line) {
  * it walks, and two copies of `y - scale` is exactly how that happens.
  */
 struct inkcell_rgb inkcell_fb_draw_row_fill_on(const struct inkcell_draw_state *state, int y,
-                                               uint32_t rows, bool selected,
+                                               uint32_t rows, bool focused,
                                                enum inkcell_color ground) {
-    if (!selected) {
+    if (!focused) {
         /* Nothing is painted: the row is already standing on whatever laid that colour down -
            the panel, or the card surface a grouped list drew before any row was placed. What is
            returned is what the text will be blended against, which is the only thing a caller
-           wanted from an unselected row. */
+           wanted from a row the cursor is not on. */
         return inkcell_fb_color(state, ground);
     }
-    const struct inkcell_rgb fill = inkcell_fb_color(state, INKCELL_COLOR_SURFACE_SEL);
+    const struct inkcell_rgb fill = inkcell_fb_focus_fill(state, ground);
     const int line = inkcell_fb_line_adv(state, state->scale);
     const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
     inkcell_fb_fill_round_rect(state, box.x, y - inkcell_step_px(state->scale), box.w,
@@ -2800,15 +2830,15 @@ struct inkcell_rgb inkcell_fb_draw_row_fill_on(const struct inkcell_draw_state *
 }
 
 struct inkcell_rgb inkcell_fb_draw_row_fill(const struct inkcell_draw_state *state, int y,
-                                            uint32_t rows, bool selected) {
-    return inkcell_fb_draw_row_fill_on(state, y, rows, selected, INKCELL_COLOR_BG);
+                                            uint32_t rows, bool focused) {
+    return inkcell_fb_draw_row_fill_on(state, y, rows, focused, INKCELL_COLOR_BG);
 }
 
-/* One list row of text, highlighted when it is the cursor: the fill above, then the words. */
+/* One list row of text, lifted when it is the cursor: the fill above, then the words. */
 void inkcell_fb_draw_row(const struct inkcell_draw_state *state, int y, const char *text,
-                         struct inkcell_rgb color, bool selected) {
-    const struct inkcell_rgb ground = inkcell_fb_draw_row_fill(state, y, 1U, selected);
-    if (selected) {
+                         struct inkcell_rgb color, bool focused) {
+    const struct inkcell_rgb ground = inkcell_fb_draw_row_fill(state, y, 1U, focused);
+    if (focused && inkcell_fb_theme_focus_fill(state)) {
         color = inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL);
     }
     inkcell_fb_draw_text(state, inkcell_fb_row_box(state).text_x, y, text, state->scale, color,

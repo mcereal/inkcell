@@ -102,7 +102,7 @@ struct inkcell_fb_meter {
     /* The fill. ACCENT, GOOD or BAD - the three inkcell_theme_validate() holds against
        INKCELL_COLOR_METER_TRACK - and anything else is drawn in the accent. */
     enum inkcell_tone tone;
-    bool selected; /* the row under it carries the cursor fill */
+    bool focused; /* the row under it carries the cursor fill */
     /*
      * What the control is standing on when the row under it is not the cursor's: the panel, or
      * the surface of the card its list drew the group on.
@@ -114,7 +114,7 @@ struct inkcell_fb_meter {
      *
      * INKCELL_COLOR_BG is 0, so a caller drawing onto the panel leaves it zeroed and says
      * nothing. A control in a list never sets it at all: inkcell_fb_list_item() writes it from the
-     * model, the same way it already writes `selected`.
+     * model, the same way it already writes `focused`.
      */
     enum inkcell_color ground;
 };
@@ -189,7 +189,7 @@ struct inkcell_fb_dial {
      * alone gets one answer for both, which is the case that needs no thought at all.
      */
     int thickness;
-    bool selected; /* the row or card under it carries the cursor fill */
+    bool focused; /* the row or card under it carries the cursor fill */
     enum inkcell_color ground;
     /*
      * What goes in the middle: the reading in the units a person reads it in, already
@@ -283,7 +283,7 @@ struct inkcell_fb_slider {
     /* The cursor is on this row: the handle stands up to its full height, and the track gets
        its own ground under the cursor fill. A slider is the one control on a settings row that
        the reader is about to change, so it says so rather than looking the same everywhere. */
-    bool selected;
+    bool focused;
 };
 
 /* The height the whole control wants at `scale` - the handle's, which is taller than its track.
@@ -383,7 +383,7 @@ struct inkcell_fb_sparkline {
        because a stroke nobody validated against the track is a line that vanishes on a theme
        somebody has not opened yet. */
     enum inkcell_tone tone;
-    bool selected; /* the row under it carries the cursor fill */
+    bool focused; /* the row under it carries the cursor fill */
 };
 
 /*
@@ -469,8 +469,8 @@ struct inkcell_fb_proportion {
     /* The row under it carries the cursor fill, so the bar lays a ground of its own - the
        meter's move, and needed here for the same reason: the series palette is validated against
        the body and against a card, and on two themes the cursor fill is neither. The gaps follow
-       it: what is behind the bar on a selected row is the pad, not `ground`. */
-    bool selected;
+       it: what is behind the bar on a focused row is the pad, not `ground`. */
+    bool focused;
 };
 
 /* The height a composition wants at `scale` - the meter's, deliberately. A card that carried a
@@ -628,7 +628,7 @@ struct inkcell_fb_chart {
      * how much of the record is on it - and a caller placing the strip itself would be a caller
      * computing coordinates, which is the thing a screen renderer does not do.
      *
-     * It is drawn selected, always. There is no cursor on this screen to move onto it: it is the
+     * It is drawn focused, always. There is no cursor on this screen to move onto it: it is the
      * only control here, Left and Right always reach it, and a control that drew unfocused while
      * being the only thing the d-pad can touch would be the frame disagreeing with the keys.
      */

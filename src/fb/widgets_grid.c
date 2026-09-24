@@ -256,6 +256,9 @@ void inkcell_fb_grid_focus_tile(const struct inkcell_draw_state *state,
     const struct inkcell_fb_rect rect = {
         .x = grid->x, .y = grid->y, .w = grid->tile_w, .h = grid->tile_h};
     inkcell_fb_focus_register_shaped(state, grid->focus_base + index, &rect, INKCELL_SHAPE_MD);
+    if (inkcell_fb_grid_is_cursor(grid, index)) {
+        inkcell_fb_focus_mark(state, grid->focus_base + index);
+    }
 }
 
 struct inkcell_focus_run inkcell_fb_grid_run(const struct inkcell_fb_grid *grid) {
@@ -473,8 +476,8 @@ void inkcell_fb_grid_tile(const struct inkcell_draw_state *state, struct inkcell
     }
     inkcell_fb_grid_chrome(state, grid);
 
-    const bool selected = inkcell_fb_grid_is_cursor(grid, index);
-    const enum inkcell_state ui_state = selected ? INKCELL_STATE_SELECTED : INKCELL_STATE_REST;
+    const bool focused = inkcell_fb_grid_is_cursor(grid, index);
+    const enum inkcell_state ui_state = focused ? INKCELL_STATE_FOCUSED : INKCELL_STATE_REST;
     /*
      * One statement decides the colour, and it is the tile's tone.
      *

@@ -54,7 +54,7 @@ struct inkcell_fb_button {
        platform there is, and the words for them are the two longest labels in the catalog. */
     enum inkcell_icon icon;
     const char *label;
-    bool selected; /* the cursor is on it */
+    bool focused; /* the d-pad will act on it; see struct inkcell_interaction */
     enum inkcell_fb_button_variant variant;
     /*
      * Which family a TONAL button is tinted with. Zero is INKCELL_FAMILY_PRIMARY, which is what
