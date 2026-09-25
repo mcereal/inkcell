@@ -208,6 +208,35 @@ INKCELL_TEST_CASE(scaffold_rail_width_does_not_follow_the_cursor, unit) {
     record_success(test_name);
 }
 
+/* A Mac window's buttons sit in the rail's top-leading corner (top_leading_inset), and a rail
+   narrower than them would leave the last one over the rule and against the pane's heading. */
+INKCELL_TEST_CASE(scaffold_rail_holds_the_window_buttons, unit) {
+    struct inkcell_draw_state *state = NULL;
+    struct inkcell_capture *capture =
+        scaffold_open(INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT, INKCELL_SCALE(3), &state);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+
+    const int bare = inkcell_fb_scaffold_rail_width(state, k_destinations, SCAFFOLD_COUNT);
+    state->top_leading_inset = bare + 40;
+    const struct inkcell_fb_scaffold scaffold = {.destinations = k_destinations,
+                                                 .count = SCAFFOLD_COUNT};
+    struct inkcell_fb_scaffold_frame frame;
+    inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+    inkcell_fb_scaffold_end(state, &frame, NULL);
+    INKCELL_TEST_FAIL_IF_CLEANUP(frame.nav != INKCELL_FB_NAV_RAIL, inkcell_capture_close(capture),
+                                 "medium gets a rail");
+    INKCELL_TEST_FAIL_IF_CLEANUP(frame.content.x != bare + 40, inkcell_capture_close(capture),
+                                 "the rail widens to hold the window's buttons");
+
+    state->top_leading_inset = 1;
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        inkcell_fb_scaffold_rail_width(state, k_destinations, SCAFFOLD_COUNT) != bare,
+        inkcell_capture_close(capture), "and an inset it already clears changes nothing");
+
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
 INKCELL_TEST_CASE(scaffold_expanded_splits_a_screen_that_has_a_detail, unit) {
     struct inkcell_draw_state *state = NULL;
     struct inkcell_capture *capture =

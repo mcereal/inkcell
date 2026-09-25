@@ -138,6 +138,22 @@ struct inkcell_backend_sdl_context {
     uint32_t width;
     uint32_t height;
     bool unified_titlebar;
+    /*
+     * Size the UI for the display the window is on, not for the handheld panel.
+     *
+     * A theme's scale is chosen for a 3.2" panel read at arm's length, and on a desktop that is
+     * text twice the size of every other window's. Set, the body scale becomes
+     * inkcell_sdl_display_scale() of the theme's at the window's pixel density, and is worked
+     * out again when the window moves to a display of another density. <PREFIX>_FB_SCALE still
+     * wins, and a fixed frame (<PREFIX>_SDL_FIXED) is a picture of the panel and keeps the
+     * panel's scale. Off, the theme's scale is used as it stands.
+     *
+     * On Windows the window is only drawn at the display's density when SDL video is started
+     * under SDL_HINT_WINDOWS_DPI_SCALING, which this backend sets before it starts video. A
+     * host that starts video itself should set it first; otherwise the host's DPI mode stands
+     * and only the scale follows the display, from its DPI.
+     */
+    bool display_scale;
     void (*request_frame)(void *userdata);
     void *frame_userdata;
 };
@@ -171,6 +187,21 @@ bool inkcell_backend_sdl_is_available(void);
  * so the translation is testable without a window.
  */
 uint16_t inkcell_sdl_evdev_code(int scancode);
+
+/*
+ * The body scale, in units, that `theme_scale` becomes on a display of `density` pixels per
+ * window point.
+ *
+ * A theme's scale is stated for the panel, and the panel is a dense one: a desktop point at the
+ * size a laptop is read from is two of its pixels. So a Retina display (density 2) keeps the
+ * theme's scale and draws it at the same size in points as every other application does, and a
+ * display of one pixel per point halves it. Rounded to half a step, which is the finest a type
+ * role is ever offset by, and clamped to what a theme may ask for. A density that is not a
+ * positive number is the theme's scale unchanged.
+ *
+ * Pure, and public so the arithmetic is testable without a display to measure.
+ */
+int inkcell_sdl_display_scale(int theme_scale, float density);
 
 #ifdef __cplusplus
 }
