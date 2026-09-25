@@ -168,6 +168,41 @@ INKCELL_TEST_CASE(focus_ring_turns_round_from_where_it_is, unit) {
 }
 
 /*
+ * Two groups - a verb on one card and a verb on the card below it - are a jump, not a journey.
+ *
+ * The line between them runs through whatever is drawn between the two, so a ring travelling
+ * it is an empty outline crossing the rows of both cards. Within a group it still travels,
+ * which is the half that says the rule is about groups and not about ids.
+ */
+INKCELL_TEST_CASE(focus_ring_jumps_between_groups, unit) {
+    struct ring_harness h;
+    INKCELL_TEST_FAIL_IF(!ring_open(&h), "the capture should open");
+    (void)inkcell_focus_set_group(&h.map, RING_ID_LEFT, RING_ID_LEFT);
+    (void)inkcell_focus_set_group(&h.map, RING_ID_RIGHT, RING_ID_LEFT);
+    (void)inkcell_focus_set_group(&h.map, RING_ID_BELOW, RING_ID_BELOW);
+
+    inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_LEFT);
+    inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_BELOW);
+    struct inkcell_focus_rect at = {0, 0, 0, 0};
+    (void)inkcell_fb_focus_ring_rect(h.state, &at, NULL);
+    INKCELL_TEST_FAIL_IF_CLEANUP(at.y != 300, ring_close(&h),
+                                 "a ring changing group should already be on the new box");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_state_animating(h.state), ring_close(&h),
+                                 "and owe no frame for a journey it did not make");
+
+    /* Back into the first group, then along it: the move inside one group still travels. */
+    inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_LEFT);
+    inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_RIGHT);
+    (void)inkcell_fb_focus_ring_rect(h.state, &at, NULL);
+    INKCELL_TEST_FAIL_IF_CLEANUP(at.x != 100, ring_close(&h),
+                                 "a move within a group should start at the box it left");
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_state_animating(h.state), ring_close(&h),
+                                 "and travel");
+    ring_close(&h);
+    record_success(test_name);
+}
+
+/*
  * The cursor was moved by the layout rather than by a press: a row was deleted, a filter
  * emptied the list, and inkcell_focus_nearest() answered somewhere new. A ring that flew there
  * would be reporting a press nobody made.

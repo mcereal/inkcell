@@ -153,6 +153,16 @@ struct inkcell_focus_item {
      * inkcell_focus_hit() sees them. Set by inkcell_focus_add_target().
      */
     bool pointer_only;
+    /*
+     * Which component the box belongs to, or 0 for none - see inkcell_focus_set_group().
+     *
+     * Nothing in the finder reads it either. It is for the focus ring, which slides from box to
+     * box in a straight line: along one card's verbs that line runs over nothing, and from one
+     * card's verbs to the next card's it runs through every row between them, which on a panel
+     * is an empty outline crossing the content for a few frames. The ring travels within a
+     * group and jumps between groups, as the card's own outline does.
+     */
+    uint32_t group;
 };
 
 /*
@@ -289,6 +299,18 @@ uint32_t inkcell_focus_hit(const struct inkcell_focus_map *map, int x, int y);
 /* The key a reserved id stands for, or INKCELL_KEY_NONE for an id outside the block. */
 enum inkcell_key inkcell_focus_key_of(uint32_t id);
 enum inkcell_key inkcell_focus_action_key_of(uint32_t id);
+
+/*
+ * Puts the already-registered `id` in `group`. A component drawing several boxes that belong
+ * together - a card's verbs - calls it once per box with an id of its own choosing; the card uses
+ * its first verb's id. 0 takes a box back out, which is where every box starts, and it is what
+ * keeps a list's rows and a strip's chips travelling as they always have. False when `id` was
+ * not registered.
+ */
+bool inkcell_focus_set_group(struct inkcell_focus_map *map, uint32_t id, uint32_t group);
+
+/* The group `id` was put in, and 0 for one never grouped or not registered. */
+uint32_t inkcell_focus_group_of(const struct inkcell_focus_map *map, uint32_t id);
 
 /* The radius `id` was registered with, and 0 for a square one or for an id that is not here.
    What the focus ring asks, and the reason `radius` is on the item at all. */
