@@ -165,8 +165,12 @@ static void focus_ring_aim(struct inkcell_draw_state *state, uint32_t id,
  * box just painted is carried to the next frame instead and declared at
  * inkcell_fb_app_frame_begin(), where it is early enough to matter.
  */
+int inkcell_fb_focus_ring_reach(const struct inkcell_draw_state *state) {
+    return state != NULL ? focus_ring_inset(state) + focus_ring_thickness(state) : 0;
+}
+
 static void focus_ring_painted(struct inkcell_draw_state *state, struct inkcell_focus_rect box) {
-    const int pad = focus_ring_inset(state) + focus_ring_thickness(state);
+    const int pad = inkcell_fb_focus_ring_reach(state);
     const int x = box.x - pad;
     const int y = box.y - pad;
     const int w = box.w + 2 * pad;

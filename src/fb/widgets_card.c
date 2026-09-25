@@ -6,6 +6,7 @@
 
 #include "inkcell/ui/widgets/button.h"
 #include "inkcell/ui/widgets/card.h"
+#include "inkcell/ui/widgets/focus.h"
 #include "inkcell/ui/widgets/meter.h"
 
 #include "inkcell/i18n/strings.h"
@@ -42,7 +43,10 @@ struct inkcell_fb_card_metrics {
     /* The header line: the heading, and the verbs against its far edge. 0 when there is
        neither. */
     int heading_h;
-    int button_h;  /* one action button, 0 when the card has no verbs */
+    int button_h; /* one action button, 0 when the card has no verbs */
+    /* How far the verbs, and the heading beside them, sit in from the top and far edges beyond
+       the card's own inset. 0 when the card has no verbs or its padding already clears them. */
+    int verb_top, verb_right;
     int content_x; /* where a row's text starts */
     int label_w;   /* the label column's width in pixels, measured off the labels in hand */
     size_t cols;   /* content width in cells */
@@ -167,6 +171,30 @@ inkcell_fb_card_measure(const struct inkcell_draw_state *state,
     const int adv = inkcell_fb_char_adv(state, state->scale);
     const int content_w = m.width - 2 * inset;
     m.cols = content_w >= adv ? (size_t)(content_w / adv) : 1U;
+
+    /*
+     * Room for the ring around a focused verb.
+     *
+     * The verbs sit in the card's top corner, and the card's inset was sized for text, which
+     * has nothing drawn around it. A focused verb does: the focus ring is painted *outside* the
+     * button, and on the card holding it the card's own edge is the doubled focus ring too. At
+     * the card's inset those two met with no pixel between them - a pill touching, and at some
+     * scales overlapping, the outline it sits inside.
+     *
+     * So the verbs keep the card's widest edge, the ring's reach and a hairline of air from the
+     * top and far sides, and the heading moves down with them so the two still share a line.
+     * Measured whether or not a verb is focused, because the card's height is a fact about the
+     * card and not about the cursor - see the ring, above. A card with no verbs keeps its inset.
+     */
+    if (m.button_h > 0) {
+        const int clear = 2 * m.edge + inkcell_fb_focus_ring_reach(state) + m.edge;
+        const int top = m.pad_y + m.edge;
+        m.verb_top = clear > top ? clear - top : 0;
+        const int right = m.width - inset - (int)m.cols * adv;
+        const int side = inset + right;
+        m.verb_right = clear > side ? clear - side : 0;
+        m.heading_h += m.verb_top;
+    }
 
     /*
      * The label column is measured from the labels the card is actually holding, rather than
@@ -725,7 +753,8 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_draw_state *state,
      */
     const int content_right = m.content_x + (int)m.cols * inkcell_fb_char_adv(state, state->scale);
     const int gap = inkcell_fb_space(state, INKCELL_SPACE_XS);
-    int actions_x = content_right;
+    int actions_x = content_right - m.verb_right;
+    const int header_y = row_y + m.verb_top;
     if (m.button_h > 0) {
         /*
          * How many of them there is room for, dropped from the *end* rather than from wherever
@@ -753,7 +782,7 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_draw_state *state,
                                                       card->actions[i].label, layout->small);
             actions_x -= width;
             const struct inkcell_fb_button button = {
-                .rect = {.x = actions_x, .y = row_y, .w = width, .h = m.button_h},
+                .rect = {.x = actions_x, .y = header_y, .w = width, .h = m.button_h},
                 .icon = INKCELL_ICON_NONE,
                 .label = card->actions[i].label,
                 .focused = card->actions[i].focused,
@@ -784,7 +813,7 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_draw_state *state,
         if (inkcell_icon_is_valid(card->icon)) {
             /* On the card's own surface, which is what it was just filled with - the icon is
                inside the panel, not on the ground the panel sits on. */
-            inkcell_fb_draw_icon(state, heading_x, row_y, card->icon, layout->small, ink,
+            inkcell_fb_draw_icon(state, heading_x, header_y, card->icon, layout->small, ink,
                                  inkcell_fb_color(state, m.fill));
             /* The same half-cell a button leaves between its symbol and its word. */
             heading_x += inkcell_fb_icon_box(state, layout->small) +
@@ -795,7 +824,7 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_draw_state *state,
         const int heading_adv = inkcell_fb_char_adv(state, layout->small);
         const int heading_w = actions_x - heading_x;
         inkcell_line_fit(&line, heading_w >= heading_adv ? (size_t)(heading_w / heading_adv) : 1U);
-        inkcell_fb_draw_text_weight(state, heading_x, row_y, inkcell_line_text(&line),
+        inkcell_fb_draw_text_weight(state, heading_x, header_y, inkcell_line_text(&line),
                                     layout->small,
                                     inkcell_fb_type_weight(state, INKCELL_TYPE_LABEL), ink,
                                     inkcell_fb_color(state, m.fill));
