@@ -158,6 +158,22 @@ struct inkcell_keyboard {
     uint8_t col;
     uint8_t layer;      /* enum inkcell_kb_layer */
     uint8_t emoji_page; /* which page, while `layer` is INKCELL_KB_EMOJI */
+    /*
+     * Where the next character goes, as the number of bytes *after* it: 0 is the end.
+     *
+     * Counted from the end rather than the start so that zero is the caret every keyboard had
+     * before it could move - a record that was zeroed, reset, or written before this field
+     * existed types on the end exactly as it did. It is also the count a press leaves alone: a
+     * character typed or deleted at the caret changes what is before it and not what is after,
+     * so the caret stays where it was without anybody moving it.
+     *
+     * A byte count on a cell boundary, and taken on trust only that far: the buffer is the
+     * caller's, and a caller that shortened it (a send clears the draft) leaves a count that may
+     * point past the start. Every press reads it through the text it is handed and writes it
+     * back normalised, so a count longer than the text is the end again - and stays the end as
+     * the text grows back - and one inside a cell steps back to its start.
+     */
+    uint16_t caret_back;
 };
 
 /*
@@ -201,8 +217,9 @@ enum inkcell_keyboard_result {
     INKCELL_KEYBOARD_DISMISS,
 };
 
-/* Cursor to the top-left, back to the lower-case layer. What a keyboard being opened wants, and
-   what a keyboard being closed wants, so the next one starts the same way. Touches no text. */
+/* Cursor to the top-left, back to the lower-case layer, and the caret to the end. What a
+   keyboard being opened wants, and what a keyboard being closed wants, so the next one starts
+   the same way. Touches no text. */
 void inkcell_keyboard_reset(struct inkcell_keyboard *kb);
 
 /*
@@ -269,8 +286,9 @@ inkcell_keyboard_layer_dest(const struct inkcell_keyboard *kb,
 void inkcell_keyboard_panel_step(struct inkcell_keyboard *kb,
                                  const struct inkcell_keyboard_layout *layout, int delta);
 
-/* Between lower and upper, from wherever. The shift key, which is a different press from
-   stepping the ring - it is the one layer change a hand makes mid-word. */
+/* Between lower and upper, from wherever: the shift, for an application that has a key to
+   spare for it. inkcell_keyboard_key() gives it none - the triggers move the caret, and R1 from
+   the letters reaches the same one-shot capitals. */
 void inkcell_keyboard_shift(struct inkcell_keyboard *kb);
 
 /*
@@ -295,6 +313,16 @@ enum inkcell_keyboard_result inkcell_keyboard_key(struct inkcell_keyboard *kb,
    appended. Returns true only when the buffer changed. */
 bool inkcell_keyboard_insert_text(const struct inkcell_keyboard_layout *layout, char *text,
                                   size_t size, const char *input);
+
+/* The same, at the caret rather than on the end - what a keyboard whose caret has moved wants
+   a host keyboard's typing to do too, or the letters land somewhere the grid's would not. */
+bool inkcell_keyboard_insert_text_at_caret(struct inkcell_keyboard *kb,
+                                           const struct inkcell_keyboard_layout *layout, char *text,
+                                           size_t size, const char *input);
+
+/* The caret as a byte offset into `text`: the count in `kb` read against the text as it now
+   is, on a cell boundary. What a renderer drawing the caret asks, and what every press uses. */
+size_t inkcell_keyboard_caret(const struct inkcell_keyboard *kb, const char *text);
 
 /*
  * The layout is one this grid can actually show: no more than INKCELL_KB_EMOJI_PAGES_MAX pages,

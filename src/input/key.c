@@ -12,7 +12,7 @@ static const char *const k_key_names[] = {
     [INKCELL_KEY_RIGHT] = "right", [INKCELL_KEY_A] = "a",           [INKCELL_KEY_B] = "b",
     [INKCELL_KEY_X] = "x",         [INKCELL_KEY_Y] = "y",           [INKCELL_KEY_L1] = "l1",
     [INKCELL_KEY_R1] = "r1",       [INKCELL_KEY_L2] = "l2",         [INKCELL_KEY_R2] = "r2",
-    [INKCELL_KEY_START] = "start", [INKCELL_KEY_SELECT] = "select",
+    [INKCELL_KEY_START] = "start", [INKCELL_KEY_SELECT] = "select", [INKCELL_KEY_B_HELD] = "hold-b",
 };
 
 enum inkcell_key inkcell_key_from_name(const char *name) {

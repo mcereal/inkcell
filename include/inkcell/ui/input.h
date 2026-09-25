@@ -108,7 +108,8 @@ void inkcell_input_device_lost(struct inkcell_input *input, int source_fd);
    <PREFIX>_KEY_REPEAT_DELAY_MS=0. Pure, and public so the ramp is testable off-device. */
 unsigned int inkcell_input_repeat_delay_ms(unsigned int repeats);
 
-/* The direction being held, or INKCELL_KEY_NONE when nothing is repeating. */
+/* The direction being held - or B, while its hold is still timing - or INKCELL_KEY_NONE when
+   nothing is. */
 enum inkcell_key inkcell_input_repeat_key(const struct inkcell_input *input);
 
 /* Emits one repeat of the held key and schedules the next. The repeat timer calls this; it is
