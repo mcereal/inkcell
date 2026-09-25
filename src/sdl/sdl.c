@@ -261,14 +261,19 @@ static int inkcell_sdl_points_to_px(float density, int points) {
     return (int)((float)points * density + 0.5f);
 }
 
-/* A mouse position, from the window's points into the frame's pixels. See the mouse section. */
-static void inkcell_sdl_to_frame(const struct inkcell_sdl_panel *panel, int *x, int *y) {
-    const float density = inkcell_sdl_density(panel);
-    if (density == 1.0f) {
-        return;
-    }
-    *x = (int)((float)*x * density);
-    *y = (int)((float)*y * density);
+/*
+ * The renderer's logical size, held at the frame's own pixels.
+ *
+ * Not to scale anything - a re-measuring window's frame *is* its drawable, so the scale is 1 -
+ * but because a logical size is what makes SDL deliver every mouse position in it. Without one,
+ * SDL2 reports a high-DPI window's mouse in points and sdl2-compat (SDL2 over SDL3, which is
+ * what Homebrew installs) reports it in pixels, and no single conversion here is right for
+ * both. With one, both hand over the frame's pixels, which is what the boxes a click is
+ * answered against are measured in.
+ */
+static void inkcell_sdl_hold_logical_size(const struct inkcell_sdl_panel *panel) {
+    SDL_RenderSetLogicalSize(panel->renderer, (int)panel->state.surface.width,
+                             (int)panel->state.surface.height);
 }
 
 /*
@@ -359,9 +364,10 @@ static bool inkcell_sdl_titlebar_sync(struct inkcell_sdl_panel *panel, bool forc
  * strip with no handler for clicks gives nothing up to a tab it could not deliver. The buttons are
  * AppKit's views and answer before this is asked.
  *
- * `point` is in window points and the boxes are in the frame's pixels. A re-measuring window is
- * both at once; a fixed one is scaled, which is what SDL_RenderWindowToLogical() undoes - and
- * before SDL 2.0.18, which has no such call, a fixed window's strip does not drag at all.
+ * `point` is in window points and the boxes are in the frame's pixels: a fixed frame is scaled,
+ * and a high-DPI window has more pixels than points. Either way the renderer has a logical size
+ * in the frame's pixels, which is what SDL_RenderWindowToLogical() undoes - and before SDL
+ * 2.0.18, which has no such call, a strip that cannot be converted does not drag at all.
  */
 static SDL_HitTestResult inkcell_sdl_hit_test(SDL_Window *window, const SDL_Point *point,
                                               void *data) {
@@ -372,11 +378,8 @@ static SDL_HitTestResult inkcell_sdl_hit_test(SDL_Window *window, const SDL_Poin
     }
     int x = point->x;
     int y = point->y;
-    if (!panel->fixed_frame) {
-        inkcell_sdl_to_frame(panel, &x, &y);
-    }
 #if SDL_VERSION_ATLEAST(2, 0, 18)
-    else if (panel->renderer != NULL) {
+    if (panel->renderer != NULL) {
         float lx = 0.0f;
         float ly = 0.0f;
         SDL_RenderWindowToLogical(panel->renderer, point->x, point->y, &lx, &ly);
@@ -384,9 +387,10 @@ static SDL_HitTestResult inkcell_sdl_hit_test(SDL_Window *window, const SDL_Poin
         y = (int)ly;
     }
 #else
-    /* Nothing to undo a fixed frame's scaling with, so the boxes cannot be found under the
-       point. A strip that never drags is the smaller loss than tabs that sometimes do. */
-    if (panel->fixed_frame) {
+    /* Nothing to undo a fixed frame's scaling or a high-DPI window's density with, so the
+       boxes cannot be found under the point. A strip that never drags is the smaller loss than
+       tabs that sometimes do. */
+    if (panel->fixed_frame || inkcell_sdl_density(panel) != 1.0f) {
         return SDL_HITTEST_NORMAL;
     }
 #endif
@@ -490,6 +494,7 @@ static bool inkcell_sdl_resize(struct inkcell_sdl_panel *panel, int width, int h
     state->surface.stride = (uint32_t)stride;
     panel->previous_frame = previous;
     panel->texture = texture;
+    inkcell_sdl_hold_logical_size(panel);
 
     /* Nothing has been drawn at this size, so there is nothing for the damage comparison to be
        a comparison *with*: the next frame goes up whole. `presented` says the same thing to
@@ -821,24 +826,18 @@ static void inkcell_sdl_handle_key(struct inkcell_sdl_panel *panel, const SDL_Ke
 
 /*
  * The coordinates here are already the frame's, under either of the two ways a window can be
- * sized. A re-measuring window is the easy case: the surface *is* the window, so a mouse
- * position needs no translation at all. A fixed one relies on SDL_RenderSetLogicalSize(), which
- * makes the renderer rewrite every mouse event into logical pixels before it is queued, so a
- * window scaled to twice the frame reports a click on a hint where the hint was drawn; a click
- * in the letterbox comes out past the frame's edge and hits nothing, which is what it is.
+ * sized, because both give the renderer a logical size in the frame's pixels and SDL rewrites
+ * every mouse event into it before it is queued. A fixed frame is scaled, so a window at twice
+ * the frame reports a click on a hint where the hint was drawn, and a click in the letterbox
+ * comes out past the frame's edge and hits nothing, which is what it is. A re-measuring window
+ * on a high-DPI display has more pixels than points, and the same rewrite answers that - see
+ * inkcell_sdl_hold_logical_size() for why it is not done by hand here.
  *
  * The map is the backend's copy of the last frame's - the frame the reader was looking at when
  * they clicked, which is the same argument the controller makes for a key.
- *
- * High-DPI is the exception to "no translation": the window reports points and draws pixels,
- * so a re-measuring window on a Retina display reports a click half as far in as the box it
- * landed on. inkcell_sdl_to_frame() multiplies it back out, and is 1 wherever that is not so.
  */
 static void inkcell_sdl_handle_button(struct inkcell_sdl_panel *panel,
-                                      const SDL_MouseButtonEvent *event) {
-    SDL_MouseButtonEvent frame_event = *event;
-    inkcell_sdl_to_frame(panel, &frame_event.x, &frame_event.y);
-    const SDL_MouseButtonEvent *const button = &frame_event;
+                                      const SDL_MouseButtonEvent *button) {
     if (button->button == SDL_BUTTON_X1) {
         /* The thumb button a browser goes back with. Back here is B, on the release so a
            held button is one press. */
@@ -925,11 +924,8 @@ static void inkcell_sdl_handle_motion(struct inkcell_sdl_panel *panel,
     if (panel->arrow == NULL || panel->hand == NULL) {
         return;
     }
-    int x = motion->x;
-    int y = motion->y;
-    inkcell_sdl_to_frame(panel, &x, &y);
-    const bool pointing =
-        inkcell_pointer_over_target(&panel->pointer_map, x, y, panel->on_click != NULL);
+    const bool pointing = inkcell_pointer_over_target(&panel->pointer_map, motion->x, motion->y,
+                                                      panel->on_click != NULL);
     if (pointing != panel->pointing) {
         panel->pointing = pointing;
         SDL_SetCursor(pointing ? panel->hand : panel->arrow);
@@ -1321,6 +1317,9 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
         .bytes_per_pixel = 4U,
         .format = {.bits_per_pixel = 32U},
     };
+    if (!panel->fixed_frame) {
+        inkcell_sdl_hold_logical_size(panel);
+    }
     inkcell_fb_state_apply_theme_from_env(state);
     panel->display_scale = context->display_scale && !panel->fixed_frame && !state->scale_pinned;
     (void)inkcell_sdl_fit_scale(panel);
