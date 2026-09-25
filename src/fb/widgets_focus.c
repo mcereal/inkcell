@@ -165,12 +165,16 @@ static void focus_ring_aim(struct inkcell_draw_state *state, uint32_t id,
  * box just painted is carried to the next frame instead and declared at
  * inkcell_fb_app_frame_begin(), where it is early enough to matter.
  */
+/* Only the inset: inkcell_fb_stroke_round_rect() paints inward from the rectangle it is given,
+   so the ring's thickness lies over the box's own edge rather than further out. */
 int inkcell_fb_focus_ring_reach(const struct inkcell_draw_state *state) {
-    return state != NULL ? focus_ring_inset(state) + focus_ring_thickness(state) : 0;
+    return state != NULL ? focus_ring_inset(state) : 0;
 }
 
 static void focus_ring_painted(struct inkcell_draw_state *state, struct inkcell_focus_rect box) {
-    const int pad = inkcell_fb_focus_ring_reach(state);
+    /* Wider than the reach on purpose: the damage rect only has to cover the paint, and a
+       conservative one costs a few pixels of repaint rather than a trail of outline. */
+    const int pad = focus_ring_inset(state) + focus_ring_thickness(state);
     const int x = box.x - pad;
     const int y = box.y - pad;
     const int w = box.w + 2 * pad;

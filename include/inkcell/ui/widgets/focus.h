@@ -103,8 +103,9 @@ void inkcell_fb_focus_ring_place(struct inkcell_draw_state *state,
                                  const struct inkcell_focus_map *map, uint32_t id);
 
 /*
- * How far past the edge of a box the ring's paint reaches: the gap it leaves, then its own
- * thickness.
+ * How far past the edge of a box the ring's paint reaches. The ring is stroked inward from a
+ * rectangle this far outside the box, so its thickness lies over the box's own edge and only
+ * this much of it is outside.
  *
  * For a component that puts something focusable against an edge of its own. The ring is drawn
  * outside the box it marks, so a button laid flush against a card's border has its ring painted

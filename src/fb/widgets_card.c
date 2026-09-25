@@ -181,17 +181,21 @@ inkcell_fb_card_measure(const struct inkcell_draw_state *state,
      * the card's inset those two met with no pixel between them - a pill touching, and at some
      * scales overlapping, the outline it sits inside.
      *
-     * So the verbs keep the card's widest edge, the ring's reach and a hairline of air from the
+     * So the verbs keep the card's widest edge, the ring's reach and a step of air from the
      * top and far sides, and the heading moves down with them so the two still share a line.
+     * The air is a whole step rather than a hairline because a hairline between two outlines
+     * in the same accent does not read as a gap on a dense panel - it reads as one thick line.
      * Measured whether or not a verb is focused, because the card's height is a fact about the
      * card and not about the cursor - see the ring, above. A card with no verbs keeps its inset.
      */
     if (m.button_h > 0) {
-        const int clear = 2 * m.edge + inkcell_fb_focus_ring_reach(state) + m.edge;
+        const int clear = 2 * m.edge + inkcell_fb_focus_ring_reach(state) +
+                          inkcell_fb_space(state, INKCELL_SPACE_SM);
         const int top = m.pad_y + m.edge;
         m.verb_top = clear > top ? clear - top : 0;
-        const int right = m.width - inset - (int)m.cols * adv;
-        const int side = inset + right;
+        /* From the last whole cell to the card's outer edge: the inset plus whatever part of a
+           cell the width did not divide into. */
+        const int side = m.width - inset - (int)m.cols * adv;
         m.verb_right = clear > side ? clear - side : 0;
         m.heading_h += m.verb_top;
     }
