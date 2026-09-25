@@ -402,21 +402,23 @@ void inkcell_fb_draw_bubble(const struct inkcell_draw_state *state,
      * outer edge alone, which at arm's length on the Brick read as a stray line rather than as
      * "this one".
      *
-     * Outward, unlike a card's, and still costing no layout: a bubble is a step shorter than the
-     * rows it stands in, so the step of ground around it is already its own and the ring only
-     * paints it. Inward it ate that step out of the text instead, and a descender on the last
-     * line ran into it. The accent shape goes first and the fill over it, so the ring follows
-     * the corners rather than squaring them off.
+     * Outward on three sides, which costs no layout: a bubble is a step shorter than the rows it
+     * stands in, so the step of ground beside and below it is already its own and the ring only
+     * paints it. Drawn inward it ate that step out of the text and clipped a descender on the
+     * last line. The top is the exception, and takes the ring out of the fill's own padding
+     * instead: the step *above* a bubble is where the row before it lets its descenders hang -
+     * the last line of the previous message, or this bubble's own separator - and those are
+     * drawn first, so a ring there would paint over them. The accent shape goes first and the
+     * fill over it, so the ring follows the corners rather than squaring them off.
      */
     const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_MD);
     const int top = y - inkcell_step_px(scale);
+    const int ring = bubble->focused ? inkcell_step_px(scale) : 0;
     if (bubble->focused) {
-        const int ring = inkcell_step_px(scale);
-        inkcell_fb_fill_round_rect(state, box_x - ring, top - ring, box_w + 2 * ring,
-                                   box_h + 2 * ring, radius + ring,
-                                   inkcell_fb_color(state, INKCELL_COLOR_PRIMARY));
+        inkcell_fb_fill_round_rect(state, box_x - ring, top, box_w + 2 * ring, box_h + ring,
+                                   radius + ring, inkcell_fb_color(state, INKCELL_COLOR_PRIMARY));
     }
-    inkcell_fb_fill_round_rect(state, box_x, top, box_w, box_h, radius, fill);
+    inkcell_fb_fill_round_rect(state, box_x, top + ring, box_w, box_h - ring, radius, fill);
 
     const int text_x = box_x + pad;
     const struct inkcell_rgb body = paint.ink;
