@@ -39,6 +39,34 @@ INKCELL_TEST_CASE(sdl_backend_is_always_offered, unit) {
     record_success(test_name);
 }
 
+/*
+ * A theme's scale is the panel's, and the panel is two pixels to a desktop point.
+ *
+ * So a Retina display keeps the theme's scale - drawn in points, that is the size every other
+ * window's text is - and a display of one pixel per point halves it. The cases between are the
+ * Windows scaling steps, and the ends are the clamp: nothing may ask below the legibility floor
+ * or above the buffers.
+ */
+INKCELL_TEST_CASE(sdl_display_scale_sizes_the_panel_for_the_desk, unit) {
+    const int theme = INKCELL_SCALE(4);
+    INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 2.0f) != theme,
+                         "a Retina display keeps the theme's scale");
+    INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 1.0f) != INKCELL_SCALE(2),
+                         "one pixel per point halves it");
+    INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 1.5f) != INKCELL_SCALE(3),
+                         "Windows at 150% is three steps");
+    INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 1.25f) !=
+                             INKCELL_SCALE(2) + INKCELL_SCALE(1) / 2,
+                         "and at 125%, two and a half: half steps are what a type role uses");
+    INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 0.5f) != INKCELL_SCALE_MIN,
+                         "nothing goes below the legibility floor");
+    INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 4.0f) != INKCELL_SCALE_MAX,
+                         "nor above what the buffers are sized for");
+    INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 0.0f) != theme,
+                         "a density nobody could measure is the theme's own scale");
+    record_success(test_name);
+}
+
 #ifndef INKCELL_HAVE_SDL
 
 /*
@@ -64,7 +92,9 @@ INKCELL_TEST_CASE(sdl_without_the_library_refuses_rather_than_pretends, unit) {
 
 #include "inkcell/ui/input_codes.h"
 #include "inkcell/ui/stack.h"
+#include "inkwell/base/env.h"
 #include <SDL.h>
+#include <stdio.h>
 
 #define SDL_TEST_WIDTH 64U
 #define SDL_TEST_HEIGHT 32U
@@ -373,6 +403,59 @@ INKCELL_TEST_CASE(sdl_resize_remeasures_and_moves_the_width_class, unit) {
                                  backend->shutdown(state, &context),
                                  "a resize to nothing must stop at the floor, not hand over one");
 
+    backend->shutdown(state, &context);
+    record_success(test_name);
+}
+
+/*
+ * A window that asked to be sized for its display is, and <PREFIX>_FB_SCALE still outranks it.
+ *
+ * The dummy driver is one pixel per point, so the display's scale is half the theme's - which is
+ * also what makes a 640-point window stop being the handheld's compact class.
+ */
+INKCELL_TEST_CASE(sdl_display_scale_follows_the_display_unless_pinned, unit) {
+    setenv("SDL_VIDEODRIVER", "dummy", 0);
+    INKCELL_TEST_FAIL_IF(!inkcell_backend_sdl_is_available(), "the dummy driver must start");
+
+    struct sdl_resize_app app = {0};
+    struct inkcell_fb_app vtable = {.ctx = &app, .render = sdl_resize_render};
+    struct inkcell_backend_sdl_context context = {
+        .app = &vtable,
+        .title = "inkcell tests",
+        .width = SDL_RESIZE_W,
+        .height = SDL_RESIZE_H,
+        .display_scale = true,
+    };
+    const struct inkcell_backend *const backend = inkcell_backend_sdl();
+    const int snapshot = 0;
+
+    void *state = NULL;
+    INKCELL_TEST_FAIL_IF(backend->init(&state, &context) != 0, "the dummy driver must open");
+    const struct inkcell_draw_state *drawn = (const struct inkcell_draw_state *)state;
+    const int theme_scale = inkcell_theme_scale(drawn->theme);
+    INKCELL_TEST_FAIL_IF_CLEANUP(drawn->scale != inkcell_sdl_display_scale(theme_scale, 1.0f),
+                                 backend->shutdown(state, &context),
+                                 "one pixel per point draws at the display's scale");
+    INKCELL_TEST_FAIL_IF_CLEANUP(!drawn->scale_pinned, backend->shutdown(state, &context),
+                                 "and holds it across a theme switch");
+    backend->present(state, &snapshot, &context);
+    INKCELL_TEST_FAIL_IF_CLEANUP(app.class == INKCELL_WIDTH_COMPACT,
+                                 backend->shutdown(state, &context),
+                                 "640 points at a desktop's text size is room beside the content");
+    backend->shutdown(state, &context);
+
+    char knob[64];
+    snprintf(knob, sizeof knob, "%s_FB_SCALE",
+             inkwell_env_prefix() != NULL ? inkwell_env_prefix() : "INKCELL");
+    setenv(knob, "4", 1);
+    state = NULL;
+    const int opened = backend->init(&state, &context);
+    unsetenv(knob);
+    INKCELL_TEST_FAIL_IF(opened != 0, "the dummy driver must open");
+    drawn = (const struct inkcell_draw_state *)state;
+    INKCELL_TEST_FAIL_IF_CLEANUP(drawn->scale != INKCELL_SCALE(4),
+                                 backend->shutdown(state, &context),
+                                 "a scale named in the environment outranks the display's");
     backend->shutdown(state, &context);
     record_success(test_name);
 }

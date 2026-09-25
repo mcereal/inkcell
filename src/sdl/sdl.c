@@ -24,6 +24,23 @@
 
 #include <errno.h>
 
+/* Built with or without SDL: it is arithmetic, and a test of it should not need a window. */
+int inkcell_sdl_display_scale(int theme_scale, float density) {
+    if (!(density > 0.0f)) {
+        return theme_scale;
+    }
+    /* Half steps, rounded to the nearest: the panel's two pixels to the desktop's point. */
+    const int half = INKCELL_SCALE_UNIT / 2;
+    const float wanted = (float)theme_scale * density / 2.0f;
+    int scale = (int)(wanted / (float)half + 0.5f) * half;
+    if (scale < INKCELL_SCALE_MIN) {
+        scale = INKCELL_SCALE_MIN;
+    } else if (scale > INKCELL_SCALE_MAX) {
+        scale = INKCELL_SCALE_MAX;
+    }
+    return scale;
+}
+
 #ifndef INKCELL_HAVE_SDL
 
 /*
@@ -199,10 +216,82 @@ struct inkcell_sdl_panel {
        smaller. Held rather than recomputed so the window and the clamp cannot disagree. */
     int min_width;
     int min_height;
+    /*
+     * Whether the body scale follows the display - see `display_scale` on the context. False
+     * when the context did not ask, when <PREFIX>_FB_SCALE named one, and under a fixed frame.
+     */
+    bool display_scale;
 };
 
 static struct inkcell_sdl_panel *inkcell_sdl_panel_of(void *state_ptr) {
     return (struct inkcell_sdl_panel *)state_ptr;
+}
+
+/* ---- points and pixels ----------------------------------------------------------------- */
+
+/*
+ * Pixels per window point, on the display the window is on now.
+ *
+ * The window is opened high-DPI, so on a Retina Mac - and on Windows, under
+ * SDL_HINT_WINDOWS_DPI_SCALING - its size, its minimum and every mouse position are in points
+ * while the renderer draws in pixels, two to the point or whatever the display says. Asked of
+ * SDL each time rather than held, because it changes when the window is dragged to another
+ * display and nothing here has to be told.
+ *
+ * A fixed frame is 1: SDL's logical size maps both the drawing and the mouse into the frame's
+ * own pixels already, and scaling them again here would do it twice.
+ */
+static float inkcell_sdl_density(const struct inkcell_sdl_panel *panel) {
+    if (panel->fixed_frame || panel->window == NULL || panel->renderer == NULL) {
+        return 1.0f;
+    }
+    int window_w = 0;
+    int window_h = 0;
+    int output_w = 0;
+    int output_h = 0;
+    SDL_GetWindowSize(panel->window, &window_w, &window_h);
+    if (window_w <= 0 || SDL_GetRendererOutputSize(panel->renderer, &output_w, &output_h) != 0 ||
+        output_w <= 0) {
+        return 1.0f;
+    }
+    return (float)output_w / (float)window_w;
+}
+
+static int inkcell_sdl_points_to_px(float density, int points) {
+    return (int)((float)points * density + 0.5f);
+}
+
+/* A mouse position, from the window's points into the frame's pixels. See the mouse section. */
+static void inkcell_sdl_to_frame(const struct inkcell_sdl_panel *panel, int *x, int *y) {
+    const float density = inkcell_sdl_density(panel);
+    if (density == 1.0f) {
+        return;
+    }
+    *x = (int)((float)*x * density);
+    *y = (int)((float)*y * density);
+}
+
+/*
+ * The body scale brought into line with the display, where the context asked for that. Answers
+ * whether it changed - which is a frame laid out for a scale this state no longer has, so the
+ * caller drops the application's caches and asks for another.
+ *
+ * Pinned once chosen, the same flag <PREFIX>_FB_SCALE sets: a theme switch should keep the
+ * size this display wants rather than swap in the panel's.
+ */
+static bool inkcell_sdl_fit_scale(struct inkcell_sdl_panel *panel) {
+    struct inkcell_draw_state *const state = &panel->state;
+    if (!panel->display_scale) {
+        return false;
+    }
+    const int scale =
+        inkcell_sdl_display_scale(inkcell_theme_scale(state->theme), inkcell_sdl_density(panel));
+    state->scale_pinned = true;
+    if (scale == state->scale) {
+        return false;
+    }
+    inkcell_fb_state_set_theme(state, state->theme, scale);
+    return true;
 }
 
 /*
@@ -283,8 +372,11 @@ static SDL_HitTestResult inkcell_sdl_hit_test(SDL_Window *window, const SDL_Poin
     }
     int x = point->x;
     int y = point->y;
+    if (!panel->fixed_frame) {
+        inkcell_sdl_to_frame(panel, &x, &y);
+    }
 #if SDL_VERSION_ATLEAST(2, 0, 18)
-    if (panel->renderer != NULL) {
+    else if (panel->renderer != NULL) {
         float lx = 0.0f;
         float ly = 0.0f;
         SDL_RenderWindowToLogical(panel->renderer, point->x, point->y, &lx, &ly);
@@ -355,12 +447,17 @@ static bool inkcell_sdl_resize(struct inkcell_sdl_panel *panel, int width, int h
     if (panel->fixed_frame || panel->renderer == NULL) {
         return false;
     }
+    /* The event is in points and so is the floor; the surface is in pixels. Converted after
+       the clamp, so the floor is the same size on every display. */
     if (width < panel->min_width) {
         width = panel->min_width;
     }
     if (height < panel->min_height) {
         height = panel->min_height;
     }
+    const float density = inkcell_sdl_density(panel);
+    width = inkcell_sdl_points_to_px(density, width);
+    height = inkcell_sdl_points_to_px(density, height);
     if ((uint32_t)width == state->surface.width && (uint32_t)height == state->surface.height) {
         return false;
     }
@@ -399,6 +496,10 @@ static bool inkcell_sdl_resize(struct inkcell_sdl_panel *panel, int width, int h
        frame(), which would otherwise hand out a buffer of zeroes as a picture. */
     panel->frame_valid = false;
     panel->presented = false;
+    /* A new size in pixels for the same size in points is a move to a display of another
+       density, and that display wants its own scale. Before the caches go, so the frame
+       requested below is laid out at it. */
+    (void)inkcell_sdl_fit_scale(panel);
     /*
      * And whatever the application memoised against the old geometry.
      *
@@ -728,9 +829,16 @@ static void inkcell_sdl_handle_key(struct inkcell_sdl_panel *panel, const SDL_Ke
  *
  * The map is the backend's copy of the last frame's - the frame the reader was looking at when
  * they clicked, which is the same argument the controller makes for a key.
+ *
+ * High-DPI is the exception to "no translation": the window reports points and draws pixels,
+ * so a re-measuring window on a Retina display reports a click half as far in as the box it
+ * landed on. inkcell_sdl_to_frame() multiplies it back out, and is 1 wherever that is not so.
  */
 static void inkcell_sdl_handle_button(struct inkcell_sdl_panel *panel,
-                                      const SDL_MouseButtonEvent *button) {
+                                      const SDL_MouseButtonEvent *event) {
+    SDL_MouseButtonEvent frame_event = *event;
+    inkcell_sdl_to_frame(panel, &frame_event.x, &frame_event.y);
+    const SDL_MouseButtonEvent *const button = &frame_event;
     if (button->button == SDL_BUTTON_X1) {
         /* The thumb button a browser goes back with. Back here is B, on the release so a
            held button is one press. */
@@ -817,8 +925,11 @@ static void inkcell_sdl_handle_motion(struct inkcell_sdl_panel *panel,
     if (panel->arrow == NULL || panel->hand == NULL) {
         return;
     }
-    const bool pointing = inkcell_pointer_over_target(&panel->pointer_map, motion->x, motion->y,
-                                                      panel->on_click != NULL);
+    int x = motion->x;
+    int y = motion->y;
+    inkcell_sdl_to_frame(panel, &x, &y);
+    const bool pointing =
+        inkcell_pointer_over_target(&panel->pointer_map, x, y, panel->on_click != NULL);
     if (pointing != panel->pointing) {
         panel->pointing = pointing;
         SDL_SetCursor(pointing ? panel->hand : panel->arrow);
@@ -872,8 +983,21 @@ static int inkcell_sdl_pump(int fd, uint32_t events, void *userdata) {
              * render - which matters, because a repaint that had to ask the application for a
              * frame would be a repaint that could not happen between two snapshots.
              */
-            if (event.window.event == SDL_WINDOWEVENT_EXPOSED ||
-                event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+            /*
+             * A move to another display is a size change in pixels even where it is none in
+             * points, and SDL does not promise a SIZE_CHANGED for it - so it is taken as one,
+             * at the size the window already has.
+             */
+            bool size_changed = event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED;
+            int new_w = event.window.data1;
+            int new_h = event.window.data2;
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+            if (event.window.event == SDL_WINDOWEVENT_DISPLAY_CHANGED) {
+                size_changed = true;
+                SDL_GetWindowSize(panel->window, &new_w, &new_h);
+            }
+#endif
+            if (event.window.event == SDL_WINDOWEVENT_EXPOSED || size_changed) {
                 /*
                  * A re-measuring window takes the new geometry here, which leaves a gap of at
                  * most one frame where the application has a `request_frame` and until the next
@@ -891,9 +1015,7 @@ static int inkcell_sdl_pump(int fd, uint32_t events, void *userdata) {
                  * frames for one drag - and a drag is a great many events. The reasons are
                  * collected and the ask is made once.
                  */
-                const bool remeasured =
-                    event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED &&
-                    inkcell_sdl_resize(panel, event.window.data1, event.window.data2);
+                const bool remeasured = size_changed && inkcell_sdl_resize(panel, new_w, new_h);
                 bool owed = remeasured;
 #if defined(__APPLE__)
                 /*
@@ -907,8 +1029,7 @@ static int inkcell_sdl_pump(int fd, uint32_t events, void *userdata) {
                  * when the theme and the strip height are unchanged, so nothing else would have
                  * recomputed the inset and the tabs would draw under the buttons.
                  */
-                if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED &&
-                    inkcell_sdl_titlebar_sync(panel, true)) {
+                if (size_changed && inkcell_sdl_titlebar_sync(panel, true)) {
                     owed = true;
                 }
 #endif
@@ -1022,10 +1143,25 @@ static void inkcell_sdl_resolve_size(const struct inkcell_backend_sdl_context *c
     *height = INKCELL_SDL_DEFAULT_HEIGHT;
 }
 
+/*
+ * Windows, told to behave like a Mac: DPI-aware, with window sizes and mouse positions in
+ * points and the renderer drawing in pixels - which is the arrangement everything in this file
+ * is written against. Without it Windows scales an unaware window's pixels up itself, which is
+ * the blur and the oversized frame the high-DPI window exists to avoid. Read when the video
+ * subsystem starts, so it is set before either place that starts it; a no-op on every other
+ * platform and on an SDL older than the hint.
+ */
+static void inkcell_sdl_hint_dpi(void) {
+#ifdef SDL_HINT_WINDOWS_DPI_SCALING
+    SDL_SetHint(SDL_HINT_WINDOWS_DPI_SCALING, "1");
+#endif
+}
+
 bool inkcell_backend_sdl_is_available(void) {
     if (SDL_WasInit(SDL_INIT_VIDEO) != 0U) {
         return true;
     }
+    inkcell_sdl_hint_dpi();
     /* The subsystem calls rather than SDL_VideoInit()/SDL_VideoQuit(): those bypass the
        reference count, so a probe made while the host had video up would take it down. */
     if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0) {
@@ -1057,6 +1193,7 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
      * calls are reference counted by SDL, so starting video here and stopping it in shutdown()
      * leaves whatever the host started exactly as it was.
      */
+    inkcell_sdl_hint_dpi();
     if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0) {
         inkwell_log_warn("ui", "SDL_InitSubSystem(VIDEO) failed: %s", SDL_GetError());
         return -ENODEV;
@@ -1068,7 +1205,7 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
 
     panel->window = SDL_CreateWindow(context->title != NULL ? context->title : "inkcell",
                                      SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, (int)width,
-                                     (int)height, SDL_WINDOW_RESIZABLE);
+                                     (int)height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
     if (panel->window == NULL) {
         inkwell_log_warn("ui", "SDL_CreateWindow failed: %s", SDL_GetError());
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
@@ -1130,6 +1267,18 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
            edge instead of the frame quietly disagreeing with the window about its own size. */
         SDL_SetWindowMinimumSize(panel->window, panel->min_width, panel->min_height);
     }
+    /*
+     * The frame in pixels, where everything above was in points.
+     *
+     * The window is high-DPI, so on a Retina display a 1024-point window is 2048 pixels across
+     * and the frame is drawn at that - sharp, rather than drawn at half and doubled by the
+     * compositor, which was both the blur and the reason every glyph came out twice the size of
+     * every other window's. A fixed frame stays the size it was asked for and lets the logical
+     * size scale it, since it is a picture of a panel that has no second density.
+     */
+    const float density = inkcell_sdl_density(panel);
+    width = (uint32_t)inkcell_sdl_points_to_px(density, (int)width);
+    height = (uint32_t)inkcell_sdl_points_to_px(density, (int)height);
 
     /*
      * ARGB8888 because that is what the rasteriser already produces: with no channel offsets
@@ -1173,6 +1322,8 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
         .format = {.bits_per_pixel = 32U},
     };
     inkcell_fb_state_apply_theme_from_env(state);
+    panel->display_scale = context->display_scale && !panel->fixed_frame && !state->scale_pinned;
+    (void)inkcell_sdl_fit_scale(panel);
     inkcell_fb_set_app(state, context->app);
     state->pointer = true;
 
@@ -1202,7 +1353,8 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
     }
     if (panel->unified_titlebar) {
         /* Half the panel is where the buttons start to crowd the first tab off the strip. */
-        SDL_SetWindowMinimumSize(panel->window, (int)width / 2, (int)height / 2);
+        SDL_SetWindowMinimumSize(panel->window, (int)((float)width / density) / 2,
+                                 (int)((float)height / density) / 2);
         if (SDL_SetWindowHitTest(panel->window, inkcell_sdl_hit_test, panel) != 0) {
             inkwell_log_warn("ui", "SDL_SetWindowHitTest failed: %s", SDL_GetError());
         }
@@ -1213,8 +1365,12 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
 
     SDL_RendererInfo info;
     const bool named = SDL_GetRendererInfo(panel->renderer, &info) == 0;
-    inkwell_log_info("ui", "SDL UI backend active (%ux%u, renderer %s, theme %s at scale %d)",
-                     width, height, named ? info.name : "unknown", state->theme->id, state->scale);
+    inkwell_log_info("ui",
+                     "SDL UI backend active (%ux%u px at %.2f px/pt, renderer %s, theme %s at "
+                     "scale %d%s)",
+                     width, height, (double)density, named ? info.name : "unknown",
+                     state->theme->id, state->scale,
+                     panel->display_scale ? ", sized for the display" : "");
 
     if (state_out != NULL) {
         *state_out = panel;
