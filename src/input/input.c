@@ -129,10 +129,20 @@ static void inkcell_input_load_quit_keys(void) {
 #define INKCELL_INPUT_REPEAT_MS 90U        /* then a row this often */
 #define INKCELL_INPUT_REPEAT_RAMP 8U       /* rows before the interval halves */
 #define INKCELL_INPUT_REPEAT_MIN_MS 25U    /* never faster than this, whatever the knobs say */
+/*
+ * And B, which does not repeat but does *hold*: kept down this long, it sends
+ * INKCELL_KEY_B_HELD once. Longer than the repeat's delay, because the press has already gone
+ * back a step and the hold is a second, larger ask - a thumb resting on B while reading must
+ * not unwind a whole stack. The same timer as the repeat, since a hold and a repeat are never
+ * both in progress: every press ends whatever was held.
+ */
+#define INKCELL_INPUT_HOLD_MS 600U
 
 static unsigned int s_repeat_delay_ms;
 static unsigned int s_repeat_interval_ms;
 static bool s_repeat_loaded;
+static unsigned int s_hold_ms;
+static bool s_hold_loaded;
 
 static void inkcell_input_load_key_repeat(void) {
     if (s_repeat_loaded) {
@@ -151,6 +161,7 @@ void inkcell_input_reload_key_repeat(void) {
     s_repeat_loaded = false;
     s_repeat_delay_ms = 0U;
     s_repeat_interval_ms = 0U;
+    s_hold_loaded = false;
     inkcell_input_load_key_repeat();
 }
 
@@ -178,6 +189,20 @@ unsigned int inkcell_input_repeat_delay_ms(unsigned int repeats) {
     return fast;
 }
 
+/* <PREFIX>_KEY_HOLD_MS, beside the repeat's knobs; 0 turns the hold off. */
+static unsigned int inkcell_input_hold_ms(void) {
+    if (!s_hold_loaded) {
+        s_hold_loaded = true;
+        s_hold_ms = (unsigned int)inkwell_env_int("KEY_HOLD_MS", 0, 5000, INKCELL_INPUT_HOLD_MS);
+    }
+    return s_hold_ms;
+}
+
+/* The one face button a hold means something on. */
+static bool inkcell_input_key_holds(enum inkcell_key key) {
+    return key == INKCELL_KEY_B;
+}
+
 static bool inkcell_input_key_repeats(enum inkcell_key key) {
     return key == INKCELL_KEY_UP || key == INKCELL_KEY_DOWN || key == INKCELL_KEY_LEFT ||
            key == INKCELL_KEY_RIGHT;
@@ -198,9 +223,12 @@ static void inkcell_input_repeat_schedule(struct inkcell_input *input) {
         return;
     }
 
-    const unsigned int ms = input->repeat_key == INKCELL_KEY_NONE
-                                ? 0U
-                                : inkcell_input_repeat_delay_ms(input->repeat_count);
+    unsigned int ms = 0U;
+    if (inkcell_input_key_holds(input->repeat_key)) {
+        ms = input->repeat_count == 0U ? inkcell_input_hold_ms() : 0U;
+    } else if (input->repeat_key != INKCELL_KEY_NONE) {
+        ms = inkcell_input_repeat_delay_ms(input->repeat_count);
+    }
 
     const int armed = inkwell_timer_arm_once(input->repeat_timer_fd, ms);
     if (armed < 0) {
@@ -225,6 +253,20 @@ static void inkcell_input_repeat_cancel(struct inkcell_input *input) {
    from scrolling forever, and makes "press A" a definite stop rather than a maybe. */
 static void inkcell_input_repeat_start(struct inkcell_input *input, enum inkcell_key key,
                                        uint16_t type, uint16_t code, int source_fd) {
+    if (inkcell_input_key_holds(key) && inkcell_input_hold_ms() > 0U) {
+        /* A keyboard's own autorepeat of the same key is the same hold, not a new one:
+           restarting the clock on each would mean a held Escape never reached it. */
+        if (inkcell_input_repeat_owns(input, type, code)) {
+            return;
+        }
+        input->repeat_key = key;
+        input->repeat_type = type;
+        input->repeat_code = code;
+        input->repeat_source_fd = source_fd;
+        input->repeat_count = 0U;
+        inkcell_input_repeat_schedule(input);
+        return;
+    }
     if (!inkcell_input_key_repeats(key) || inkcell_input_repeat_delay_ms(0U) == 0U) {
         inkcell_input_repeat_cancel(input);
         return;
@@ -253,6 +295,15 @@ void inkcell_input_repeat_tick(struct inkcell_input *input) {
         return;
     }
 
+    if (inkcell_input_key_holds(input->repeat_key)) {
+        /* Once per hold: the hold is over as far as the timer is concerned, and the release
+           that follows ends nothing. Cancelled before the handler runs, for the reason below. */
+        inkcell_input_repeat_cancel(input);
+        if (input->on_key != NULL) {
+            input->on_key(input->key_userdata, INKCELL_KEY_B_HELD);
+        }
+        return;
+    }
     const enum inkcell_key key = input->repeat_key;
     if (input->repeat_count < UINT_MAX) {
         input->repeat_count++;

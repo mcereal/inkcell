@@ -39,6 +39,16 @@ enum inkcell_key {
     INKCELL_KEY_R2,
     INKCELL_KEY_START,
     INKCELL_KEY_SELECT,
+    /*
+     * B, still down after the press it made. Not a cap - a second thing the same cap says, and
+     * the one gesture here that is about time rather than about which button: the press has
+     * already gone back one step, and a thumb still on it is asking to go all the way.
+     *
+     * Its own key rather than a flag on B because a screen that has no answer to it must be
+     * able to ignore it without also ignoring B. Sent once per hold, and only by the evdev
+     * reader - see inkcell_input_handle_device_event().
+     */
+    INKCELL_KEY_B_HELD,
 };
 
 /*
