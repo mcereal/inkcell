@@ -547,7 +547,7 @@ static void sdl_push_key(SDL_Scancode scancode, SDL_Keycode symbol, SDL_Keymod m
     event.key.type = SDL_KEYDOWN;
     event.key.keysym.scancode = scancode;
     event.key.keysym.sym = symbol;
-    event.key.keysym.mod = modifiers;
+    event.key.keysym.mod = (Uint16)modifiers;
     event.key.repeat = repeat;
     SDL_PushEvent(&event);
 }
