@@ -220,6 +220,19 @@ INKCELL_TEST_CASE(button_cap_never_returns_null, unit) {
 }
 
 /*
+ * The four-way cap: printed, since it names a real press, and standing for no key a click could
+ * make - so a pointer's bar draws it as words and registers nothing to click.
+ */
+INKCELL_TEST_CASE(dpad_cap_is_printed_and_never_clicked, unit) {
+    INKCELL_TEST_FAIL_IF(inkcell_button_cap(INKCELL_BUTTON_DPAD)[0] == '\0',
+                         "the four-way cap is printed beside the verb it names");
+    enum inkcell_key keys[2] = {INKCELL_KEY_NONE, INKCELL_KEY_NONE};
+    INKCELL_TEST_FAIL_IF(inkcell_button_keys(INKCELL_BUTTON_DPAD, keys) != 0U,
+                         "no one click can stand for four directions");
+    record_success(test_name);
+}
+
+/*
  * The clipped frame, which is the case inkcell_fb_animation_damage() exists for and the one
  * nothing else in this tree exercises: no code here sets `clip_active`, so the band is a
  * contract with whatever application does.

@@ -73,6 +73,18 @@ enum inkcell_button {
     INKCELL_BUTTON_UP_DOWN,
     INKCELL_BUTTON_LEFT_RIGHT,
     /*
+     * All four directions at once, for a screen where the d-pad is one gesture rather than a
+     * cursor on one axis and something else on the other - panning a map is the case. Named as
+     * either pair it undersold the press: "up/down pan" over a view that also pans sideways sent
+     * a reader looking for the other half.
+     *
+     * No keys, the quit key's answer, because there is no one press to stand for: a click on
+     * the hint could only pick a direction arbitrarily. It is still drawn for a pointer, unlike
+     * the up/down pair: a wheel stands in for that pair and for nothing sideways, so the hint
+     * is what tells a window's reader the arrow keys pan. It just is not a click target.
+     */
+    INKCELL_BUTTON_DPAD,
+    /*
      * Whatever leaves the pak. Its cap is the one that is not a constant: MENU by default, and
      * a bare key code when <PREFIX>_QUIT_KEYS has rebound it to something whose name we do
      * not know. inkcell_input_quit_cap() answers.
@@ -95,7 +107,8 @@ const char *inkcell_button_cap(enum inkcell_button button);
 /*
  * The keys a cap stands for, in the order it is printed: one for a face button, two for a pair -
  * "L/R" is L1 then R1, the arrow pair is up then down - and none for QUIT, which is a way out
- * rather than a press the application hears. Returns how many were written into `keys`.
+ * rather than a press the application hears, or for DPAD, whose four directions no one click
+ * could choose between. Returns how many were written into `keys`.
  *
  * What a pointer needs to turn a click on a hint into a press. A pair's pill is split down the
  * middle for it, which is where the eye already divides it: the half under "L" is L1.

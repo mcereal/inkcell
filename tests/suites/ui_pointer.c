@@ -397,3 +397,38 @@ INKCELL_TEST_CASE(pointer_keeps_back_in_the_bar_when_no_arrow_was_drawn, unit) {
     inkcell_capture_close(capture);
     record_success(test_name);
 }
+
+/*
+ * The four-way hint stays in a pointer's bar - a wheel is up and down and nothing sideways, so
+ * leaving it out would leave a window's reader with no word that the arrow keys pan - and it
+ * registers no target, because no one click could choose between its four directions.
+ */
+INKCELL_TEST_CASE(pointer_draws_the_d_pad_hint_without_a_target, unit) {
+    struct inkcell_capture *capture = NULL;
+    INKCELL_TEST_FAIL_IF(inkcell_capture_open(&capture, INKCELL_CAPTURE_WIDTH,
+                                              INKCELL_CAPTURE_HEIGHT, INKCELL_SCALE(2)) < 0,
+                         "the capture should open");
+    struct inkcell_draw_state *const state = inkcell_capture_state(capture);
+    state->pointer = true;
+    struct inkcell_focus_item storage[POINTER_STORAGE];
+    struct inkcell_focus_map map;
+    inkcell_focus_begin(&map, storage, POINTER_STORAGE);
+    inkcell_fb_set_focus_map(state, &map);
+
+    const struct inkcell_button_action items[] = {
+        {.button = INKCELL_BUTTON_A, .label = INKCELL_STR_KEY_DELETE},
+        {.button = INKCELL_BUTTON_DPAD, .label = INKCELL_STR_KEY_SPACE},
+    };
+    const struct inkcell_fb_action_bar bar = {.items = items, .count = 2U, .status = NULL};
+    const struct inkcell_fb_layout layout = inkcell_fb_layout_begin(state, true, true);
+    inkcell_fb_draw_action_bar(state, &layout, &bar);
+
+    INKCELL_TEST_FAIL_IF_CLEANUP(map.count != 1U, inkcell_capture_close(capture),
+                                 "A is a target and the four-way hint is not");
+    struct inkcell_focus_rect a;
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        !inkcell_focus_rect_of(&map, INKCELL_FOCUS_ACTION_KEY(INKCELL_KEY_A), &a),
+        inkcell_capture_close(capture), "the face button's verb is still clickable");
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
