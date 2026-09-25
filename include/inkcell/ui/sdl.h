@@ -147,6 +147,11 @@ struct inkcell_backend_sdl_context {
      * out again when the window moves to a display of another density. <PREFIX>_FB_SCALE still
      * wins, and a fixed frame (<PREFIX>_SDL_FIXED) is a picture of the panel and keeps the
      * panel's scale. Off, the theme's scale is used as it stands.
+     *
+     * On Windows the window is only drawn at the display's density when SDL video is started
+     * under SDL_HINT_WINDOWS_DPI_SCALING, which this backend sets before it starts video. A
+     * host that starts video itself should set it first; otherwise the host's DPI mode stands
+     * and only the scale follows the display, from its DPI.
      */
     bool display_scale;
     void (*request_frame)(void *userdata);

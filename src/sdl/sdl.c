@@ -277,6 +277,34 @@ static void inkcell_sdl_hold_logical_size(const struct inkcell_sdl_panel *panel)
 }
 
 /*
+ * The density the body scale is chosen for, which is the window's except in one case.
+ *
+ * On Windows the window only has points and pixels that differ when SDL was started under
+ * SDL_HINT_WINDOWS_DPI_SCALING, and SDL reads that once, when video starts. A host that
+ * started video before this backend did (see inkcell_sdl_hint_dpi()) may have left the process
+ * DPI-aware in pixels, and then a 150% display measures one pixel per point here and the text
+ * would be sized for 100%. The display's DPI is the scaling Windows was set to - 96 per 100% -
+ * so it is asked instead. Where the process is not DPI-aware at all that DPI is virtualised to
+ * 96 and the answer is 1 again, which is right: Windows scales that window up itself.
+ *
+ * Only on Windows. On a Mac or under X11, SDL_GetDisplayDPI() is the panel's physical density,
+ * which is not a scaling anybody chose.
+ */
+static float inkcell_sdl_scale_density(const struct inkcell_sdl_panel *panel) {
+    const float density = inkcell_sdl_density(panel);
+#if defined(_WIN32)
+    if (density == 1.0f && !panel->fixed_frame && panel->window != NULL) {
+        const int display = SDL_GetWindowDisplayIndex(panel->window);
+        float dpi = 0.0f;
+        if (display >= 0 && SDL_GetDisplayDPI(display, NULL, &dpi, NULL) == 0 && dpi > 0.0f) {
+            return dpi / 96.0f;
+        }
+    }
+#endif
+    return density;
+}
+
+/*
  * The body scale brought into line with the display, where the context asked for that. Answers
  * whether it changed - which is a frame laid out for a scale this state no longer has, so the
  * caller drops the application's caches and asks for another.
@@ -289,8 +317,8 @@ static bool inkcell_sdl_fit_scale(struct inkcell_sdl_panel *panel) {
     if (!panel->display_scale) {
         return false;
     }
-    const int scale =
-        inkcell_sdl_display_scale(inkcell_theme_scale(state->theme), inkcell_sdl_density(panel));
+    const int scale = inkcell_sdl_display_scale(inkcell_theme_scale(state->theme),
+                                                inkcell_sdl_scale_density(panel));
     state->scale_pinned = true;
     if (scale == state->scale) {
         return false;
@@ -1013,6 +1041,15 @@ static int inkcell_sdl_pump(int fd, uint32_t events, void *userdata) {
                  */
                 const bool remeasured = size_changed && inkcell_sdl_resize(panel, new_w, new_h);
                 bool owed = remeasured;
+                /* A move to another display whose pixels did not change - Windows, DPI-aware in
+                   pixels, between two scalings - is still a different scale. The resize refits
+                   it when it reallocates; this is the move that did not. */
+                if (size_changed && !remeasured && inkcell_sdl_fit_scale(panel)) {
+                    inkcell_fb_app_drop_caches(&panel->state);
+                    panel->pointer_map.count = 0U;
+                    panel->pointer_map.dropped = 0U;
+                    owed = true;
+                }
 #if defined(__APPLE__)
                 /*
                  * The buttons do not scale with the frame, so a resize changes how far in the
@@ -1190,6 +1227,14 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
      * leaves whatever the host started exactly as it was.
      */
     inkcell_sdl_hint_dpi();
+#if defined(_WIN32)
+    if (SDL_WasInit(SDL_INIT_VIDEO) != 0U) {
+        /* Too late for the hint to take: the host's DPI mode stands, and the scale falls back
+           to the display's DPI - see inkcell_sdl_scale_density(). Said, because a blurry
+           window with nothing in the log is a long afternoon. */
+        inkwell_log_info("ui", "SDL video was already started; the host's DPI mode is kept");
+    }
+#endif
     if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0) {
         inkwell_log_warn("ui", "SDL_InitSubSystem(VIDEO) failed: %s", SDL_GetError());
         return -ENODEV;
