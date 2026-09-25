@@ -103,6 +103,19 @@ void inkcell_fb_focus_ring_place(struct inkcell_draw_state *state,
                                  const struct inkcell_focus_map *map, uint32_t id);
 
 /*
+ * How far past the edge of a box the ring's paint reaches. The ring is stroked inward from a
+ * rectangle this far outside the box, so its thickness lies over the box's own edge and only
+ * this much of it is outside.
+ *
+ * For a component that puts something focusable against an edge of its own. The ring is drawn
+ * outside the box it marks, so a button laid flush against a card's border has its ring painted
+ * *on* that border - two outlines in the accent with nothing between them, which reads as one
+ * thick smudge rather than as a button inside a card. Asking this, rather than assuming a
+ * hairline or two, is what keeps such a component right when the ring's geometry changes.
+ */
+int inkcell_fb_focus_ring_reach(const struct inkcell_draw_state *state);
+
+/*
  * Where the ring is at this instant, mid-travel included, and how round it is there.
  *
  * False when no ring is up. `rect` and `radius` may each be NULL.
