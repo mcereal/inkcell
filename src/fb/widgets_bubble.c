@@ -397,22 +397,28 @@ void inkcell_fb_draw_bubble(const struct inkcell_draw_state *state,
      * corners off read as a conversation. It is the panel shape, so how round belongs to the
      * theme along with everything else about it.
      *
-     * The cursor also gets a bar down its outer edge - on a small panel a fill one step lighter
-     * is not by itself enough to find, and a colour-blind eye gets nothing from it at all - and
-     * it is laid as the card's edge is: the accent shape first, the fill over it a scale
-     * narrower on the outer side only, so the bar follows the corner rather than squaring it
-     * off. The three edges the two shapes share leave no accent showing on them.
+     * The cursor also gets a ring - on a small panel a fill one step lighter is not by itself
+     * enough to find, and a colour-blind eye gets nothing from it at all. It was a bar down the
+     * outer edge alone, which at arm's length on the Brick read as a stray line rather than as
+     * "this one".
+     *
+     * Outward on three sides, which costs no layout: a bubble is a step shorter than the rows it
+     * stands in, so the step of ground beside and below it is already its own and the ring only
+     * paints it. Drawn inward it ate that step out of the text and clipped a descender on the
+     * last line. The top is the exception, and takes the ring out of the fill's own padding
+     * instead: the step *above* a bubble is where the row before it lets its descenders hang -
+     * the last line of the previous message, or this bubble's own separator - and those are
+     * drawn first, so a ring there would paint over them. The accent shape goes first and the
+     * fill over it, so the ring follows the corners rather than squaring them off.
      */
     const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_MD);
+    const int top = y - inkcell_step_px(scale);
+    const int ring = bubble->focused ? inkcell_step_px(scale) : 0;
     if (bubble->focused) {
-        inkcell_fb_fill_round_rect(state, box_x, y - inkcell_step_px(scale), box_w, box_h, radius,
-                                   inkcell_fb_color(state, INKCELL_COLOR_PRIMARY));
+        inkcell_fb_fill_round_rect(state, box_x - ring, top, box_w + 2 * ring, box_h + ring,
+                                   radius + ring, inkcell_fb_color(state, INKCELL_COLOR_PRIMARY));
     }
-    const int fill_x =
-        (bubble->focused && !bubble->outbound) ? box_x + inkcell_step_px(scale) : box_x;
-    const int fill_w = bubble->focused ? box_w - inkcell_step_px(scale) : box_w;
-    inkcell_fb_fill_round_rect(state, fill_x, y - inkcell_step_px(scale), fill_w, box_h, radius,
-                               fill);
+    inkcell_fb_fill_round_rect(state, box_x, top + ring, box_w, box_h - ring, radius, fill);
 
     const int text_x = box_x + pad;
     const struct inkcell_rgb body = paint.ink;
