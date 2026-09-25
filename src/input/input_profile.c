@@ -38,6 +38,8 @@ static const char *const k_caps_abxy[INKCELL_BUTTON_COUNT] = {
     [INKCELL_BUTTON_TRIGGERS] = "L2/R2",
     [INKCELL_BUTTON_UP_DOWN] = "\xE2\x86\x91\xE2\x86\x93",    /* up arrow, down arrow */
     [INKCELL_BUTTON_LEFT_RIGHT] = "\xE2\x86\x90\xE2\x86\x92", /* left arrow, right arrow */
+    /* up, down, left, right: the two pairs above side by side, in the order each is printed */
+    [INKCELL_BUTTON_DPAD] = "\xE2\x86\x91\xE2\x86\x93\xE2\x86\x90\xE2\x86\x92",
     [INKCELL_BUTTON_QUIT] = NULL,
 };
 
@@ -248,6 +250,7 @@ size_t inkcell_button_keys(enum inkcell_button button, enum inkcell_key keys[2])
         keys[0] = INKCELL_KEY_LEFT;
         keys[1] = INKCELL_KEY_RIGHT;
         return 2U;
+    case INKCELL_BUTTON_DPAD:
     case INKCELL_BUTTON_QUIT:
     case INKCELL_BUTTON_COUNT:
     default:

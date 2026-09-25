@@ -388,7 +388,8 @@ static bool inkcell_fb_action_elsewhere(const struct inkcell_draw_state *state,
     if (!state->pointer) {
         return false;
     }
-    if (button == INKCELL_BUTTON_UP_DOWN || button == INKCELL_BUTTON_QUIT) {
+    if (button == INKCELL_BUTTON_UP_DOWN || button == INKCELL_BUTTON_DPAD ||
+        button == INKCELL_BUTTON_QUIT) {
         return true;
     }
     struct inkcell_focus_rect arrow;
