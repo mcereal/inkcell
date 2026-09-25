@@ -172,6 +172,22 @@ static void keyboard_caret_set(struct inkcell_keyboard *kb, const char *text, si
     kb->caret_back = back > UINT16_MAX ? (uint16_t)UINT16_MAX : (uint16_t)back;
 }
 
+/*
+ * The caret read against the text and written back as read, before anything edits at it.
+ *
+ * Reading alone is not enough. A count the caller made stale - a buffer cleared under a caret
+ * two from the end - reads as the end, but left as 2 it stops reading that way the moment the
+ * text is two bytes long again, and the next character lands at the start. Every press goes
+ * through here first, so the count is only ever stale between presses.
+ */
+static size_t keyboard_caret_normalise(struct inkcell_keyboard *kb, const char *text) {
+    const size_t at = inkcell_keyboard_caret(kb, text);
+    if (kb != NULL) {
+        keyboard_caret_set(kb, text, at);
+    }
+    return at;
+}
+
 /* Committed text a host may type: well-formed UTF-8 with no control in it, C0, C1 or the two
    Unicode separators - each would reach a peer and a panel as-is. */
 static bool keyboard_input_ok(const char *input) {
@@ -202,15 +218,15 @@ bool inkcell_keyboard_insert_text(const struct inkcell_keyboard_layout *layout, 
     return keyboard_insert(text, size, keyboard_cap(layout, size), strlen(text), input);
 }
 
-bool inkcell_keyboard_insert_text_at_caret(const struct inkcell_keyboard *kb,
+bool inkcell_keyboard_insert_text_at_caret(struct inkcell_keyboard *kb,
                                            const struct inkcell_keyboard_layout *layout, char *text,
                                            size_t size, const char *input) {
     if (text == NULL || size == 0U || input == NULL || input[0] == '\0' ||
         !keyboard_input_ok(input)) {
         return false;
     }
-    return keyboard_insert(text, size, keyboard_cap(layout, size), inkcell_keyboard_caret(kb, text),
-                           input);
+    const size_t at = keyboard_caret_normalise(kb, text);
+    return keyboard_insert(text, size, keyboard_cap(layout, size), at, input);
 }
 
 /*
@@ -415,6 +431,7 @@ enum inkcell_keyboard_result inkcell_keyboard_key(struct inkcell_keyboard *kb,
     if (kb == NULL || text == NULL || size == 0U) {
         return INKCELL_KEYBOARD_IGNORED;
     }
+    (void)keyboard_caret_normalise(kb, text);
     switch (key) {
     case INKCELL_KEY_UP:
     case INKCELL_KEY_DOWN: {

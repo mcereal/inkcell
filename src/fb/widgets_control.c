@@ -477,16 +477,44 @@ static void inkcell_fb_text_field_value_mid(const struct inkcell_draw_state *sta
             start = caret_cells;
         }
     }
-    const char *const tail = shown + inkcell_text_cell_offset(shown, start);
+    const char *tail = shown + inkcell_text_cell_offset(shown, start);
     const char *const at = shown + caret;
 
     const struct inkcell_rgb ink = inkcell_fb_tone_color(state, INKCELL_TONE_STRONG);
     const struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH);
     struct inkcell_fb_wrap_ctx wctx;
     const struct inkcell_wrap_metric metric = inkcell_fb_wrap_metric(&wctx, state, scale);
+    const size_t budget = inkcell_fb_wrap_budget(&wctx, layout->body_w);
+    /*
+     * The cells above are a nominal count, and wrapping spends more than that: a word pushed
+     * whole to the next line leaves room unused, and the face is proportional. So the window is
+     * checked against the wrap it will actually be drawn with, and moved on a line at a time
+     * until the caret's line is one of the `lines` drawn - a caret that fell off the bottom of
+     * the box would be the one thing on it the next press moves, and not on the panel.
+     */
+    for (;;) {
+        struct inkcell_wrap probe;
+        inkcell_wrap_begin_measured(&probe, tail, budget, &metric);
+        const char *second = NULL;
+        uint32_t line = 0U;
+        bool found = false;
+        while (inkcell_wrap_next(&probe)) {
+            if (line == 0U) {
+                second = probe.rest;
+            }
+            if (at < probe.rest || *probe.rest == '\0') {
+                found = true;
+                break;
+            }
+            ++line;
+        }
+        if (!found || line < lines || second == NULL || second <= tail || second > at) {
+            break;
+        }
+        tail = second;
+    }
     struct inkcell_wrap wrap;
-    inkcell_wrap_begin_measured(&wrap, tail, inkcell_fb_wrap_budget(&wctx, layout->body_w),
-                                &metric);
+    inkcell_wrap_begin_measured(&wrap, tail, budget, &metric);
     const int x = inkcell_fb_margin(state);
     int y = top + inkcell_step_px(scale);
     bool placed = false;

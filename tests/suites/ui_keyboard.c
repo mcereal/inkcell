@@ -570,3 +570,28 @@ INKCELL_TEST_CASE(keyboard_caret_steps_cells_and_survives_a_cleared_buffer, unit
     INKCELL_TEST_FAIL_IF(inkcell_keyboard_caret(&kb, mid) != 1U,
                          "a count inside a cell should step back to its start");
 }
+
+/* A count made stale by the caller clearing the buffer is the end, and stays the end as the
+   text grows back past it - on the grid and from a host keyboard alike. */
+INKCELL_TEST_CASE(keyboard_stale_caret_stays_at_the_end_as_text_grows, unit) {
+    const struct inkcell_keyboard_layout layout = bare_layout();
+    struct inkcell_keyboard kb;
+    inkcell_keyboard_reset(&kb);
+
+    char text[16] = "";
+    kb.caret_back = 2U; /* left over from a draft the caller has since cleared */
+    kb.row = 1U;
+    kb.col = 0U; /* q */
+    for (int i = 0; i < 3; ++i) {
+        (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_A, text, sizeof text);
+    }
+    INKCELL_TEST_FAIL_IF(strcmp(text, "qqq") != 0 || kb.caret_back != 0U,
+                         "a stale count should type on the end, and be forgotten");
+
+    char host[16] = "";
+    kb.caret_back = 2U;
+    (void)inkcell_keyboard_insert_text_at_caret(&kb, &layout, host, sizeof host, "ab");
+    (void)inkcell_keyboard_insert_text_at_caret(&kb, &layout, host, sizeof host, "c");
+    INKCELL_TEST_FAIL_IF(strcmp(host, "abc") != 0,
+                         "host text over a stale count should still go on the end");
+}

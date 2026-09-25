@@ -169,8 +169,9 @@ struct inkcell_keyboard {
      *
      * A byte count on a cell boundary, and taken on trust only that far: the buffer is the
      * caller's, and a caller that shortened it (a send clears the draft) leaves a count that may
-     * point past the start. Every press reads it through the text it is handed, so a count
-     * longer than the text is the end again and one inside a cell steps back to its start.
+     * point past the start. Every press reads it through the text it is handed and writes it
+     * back normalised, so a count longer than the text is the end again - and stays the end as
+     * the text grows back - and one inside a cell steps back to its start.
      */
     uint16_t caret_back;
 };
@@ -315,7 +316,7 @@ bool inkcell_keyboard_insert_text(const struct inkcell_keyboard_layout *layout, 
 
 /* The same, at the caret rather than on the end - what a keyboard whose caret has moved wants
    a host keyboard's typing to do too, or the letters land somewhere the grid's would not. */
-bool inkcell_keyboard_insert_text_at_caret(const struct inkcell_keyboard *kb,
+bool inkcell_keyboard_insert_text_at_caret(struct inkcell_keyboard *kb,
                                            const struct inkcell_keyboard_layout *layout, char *text,
                                            size_t size, const char *input);
 
