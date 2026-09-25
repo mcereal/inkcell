@@ -248,6 +248,14 @@ struct inkcell_fb_text_field {
     /* The caret after the value. A block rather than a bar, because at this glyph scale a
        one-pixel rule beside a five-pixel-wide cell is not findable. */
     bool caret;
+    /*
+     * Where the caret is, as bytes of `value` after it - inkcell_keyboard's own count, so a
+     * screen hands the keyboard's straight over. 0 is the end, which is where every field put
+     * it before the caret could move. Anywhere else it underlines the character it sits before:
+     * the same mark the end has, under a cell rather than after the last one. The window then
+     * follows the caret rather than the tail, since the caret is what the next press moves.
+     */
+    size_t caret_back;
     /* Wrapped lines the box holds. 0 is read as 1; the box is this tall whether or not the
        value fills it, so it does not change height as somebody types. */
     uint32_t lines;

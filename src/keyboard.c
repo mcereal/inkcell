@@ -106,31 +106,75 @@ static size_t keyboard_cap(const struct inkcell_keyboard_layout *layout, size_t 
 }
 
 /*
- * Append a whole keycap's text, or none of it.
+ * Put a whole keycap's text in at byte `at`, or none of it.
  *
  * All of it or nothing, and that is the emoji case rather than fussiness: the cap is a byte
- * count and an emoji is four of them, so appending as far as the cap would leave a truncated
+ * count and an emoji is four of them, so inserting as far as the cap would leave a truncated
  * UTF-8 sequence in a field that is about to be written somewhere - the one outcome worse than
  * the character not fitting.
  */
-static bool keyboard_append(char *text, size_t size, size_t cap, const char *add) {
+static bool keyboard_insert(char *text, size_t size, size_t cap, size_t at, const char *add) {
     if (add == NULL || add[0] == '\0') {
         return false;
     }
     const size_t len = strlen(text);
     const size_t extra = strlen(add);
-    if (len + extra > cap || len + extra + 1U > size) {
+    if (at > len || len + extra > cap || len + extra + 1U > size) {
         return false;
     }
-    memcpy(&text[len], add, extra + 1U);
+    memmove(&text[at + extra], &text[at], len - at + 1U);
+    memcpy(&text[at], add, extra);
     return true;
 }
 
-bool inkcell_keyboard_insert_text(const struct inkcell_keyboard_layout *layout, char *text,
-                                  size_t size, const char *input) {
-    if (text == NULL || size == 0U || input == NULL || input[0] == '\0') {
-        return false;
+/* Where each cell before `limit` starts: the last one strictly before it, or `limit` itself
+   when there is none. Walked from the start with inkcell_text_cell_next(), because a cell is
+   only findable forwards - see keyboard_delete(). */
+static size_t keyboard_cell_before(const char *text, size_t limit) {
+    size_t last = limit;
+    size_t offset = 0U;
+    while (offset < limit) {
+        const struct inkcell_text_cell cell = inkcell_text_cell_next(&text[offset]);
+        if (cell.bytes == 0U || offset + cell.bytes > limit) {
+            break;
+        }
+        last = offset;
+        offset += cell.bytes;
     }
+    return last;
+}
+
+size_t inkcell_keyboard_caret(const struct inkcell_keyboard *kb, const char *text) {
+    if (text == NULL) {
+        return 0U;
+    }
+    const size_t len = strlen(text);
+    if (kb == NULL || kb->caret_back == 0U || kb->caret_back > len) {
+        return len;
+    }
+    /* On a cell boundary: the last one at or before where the count points. */
+    const size_t want = len - kb->caret_back;
+    size_t offset = 0U;
+    while (offset < want) {
+        const struct inkcell_text_cell cell = inkcell_text_cell_next(&text[offset]);
+        if (cell.bytes == 0U || offset + cell.bytes > want) {
+            break;
+        }
+        offset += cell.bytes;
+    }
+    return offset;
+}
+
+/* The count that puts the caret at byte `at`. */
+static void keyboard_caret_set(struct inkcell_keyboard *kb, const char *text, size_t at) {
+    const size_t len = strlen(text);
+    const size_t back = at < len ? len - at : 0U;
+    kb->caret_back = back > UINT16_MAX ? (uint16_t)UINT16_MAX : (uint16_t)back;
+}
+
+/* Committed text a host may type: well-formed UTF-8 with no control in it, C0, C1 or the two
+   Unicode separators - each would reach a peer and a panel as-is. */
+static bool keyboard_input_ok(const char *input) {
     const size_t bytes = strlen(input);
     for (size_t offset = 0U; offset < bytes;) {
         const size_t step =
@@ -146,11 +190,31 @@ bool inkcell_keyboard_insert_text(const struct inkcell_keyboard_layout *layout, 
         }
         offset += step;
     }
-    return keyboard_append(text, size, keyboard_cap(layout, size), input);
+    return true;
+}
+
+bool inkcell_keyboard_insert_text(const struct inkcell_keyboard_layout *layout, char *text,
+                                  size_t size, const char *input) {
+    if (text == NULL || size == 0U || input == NULL || input[0] == '\0' ||
+        !keyboard_input_ok(input)) {
+        return false;
+    }
+    return keyboard_insert(text, size, keyboard_cap(layout, size), strlen(text), input);
+}
+
+bool inkcell_keyboard_insert_text_at_caret(const struct inkcell_keyboard *kb,
+                                           const struct inkcell_keyboard_layout *layout, char *text,
+                                           size_t size, const char *input) {
+    if (text == NULL || size == 0U || input == NULL || input[0] == '\0' ||
+        !keyboard_input_ok(input)) {
+        return false;
+    }
+    return keyboard_insert(text, size, keyboard_cap(layout, size), inkcell_keyboard_caret(kb, text),
+                           input);
 }
 
 /*
- * Remove the last cell.
+ * Remove the cell before byte `at` - the caret.
  *
  * A cell rather than a byte or a code point, walked with the same inkcell_text_cell_next() that
  * measuring and drawing use. A value preloaded from somewhere else may hold UTF-8 this grid
@@ -159,21 +223,15 @@ bool inkcell_keyboard_insert_text(const struct inkcell_keyboard_layout *layout, 
  * three presses to remove one thing the user sees. Walking from the start each time is O(n) on a
  * buffer bounded by a text field, which is nothing beside the frame it causes.
  */
-static bool keyboard_delete(char *text) {
-    size_t last = 0U;
-    size_t offset = 0U;
-    for (;;) {
-        const struct inkcell_text_cell cell = inkcell_text_cell_next(&text[offset]);
-        if (cell.bytes == 0U) {
-            break;
-        }
-        last = offset;
-        offset += cell.bytes;
-    }
-    if (offset == 0U) {
+static bool keyboard_delete(char *text, size_t at) {
+    if (at == 0U) {
         return false;
     }
-    text[last] = '\0';
+    const size_t start = keyboard_cell_before(text, at);
+    if (start >= at) {
+        return false;
+    }
+    memmove(&text[start], &text[at], strlen(text) - at + 1U);
     return true;
 }
 
@@ -185,6 +243,7 @@ void inkcell_keyboard_reset(struct inkcell_keyboard *kb) {
     kb->col = 0U;
     kb->layer = (uint8_t)INKCELL_KB_LOWER;
     kb->emoji_page = 0U;
+    kb->caret_back = 0U;
 }
 
 const char *inkcell_keyboard_cell(const struct inkcell_keyboard *kb,
@@ -335,10 +394,11 @@ static enum inkcell_keyboard_result keyboard_action(struct inkcell_keyboard *kb,
         inkcell_keyboard_panel_step(kb, layout, 1);
         return INKCELL_KEYBOARD_CONSUMED;
     case INKCELL_KB_ACTION_SPACE:
-        (void)keyboard_append(text, size, keyboard_cap(layout, size), " ");
+        (void)keyboard_insert(text, size, keyboard_cap(layout, size),
+                              inkcell_keyboard_caret(kb, text), " ");
         return INKCELL_KEYBOARD_CONSUMED;
     case INKCELL_KB_ACTION_DELETE:
-        (void)keyboard_delete(text);
+        (void)keyboard_delete(text, inkcell_keyboard_caret(kb, text));
         return INKCELL_KEYBOARD_CONSUMED;
     case INKCELL_KB_ACTION_SUBMIT:
         return INKCELL_KEYBOARD_SUBMIT;
@@ -390,7 +450,8 @@ enum inkcell_keyboard_result inkcell_keyboard_key(struct inkcell_keyboard *kb,
         }
         char scratch[INKCELL_KB_CELL_MAX];
         const char *const cell = inkcell_keyboard_cell(kb, layout, kb->row, kb->col, scratch);
-        if (keyboard_append(text, size, keyboard_cap(layout, size), cell)) {
+        if (keyboard_insert(text, size, keyboard_cap(layout, size),
+                            inkcell_keyboard_caret(kb, text), cell)) {
             /* One capital, then back to lower case, like a phone keyboard. The emoji layer
                deliberately does not do the same: a run of them is the normal way to use it, and
                a picker that closed itself after one would be a picker nobody uses twice.
@@ -412,10 +473,11 @@ enum inkcell_keyboard_result inkcell_keyboard_key(struct inkcell_keyboard *kb,
         return INKCELL_KEYBOARD_DISMISS;
     case INKCELL_KEY_X:
         /* Backspace, where a pad-driven keyboard puts it. */
-        (void)keyboard_delete(text);
+        (void)keyboard_delete(text, inkcell_keyboard_caret(kb, text));
         return INKCELL_KEYBOARD_CONSUMED;
     case INKCELL_KEY_Y:
-        (void)keyboard_append(text, size, keyboard_cap(layout, size), " ");
+        (void)keyboard_insert(text, size, keyboard_cap(layout, size),
+                              inkcell_keyboard_caret(kb, text), " ");
         return INKCELL_KEYBOARD_CONSUMED;
     case INKCELL_KEY_L1:
     case INKCELL_KEY_R1:
@@ -425,9 +487,22 @@ enum inkcell_keyboard_result inkcell_keyboard_key(struct inkcell_keyboard *kb,
         inkcell_keyboard_panel_step(kb, layout, (key == INKCELL_KEY_L1) ? -1 : 1);
         return INKCELL_KEYBOARD_CONSUMED;
     case INKCELL_KEY_L2:
-    case INKCELL_KEY_R2:
-        inkcell_keyboard_shift(kb);
+    case INKCELL_KEY_R2: {
+        /*
+         * The caret, a cell at a time. The triggers were the shift, and the shift is the one
+         * thing on this pad that was already somewhere else - R1 from the letters is the
+         * capitals, and the capitals go back after one letter just as the shift did - while a
+         * typo early in a draft had no way to it but deleting everything after it.
+         */
+        const size_t at = inkcell_keyboard_caret(kb, text);
+        if (key == INKCELL_KEY_L2) {
+            keyboard_caret_set(kb, text, at > 0U ? keyboard_cell_before(text, at) : 0U);
+        } else {
+            const struct inkcell_text_cell cell = inkcell_text_cell_next(&text[at]);
+            keyboard_caret_set(kb, text, at + cell.bytes);
+        }
         return INKCELL_KEYBOARD_CONSUMED;
+    }
     case INKCELL_KEY_START:
         return INKCELL_KEYBOARD_SUBMIT;
     case INKCELL_KEY_SELECT:

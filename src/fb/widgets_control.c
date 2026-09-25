@@ -13,6 +13,7 @@
 #include "inkcell/ui/layout.h"
 
 #include <stdio.h>
+#include <string.h>
 
 /* ---- the switch -------------------------------------------------------------------------- */
 
@@ -437,6 +438,95 @@ int inkcell_fb_text_field_height(const struct inkcell_draw_state *state,
            inkcell_fb_text_field_counter_h(state, layout, field) + inkcell_step_px(state->scale);
 }
 
+/* The most bytes one cell under the caret can take: a ZWJ emoji sequence, with its NUL. */
+#define INKCELL_FB_CARET_CELL_MAX 32U
+
+/*
+ * The value with the caret somewhere inside it rather than on the end.
+ *
+ * Laid out line by line rather than through inkcell_fb_draw_wrapped(), because the caret has to
+ * be found on the line it landed on: each line inkcell_wrap_next() hands back is an exact slice
+ * of the text from its first non-space byte, so the caret's offset into the line is its offset
+ * into the text less where the line began, and the pixels to it are that prefix measured.
+ *
+ * The window is the tail, as it is with the caret on the end, unless the caret is before the
+ * tail - then it starts at the caret. What the next press changes has to be on the panel.
+ */
+static void inkcell_fb_text_field_value_mid(const struct inkcell_draw_state *state,
+                                            const struct inkcell_fb_layout *layout, int top,
+                                            const struct inkcell_fb_text_field *field,
+                                            size_t caret) {
+    const int scale = state->scale;
+    const uint32_t lines = field->lines > 0U ? field->lines : 1U;
+    char shown[INKCELL_LINE_MAX];
+    snprintf(shown, sizeof shown, "%s", field->value);
+    if (caret > strlen(shown)) {
+        caret = strlen(shown);
+    }
+
+    const size_t visible = layout->cols * (size_t)lines;
+    const size_t width = inkcell_text_cells(shown);
+    size_t start = 0U;
+    if (width > visible) {
+        char before[INKCELL_LINE_MAX];
+        memcpy(before, shown, caret);
+        before[caret] = '\0';
+        const size_t caret_cells = inkcell_text_cells(before);
+        start = width - visible;
+        if (caret_cells < start) {
+            start = caret_cells;
+        }
+    }
+    const char *const tail = shown + inkcell_text_cell_offset(shown, start);
+    const char *const at = shown + caret;
+
+    const struct inkcell_rgb ink = inkcell_fb_tone_color(state, INKCELL_TONE_STRONG);
+    const struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH);
+    struct inkcell_fb_wrap_ctx wctx;
+    const struct inkcell_wrap_metric metric = inkcell_fb_wrap_metric(&wctx, state, scale);
+    struct inkcell_wrap wrap;
+    inkcell_wrap_begin_measured(&wrap, tail, inkcell_fb_wrap_budget(&wctx, layout->body_w),
+                                &metric);
+    const int x = inkcell_fb_margin(state);
+    int y = top + inkcell_step_px(scale);
+    bool placed = false;
+    for (uint32_t drawn = 0U; drawn < lines; ++drawn) {
+        const char *line_from = wrap.rest;
+        if (!inkcell_wrap_next(&wrap)) {
+            break;
+        }
+        while (*line_from == ' ') {
+            ++line_from;
+        }
+        inkcell_fb_draw_text(state, x, y, wrap.line, scale, ink, ground);
+        const size_t line_len = strlen(wrap.line);
+        const bool last = *wrap.rest == '\0';
+        if (!placed && at >= tail && (at < wrap.rest || last)) {
+            placed = true;
+            size_t into = at > line_from ? (size_t)(at - line_from) : 0U;
+            if (into > line_len) {
+                into = line_len;
+            }
+            char prefix[INKCELL_LINE_MAX];
+            memcpy(prefix, wrap.line, into);
+            prefix[into] = '\0';
+            char under[INKCELL_FB_CARET_CELL_MAX] = "_";
+            if (into < line_len) {
+                const struct inkcell_text_cell cell = inkcell_text_cell_next(&wrap.line[into]);
+                if (cell.bytes > 0U && cell.bytes < sizeof under) {
+                    memcpy(under, &wrap.line[into], cell.bytes);
+                    under[cell.bytes] = '\0';
+                }
+            }
+            const int step = inkcell_step_px(scale);
+            inkcell_fb_fill_rect(state, x + inkcell_fb_text_width(state, prefix, scale),
+                                 y + layout->line - 2 * step,
+                                 inkcell_fb_text_width(state, under, scale), step, ink);
+        }
+        y += layout->line;
+    }
+}
+
 void inkcell_fb_draw_text_field(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_layout *layout, int *y,
                                 const struct inkcell_fb_text_field *field) {
@@ -483,20 +573,25 @@ void inkcell_fb_draw_text_field(const struct inkcell_draw_state *state,
      * screen. Measured and cut in cells, so a draft of emoji scrolls a glyph at a time rather
      * than splitting one down the middle.
      */
-    char shown[INKCELL_LINE_MAX];
-    snprintf(shown, sizeof shown, "%s%s", field->value != NULL ? field->value : "",
-             field->caret ? "_" : "");
-    const size_t visible = layout->cols * (size_t)lines;
-    const char *tail = shown;
-    const size_t width = inkcell_text_cells(shown);
-    if (width > visible) {
-        tail = shown + inkcell_text_cell_offset(shown, width - visible);
+    const size_t value_len = field->value != NULL ? strlen(field->value) : 0U;
+    if (field->caret && field->caret_back > 0U && field->caret_back <= value_len) {
+        inkcell_fb_text_field_value_mid(state, layout, top, field, value_len - field->caret_back);
+    } else {
+        char shown[INKCELL_LINE_MAX];
+        snprintf(shown, sizeof shown, "%s%s", field->value != NULL ? field->value : "",
+                 field->caret ? "_" : "");
+        const size_t visible = layout->cols * (size_t)lines;
+        const char *tail = shown;
+        const size_t width = inkcell_text_cells(shown);
+        if (width > visible) {
+            tail = shown + inkcell_text_cell_offset(shown, width - visible);
+        }
+        /* The value sits a scale down from the box's own top edge, which is the inset every other
+           container here gives its contents. */
+        inkcell_fb_draw_wrapped(state, top + inkcell_step_px(scale), tail, (size_t)layout->body_w,
+                                (int)lines, inkcell_fb_tone_color(state, INKCELL_TONE_STRONG),
+                                inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
     }
-    /* The value sits a scale down from the box's own top edge, which is the inset every other
-       container here gives its contents. */
-    inkcell_fb_draw_wrapped(state, top + inkcell_step_px(scale), tail, (size_t)layout->body_w,
-                            (int)lines, inkcell_fb_tone_color(state, INKCELL_TONE_STRONG),
-                            inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
     top += box_h;
 
     if (inkcell_fb_text_field_counter_h(state, layout, field) > 0) {

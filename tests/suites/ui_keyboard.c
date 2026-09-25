@@ -492,3 +492,81 @@ INKCELL_TEST_CASE(keyboard_panel_step_takes_any_int, unit) {
         }
     }
 }
+
+/*
+ * The caret: the triggers walk it a cell at a time, and typing, the space and the backspace all
+ * work where it is rather than on the end. A typo early in a draft was otherwise a delete of
+ * everything after it.
+ */
+INKCELL_TEST_CASE(keyboard_triggers_move_the_caret_and_edits_follow_it, unit) {
+    const struct inkcell_keyboard_layout layout = bare_layout();
+    struct inkcell_keyboard kb;
+    inkcell_keyboard_reset(&kb);
+
+    char text[16] = "hllo";
+    INKCELL_TEST_FAIL_IF(inkcell_keyboard_caret(&kb, text) != 4U, "a reset caret is the end");
+    for (int i = 0; i < 3; ++i) {
+        (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_L2, text, sizeof text);
+    }
+    INKCELL_TEST_FAIL_IF(inkcell_keyboard_caret(&kb, text) != 1U, "three L2 should be after h");
+
+    /* Row 1, col 2 of the letters is 'e'. */
+    kb.row = 1U;
+    kb.col = 2U;
+    (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_A, text, sizeof text);
+    INKCELL_TEST_FAIL_IF(strcmp(text, "hello") != 0, "A should type at the caret");
+    INKCELL_TEST_FAIL_IF(inkcell_keyboard_caret(&kb, text) != 2U,
+                         "the caret should stay after what was typed");
+
+    (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_X, text, sizeof text);
+    INKCELL_TEST_FAIL_IF(strcmp(text, "hllo") != 0, "X should delete the cell before the caret");
+    (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_Y, text, sizeof text);
+    INKCELL_TEST_FAIL_IF(strcmp(text, "h llo") != 0, "Y should put the space at the caret");
+
+    /* The ends hold rather than wrap. */
+    for (int i = 0; i < 10; ++i) {
+        (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_L2, text, sizeof text);
+    }
+    INKCELL_TEST_FAIL_IF(inkcell_keyboard_caret(&kb, text) != 0U, "L2 should stop at the start");
+    INKCELL_TEST_FAIL_IF(inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_X, text, sizeof text) !=
+                                 INKCELL_KEYBOARD_CONSUMED ||
+                             strcmp(text, "h llo") != 0,
+                         "X at the start should delete nothing and still be taken");
+    for (int i = 0; i < 10; ++i) {
+        (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_R2, text, sizeof text);
+    }
+    INKCELL_TEST_FAIL_IF(kb.caret_back != 0U, "R2 should stop at the end");
+
+    /* A host keyboard types at the caret too. */
+    (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_L2, text, sizeof text);
+    INKCELL_TEST_FAIL_IF(
+        !inkcell_keyboard_insert_text_at_caret(&kb, &layout, text, sizeof text, "el"),
+        "host text should go in");
+    INKCELL_TEST_FAIL_IF(strcmp(text, "h llelo") != 0, "host text should land at the caret");
+}
+
+/* A caret is read through the text it is handed: an emoji is one step, and a count the caller
+   made stale by shortening the buffer is the end again rather than a place past the start. */
+INKCELL_TEST_CASE(keyboard_caret_steps_cells_and_survives_a_cleared_buffer, unit) {
+    const struct inkcell_keyboard_layout layout = bare_layout();
+    struct inkcell_keyboard kb;
+    inkcell_keyboard_reset(&kb);
+
+    char text[32] = "a\xF0\x9F\x98\x80"
+                    "b"; /* a, grinning face, b */
+    (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_L2, text, sizeof text);
+    (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_L2, text, sizeof text);
+    INKCELL_TEST_FAIL_IF(inkcell_keyboard_caret(&kb, text) != 1U,
+                         "an emoji should be one step of the caret");
+    (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_R2, text, sizeof text);
+    (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_X, text, sizeof text);
+    INKCELL_TEST_FAIL_IF(strcmp(text, "ab") != 0, "X should take the whole emoji");
+
+    text[0] = '\0'; /* a send clears the draft; the record still holds a count */
+    INKCELL_TEST_FAIL_IF(inkcell_keyboard_caret(&kb, text) != 0U,
+                         "a count past a cleared buffer should be its end");
+    kb.caret_back = 2U;
+    char mid[16] = "a\xF0\x9F\x98\x80"; /* the count points inside the emoji */
+    INKCELL_TEST_FAIL_IF(inkcell_keyboard_caret(&kb, mid) != 1U,
+                         "a count inside a cell should step back to its start");
+}
