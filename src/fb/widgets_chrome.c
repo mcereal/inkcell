@@ -1504,6 +1504,17 @@ inkcell_fb_app_bar_draw_large(const struct inkcell_draw_state *state,
         inkcell_fb_draw_icon(state, margin, layout->body_y + (collapsed_h - back_w) / 2,
                              INKCELL_ICON_BACK, title_scale,
                              inkcell_fb_tone_color(state, INKCELL_TONE_DIM), ground);
+        /* And B to a pointer, as on the small bar: out into the gutter and down the collapsed
+           row, since that is where the arrow sits at both sizes. */
+        if (state->pointer) {
+            const int gutter = inkcell_fb_gutter(state);
+            const struct inkcell_fb_rect arrow = {.x = margin - gutter,
+                                                  .y = layout->body_y,
+                                                  .w = gutter + back_w +
+                                                       inkcell_fb_char_adv(state, small) / 2,
+                                                  .h = collapsed_h};
+            inkcell_fb_target_register(state, INKCELL_FOCUS_KEY(INKCELL_KEY_B), &arrow);
+        }
     }
 
     /*

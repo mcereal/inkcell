@@ -286,6 +286,59 @@ INKCELL_TEST_CASE(pointer_action_bar_is_verbs_and_leaves_out_what_the_pointer_ha
     record_success(test_name);
 }
 
+/*
+ * The large title is the app bar with `large` set, and it drew the arrow without registering it:
+ * a pointer clicked the arrow on a collapsing heading and nothing happened - and the action bar,
+ * finding no arrow, had no reason to drop its B either way. Held at both ends of the collapse,
+ * since the arrow sits on the collapsed row at every offset.
+ */
+INKCELL_TEST_CASE(pointer_large_title_arrow_is_b, unit) {
+    struct inkcell_capture *capture = NULL;
+    INKCELL_TEST_FAIL_IF(inkcell_capture_open(&capture, INKCELL_CAPTURE_WIDTH,
+                                              INKCELL_CAPTURE_HEIGHT, INKCELL_SCALE(2)) < 0,
+                         "the capture should open");
+    struct inkcell_draw_state *const state = inkcell_capture_state(capture);
+    const int32_t offsets[] = {0, inkcell_fb_large_title_travel(state)};
+    for (size_t i = 0U; i < sizeof offsets / sizeof offsets[0]; ++i) {
+        struct inkcell_focus_item storage[POINTER_STORAGE];
+        struct inkcell_focus_map map;
+        inkcell_focus_begin(&map, storage, POINTER_STORAGE);
+        inkcell_fb_set_focus_map(state, &map);
+        state->pointer = true;
+        struct inkcell_fb_layout layout = inkcell_fb_layout_begin(state, true, true);
+        const int top = layout.body_y;
+        const struct inkcell_fb_large_title title = {.title = "Help"};
+        inkcell_fb_draw_large_title(state, &layout, &title, offsets[i]);
+
+        struct inkcell_focus_rect back;
+        INKCELL_TEST_FAIL_IF_CLEANUP(
+            !inkcell_focus_rect_of(&map, INKCELL_FOCUS_KEY(INKCELL_KEY_B), &back),
+            inkcell_capture_close(capture), "the large title's arrow is B to a pointer");
+        INKCELL_TEST_FAIL_IF_CLEANUP(back.y != top || back.y + back.h > layout.body_y,
+                                     inkcell_capture_close(capture),
+                                     "...and it is on the heading, not in the body under it");
+        struct inkcell_pointer pointer;
+        inkcell_pointer_reset(&pointer);
+        inkcell_pointer_down(&pointer, &map, back.x + back.w / 2, back.y + back.h / 2);
+        const struct inkcell_pointer_result r =
+            inkcell_pointer_up(&pointer, &map, back.x + back.w / 2, back.y + back.h / 2);
+        INKCELL_TEST_FAIL_IF_CLEANUP(r.kind != INKCELL_POINTER_KEY || r.key != INKCELL_KEY_B,
+                                     inkcell_capture_close(capture),
+                                     "clicking the arrow presses B");
+
+        /* Without a pointer the arrow is a picture, and the map spends no slot on it. */
+        inkcell_focus_begin(&map, storage, POINTER_STORAGE);
+        state->pointer = false;
+        layout = inkcell_fb_layout_begin(state, true, true);
+        inkcell_fb_draw_large_title(state, &layout, &title, offsets[i]);
+        INKCELL_TEST_FAIL_IF_CLEANUP(
+            inkcell_focus_rect_of(&map, INKCELL_FOCUS_KEY(INKCELL_KEY_B), &back),
+            inkcell_capture_close(capture), "a panel with no pointer registers no arrow");
+    }
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
 INKCELL_TEST_CASE(pointer_off_keeps_the_keycaps, unit) {
     struct inkcell_capture *capture = NULL;
     INKCELL_TEST_FAIL_IF(inkcell_capture_open(&capture, INKCELL_CAPTURE_WIDTH,
