@@ -221,7 +221,7 @@ INKCELL_TEST_CASE(button_cap_never_returns_null, unit) {
 
 /*
  * The four-way cap: printed, since it names a real press, and standing for no key a click could
- * make - so a pointer's bar leaves it out, as it does the arrow pair it widens.
+ * make - so a pointer's bar draws it as words and registers nothing to click.
  */
 INKCELL_TEST_CASE(dpad_cap_is_printed_and_never_clicked, unit) {
     INKCELL_TEST_FAIL_IF(inkcell_button_cap(INKCELL_BUTTON_DPAD)[0] == '\0',

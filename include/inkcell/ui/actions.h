@@ -79,8 +79,9 @@ enum inkcell_button {
      * a reader looking for the other half.
      *
      * No keys, the quit key's answer, because there is no one press to stand for: a click on
-     * the hint could only pick a direction arbitrarily. A pointer pans by the pointer's own
-     * means, so the hint is a keypad's alone - see inkcell_fb_action_elsewhere().
+     * the hint could only pick a direction arbitrarily. It is still drawn for a pointer, unlike
+     * the up/down pair: a wheel stands in for that pair and for nothing sideways, so the hint
+     * is what tells a window's reader the arrow keys pan. It just is not a click target.
      */
     INKCELL_BUTTON_DPAD,
     /*

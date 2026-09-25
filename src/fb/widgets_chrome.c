@@ -388,8 +388,10 @@ static bool inkcell_fb_action_elsewhere(const struct inkcell_draw_state *state,
     if (!state->pointer) {
         return false;
     }
-    if (button == INKCELL_BUTTON_UP_DOWN || button == INKCELL_BUTTON_DPAD ||
-        button == INKCELL_BUTTON_QUIT) {
+    /* Not DPAD: a pointer's wheel is the up/down pair and nothing sideways, so a four-way hint
+       left out here would leave a window's reader with no word that the arrow keys pan. It is
+       drawn and registers no target - see inkcell_button_keys(). */
+    if (button == INKCELL_BUTTON_UP_DOWN || button == INKCELL_BUTTON_QUIT) {
         return true;
     }
     struct inkcell_focus_rect arrow;
