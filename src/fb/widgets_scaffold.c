@@ -252,7 +252,12 @@ int inkcell_fb_scaffold_rail_width(const struct inkcell_draw_state *state,
     const bool labels = scaffold_rail_labels(state, destinations, count, small, &widest);
     const int pill = scaffold_indicator_size(state, small).w;
     const int content = labels && widest > pill ? widest : pill;
-    return content + 2 * inkcell_fb_gutter(state) + inkcell_fb_rule_height(state, small);
+    const int width = content + 2 * inkcell_fb_gutter(state) + inkcell_fb_rule_height(state, small);
+    /* And never narrower than the window's buttons, where the host put them on the frame: the
+       rail's top-leading corner is where they sit (see scaffold_draw_rail()), and a rail
+       narrower than them leaves the last one over its rule and against the pane's heading. A
+       sidebar holds its window's buttons, which is how every Mac app with one draws it. */
+    return width > state->top_leading_inset ? width : state->top_leading_inset;
 }
 
 static void scaffold_draw_rail(const struct inkcell_draw_state *state, struct inkcell_box box,
