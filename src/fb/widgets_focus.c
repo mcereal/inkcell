@@ -64,11 +64,12 @@ static struct inkcell_focus_rect focus_ring_now(const struct inkcell_fb_focus_ri
 
 /* The target, or false when there is nothing to put a ring on. */
 static bool focus_ring_target(const struct inkcell_focus_map *map, uint32_t id,
-                              struct inkcell_focus_rect *rect, int *radius) {
+                              struct inkcell_focus_rect *rect, int *radius, uint32_t *group) {
     if (id == INKCELL_FOCUS_NONE || !inkcell_focus_rect_of(map, id, rect)) {
         return false;
     }
     *radius = inkcell_focus_radius_of(map, id);
+    *group = inkcell_focus_group_of(map, id);
     return true;
 }
 
@@ -84,11 +85,23 @@ static bool focus_ring_target(const struct inkcell_focus_map *map, uint32_t id,
  * property inkcell_anim_to() exists to give a switch flicked twice.
  */
 static void focus_ring_aim(struct inkcell_draw_state *state, uint32_t id,
-                           struct inkcell_focus_rect target, int radius, bool travelled) {
+                           struct inkcell_focus_rect target, int radius, uint32_t group,
+                           bool travelled) {
     struct inkcell_fb_focus_ring *ring = &state->focus_ring;
     const bool arriving = ring->id == INKCELL_FOCUS_NONE;
+    /*
+     * Out of one group and into another: jump rather than travel.
+     *
+     * The journey is a straight line, and a straight line is only honest between boxes with
+     * nothing between them - a list's rows, one card's verbs. From a verb on one card to a verb
+     * on the next it runs down through the rows of every card in the way, and for the length of
+     * the motion the panel shows an empty outline over "My node" or a NodeDB count. The card's
+     * own outline jumps from card to card; the ring does the same.
+     */
+    const bool crossing = ring->group != group;
 
-    if (!travelled || arriving) {
+    ring->group = group;
+    if (!travelled || arriving || crossing) {
         ring->id = id;
         ring->from = target;
         ring->to = target;
@@ -192,13 +205,14 @@ void inkcell_fb_focus_ring_place(struct inkcell_draw_state *state,
     }
     struct inkcell_focus_rect target = {0, 0, 0, 0};
     int radius = 0;
-    if (!focus_ring_target(map, id, &target, &radius)) {
+    uint32_t group = 0U;
+    if (!focus_ring_target(map, id, &target, &radius, &group)) {
         const struct inkcell_fb_damage_rect painted = state->focus_ring.drawn;
         state->focus_ring = (struct inkcell_fb_focus_ring){0};
         state->focus_ring.drawn = painted;
         return;
     }
-    focus_ring_aim(state, id, target, radius, false);
+    focus_ring_aim(state, id, target, radius, group, false);
 }
 
 void inkcell_fb_draw_focus_ring(struct inkcell_draw_state *state,
@@ -208,7 +222,8 @@ void inkcell_fb_draw_focus_ring(struct inkcell_draw_state *state,
     }
     struct inkcell_focus_rect target = {0, 0, 0, 0};
     int radius = 0;
-    if (!focus_ring_target(map, id, &target, &radius)) {
+    uint32_t group = 0U;
+    if (!focus_ring_target(map, id, &target, &radius, &group)) {
         /* Nothing to be on. Forgetting the journey rather than keeping the last box is what
            stops the next id being travelled to from a rectangle that is no longer anywhere -
            but what was *painted* survives the clearing, because those pixels are still on the
@@ -219,7 +234,7 @@ void inkcell_fb_draw_focus_ring(struct inkcell_draw_state *state,
         return;
     }
 
-    focus_ring_aim(state, id, target, radius, true);
+    focus_ring_aim(state, id, target, radius, group, true);
 
     int at_radius = 0;
     const struct inkcell_focus_rect at =

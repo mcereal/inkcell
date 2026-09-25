@@ -257,6 +257,7 @@ static bool focus_put(struct inkcell_focus_map *map, uint32_t id, int x, int y, 
     map->items[map->count].radius =
         (radius < 0) ? 0 : ((radius > shorter / 2) ? shorter / 2 : radius);
     map->items[map->count].pointer_only = pointer_only;
+    map->items[map->count].group = 0U;
     map->count += 1U;
     return true;
 }
@@ -300,6 +301,24 @@ enum inkcell_key inkcell_focus_action_key_of(uint32_t id) {
     }
     const uint32_t key = id - INKCELL_FOCUS_ACTION_KEY_BASE;
     return key <= (uint32_t)INKCELL_KEY_SELECT ? (enum inkcell_key)key : INKCELL_KEY_NONE;
+}
+
+bool inkcell_focus_set_group(struct inkcell_focus_map *map, uint32_t id, uint32_t group) {
+    if (map == NULL || map->items == NULL || id == INKCELL_FOCUS_NONE) {
+        return false;
+    }
+    for (uint32_t i = 0U; i < map->count; ++i) {
+        if (map->items[i].id == id) {
+            map->items[i].group = group;
+            return true;
+        }
+    }
+    return false;
+}
+
+uint32_t inkcell_focus_group_of(const struct inkcell_focus_map *map, uint32_t id) {
+    const struct inkcell_focus_item *item = focus_item(map, id);
+    return (item != NULL) ? item->group : 0U;
 }
 
 int inkcell_focus_radius_of(const struct inkcell_focus_map *map, uint32_t id) {

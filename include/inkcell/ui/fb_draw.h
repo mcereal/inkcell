@@ -197,7 +197,8 @@ struct inkcell_fb_list_glide {
  * travels and why the ring is one thing rather than a property of each widget.
  */
 struct inkcell_fb_focus_ring {
-    uint32_t id; /* what it is on, or arriving at; INKCELL_FOCUS_NONE for no ring */
+    uint32_t id;    /* what it is on, or arriving at; INKCELL_FOCUS_NONE for no ring */
+    uint32_t group; /* `id`'s inkcell_focus_group_of(): the ring travels only within one */
     struct inkcell_focus_rect from;
     struct inkcell_focus_rect to;
     int from_radius;

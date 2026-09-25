@@ -802,6 +802,9 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_draw_state *state,
                                                                         : INKCELL_FOCUS_NONE,
             };
             inkcell_fb_draw_button(state, &button);
+            /* One group per card, so the ring slides along this card's verbs and jumps to the
+               next card's rather than crossing the rows between them. */
+            (void)inkcell_focus_set_group(state->focus, button.focus_id, card->action_focus_id);
             actions_x -= gap;
         }
     }
