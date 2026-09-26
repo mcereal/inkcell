@@ -143,8 +143,8 @@ bool inkcell_trend_frame(const struct inkcell_series *const *series, uint32_t co
                          struct inkcell_scale domain, uint8_t span, struct inkcell_trend *out);
 
 /*
- * Where the vertical's gridlines go: at most `max` values, lowest first, from the floor up in
- * even steps. Returns how many.
+ * Where the vertical's gridlines go: at most `max` values from the floor towards the ceiling in
+ * even steps - upwards on an ordinary domain, downwards on a descending one. Returns how many.
  *
  * A plot with only its two ends labelled asks the reader to interpolate, and every chart on a
  * phone stopped asking that a long time ago: Material's and Swift Charts' both rule faint lines

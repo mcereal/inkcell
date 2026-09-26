@@ -1446,7 +1446,16 @@ void inkcell_fb_draw_chart(const struct inkcell_draw_state *state,
             ++stride;
         }
     }
-    for (uint32_t i = 0U; i < tick_count; i += stride) {
+    for (uint32_t i = 0U; i < tick_count; ++i) {
+        /*
+         * The floor and the last value the caller ruled always keep theirs - the two ends are
+         * what say where the scale starts and how high it goes. Between them every `stride`th,
+         * and none within a stride of the top one, so thinning never crowds the ceiling either.
+         */
+        const bool last = i + 1U == tick_count;
+        if (!last && (i % stride != 0U || (i > 0U && i + stride > tick_count - 1U))) {
+            continue;
+        }
         if (!inkcell_fb_chart_holds(chart->scale, ticks[i].value)) {
             continue;
         }
@@ -1549,10 +1558,13 @@ void inkcell_fb_draw_chart(const struct inkcell_draw_state *state,
                     inkcell_fb_stroke_line(state, previous_x - stroke / 2, previous_y - stroke / 2,
                                            x - stroke / 2, y - stroke / 2, stroke, colour);
                     drawn = true;
-                    ends_at[i] = true;
                     end_x[i] = x;
                     end_y[i] = y;
                 }
+                /* The dot is on the newest reading or nowhere. A newest reading that arrived
+                   alone after a silence is drawn by nothing, and a dot left on the end of the
+                   run before it would mark a stale reading beside a legend stating the new one. */
+                ends_at[i] = !point->gap && j > 0U;
                 previous_x = x;
                 previous_y = y;
             }
