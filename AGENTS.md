@@ -38,8 +38,10 @@ scripts/check-platform.py     fails on a platform header in include/
   diff.
 - `inkcell_` on everything public, `INKCELL_` on macros and enum members. A symbol carries the
   prefix of whoever owns it.
-- Every public header is wrapped in `extern "C"` and says in prose *why* it works the way it
-  does. The reasoning is the valuable part; a signature can be read off the line below it.
+- A public header says in prose *why* it works the way it does. The reasoning is the valuable
+  part; a signature can be read off the line below it.
+- A new or changed public header wraps its declarations in `extern "C"` under `__cplusplus`.
+  Not every existing header does yet, so a C++ caller cannot assume it.
 - Functions return `0` or a negative `errno` for status, and the quantity itself when the answer
   is a quantity - inkwell's rule.
 
