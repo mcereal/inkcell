@@ -48,8 +48,8 @@ static const char *const k_id_names[INKCELL_STR_COUNT] = {
 /*
  * "one for exactly 1, other for everything else", which is English, German, Dutch, the
  * Scandinavian languages and most of the rest of Germanic Europe. French counts 0 as one;
- * Polish, Russian and Arabic need more forms than INKCELL_STR_PLURAL_FORMS has - see docs/i18n.md
- * before adding one of those.
+ * Polish, Russian and Arabic need more forms than INKCELL_STR_PLURAL_FORMS has - widen that
+ * constant in strings.h before adding one of those.
  */
 static uint8_t plural_english(uint32_t n) {
     return (uint8_t)(n == 1U ? 0 : 1);
