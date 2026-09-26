@@ -231,15 +231,22 @@ void gallery_scene_meters(struct inkcell_draw_state *state) {
         .active = 2U,
     };
     const int chart_h = layout.footer_y - inkcell_fb_gutter(state) - y;
+    /* Ruled every fifth of the domain, labelled the way a caller would word them. */
+    static const struct inkcell_fb_chart_tick k_ticks[] = {
+        {0, "0%"}, {200, "20%"}, {400, "40%"}, {600, "60%"}, {800, "80%"}, {1000, "100%"},
+    };
     if (chart_h >= inkcell_fb_chart_min_height(state, &layout)) {
         const struct inkcell_fb_chart chart = {
             .rect = {.x = box.text_x, .y = y, .w = box.text_right - box.text_x, .h = chart_h},
             .lines = {{.points = &points,
                        .label = (inkcell_str_id)GALLERY_STR_READ_UTILISATION,
-                       .value = "69%"}},
+                       .value = "69%",
+                       .area = true}},
             .count = 1U,
             .top = "100%",
             .bottom = "0%",
+            .ticks = k_ticks,
+            .tick_count = sizeof k_ticks / sizeof k_ticks[0],
             .span = inkcell_str(INKCELL_STR_TREND_SPAN_6H),
             .band = &k_band,
             .scale = k_permille,

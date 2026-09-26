@@ -305,3 +305,64 @@ INKCELL_TEST_CASE(shapes_survive_a_radius_past_the_page, unit) {
     inkcell_capture_close(page.capture);
     record_success(test_name);
 }
+
+INKCELL_TEST_CASE(shapes_level_line_is_crisp_and_a_slope_is_graded, unit) {
+    /*
+     * The two promises inkcell_fb_stroke_line() makes. A level stroke with an even pen lands on
+     * pixel boundaries, so it is whole rows of ink and nothing in between - a chart's flat
+     * stretch drawn soft would read as out of focus. A slope is graded at its edge, which is the
+     * whole difference between it and the column walk it replaced.
+     */
+    struct shapes_page page;
+    INKCELL_TEST_FAIL_IF(!shapes_open(&page), "the capture should open");
+
+    inkcell_fb_stroke_line(page.state, 40, 40, 200, 40, 4, k_ink);
+    for (int y = 36; y < 48; ++y) {
+        const int value = shapes_at(&page, 120, y);
+        const int expected = (y >= 40 && y < 44) ? 255 : 0;
+        INKCELL_TEST_FAIL_IF(value != expected, "a level stroke should cover whole rows exactly");
+    }
+    /* Round ends: the corner of the pen's square at the start is outside the disc. */
+    INKCELL_TEST_FAIL_IF(shapes_at(&page, 40, 40) == 255, "a stroke's end should be round");
+
+    inkcell_fb_clear(page.state, k_ground);
+    inkcell_fb_stroke_line(page.state, 40, 60, 200, 180, 4, k_ink);
+    int blended = 0;
+    int full = 0;
+    for (int y = 50; y < 200; ++y) {
+        for (int x = 30; x < 220; ++x) {
+            const int value = shapes_at(&page, x, y);
+            blended += value > 0 && value < 255;
+            full += value == 255;
+        }
+    }
+    INKCELL_TEST_FAIL_IF(full == 0, "a sloped stroke should have a solid core");
+    INKCELL_TEST_FAIL_IF(blended < 100, "a sloped stroke's edges should be graded");
+
+    inkcell_capture_close(page.capture);
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(shapes_wash_fades_from_top_to_bottom, unit) {
+    struct shapes_page page;
+    INKCELL_TEST_FAIL_IF(!shapes_open(&page), "the capture should open");
+
+    inkcell_fb_fill_wash(page.state, 20, 20, 40, 200, k_ink, 1000, 0);
+    const int top = shapes_at(&page, 40, 20);
+    const int middle = shapes_at(&page, 40, 120);
+    const int bottom = shapes_at(&page, 40, 219);
+    INKCELL_TEST_FAIL_IF(top < 250, "the first row should be nearly the full colour");
+    INKCELL_TEST_FAIL_IF(middle < 100 || middle > 155, "halfway down should be about half");
+    INKCELL_TEST_FAIL_IF(bottom > 5, "the last row should be nearly nothing");
+    INKCELL_TEST_FAIL_IF(shapes_at(&page, 19, 120) != 0, "outside the rectangle is untouched");
+
+    /* Over something already drawn it mixes rather than replaces: a quarter-strength wash of
+       black over white is three quarters white. */
+    inkcell_fb_fill_rect(page.state, 100, 20, 40, 40, k_ink);
+    inkcell_fb_fill_wash(page.state, 100, 20, 40, 40, k_ground, 250, 250);
+    const int mixed = shapes_at(&page, 120, 40);
+    INKCELL_TEST_FAIL_IF(mixed < 185 || mixed > 196, "a wash should blend with what is under it");
+
+    inkcell_capture_close(page.capture);
+    record_success(test_name);
+}

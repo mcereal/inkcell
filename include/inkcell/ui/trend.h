@@ -142,6 +142,32 @@ struct inkcell_trend {
 bool inkcell_trend_frame(const struct inkcell_series *const *series, uint32_t count,
                          struct inkcell_scale domain, uint8_t span, struct inkcell_trend *out);
 
+/*
+ * Where the vertical's gridlines go: at most `max` values from the floor towards the ceiling in
+ * even steps - upwards on an ordinary domain, downwards on a descending one. Returns how many.
+ *
+ * A plot with only its two ends labelled asks the reader to interpolate, and every chart on a
+ * phone stopped asking that a long time ago: Material's and Swift Charts' both rule faint lines
+ * across the plot at round values and label each one. The lines are furniture; the labels on
+ * them are what turn a height into a number without a ruler.
+ *
+ * The step is the first on a 1-2-5 ladder of `quantum` (1, 2, 5, 10, 20, 50... of it) that
+ * divides the domain into at most six intervals - the same ladder the ceiling contracts on, so
+ * on the percent and permille domains a contracted ceiling is always a gridline. `quantum` is the
+ * finest step the caller's units can *word*: a permille reading labelled in whole percent says
+ * 10, so a gridline never lands on a value its label would round.
+ *
+ * From the floor rather than from the nearest multiple of the step, because the floor is the
+ * domain's own and a baseline with no label is an axis that does not say where it starts. The
+ * domains here are stated on round numbers, so in practice the two agree. The ceiling is a
+ * gridline only when the steps land on it; it is not added when they do not, since a last
+ * interval shorter than the others reads as a mistake in the ruling.
+ */
+#define INKCELL_TREND_TICKS_MAX 7U
+
+uint32_t inkcell_trend_ticks(struct inkcell_scale scale, int32_t quantum, int32_t *out,
+                             uint32_t max);
+
 /* ---- readings ---------------------------------------------------------------------------------
  *
  * The same window, read as a list instead of drawn as a picture.

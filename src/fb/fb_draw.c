@@ -2660,6 +2660,158 @@ void inkcell_fb_stroke_arc(const struct inkcell_draw_state *state, int cx, int c
     }
 }
 
+/* ---- strokes and washes ---------------------------------------------------------------------- */
+
+/*
+ * Whether a sub-sample `u` (relative to the segment's start) lies within `radius_sq` of the
+ * segment running `d` from that start, every figure in the AA's fixed units.
+ *
+ * Squared throughout and never divided, for the reason every coverage test in this file is
+ * integer: the golden sheet compares digests across compilers. The perpendicular case compares
+ * the cross product's square against radius squared times the length squared - the distance
+ * formula with both sides multiplied up by the length squared, so there is no quotient to round.
+ */
+static bool inkcell_fb_segment_within(int64_t ux, int64_t uy, int64_t dx, int64_t dy,
+                                      int64_t length_sq, int64_t radius_sq) {
+    const int64_t along = ux * dx + uy * dy;
+    if (length_sq == 0 || along <= 0) {
+        return ux * ux + uy * uy <= radius_sq;
+    }
+    if (along >= length_sq) {
+        const int64_t vx = ux - dx;
+        const int64_t vy = uy - dy;
+        return vx * vx + vy * vy <= radius_sq;
+    }
+    const int64_t cross = ux * dy - uy * dx;
+    return cross * cross <= radius_sq * length_sq;
+}
+
+void inkcell_fb_stroke_line(const struct inkcell_draw_state *state, int x0, int y0, int x1, int y1,
+                            int thickness, struct inkcell_rgb color) {
+    if (state == NULL || thickness <= 0) {
+        return;
+    }
+    const int panel_w = inkcell_fb_panel_width(state);
+    const int panel_h = inkcell_fb_panel_height(state);
+    /* A segment wholly off a generous margin round the panel is not walked. The blend clips each
+       pixel anyway; this is what stops a wild coordinate costing a wild loop. */
+    if ((x0 < -panel_w && x1 < -panel_w) || (x0 > 2 * panel_w && x1 > 2 * panel_w) ||
+        (y0 < -panel_h && y1 < -panel_h) || (y0 > 2 * panel_h && y1 > 2 * panel_h)) {
+        return;
+    }
+
+    /*
+     * The centre line, in fixed units. The ends are the top-left of the pen's square, which is
+     * what every caller of the column walk this replaces was already passing - and it is also
+     * what keeps a level stroke crisp: an even pen centred on a pixel boundary covers whole rows,
+     * where one centred on a pixel's middle would smear half a row either side of it.
+     */
+    const int64_t fixed = INKCELL_FB_AA_FIXED;
+    const int64_t half = (fixed * thickness) / 2;
+    const int64_t ax = fixed * x0 + half;
+    const int64_t ay = fixed * y0 + half;
+    const int64_t dx = fixed * (x1 - x0);
+    const int64_t dy = fixed * (y1 - y0);
+    const int64_t length_sq = dx * dx + dy * dy;
+    const int64_t radius_sq = half * half;
+    /* A pixel's centre within this of the edge may be partly covered; nearer in or farther out
+       it is wholly one side - half a pixel's diagonal, rounded up. */
+    const int64_t slack = (fixed * 3) / 4;
+    const int64_t inner = half > slack ? half - slack : 0;
+    const int64_t inner_sq = inner * inner;
+    const int64_t outer_sq = (half + slack) * (half + slack);
+
+    const int left = (x0 < x1 ? x0 : x1);
+    const int right = (x0 < x1 ? x1 : x0) + thickness;
+    const int flat_top = (y0 < y1 ? y0 : y1);
+    const int flat_bottom = (y0 < y1 ? y1 : y0) + thickness;
+    for (int px = left; px < right; ++px) {
+        /*
+         * Only the rows this column can reach: the centre line's height across the column, less
+         * and more a pen. A long diagonal would otherwise be walked as its whole bounding box,
+         * which on a chart is most of the plot per segment.
+         */
+        int top = flat_top;
+        int bottom = flat_bottom;
+        if (x1 != x0) {
+            const int span = x1 - x0;
+            int from = px - thickness - x0;
+            int to = px + 1 - x0;
+            const int low = span < 0 ? span : 0;
+            const int high = span < 0 ? 0 : span;
+            from = from < low ? low : (from > high ? high : from);
+            to = to < low ? low : (to > high ? high : to);
+            const int ya = y0 + (int)(((int64_t)(y1 - y0) * from) / span);
+            const int yb = y0 + (int)(((int64_t)(y1 - y0) * to) / span);
+            top = (ya < yb ? ya : yb) - 1;
+            bottom = (ya < yb ? yb : ya) + thickness + 1;
+        }
+        for (int py = top; py < bottom; ++py) {
+            const int64_t cx = fixed * px + fixed / 2 - ax;
+            const int64_t cy = fixed * py + fixed / 2 - ay;
+            if (!inkcell_fb_segment_within(cx, cy, dx, dy, length_sq, outer_sq)) {
+                continue;
+            }
+            if (inkcell_fb_segment_within(cx, cy, dx, dy, length_sq, inner_sq)) {
+                inkcell_fb_blend_pixel(state, px, py, color, INKCELL_FB_AA_STEPS);
+                continue;
+            }
+            int covered = 0;
+            for (int ssy = 0; ssy < INKCELL_FB_AA_SUB; ++ssy) {
+                const int64_t uy = fixed * py + 2 * ssy + 1 - ay;
+                for (int ssx = 0; ssx < INKCELL_FB_AA_SUB; ++ssx) {
+                    const int64_t ux = fixed * px + 2 * ssx + 1 - ax;
+                    covered += inkcell_fb_segment_within(ux, uy, dx, dy, length_sq, radius_sq);
+                }
+            }
+            inkcell_fb_blend_pixel(state, px, py, color, covered);
+        }
+    }
+}
+
+void inkcell_fb_fill_wash(const struct inkcell_draw_state *state, int x, int y, int w, int h,
+                          struct inkcell_rgb color, int32_t top, int32_t bottom) {
+    if (state == NULL || w <= 0 || h <= 0) {
+        return;
+    }
+    struct inkcell_fb_clipped_box box;
+    if (!inkcell_fb_clip_box(state, x, y, w, h, &box)) {
+        return;
+    }
+    const size_t bpp = state->surface.bytes_per_pixel;
+    const size_t stride = state->surface.stride;
+    for (int row = 0; row < box.h; ++row) {
+        /*
+         * The row's strength, from where it falls in the *whole* rectangle rather than in the
+         * part of it that survived the clip - so a wash half under the app bar fades the way it
+         * would have, and is cut rather than squeezed. Out of 256 rather than the coverage's 16
+         * steps: a gradient over a few hundred rows in sixteen steps is sixteen visible bands.
+         */
+        const int64_t along = (int64_t)(row + box.dy) * 2 + 1;
+        const int64_t permille = top + ((int64_t)(bottom - top) * along) / ((int64_t)h * 2);
+        const int alpha = (int)((permille < 0      ? 0
+                                 : permille > 1000 ? 1000
+                                                   : permille) *
+                                256 / 1000);
+        if (alpha <= 0) {
+            continue;
+        }
+        uint8_t *px = state->surface.pixels + (size_t)(box.y + row) * stride + (size_t)box.x * bpp;
+        if ((size_t)(px - state->surface.pixels) + (size_t)box.w * bpp > state->surface.size) {
+            return;
+        }
+        for (int col = 0; col < box.w; ++col, px += bpp) {
+            const struct inkcell_rgb ground =
+                decompose_color(state, inkcell_fb_load_pixel(px, bpp));
+            const uint32_t blended = compose_color(
+                state, (uint8_t)((ground.r * (256 - alpha) + color.r * alpha + 128) >> 8),
+                (uint8_t)((ground.g * (256 - alpha) + color.g * alpha + 128) >> 8),
+                (uint8_t)((ground.b * (256 - alpha) + color.b * alpha + 128) >> 8));
+            inkcell_fb_store_span(px, 1, blended, bpp);
+        }
+    }
+}
+
 void inkcell_fb_clear(const struct inkcell_draw_state *state, struct inkcell_rgb color) {
     inkcell_fb_fill_rect(state, 0, 0, inkcell_fb_panel_width(state), inkcell_fb_panel_height(state),
                          color);

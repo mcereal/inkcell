@@ -279,6 +279,51 @@ bool inkcell_trend_frame(const struct inkcell_series *const *series, uint32_t co
     return true;
 }
 
+/* ---- the ruling ----------------------------------------------------------------------------- */
+
+uint32_t inkcell_trend_ticks(struct inkcell_scale scale, int32_t quantum, int32_t *out,
+                             uint32_t max) {
+    if (out == NULL || max == 0U) {
+        return 0U;
+    }
+    const int64_t min = scale.min;
+    const int64_t top = scale.min == scale.max ? INKCELL_ANIM_ONE : scale.max;
+    if (top == min) {
+        /* No width: the floor is the ceiling, and there is nothing between them to rule. */
+        out[0] = scale.min;
+        return 1U;
+    }
+    /* A descending domain is ruled the same way from its floor, walking down rather than up -
+       inkcell_scale_permille() places it the right way round, so only the direction differs. */
+    const int64_t direction = top > min ? 1 : -1;
+    const int64_t span = (top - min) * direction;
+    const int64_t unit = quantum > 0 ? quantum : 1;
+    /* Six intervals at most, which is what the plot has height for at the Brick's scale without
+       the labels crowding - and what a temperature's -40..80 needs to be ruled every twenty
+       degrees rather than every fifty. */
+    static const int64_t k_steps[] = {1, 2, 5};
+    int64_t step = unit;
+    for (int64_t decade = unit; decade <= span; decade *= 10) {
+        bool found = false;
+        for (size_t i = 0U; i < sizeof k_steps / sizeof k_steps[0]; ++i) {
+            step = decade * k_steps[i];
+            if (span / step <= 6) {
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            break;
+        }
+        step = decade * 10;
+    }
+    uint32_t count = 0U;
+    for (int64_t offset = 0; offset <= span && count < max; offset += step) {
+        out[count++] = (int32_t)(min + offset * direction);
+    }
+    return count;
+}
+
 /* ---- columns -------------------------------------------------------------------------------- */
 
 /* The durations a bin may be, shortest first. Down to a second only because the capture harness

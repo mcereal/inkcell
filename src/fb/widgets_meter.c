@@ -617,53 +617,14 @@ int inkcell_fb_sparkline_height(const struct inkcell_draw_state *state, int scal
  * How thick the line is drawn, and how thick its floor is.
  *
  * A stroke a single pixel wide is what a line on a desktop is and it is the wrong answer on a
- * panel with 1024 pixels across 3.2 inches and no anti-aliasing: a diagonal run of single pixels
- * is a dotted line held at arm's length. The glyph scale is what everything else here grows
+ * panel with 1024 pixels across 3.2 inches: a diagonal a single pixel wide is a dotted line held
+ * at arm's length, anti-aliased or not. The glyph scale is what everything else here grows
  * with, so the stroke grows with it too - a theme picked for legibility gets a legible line
  * rather than the same hairline beside larger type.
  */
 static int inkcell_fb_spark_stroke(int scale) {
     const int stroke = inkcell_step_px(scale) / 2;
     return stroke > 1 ? stroke : 1;
-}
-
-/*
- * One segment, drawn a pixel column at a time.
- *
- * Bresenham's is the usual answer and this is not it, deliberately: what a column-wise walk
- * gives that a line rasteriser does not is that consecutive columns are *joined* by
- * construction - each fills from where the last one ended to where this one lands - so a steep
- * segment is a connected stroke rather than a ladder of separated pixels. On a series whose x
- * axis is time, steep is the ordinary case: two readings a minute apart on a line spanning an
- * hour land within a few columns of each other.
- */
-static void inkcell_fb_spark_segment(const struct inkcell_draw_state *state, int x0, int y0, int x1,
-                                     int y1, int stroke, struct inkcell_rgb color) {
-    if (x1 < x0) {
-        const int swap_x = x0, swap_y = y0;
-        x0 = x1;
-        y0 = y1;
-        x1 = swap_x;
-        y1 = swap_y;
-    }
-    const int columns = x1 - x0;
-    if (columns == 0) {
-        /* Two readings the clock could not separate, or a series projected onto a box narrower
-           than it has samples: a vertical connector rather than nothing, so the line still
-           passes through both values. */
-        const int top = y0 < y1 ? y0 : y1;
-        const int bottom = y0 > y1 ? y0 : y1;
-        inkcell_fb_fill_rect(state, x0, top, stroke, bottom - top + stroke, color);
-        return;
-    }
-    int previous = y0;
-    for (int i = 0; i <= columns; ++i) {
-        const int y = y0 + (int)(((int64_t)(y1 - y0) * i) / columns);
-        const int top = y < previous ? y : previous;
-        const int bottom = y > previous ? y : previous;
-        inkcell_fb_fill_rect(state, x0 + i, top, stroke, bottom - top + stroke, color);
-        previous = y;
-    }
 }
 
 void inkcell_fb_draw_sparkline(const struct inkcell_draw_state *state,
@@ -723,7 +684,7 @@ void inkcell_fb_draw_sparkline(const struct inkcell_draw_state *state,
            origin is its top corner is a subtraction. */
         const int y = r.y + travel - (int)(((int64_t)point->y * travel) / INKCELL_ANIM_ONE);
         if (!point->gap && i > 0U) {
-            inkcell_fb_spark_segment(state, previous_x, previous_y, x, y, stroke, ink);
+            inkcell_fb_stroke_line(state, previous_x, previous_y, x, y, stroke, ink);
         }
         previous_x = x;
         previous_y = y;
@@ -734,12 +695,13 @@ void inkcell_fb_draw_sparkline(const struct inkcell_draw_state *state,
      *
      * A line has two ends and nothing about a stroke says which of them is now. On a trend that
      * is the whole reading - a line that falls left to right and one that rises are the same
-     * picture read backwards - so the end that is the present carries a square three times the
-     * stroke, which is the smallest mark that is still findable against the line it ends.
+     * picture read backwards - so the end that is the present carries a disc three times the
+     * stroke, which is the smallest mark that is still findable against the line it ends. A disc
+     * rather than a square, because it is the mark a chart's lines end in too.
      */
     const int mark = stroke * 3;
     /* Centred on the stroke's own centre, then held inside the box: the newest reading is at the
-       trailing edge by construction, so an uncentred square would hang over whatever the slot
+       trailing edge by construction, so an uncentred disc would hang over whatever the slot
        was measured to keep clear of. */
     int mark_x = previous_x + stroke / 2 - mark / 2;
     int mark_y = previous_y + stroke / 2 - mark / 2;
@@ -755,7 +717,7 @@ void inkcell_fb_draw_sparkline(const struct inkcell_draw_state *state,
     if (mark_y < r.y) {
         mark_y = r.y;
     }
-    inkcell_fb_fill_rect(state, mark_x, mark_y, mark, mark, ink);
+    inkcell_fb_fill_round_rect(state, mark_x, mark_y, mark, mark, mark / 2, ink);
 }
 
 /* ---- the proportion bar --------------------------------------------------------------------- */
@@ -908,16 +870,45 @@ int inkcell_fb_chart_min_height(const struct inkcell_draw_state *state,
 }
 
 /*
- * One threshold, drawn across the plot as a broken rule.
+ * Where a chart's plot is, and how a reading is placed in it.
  *
- * Broken rather than solid, and that is the whole of what tells it from the axis and from the
- * data: a chart with three solid horizontals on it has three things that look like readings. The
- * meter answers the same question by cutting a notch in its own track, which is a gap in a thing
- * the eye has already found; there is no track here to cut, so the mark has to be visibly a mark.
+ * One struct because four things place against it - the gridlines, the thresholds, the lines and
+ * the columns - and four copies of the arithmetic were four chances for a gridline labelled 2%
+ * to sit a pixel away from a column that reached 2%. A reading's *centre* is what is placed: the
+ * floor of the domain lands on the baseline and the ceiling half a pen below the top, so a line
+ * at either end draws wholly inside the plot and a column's top and a gridline's value agree.
+ */
+struct inkcell_fb_chart_plot {
+    struct inkcell_fb_rect rect;
+    int base;   /* the baseline's top row: the floor of the domain */
+    int half;   /* half the pen, which the ceiling is held below */
+    int travel; /* rows from the ceiling's centre to the floor's */
+};
+
+static int inkcell_fb_chart_y(const struct inkcell_fb_chart_plot *plot, int32_t permille) {
+    return plot->base - (int)(((int64_t)permille * plot->travel) / INKCELL_ANIM_ONE);
+}
+
+/* Whether `value` is inside the domain - asked of the reading rather than its projection, for
+   the reason inkcell_fb_chart_threshold() gives. */
+static bool inkcell_fb_chart_holds(struct inkcell_scale scale, int32_t value) {
+    const int32_t max = scale.min == scale.max ? INKCELL_ANIM_ONE : scale.max;
+    const int32_t low = scale.min < max ? scale.min : max;
+    const int32_t high = scale.min < max ? max : scale.min;
+    return value >= low && value <= high;
+}
+
+/*
+ * One threshold, drawn across the plot as a broken rule in the tone it is the edge of.
+ *
+ * Broken rather than solid, and that is what tells it from a gridline and from the data: a chart
+ * with a solid coloured horizontal on it has one more thing that looks like a reading. Coloured,
+ * because this is Material's and Swift Charts' limit line - the amber rule is the amber of the
+ * card's bar, so where the reader saw a colour change is a line they can watch the trend cross.
  */
 static void inkcell_fb_chart_threshold(const struct inkcell_draw_state *state,
-                                       const struct inkcell_fb_rect *plot, int travel,
-                                       int32_t value, struct inkcell_scale scale, int rule,
+                                       const struct inkcell_fb_chart_plot *plot, int32_t value,
+                                       struct inkcell_scale scale, int rule,
                                        struct inkcell_rgb ink) {
     /*
      * Outside the domain the lines are drawn on. Nothing is clamped to an edge here: a threshold
@@ -926,26 +917,70 @@ static void inkcell_fb_chart_threshold(const struct inkcell_draw_state *state,
      *
      * Asked of the *reading* rather than of its projection, and that is not a tidy-up:
      * inkcell_scale_permille() clamps, so a threshold above the domain's ceiling comes back as
-     * 1000 and this test - written against the projection - could never fire. It never had to
-     * until the ceiling learned to contract (inkcell_trend_domain()), and the first quiet mesh
-     * drawn on a fifth of the domain would have had a rule ruled across the top of it saying the
-     * air was as busy as the picture goes.
-     *
-     * Both ends of the comparison rather than one, because a domain may be stated either way
-     * round: a descending scale reads backwards, and its ceiling is the smaller number.
+     * 1000 and a test written against the projection could never fire. It never had to until
+     * the ceiling learned to contract (inkcell_trend_domain()), and the first quiet mesh drawn on
+     * a fifth of the domain would have had a rule across the top of it saying the air was as busy
+     * as the picture goes.
      */
-    const int32_t max = scale.min == scale.max ? INKCELL_ANIM_ONE : scale.max;
-    const int32_t low = scale.min < max ? scale.min : max;
-    const int32_t high = scale.min < max ? max : scale.min;
-    if (value < low || value > high) {
+    if (!inkcell_fb_chart_holds(scale, value)) {
         return;
     }
-    const int32_t permille = inkcell_scale_permille(scale, value);
-    const int y = plot->y + travel - (int)(((int64_t)permille * travel) / INKCELL_ANIM_ONE);
-    const int dash = rule * 3;
-    for (int x = plot->x; x < plot->x + plot->w; x += dash * 2) {
-        const int w = (x + dash > plot->x + plot->w) ? plot->x + plot->w - x : dash;
-        inkcell_fb_fill_rect(state, x, y, w, rule, ink);
+    const int y = inkcell_fb_chart_y(plot, inkcell_scale_permille(scale, value)) - rule / 2;
+    const int dash = rule * 4;
+    const struct inkcell_fb_rect *r = &plot->rect;
+    for (int x = r->x; x < r->x + r->w; x += dash * 2) {
+        const int w = (x + dash > r->x + r->w) ? r->x + r->w - x : dash;
+        inkcell_fb_fill_round_rect(state, x, y, w, rule, rule / 2, ink);
+    }
+}
+
+/*
+ * The newest reading on a line, marked: a dot in the line's colour inside a ring of the ground.
+ *
+ * The chart used to argue it did not need one, because "now" is the right-hand edge by
+ * construction. That holds for the *position* and not for the eye: every chart on a phone marks
+ * the point a reader's finger would land on, and it is the one place on the line that the
+ * legend's figure is a reading *of*. The ring is what lifts it off a column it sits on.
+ *
+ * Held inside `bounds`, which is the plot plus the headroom above it the top label already
+ * reserves - so a reading at the ceiling does not put a dot over the span strip.
+ */
+static void inkcell_fb_chart_dot(const struct inkcell_draw_state *state,
+                                 const struct inkcell_fb_rect *bounds, int cx, int cy, int dot,
+                                 int ring, struct inkcell_rgb colour, struct inkcell_rgb ground) {
+    const int outer = dot + ring * 2;
+    int x = cx - outer / 2;
+    int y = cy - outer / 2;
+    x = x > bounds->x + bounds->w - outer ? bounds->x + bounds->w - outer : x;
+    x = x < bounds->x ? bounds->x : x;
+    y = y > bounds->y + bounds->h - outer ? bounds->y + bounds->h - outer : y;
+    y = y < bounds->y ? bounds->y : y;
+    inkcell_fb_fill_round_rect(state, x, y, outer, outer, outer / 2, ground);
+    inkcell_fb_fill_round_rect(state, x + ring, y + ring, dot, dot, dot / 2, colour);
+}
+
+/*
+ * The wash under one joined run of a line, a column at a time from the line down to the axis.
+ *
+ * Each column's strength is where the line is in it, measured against the line's own highest
+ * point - so the wash is strongest under the peak and thins towards the floor the way one
+ * gradient laid over the whole plot would, without painting the air above the line and cutting
+ * it back out.
+ */
+static void inkcell_fb_chart_wash(const struct inkcell_draw_state *state,
+                                  const struct inkcell_fb_chart_plot *plot, int x0, int y0, int x1,
+                                  int y1, int peak, bool last, struct inkcell_rgb colour) {
+    enum { WASH_STRENGTH = 280 }; /* permille at the peak; ~a quarter, as the platforms draw it */
+    const int reach = plot->base - peak;
+    const int stop = last ? x1 + 1 : x1;
+    for (int x = x0; x < stop; ++x) {
+        const int y = x1 == x0 ? y1 : y0 + (int)(((int64_t)(y1 - y0) * (x - x0)) / (x1 - x0));
+        const int h = plot->base - y;
+        if (h <= 0) {
+            continue;
+        }
+        const int32_t top = reach > 0 ? (int32_t)(((int64_t)WASH_STRENGTH * h) / reach) : 0;
+        inkcell_fb_fill_wash(state, x, y, 1, h, colour, top, 0);
     }
 }
 
@@ -991,8 +1026,9 @@ static void inkcell_fb_chart_legend(const struct inkcell_draw_state *state,
         /* Vertically centred on the capitals beside it rather than on the cell, which is the
            icon slot's rule - a square sized to the cell stands a seventh taller than the word it
            is labelling on any face with real descenders. */
-        inkcell_fb_fill_round_rect(state, x, y + (line - cap) / 2, cap, cap,
-                                   inkcell_fb_radius(state, INKCELL_SHAPE_SM),
+        /* A disc rather than a rounded square: it is the same mark the newest reading on the
+           line carries, so the legend and the plot point at each other. */
+        inkcell_fb_fill_round_rect(state, x, y + (line - cap) / 2, cap, cap, cap / 2,
                                    inkcell_theme_series(state->theme, i));
         int text_x = x + cap + adv;
         if (word != NULL) {
@@ -1012,38 +1048,45 @@ static void inkcell_fb_chart_legend(const struct inkcell_draw_state *state,
 /*
  * One binned line: columns up from the axis, or a stroke through the bins' centres.
  *
+ * A column's top corners are rounded and its foot is square, which is the bar mark both
+ * platforms draw: the foot stands on the baseline, and the round top is what says "this is the
+ * end of a quantity" rather than the edge of a cell. The radius is the theme's small corner, and
+ * never more than a third of the column - past that a narrow column is a capsule and its height
+ * is read off the middle of a curve.
+ *
  * A present bin whose mean is zero still gets a column one rule tall, because "the radio said
  * nothing was on the air" and "the radio said nothing" are different readings and an empty slot
- * is the second. The gap between columns is one rule, and only where a column is wide enough to
- * spare it; below that the columns touch rather than vanish.
+ * is the second. The gap between columns is a quarter of a bin, at least one rule, and only where
+ * a column is wide enough to spare it; below that the columns touch rather than vanish.
  *
  * A stroke is drawn twice: first wider in the ground colour, then in its own. The series colours
- * are only promised apart by 1.4:1, which a column next to a column meets and a two-pixel line
- * crossing a column does not - the halo is what keeps the line legible where it passes through
- * one.
+ * are only promised apart by 1.4:1, which a column next to a column meets and a line crossing a
+ * column does not - the halo is what keeps the line legible where it passes through one.
  *
- * True when it put a mark on the panel.
+ * True when it put a mark on the panel. `*end_x`/`*end_y` are the centre of the last bin drawn,
+ * for the dot that marks it.
  */
 static bool inkcell_fb_chart_bins(const struct inkcell_draw_state *state,
-                                  const struct inkcell_fb_rect *plot, int travel, int stroke,
-                                  int rule, struct inkcell_scale scale,
+                                  const struct inkcell_fb_chart_plot *plot, int stroke, int rule,
+                                  struct inkcell_scale scale,
                                   const struct inkcell_fb_chart_line *line,
-                                  struct inkcell_rgb colour, struct inkcell_rgb ground) {
+                                  struct inkcell_rgb colour, struct inkcell_rgb ground, int *end_x,
+                                  int *end_y) {
     const struct inkcell_trend_bins *bins = line->bins;
     const uint32_t count =
         bins->count < INKCELL_TREND_BINS_MAX ? bins->count : INKCELL_TREND_BINS_MAX;
     if (count == 0U) {
         return false;
     }
-    /* The plot less the axis rule on its left, so the first column does not sit on the axis. */
-    const int left = plot->x + rule;
-    const int width = plot->w - rule;
-    const int base = plot->y + travel + stroke; /* the top of the axis rule */
-    const int halo = stroke / 2 > rule ? stroke / 2 : rule;
+    const int left = plot->rect.x;
+    const int width = plot->rect.w;
+    /* The halo is one rule each side: enough to cut the line out of a column it crosses, and no
+       more - a halo as thick as the pen reads as an outline drawn round the line. */
+    const int halo = rule;
+    const int corner = inkcell_fb_radius(state, INKCELL_SHAPE_SM);
     bool drawn = false;
     for (int pass = line->columns ? 1 : 0; pass < 2; ++pass) {
         const int pen = pass == 0 ? stroke + halo * 2 : stroke;
-        const int offset = pass == 0 ? halo : 0;
         const struct inkcell_rgb ink = pass == 0 ? ground : colour;
         int previous_x = 0;
         int previous_y = 0;
@@ -1054,29 +1097,38 @@ static bool inkcell_fb_chart_bins(const struct inkcell_draw_state *state,
             const int x0 = left + (int)(((int64_t)i * width) / (int64_t)count);
             const int x1 = left + (int)(((int64_t)(i + 1U) * width) / (int64_t)count);
             const int32_t permille = inkcell_scale_permille(scale, bins->values[i]);
+            const int cy = inkcell_fb_chart_y(plot, permille);
             if (line->columns) {
-                const int gap = (x1 - x0) >= rule * 4 ? rule : 0;
-                int h = (int)(((int64_t)permille * (travel + stroke)) / INKCELL_ANIM_ONE);
+                const int quarter = (x1 - x0) / 4;
+                const int gap = (x1 - x0) >= rule * 4 ? (quarter > rule ? quarter : rule) : 0;
+                int h = plot->base - cy;
                 h = h < rule ? rule : h;
-                if (x1 - x0 - gap > 0) {
-                    inkcell_fb_fill_rect(state, x0, base - h, x1 - x0 - gap, h, ink);
+                const int w = x1 - x0 - gap;
+                if (w > 0) {
+                    int radius = corner < w / 3 ? corner : w / 3;
+                    radius = radius < h ? radius : h;
+                    inkcell_fb_fill_round_rect_ends(state, x0 + gap / 2, plot->base - h, w, h,
+                                                    radius, ink, true, false);
                     drawn = true;
+                    *end_x = x0 + gap / 2 + w / 2;
+                    *end_y = plot->base - h;
                 }
                 continue;
             }
-            const int x = (x0 + x1) / 2 - offset;
-            const int y =
-                plot->y + travel - (int)(((int64_t)permille * travel) / INKCELL_ANIM_ONE) - offset;
+            const int x = (x0 + x1) / 2 - pen / 2;
+            const int y = cy - pen / 2;
             if (bins->joins[i]) {
-                inkcell_fb_spark_segment(state, previous_x, previous_y, x, y, pen, ink);
+                inkcell_fb_stroke_line(state, previous_x, previous_y, x, y, pen, ink);
             } else {
-                /* A bin nothing joins is still a reading: a stroke's worth of dot says so, where
+                /* A bin nothing joins is still a reading: a pen's worth of dot says so, where
                    the polyline's rule would draw nothing. */
-                inkcell_fb_fill_rect(state, x - pen / 2 + offset, y, pen, pen, ink);
+                inkcell_fb_fill_round_rect(state, x, y, pen, pen, pen / 2, ink);
             }
             drawn = true;
             previous_x = x;
             previous_y = y;
+            *end_x = (x0 + x1) / 2;
+            *end_y = cy;
         }
     }
     return drawn;
@@ -1100,6 +1152,34 @@ static bool inkcell_fb_chart_bins(const struct inkcell_draw_state *state,
  * lines under it say what came out. Put underneath, the control would be the third line of a
  * caption. Centred, because it is about the whole horizontal rather than either end of it.
  */
+/*
+ * The type the strip's words are set in: the size a segmented control in a row uses, so the two
+ * are one control. Its *height* is taken at the body's scale, as a row's is - the words are
+ * chrome-sized and the control is not. At the chart's small scale for both, the words sat
+ * against the strip's own outline and it read as a caption rather than something to press.
+ */
+static int inkcell_fb_chart_strip_scale(const struct inkcell_draw_state *state) {
+    return inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL);
+}
+
+/*
+ * How wide the strip is drawn: what its words need, and at least half the plot.
+ *
+ * Wider than its words because a segmented control is read as a *bar* of choices - both
+ * platforms stretch one across the view it filters - and four segments each hugging a two-letter
+ * word read as four chips. Half rather than the whole width, because the plot under it is the
+ * subject and a control the width of the panel reads as a second app bar.
+ */
+static int inkcell_fb_chart_strip_width(const struct inkcell_draw_state *state,
+                                        const struct inkcell_fb_rect *rect,
+                                        const struct inkcell_fb_segmented *spans) {
+    const int words = inkcell_fb_segmented_width(state, spans, inkcell_fb_chart_strip_scale(state));
+    if (words <= 0) {
+        return words;
+    }
+    return words > rect->w / 2 ? words : rect->w / 2;
+}
+
 static int inkcell_fb_chart_strip(const struct inkcell_draw_state *state,
                                   const struct inkcell_fb_layout *layout,
                                   const struct inkcell_fb_rect *rect,
@@ -1108,9 +1188,8 @@ static int inkcell_fb_chart_strip(const struct inkcell_draw_state *state,
     if (spans == NULL) {
         return 0;
     }
-    const int scale = layout->small;
-    const int strip = inkcell_fb_segmented_height(state, scale);
-    const int width = inkcell_fb_segmented_width(state, spans, scale);
+    const int strip = inkcell_fb_segmented_height(state, state->scale);
+    const int width = inkcell_fb_chart_strip_width(state, rect, spans);
     const int gap = inkcell_fb_gutter(state);
     if (strip <= 0 || width <= 0 || width > rect->w ||
         rect->h - (strip + gap) < inkcell_fb_chart_min_height(state, layout)) {
@@ -1256,12 +1335,13 @@ void inkcell_fb_draw_chart(const struct inkcell_draw_state *state,
     const int strip_takes =
         inkcell_fb_chart_strip(state, layout, &chart->rect, chart->spans, &strip_width);
     if (strip_takes > 0) {
-        const int strip = inkcell_fb_segmented_height(state, scale);
+        const int strip_scale = inkcell_fb_chart_strip_scale(state);
+        const int strip = inkcell_fb_segmented_height(state, state->scale);
         const struct inkcell_fb_rect box = {
             .x = body.x + (body.w - strip_width) / 2, .y = body.y, .w = strip_width, .h = strip};
         /* Selected, always: it is the only control on the screen and the d-pad always reaches
            it - see `spans`. Its ground is the body's, because that is what is behind it. */
-        inkcell_fb_draw_segmented(state, &box, chart->spans, true, INKCELL_COLOR_BG, scale);
+        inkcell_fb_draw_segmented(state, &box, chart->spans, true, INKCELL_COLOR_BG, strip_scale);
         body.y += strip_takes;
         body.h -= strip_takes;
     }
@@ -1274,73 +1354,156 @@ void inkcell_fb_draw_chart(const struct inkcell_draw_state *state,
     }
 
     /*
-     * The room the vertical's two ends want, taken off the left before anything is placed.
+     * The labels up the side: the caller's ruled values, or the two ends when it stated only
+     * those. Either way they are one list from here on, so the ends are ruled exactly as the
+     * values between them are.
+     */
+    struct inkcell_fb_chart_tick ends[2];
+    const struct inkcell_fb_chart_tick *ticks = chart->ticks;
+    uint32_t tick_count = chart->ticks != NULL ? chart->tick_count : 0U;
+    if (tick_count == 0U) {
+        ends[0] = (struct inkcell_fb_chart_tick){chart->scale.min, chart->bottom};
+        ends[1] = (struct inkcell_fb_chart_tick){
+            chart->scale.min == chart->scale.max ? INKCELL_ANIM_ONE : chart->scale.max, chart->top};
+        ticks = ends;
+        tick_count = 2U;
+    }
+
+    /*
+     * The room the labels want, taken off the left before anything is placed.
      *
      * Measured from the labels themselves rather than reserved as a fixed column: this is the
      * only screen on the panel, so a chart of percentages should not be inset as far as one of
      * five-digit counts. The gap after them is one cell, which is the same gap a list row leaves
      * between its label column and its value.
      */
-    const int top_w = inkcell_fb_text_width(state, chart->top, scale);
-    const int bottom_w = inkcell_fb_text_width(state, chart->bottom, scale);
-    const int axis_w = top_w > bottom_w ? top_w : bottom_w;
+    int axis_w = 0;
+    for (uint32_t i = 0U; i < tick_count; ++i) {
+        const int w = inkcell_fb_text_width(state, ticks[i].label, scale);
+        axis_w = w > axis_w ? w : axis_w;
+    }
     const int gutter = axis_w > 0 ? axis_w + adv : 0;
 
-    struct inkcell_fb_rect plot = {
+    /*
+     * Half a line of headroom over the plot, because every label is centred on its gridline and
+     * the top one would otherwise hang over the strip above. The same half is what the newest
+     * reading's dot may rise into at the ceiling.
+     */
+    const int label_line = inkcell_fb_line_adv(state, scale);
+    const int headroom = label_line / 2;
+    const struct inkcell_fb_rect rect = {
         .x = body.x + gutter,
-        .y = body.y,
+        .y = body.y + headroom,
         .w = body.w - gutter,
-        .h = body.h - INKCELL_FB_CHART_FOOTER_LINES * layout->line,
+        .h = body.h - INKCELL_FB_CHART_FOOTER_LINES * layout->line - headroom,
     };
-    if (plot.w <= 0 || plot.h <= rule) {
+    if (rect.w <= 0 || rect.h <= rule) {
         return;
     }
-
-    const struct inkcell_rgb furniture = inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK);
-    const struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_BG);
-
-    /*
-     * The frame: the two axes and nothing else.
-     *
-     * Two rather than four, because the two that are not drawn would be saying something. A rule
-     * along the top of a chart reads as the domain's ceiling and this one has a label saying
-     * where that is; a rule up the right-hand edge reads as the present, which is where the
-     * lines end anyway. What is left is the pair that say "measured from here".
-     */
-    const int interior = plot.h - rule;
-    inkcell_fb_fill_rect(state, plot.x, plot.y, rule, plot.h, furniture);
-    inkcell_fb_fill_rect(state, plot.x, plot.y + interior, plot.w, rule, furniture);
-
-    /*
-     * The height a reading travels over, which is the interior less the stroke - so a reading at
-     * the top of its domain draws its whole line inside the plot rather than half outside it.
-     * The sparkline's arithmetic, with a thicker pen.
-     */
     const int stroke = inkcell_fb_chart_stroke(state->scale);
-    const int travel = interior > stroke ? interior - stroke : 0;
-    const int span = plot.w > 1 ? plot.w - 1 : 0;
+    const int interior = rect.h - rule;
+    const struct inkcell_fb_chart_plot plot = {
+        .rect = rect,
+        .base = rect.y + interior,
+        .half = stroke / 2,
+        .travel = interior > stroke / 2 ? interior - stroke / 2 : 0,
+    };
+    const struct inkcell_fb_rect bounds = {rect.x, rect.y - headroom, rect.w, rect.h + headroom};
 
-    /* The thresholds, under the lines: a mark the data can be seen crossing has to be behind it,
-       or the mark is what is on top of the reading. */
-    if (chart->band != NULL) {
-        inkcell_fb_chart_threshold(state, &plot, travel, chart->band->warn, chart->scale, rule,
-                                   furniture);
-        inkcell_fb_chart_threshold(state, &plot, travel, chart->band->bad, chart->scale, rule,
-                                   furniture);
-    }
-
-    /* The two ends of the vertical, against the plot's own top and bottom. */
-    const int label_line = inkcell_fb_line_adv(state, scale);
+    const struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_BG);
     const struct inkcell_rgb ink = inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM);
-    /* Right-aligned against the plot's edge, each by its own measured width: the gutter was
-       sized for the wider of the two, so hanging both off the same cell count would push the
-       shorter one away from the axis it labels. */
-    if (chart->top != NULL) {
-        inkcell_fb_draw_text(state, plot.x - adv - top_w, plot.y, chart->top, scale, ink, ground);
+    /* The baseline in the meter's track and the rest a step quieter, so the floor reads as the
+       floor and the rest as ruling. */
+    const struct inkcell_rgb baseline = inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK);
+    const struct inkcell_rgb grid = inkcell_fb_fade(baseline, ground, 450);
+
+    /*
+     * The ruling: a hairline across the plot at each value, and its label beside it.
+     *
+     * This is what the chart used to decline as furniture, and the argument was right about a
+     * lattice - evenly spaced lines that make a picture look measured without saying what the
+     * measure is. These are not that: each line has a number on it, so the reader reads a height
+     * against the nearest one instead of against the two ends of the axis. They are drawn faint
+     * enough to sit behind the data, and horizontally only - a vertical rule reads as a moment,
+     * and nothing happened at the moments they would mark.
+     *
+     * No rule up the left-hand side. The labels are already standing there, and a line beside
+     * them is the axis of a spreadsheet chart rather than a phone's.
+     */
+    /*
+     * Every other value, or every third, when the plot is too short for a label per line: the
+     * lines are as far apart as the values are, and a label is a line of text tall. Thinned from
+     * the floor up, so the baseline always keeps its label.
+     */
+    uint32_t stride = 1U;
+    if (tick_count > 1U) {
+        const int first =
+            inkcell_fb_chart_y(&plot, inkcell_scale_permille(chart->scale, ticks[0].value));
+        const int second =
+            inkcell_fb_chart_y(&plot, inkcell_scale_permille(chart->scale, ticks[1].value));
+        const int apart = first > second ? first - second : second - first;
+        while (apart > 0 && (int)stride * apart < label_line && stride < tick_count) {
+            ++stride;
+        }
     }
-    if (chart->bottom != NULL) {
-        inkcell_fb_draw_text(state, plot.x - adv - bottom_w, plot.y + interior - label_line,
-                             chart->bottom, scale, ink, ground);
+    for (uint32_t i = 0U; i < tick_count; ++i) {
+        /*
+         * The floor and the last value the caller ruled always keep theirs - the two ends are
+         * what say where the scale starts and how high it goes. Between them every `stride`th,
+         * and none within a stride of the top one, so thinning never crowds the ceiling either.
+         */
+        const bool last = i + 1U == tick_count;
+        if (!last && (i % stride != 0U || (i > 0U && i + stride > tick_count - 1U))) {
+            continue;
+        }
+        if (!inkcell_fb_chart_holds(chart->scale, ticks[i].value)) {
+            continue;
+        }
+        const int y =
+            inkcell_fb_chart_y(&plot, inkcell_scale_permille(chart->scale, ticks[i].value));
+        const bool floor = i == 0U && ticks[i].value == chart->scale.min;
+        inkcell_fb_fill_rect(state, rect.x, floor ? plot.base : y - rule / 2, rect.w, rule,
+                             floor ? baseline : grid);
+        if (ticks[i].label != NULL) {
+            const int w = inkcell_fb_text_width(state, ticks[i].label, scale);
+            int ty = y - label_line / 2;
+            ty = ty < bounds.y ? bounds.y : ty;
+            inkcell_fb_draw_text(state, rect.x - adv - w, ty, ticks[i].label, scale, ink, ground);
+        }
+    }
+
+    /*
+     * The washes first, under everything: a wash is the quietest mark on the plot and a column or
+     * a threshold drawn under one would be tinted by it.
+     */
+    for (uint32_t i = 0U; i < chart->count && i < INKCELL_FB_CHART_LINES; ++i) {
+        const struct inkcell_fb_chart_line *line = &chart->lines[i];
+        const struct inkcell_polyline *points = line->points;
+        if (!line->area || line->bins != NULL || points == NULL || points->count < 2U) {
+            continue;
+        }
+        const uint32_t n = points->count < INKCELL_SERIES_MAX ? points->count : INKCELL_SERIES_MAX;
+        int peak = plot.base;
+        for (uint32_t j = 0U; j < n; ++j) {
+            const bool joined =
+                (j > 0U && !points->items[j].gap) || (j + 1U < n && !points->items[j + 1U].gap);
+            const int y = inkcell_fb_chart_y(&plot, points->items[j].y);
+            peak = joined && y < peak ? y : peak;
+        }
+        const struct inkcell_rgb colour = inkcell_theme_series(state->theme, i);
+        for (uint32_t j = 1U; j < n; ++j) {
+            if (points->items[j].gap) {
+                continue;
+            }
+            const int span = rect.w > 1 ? rect.w - 1 : 0;
+            const int xa =
+                rect.x + (int)(((int64_t)points->items[j - 1U].x * span) / INKCELL_ANIM_ONE);
+            const int xb = rect.x + (int)(((int64_t)points->items[j].x * span) / INKCELL_ANIM_ONE);
+            const bool last = j + 1U >= n || points->items[j + 1U].gap;
+            inkcell_fb_chart_wash(
+                state, &plot, xa, inkcell_fb_chart_y(&plot, points->items[j - 1U].y), xb,
+                inkcell_fb_chart_y(&plot, points->items[j].y), peak, last, colour);
+        }
     }
 
     /*
@@ -1350,11 +1513,21 @@ void inkcell_fb_draw_chart(const struct inkcell_draw_state *state,
      * slice 0 is the same colour on every frame and every theme, so the legend under the plot
      * goes on meaning what it said the last time this screen was opened.
      *
-     * Two passes: columns first, then strokes, so a line is never hidden behind a column that
-     * happens to come later in the list.
+     * Columns first, then the thresholds over them, then strokes, then the dots that end them -
+     * so a line is never hidden behind a column that happens to come later in the list, and a
+     * limit line is never hidden behind the data it is a limit on.
      */
     bool drawn = false;
+    bool ends_at[INKCELL_FB_CHART_LINES] = {false};
+    int end_x[INKCELL_FB_CHART_LINES] = {0};
+    int end_y[INKCELL_FB_CHART_LINES] = {0};
     for (int pass = 0; pass < 2; ++pass) {
+        if (pass == 1 && chart->band != NULL) {
+            inkcell_fb_chart_threshold(state, &plot, chart->band->warn, chart->scale, rule,
+                                       inkcell_fb_color(state, INKCELL_COLOR_WARNING));
+            inkcell_fb_chart_threshold(state, &plot, chart->band->bad, chart->scale, rule,
+                                       inkcell_fb_color(state, INKCELL_COLOR_ERROR));
+        }
         for (uint32_t i = 0U; i < chart->count && i < INKCELL_FB_CHART_LINES; ++i) {
             const struct inkcell_fb_chart_line *line = &chart->lines[i];
             const bool columns = line->bins != NULL && line->columns;
@@ -1363,29 +1536,45 @@ void inkcell_fb_draw_chart(const struct inkcell_draw_state *state,
             }
             const struct inkcell_rgb colour = inkcell_theme_series(state->theme, i);
             if (line->bins != NULL) {
-                drawn = inkcell_fb_chart_bins(state, &plot, travel, stroke, rule, chart->scale,
-                                              line, colour, ground) ||
-                        drawn;
+                const bool marked =
+                    inkcell_fb_chart_bins(state, &plot, stroke, rule, chart->scale, line, colour,
+                                          ground, &end_x[i], &end_y[i]);
+                drawn = marked || drawn;
+                ends_at[i] = marked && !columns;
                 continue;
             }
             const struct inkcell_polyline *points = line->points;
             if (points == NULL || points->count < 2U) {
                 continue; /* one reading is a level; the sparkline's rule, unchanged */
             }
+            const int span = rect.w > 1 ? rect.w - 1 : 0;
             int previous_x = 0;
             int previous_y = 0;
             for (uint32_t j = 0U; j < points->count && j < INKCELL_SERIES_MAX; ++j) {
                 const struct inkcell_point *point = &points->items[j];
-                const int x = plot.x + (int)(((int64_t)point->x * span) / INKCELL_ANIM_ONE);
-                const int y =
-                    plot.y + travel - (int)(((int64_t)point->y * travel) / INKCELL_ANIM_ONE);
+                const int x = rect.x + (int)(((int64_t)point->x * span) / INKCELL_ANIM_ONE);
+                const int y = inkcell_fb_chart_y(&plot, point->y);
                 if (!point->gap && j > 0U) {
-                    inkcell_fb_spark_segment(state, previous_x, previous_y, x, y, stroke, colour);
+                    inkcell_fb_stroke_line(state, previous_x - stroke / 2, previous_y - stroke / 2,
+                                           x - stroke / 2, y - stroke / 2, stroke, colour);
                     drawn = true;
+                    end_x[i] = x;
+                    end_y[i] = y;
                 }
+                /* The dot is on the newest reading or nowhere. A newest reading that arrived
+                   alone after a silence is drawn by nothing, and a dot left on the end of the
+                   run before it would mark a stale reading beside a legend stating the new one. */
+                ends_at[i] = !point->gap && j > 0U;
                 previous_x = x;
                 previous_y = y;
             }
+        }
+    }
+    const int dot = stroke * 2 + rule;
+    for (uint32_t i = 0U; i < chart->count && i < INKCELL_FB_CHART_LINES; ++i) {
+        if (ends_at[i]) {
+            inkcell_fb_chart_dot(state, &bounds, end_x[i], end_y[i], dot, rule,
+                                 inkcell_theme_series(state->theme, i), ground);
         }
     }
 
@@ -1400,9 +1589,9 @@ void inkcell_fb_draw_chart(const struct inkcell_draw_state *state,
     if (!drawn && chart->empty != INKCELL_STR_NONE) {
         const char *word = inkcell_str(chart->empty);
         const int width = inkcell_fb_text_width(state, word, scale);
-        const int x = plot.x + (plot.w - width) / 2;
-        inkcell_fb_draw_text(state, x > plot.x ? x : plot.x, plot.y + (interior - layout->line) / 2,
-                             word, scale, inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM), ground);
+        const int x = rect.x + (rect.w - width) / 2;
+        inkcell_fb_draw_text(state, x > rect.x ? x : rect.x, rect.y + (interior - layout->line) / 2,
+                             word, scale, ink, ground);
     }
 
     /*
@@ -1412,12 +1601,12 @@ void inkcell_fb_draw_chart(const struct inkcell_draw_state *state,
      * whole axis rather than a point on it - "last 45m" under the left-hand end reads as a label
      * for that end, which is the one place on the axis it is not true of.
      */
-    int y = plot.y + plot.h;
+    int y = rect.y + rect.h;
     if (chart->span != NULL) {
         const int width = inkcell_fb_text_width(state, chart->span, scale);
-        const int x = plot.x + (plot.w - width) / 2;
-        inkcell_fb_draw_text(state, x > plot.x ? x : plot.x, y, chart->span, scale, ink, ground);
+        const int x = rect.x + (rect.w - width) / 2;
+        inkcell_fb_draw_text(state, x > rect.x ? x : rect.x, y, chart->span, scale, ink, ground);
     }
     y += layout->line;
-    inkcell_fb_chart_legend(state, layout, chart, plot.x, y);
+    inkcell_fb_chart_legend(state, layout, chart, rect.x, y);
 }
