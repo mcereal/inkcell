@@ -254,6 +254,71 @@ INKCELL_TEST_CASE(app_bar_modes_replace_the_heading_without_reflowing, unit) {
     record_success(test_name);
 }
 
+/* ---- the search field's caret ------------------------------------------------------------- */
+
+/*
+ * The leftmost column the caret lights, or -1 for none: the one thing on a search bar drawn in
+ * the primary tone, so it can be found by colour without naming a theme. Drawn on a cleared page
+ * each time, so a caret from the last call cannot be read as this one's.
+ */
+static int app_bar_caret_x(struct app_bar_harness *h, const struct inkcell_fb_app_bar *bar) {
+    inkcell_fb_clear(h->state, inkcell_fb_color(h->state, INKCELL_COLOR_BG));
+    inkcell_focus_begin(&h->map, h->storage, APP_BAR_STORAGE);
+    struct inkcell_fb_layout layout = inkcell_fb_layout_begin(h->state, true, false);
+    const int top = layout.body_y;
+    (void)inkcell_fb_draw_app_bar(h->state, &layout, bar);
+    const struct inkcell_rgb ink = inkcell_fb_tone_color(h->state, INKCELL_TONE_PRIMARY);
+    uint32_t width = 0U;
+    uint32_t height = 0U;
+    size_t stride = 0U;
+    const uint8_t *pixels = inkcell_capture_pixels(h->capture, &width, &height, &stride);
+    for (uint32_t x = 0U; pixels != NULL && x < width; ++x) {
+        for (int y = top; y < layout.body_y && y < (int)height; ++y) {
+            const uint8_t *p = pixels + (size_t)y * stride + (size_t)x * 4U;
+            if (p[2] == ink.r && p[1] == ink.g && p[0] == ink.b) {
+                return (int)x;
+            }
+        }
+    }
+    return -1;
+}
+
+INKCELL_TEST_CASE(app_bar_search_caret_stands_where_the_keyboard_put_it, unit) {
+    struct app_bar_harness h;
+    INKCELL_TEST_FAIL_IF(!app_bar_open(&h, INKCELL_CAPTURE_WIDTH), "the capture should open");
+
+    struct inkcell_fb_app_bar bar = {
+        .mode = INKCELL_FB_APP_BAR_SEARCH, .query = "ridgeline", .editing = true};
+    const int end = app_bar_caret_x(&h, &bar);
+    AB_CHECK(end < 0, "an editing field draws a caret");
+    bar.caret_back = 4U;
+    const int middle = app_bar_caret_x(&h, &bar);
+    AB_CHECK(middle < 0 || middle >= end, "a caret moved back is drawn before the end");
+    bar.caret_back = strlen(bar.query);
+    const int start = app_bar_caret_x(&h, &bar);
+    AB_CHECK(start < 0 || start >= middle, "and one moved to the start before both");
+    bar.caret_back = 99U;
+    AB_CHECK(app_bar_caret_x(&h, &bar) != end, "a stale count is the end, not the start");
+    bar.caret_back = 4U;
+    bar.editing = false;
+    AB_CHECK(app_bar_caret_x(&h, &bar) >= 0, "and a field without the keyboard draws none");
+
+    /* Far longer than the field: the window follows the caret, so a caret at the start is on
+       the panel where the short query's was, rather than scrolled off with the head. */
+    char longer[200];
+    memset(longer, 'm', sizeof longer - 1U);
+    longer[sizeof longer - 1U] = '\0';
+    bar = (struct inkcell_fb_app_bar){.mode = INKCELL_FB_APP_BAR_SEARCH,
+                                      .query = longer,
+                                      .editing = true,
+                                      .caret_back = strlen(longer)};
+    AB_CHECK(app_bar_caret_x(&h, &bar) != start, "a long query's caret at its start is shown");
+    bar.caret_back = 0U;
+    AB_CHECK(app_bar_caret_x(&h, &bar) <= start, "and at its end, after the tail");
+    app_bar_close(&h);
+    record_success(test_name);
+}
+
 INKCELL_TEST_CASE(app_bar_large_title_measures_what_it_draws, unit) {
     struct app_bar_harness h;
     INKCELL_TEST_FAIL_IF(!app_bar_open(&h, INKCELL_CAPTURE_WIDTH), "the capture should open");
