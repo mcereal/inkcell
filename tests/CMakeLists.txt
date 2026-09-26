@@ -70,12 +70,12 @@ endif()
 # ---- the golden sheet -------------------------------------------------------------------------
 #
 # The gallery renders every component and this checks that what came out is what came out last
-# time. It is the only test the ten files under src/fb/widgets_*.c have: "the button looks
+# time. It is the only test the widgets under src/fb/widgets_*.c have: "the button looks
 # right" is not a unit test anybody can write, and "the button looks like it did, and here is
 # the picture of what changed" is.
 #
-# A digest rather than committed images, because a page is 1024x768 and sixty of them in git
-# would be forty megabytes of binary that every clone pays for. When one differs, `make gallery`
+# A digest rather than committed images, because a page is 1024x768 and hundreds of them in git
+# would be binary every clone pays for. When one differs, `make gallery`
 # produces the pictures to look at; CI uploads them for the same reason.
 if(TARGET inkcell_gallery)
     add_test(NAME inkcell_golden
