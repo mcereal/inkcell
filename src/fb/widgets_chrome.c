@@ -18,6 +18,9 @@
 #include "inkcell/ui/emoji.h"
 #include "inkwell/base/text.h"
 
+#include <limits.h>
+#include <string.h>
+
 /* ---- the frame ------------------------------------------------------------------------------ */
 
 uint32_t inkcell_fb_layout_rows(const struct inkcell_draw_state *state,
@@ -1254,6 +1257,20 @@ static int inkcell_fb_app_bar_title_keep(const struct inkcell_draw_state *state,
 
 /* ---- the search field ----------------------------------------------------------------------- */
 
+/* The measured width of [from, to) - the part of a query before the caret. A span too long for a
+   line of text is reported as wider than any field, which is what it is. */
+static int inkcell_fb_app_bar_span_width(const struct inkcell_draw_state *state, const char *from,
+                                         const char *to, int scale) {
+    char span[INKCELL_LINE_MAX];
+    const size_t bytes = (size_t)(to - from);
+    if (bytes >= sizeof span) {
+        return INT_MAX;
+    }
+    memcpy(span, from, bytes);
+    span[bytes] = '\0';
+    return inkcell_fb_text_width(state, span, scale);
+}
+
 /*
  * The title slot as a search field, filling [x, right) and centred on the row.
  *
@@ -1322,19 +1339,42 @@ static void inkcell_fb_app_bar_draw_field(const struct inkcell_draw_state *state
     int caret_x = left;
     if (has_query) {
         /*
-         * The *tail* of the query when it is too long, not its head: the reader is typing at the
-         * end, and a field that showed the start of what they had typed would hide each letter
-         * as it arrived. The same thing every single-line field does.
+         * The window onto the query: as much of it as fits, with the caret inside.
+         *
+         * With the caret at the end - where the reader is typing, almost always - that is the
+         * *tail* when the query is too long, not its head, since a field that showed the start
+         * of what they had typed would hide each letter as it arrived. The same thing every
+         * single-line field does. With the caret moved back, the head is dropped only until the
+         * caret fits, and whatever runs past the field's end is cut instead.
          */
-        const char *tail = bar->query;
-        while (tail[0] != '\0' && inkcell_fb_text_width(state, tail, scale) > room) {
-            const struct inkcell_text_cell cell = inkcell_text_cell_next(tail);
-            tail += cell.bytes > 0U ? cell.bytes : 1U;
+        const size_t len = strlen(bar->query);
+        const size_t at = bar->editing && bar->caret_back > 0U && bar->caret_back <= len
+                              ? len - bar->caret_back
+                              : len;
+        const char *head = bar->query;
+        int before = inkcell_fb_app_bar_span_width(state, head, bar->query + at, scale);
+        while (head < bar->query + at && before > room) {
+            const struct inkcell_text_cell cell = inkcell_text_cell_next(head);
+            head += cell.bytes > 0U ? cell.bytes : 1U;
+            before = inkcell_fb_app_bar_span_width(state, head, bar->query + at, scale);
         }
-        inkwell_str_copy(text, sizeof text, tail);
+        inkwell_str_copy(text, sizeof text, head);
+        while (text[0] != '\0' && inkcell_fb_text_width(state, text, scale) > room) {
+            const size_t cells = inkcell_text_cells(text);
+            if (cells == 0U) {
+                break;
+            }
+            inkcell_text_cell_truncate(text, cells - 1U);
+        }
         inkcell_fb_draw_text(state, left, text_y, text, scale,
                              inkcell_fb_color(state, INKCELL_COLOR_TEXT), fill);
-        caret_x = left + inkcell_fb_text_width(state, text, scale) + caret_w / 2;
+        /* After the last letter, the caret keeps a gap from it; between two, it sits in the gap
+           they already have, so it reads as *between* them rather than on the one after. */
+        caret_x = at == len ? left + inkcell_fb_text_width(state, text, scale) + caret_w / 2
+                            : left + before - caret_w / 2;
+        if (caret_x < left) {
+            caret_x = left;
+        }
     } else if (bar->placeholder != NULL && bar->placeholder[0] != '\0') {
         inkwell_str_copy(text, sizeof text, bar->placeholder);
         while (inkcell_fb_text_width(state, text, scale) > room) {

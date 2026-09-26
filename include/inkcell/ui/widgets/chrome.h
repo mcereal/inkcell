@@ -687,8 +687,20 @@ struct inkcell_fb_app_bar {
        `placeholder` is what an empty field says. */
     const char *query;
     const char *placeholder;
-    /* The field has the keyboard: draw a caret after the query. */
+    /* The field has the keyboard: draw a caret. */
     bool editing;
+    /*
+     * Where that caret is, as bytes of `query` after it - struct inkcell_keyboard's own count,
+     * handed straight over, and the text field's `caret_back` on the same terms. 0 is the end,
+     * and so is a count longer than the query: a stale caret is the end rather than a mark
+     * before the first letter.
+     *
+     * The keyboard's triggers move the caret through what was typed, and a field that drew it
+     * after the last letter wherever it really was would be telling the reader the next letter
+     * lands somewhere it does not. So the window follows the caret rather than the tail: a long
+     * query with the caret near its start shows its start.
+     */
+    size_t caret_back;
     /* The field itself, for the d-pad to land on, and the clear mark inside it. The mark is
        drawn only when there is a query *and* an id to press it by - a clear that cannot be
        pressed is a mark that promises something the screen does not do. */
