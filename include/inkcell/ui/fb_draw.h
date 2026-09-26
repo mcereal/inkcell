@@ -1516,6 +1516,41 @@ void inkcell_fb_stroke_round_rect(const struct inkcell_draw_state *state, int x,
 void inkcell_fb_stroke_arc(const struct inkcell_draw_state *state, int cx, int cy, int radius,
                            int thickness, int32_t start, int32_t sweep, struct inkcell_rgb color);
 
+/*
+ * A straight stroke `thickness` wide with round ends, anti-aliased.
+ *
+ * (`x0`, `y0`) and (`x1`, `y1`) are the top-left corners of the pen's square at each end, which
+ * is what the column walk this replaced took - so a caller moving over changes nothing but the
+ * name. The pen is centred on the middle of that square, so an even pen lands on pixel
+ * boundaries and a level stroke is as crisp as a fill.
+ *
+ * Round ends are what make a polyline drawn one segment at a time a *line*: each end is a disc
+ * the next segment starts from, so a join is round at any angle rather than a notch on the
+ * outside of the bend. The overlap at a join is blended twice at its edge only, which darkens
+ * a fringe a quarter of a pixel wide - invisible, and cheaper than tracking the whole path.
+ *
+ * Integer coverage over sixteen sub-samples, like every edge in this file: see the note above
+ * INKCELL_FB_AA_SUB.
+ */
+void inkcell_fb_stroke_line(const struct inkcell_draw_state *state, int x0, int y0, int x1, int y1,
+                            int thickness, struct inkcell_rgb color);
+
+/*
+ * A rectangle of `color` laid *over* what is already drawn, from `top` permille strength on its
+ * first row to `bottom` on its last.
+ *
+ * The one fill in this file that is translucent all the way through rather than only at its
+ * edge, and it exists for one picture: the soft area under a trend line that Material's and
+ * iOS's charts both draw, fading from the line down to the axis. That fade is what makes a line
+ * read as a *level* - how much is under it - rather than as a wire strung across the plot.
+ *
+ * Every pixel is read back and mixed, so this costs its area and not its boundary. On a chart
+ * that is a few hundred thousand pixels once per frame, on a screen that repaints only when a
+ * reading arrives or a key moves the span. It is not for anything that scrolls.
+ */
+void inkcell_fb_fill_wash(const struct inkcell_draw_state *state, int x, int y, int w, int h,
+                          struct inkcell_rgb color, int32_t top, int32_t bottom);
+
 void inkcell_fb_fit(char *line, size_t cols);
 void inkcell_fb_format_age(uint32_t last_heard, char *out, size_t out_len);
 void inkcell_fb_format_clock(uint32_t rx_time, char *out, size_t out_len);

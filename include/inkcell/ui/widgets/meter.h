@@ -512,17 +512,23 @@ void inkcell_fb_draw_proportion(const struct inkcell_draw_state *state,
  *   - **More than one line fits.** Which is what the legend is for, and why two lines could not
  *     be drawn in a row: the words naming them have to be somewhere, and a row has no somewhere.
  *
- * Three things it deliberately does not do:
+ * How it is drawn is Material's and Swift Charts' vocabulary rather than a spreadsheet's, because
+ * that is what the reader's eye is trained on:
  *
- *   - **No end mark.** A sparkline marks its newest reading because a stroke does not say which
- *     end is now, and a line falling left to right and one rising are the same picture read
- *     backwards. A chart has the answer written under it: the axis is labelled with the span it
- *     covers, so "now" is the right-hand edge by construction.
- *   - **No grid.** Two threshold rules and an axis are the marks that mean something; a lattice
- *     of evenly spaced lines is furniture that makes a picture look measured without measuring
- *     anything, and on a panel with no anti-aliasing it competes with the data for pixels.
- *   - **Nothing animates.** The sparkline's reason, unchanged: a trend keeps its readings rather
- *     than replacing them, so there is nothing to move between.
+ *   - **Ruled, not boxed.** Faint horizontal lines at round values, each labelled
+ *     (inkcell_trend_ticks() picks them), a baseline a step stronger, and no rule up the side.
+ *     Horizontal only: a vertical rule reads as a moment, and nothing happened at the moments
+ *     it would mark.
+ *   - **Columns with round tops** standing on the baseline, a quarter of a bin apart.
+ *   - **Lines anti-aliased with round joins**, and optionally a wash under a lone line that fades
+ *     to nothing at the axis - see `area`.
+ *   - **The newest reading marked** with a ringed dot. The position of "now" is the right-hand
+ *     edge by construction; the dot is for the eye, and it is the point the legend's figure is a
+ *     reading of.
+ *   - **Thresholds as coloured dashes**, in the tone they are the edge of.
+ *
+ * And one thing it still does not do: **nothing animates.** The sparkline's reason, unchanged -
+ * a trend keeps its readings rather than replacing them, so there is nothing to move between.
  */
 
 /* Lines one chart may carry - the palette's count, because a line takes a series colour and two
@@ -553,6 +559,16 @@ struct inkcell_fb_chart_line {
      */
     const struct inkcell_trend_bins *bins;
     bool columns;
+    /*
+     * A soft wash under the line, fading from the series colour at the line's highest point to
+     * nothing at the axis - Material's and iOS's area mark. It is what makes a single reading
+     * read as a *level* rather than a wire strung across the plot.
+     *
+     * Asked for rather than drawn by default, because it only reads on a chart with one line:
+     * two washes overlapping are a third colour nobody validated, and a wash over columns is the
+     * columns drawn a second time, fainter. Ignored for columns themselves.
+     */
+    bool area;
     /* What the legend calls it. INKCELL_STR_NONE draws the line and names it nowhere, which is
        honest only when there is exactly one line - with two it is the picture asking the reader
        to guess. */
@@ -587,6 +603,16 @@ struct inkcell_fb_chart_reading {
     const char *value;
 };
 
+/*
+ * One ruled value up the side: a faint line across the plot and its label at the left. The
+ * label is worded by the caller for `top`'s reason - this knows where the value is and not what
+ * it is measured in. inkcell_trend_ticks() is what picks the values.
+ */
+struct inkcell_fb_chart_tick {
+    int32_t value;
+    const char *label;
+};
+
 struct inkcell_fb_chart {
     /* Everything: the plot, the words down its side and the two lines of chrome under it. The
        caller hands over a body and this divides it, which is the one place in this component set
@@ -602,6 +628,14 @@ struct inkcell_fb_chart {
      */
     const char *top;
     const char *bottom;
+    /*
+     * Or the vertical ruled at round values, each with its label - which takes the place of `top`
+     * and `bottom` when set. Values in the chart's `scale` units, lowest first. The lowest is the
+     * baseline and is drawn a shade stronger than the rest, which is all the axis there is: a
+     * rule up the left-hand side says nothing the labels beside it are not already saying.
+     */
+    const struct inkcell_fb_chart_tick *ticks;
+    uint32_t tick_count;
     /* What the horizontal covers, as words ("45m", "3h 20m"), or NULL when the readings share
        one clock tick and there is no span to name. NULL draws no label rather than a zero: an
        axis whose span is unknown says nothing about it, and "0m" is a claim. */
