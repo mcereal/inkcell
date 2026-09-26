@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Fail when a screen spells out an English sentence instead of naming a catalog id.
 
-Every word the user reads comes from include/inkcell/i18n/catalog.def (see docs/i18n.md). That is
-only true for as long as nobody adds a `"Not connected"` back into a renderer, and the compiler
-has no opinion about it - a string literal is a string literal. This is the check that does.
+Every word the user reads comes from include/inkcell/i18n/catalog.def (see
+include/inkcell/i18n/strings.h). That is only true for as long as nobody adds a
+`"Not connected"` back into a renderer, and the compiler has no opinion about it - a string
+literal is a string literal. This is the check that does.
 
 It reads the files that draw or announce something, and reports any string literal that looks
 like prose: three or more letters in a row, outside a comment, outside a log call, outside a
@@ -84,7 +85,7 @@ ALLOWED = {
     # A glyph, drawn rather than read: the star beside a pinned node.
     '"\\xE2\\xAD\\x90"': "the pinned-node star",
     # The keyboard's own layers. These are the keys, not words about them: a locale that wants
-    # AZERTY needs a second layout table rather than a translation of this one. See docs/i18n.md.
+    # AZERTY needs a second layout table rather than a translation of this one.
     '"1234567890"': "the keyboard's number row",
     '"qwertyuiop"': "the keyboard's lower layer",
     '"asdfghjkl\'"': "the keyboard's lower layer",
@@ -199,7 +200,7 @@ def main():
     if problems:
         print(
             f"\n{len(problems)} hardcoded string(s). Add an entry to "
-            "include/inkcell/i18n/catalog.def and use inkcell_str(); see docs/i18n.md.\n"
+            "include/inkcell/i18n/catalog.def and use inkcell_str(); see include/inkcell/i18n/strings.h.\n"
             "If the string is genuinely not prose, list it in ALLOWED in this script with "
             "the reason.",
             file=sys.stderr,

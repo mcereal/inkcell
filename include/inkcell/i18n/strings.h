@@ -6,7 +6,7 @@
  *
  * A screen never spells out a sentence. It names a *string id* - INKCELL_STR_TIME_NOW, or one
  * of the application's own - and this module answers with the text for the locale in
- * force, exactly the way src/ui/theme/theme.c answers a colour role. That is what makes a language
+ * force, exactly the way the theme answers a colour role. That is what makes a language
  * switch total rather than a hunt: the renderers hold no opinion about English, so there is
  * nowhere for an untranslated sentence to hide.
  *
@@ -21,18 +21,16 @@
  * What is deliberately *not* here:
  *
  *   - Log lines. inkwell_log_info() and its siblings write output that is for whoever is reading
- * `deploy-logs`, and a bug report in a language the maintainer cannot read is worse than no bug
+ * the log, and a bug report in a language the maintainer cannot read is worse than no bug
  * report.
- *   - Names shared with the rest of Meshtastic: region codes ("EU 868"), hardware models
- *     ("Heltec V3"), modem presets ("Long Range - Fast"), device roles ("Router"). A setting
- *     read off the Brick has to be recognisable in the phone app and back, so those stay in
- *     src/core/session/radio_settings.c untranslated, for the same reason a channel key is shown as
- *     base64.
+ *   - Names a device or protocol already fixes: a region code, a hardware model, a preset's
+ *     name. A value read off a device has to be recognisable in that device's other tools, so
+ *     an application keeps those untranslated, for the same reason a key is shown as base64.
  *   - Protocol, path, environment and config text. Nobody reads it as prose.
- *   - src/main.c's --help and the cli/stub backends, which are the headless developer
- *     surfaces and never reach the device screen.
+ *   - A command line's --help and other developer-only surfaces that never reach the screen.
  *
- * See docs/i18n.md.
+ * Adding a language is a table of the catalog's length (inkcell_i18n_set_catalog()); a language
+ * with more plural forms than INKCELL_STR_PLURAL_FORMS widens that constant first.
  */
 
 #include <stdarg.h>
@@ -82,7 +80,7 @@ enum {
 
 /* How many forms a plural entry has. Two covers English and the languages that count like it;
    Polish, Russian and Arabic need three to six, and widening them is this constant, the
-   INKCELL_STR_PLURAL_ENTRY macro above, and nothing else. See docs/i18n.md. */
+   INKCELL_STR_PLURAL_ENTRY macro above, and nothing else. */
 #define INKCELL_STR_PLURAL_FORMS 2
 
 /*

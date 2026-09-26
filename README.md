@@ -11,14 +11,10 @@ d-pad that always lands somewhere. The same interface then runs unchanged on a T
 used the width rather than a magnified handheld. Think of it as a console or TV UI toolkit that
 happens to be small enough to read.
 
-It began as the part of [mesh-client](https://github.com/mcereal/mesh-client) that was never about
-Meshtastic: the theme, the fonts and glyph tables, the layout arithmetic, the framebuffer
-backend and its component set, and the evdev layer that turns a handheld's buttons into presses.
-
-It stands on [inkwell](https://github.com/mcereal/inkwell), the single-threaded runtime that is
-the part that was never about *drawing* either: the loop, the clock, the log, the environment knobs and the
-codecs. Those lived here for a while because this library was extracted first, and a toolkit
-that a platform layer has to depend on to write a log line has its arrows the wrong way round.
+It was extracted from [mesh-client](https://github.com/mcereal/mesh-client), a Meshtastic client
+for the TrimUI Brick, and stands on [inkwell](https://github.com/mcereal/inkwell), the
+single-threaded runtime under it: the loop, the clock, the log, the environment knobs and the
+codecs.
 
 ## What you get
 
@@ -164,7 +160,7 @@ catalog, and writes screens - and it draws every component the library ships, in
 two scales.
 
 ```bash
-make gallery     # 185 pages into build/gallery/, plus build/gallery/contact.png
+make gallery     # every page into build/gallery/, plus build/gallery/contact.png
 ```
 
 It renders through `inkcell_capture`, which is the fb backend with the device taken out of it,
@@ -172,7 +168,7 @@ so this works in a container with no framebuffer anywhere near it.
 
 ### The golden sheet
 
-The same program is the test suite for the ten files under `src/fb/widgets_*.c`. "The button
+The same program is the test suite for the widgets under `src/fb/widgets_*.c`. "The button
 looks right" is not a unit test anybody can write; "the button looks like it did yesterday, and
 here is the picture of what changed" is.
 
@@ -182,8 +178,8 @@ make gallery         # when one differs, the pictures to look at
 make gallery-update  # once they have been looked at, record them
 ```
 
-The manifest holds a digest per page rather than the images themselves - sixty pages of 1024x768
-in git is forty megabytes every clone pays for. CI renders and uploads the pictures on failure,
+The manifest holds a digest per page rather than the images themselves, so a clone does not pay
+for hundreds of 1024x768 pictures. CI renders and uploads the pictures on failure,
 which is the only time anybody wants them. The clang job runs the whole sheet under ASan and
 UBSan, so the widget code is sanitizer-covered by the same pass.
 
@@ -275,7 +271,7 @@ window is standing in for the device rather than being a surface of its own.
   whether it agrees with the profile in `src/input/input_profile.c` about a given handheld is a
   question for that handheld. A window is driven from a keyboard; a device is driven from
   evdev.
-- **Translations.** The mechanism is here and so are inkcell's own twenty-three strings. A translation
+- **Translations.** The mechanism is here and so are inkcell's own handful of strings. A translation
   covers the catalog in force — both halves at once — so it belongs with the application.
 - **Your vocabulary.** Strings and icons work the same way: inkcell ships only what a *widget*
   needs to put on a panel, and an application's own continue the ids from there
