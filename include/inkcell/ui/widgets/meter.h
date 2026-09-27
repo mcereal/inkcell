@@ -21,6 +21,7 @@
 #include "inkcell/ui/trend.h"
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 /* ---- the meter --------------------------------------------------------------------------- *
@@ -220,6 +221,52 @@ int inkcell_fb_dial_min_side(const struct inkcell_draw_state *state, int scale);
 /* Mutable for the reason the meter is: where the arc has got to lives on the state, keyed by
    `id`, because a screen renderer is rebuilt from nothing every frame. */
 void inkcell_fb_draw_dial(struct inkcell_draw_state *state, const struct inkcell_fb_dial *dial);
+
+/* ---- the steps -------------------------------------------------------------------------------
+ *
+ * Where a job with several stages has got to: a row of markers joined by a line, one per stage,
+ * each with its name under it - the ones behind ticked, the one under way ringed, the ones to
+ * come waiting on the track.
+ *
+ * It sits beside the dial because the two answer the two halves of one question. A dial says
+ * how far through *this* stage the work is, and says it well; what it cannot say is how many
+ * stages there are, so a ring that fills to 100% and then starts again from nothing reads as the
+ * work having gone backwards. The steps are what make the second ring read as the next stage
+ * rather than as a retry - and they are what a stage with no fraction to report still has to
+ * show, when the dial above it can only spin.
+ *
+ * A stage is a *name*, and deliberately not a state enum. What the stages are is the
+ * application's business; what inkcell knows is that there is an ordered handful of them and one
+ * is under way.
+ *
+ * The names are measured, not counted. When the widest of them will not fit its share of the
+ * row, only the stage under way keeps its name, centred under its own marker and pulled in off
+ * the edges - on a narrow panel the reader needs to know what is happening now far more than
+ * they need the names of what already has.
+ */
+
+struct inkcell_fb_steps {
+    /* The row. Its height is inkcell_fb_steps_height(); the markers take the top of it and the
+       names the rest, and the row is divided into `count` equal columns. */
+    struct inkcell_fb_rect rect;
+    const char *const *labels; /* `count` names, already translated; a NULL one draws no name */
+    size_t count;
+    /* The stage under way. Every stage before it is done; `count` means every stage is. */
+    size_t current;
+    /* The ink of the stages behind and the one under way: a family's tone, as a meter's is. */
+    enum inkcell_tone tone;
+    /* The stage under way stopped and will not go on: its marker is the error family's, with a
+       cross where the others have a tick. The stages behind it stay done - they were. */
+    bool halted;
+    enum inkcell_color ground; /* what the row is drawn on, as a meter's `ground` */
+};
+
+/* The height the row wants at `scale`: a marker, a gap, and one line of names. */
+int inkcell_fb_steps_height(const struct inkcell_draw_state *state, int scale);
+
+/* Draws it. Stateless: a stage moving on is a new frame, and a marker has nothing to ease. */
+void inkcell_fb_draw_steps(const struct inkcell_draw_state *state,
+                           const struct inkcell_fb_steps *steps);
 
 /* ---- the slider ------------------------------------------------------------------------------
  *

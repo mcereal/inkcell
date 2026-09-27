@@ -2564,8 +2564,26 @@ static void inkcell_fb_turn_vector(int32_t turn, int32_t *vx, int32_t *vy) {
     *vy = -inkcell_fb_sin_turn(wrapped + 250);
 }
 
-void inkcell_fb_stroke_arc(const struct inkcell_draw_state *state, int cx, int cy, int radius,
-                           int thickness, int32_t start, int32_t sweep, struct inkcell_rgb color) {
+/*
+ * Whether a sub-sample at (`ox`, `oy`) lies on the round end of an arc whose midline runs along
+ * (`vx`, `vy`) - a disc as wide as the band, centred where the band's middle crosses that ray.
+ *
+ * Every figure is in the AA's fixed units except the ray, which is the sine table's 1024ths:
+ * the centre is scaled by both at once so nothing is rounded before it has to be.
+ */
+static bool inkcell_fb_arc_cap_within(int64_t ox, int64_t oy, int64_t mid2, int32_t vx, int32_t vy,
+                                      int64_t cap_sq) {
+    /* `mid2` is twice the midline's radius, in fixed units; the ray is 1024 long. */
+    const int64_t kx = mid2 * vx / 2048;
+    const int64_t ky = mid2 * vy / 2048;
+    const int64_t dx = ox - kx;
+    const int64_t dy = oy - ky;
+    return dx * dx + dy * dy <= cap_sq;
+}
+
+static void inkcell_fb_arc(const struct inkcell_draw_state *state, int cx, int cy, int radius,
+                           int thickness, int32_t start, int32_t sweep, struct inkcell_rgb color,
+                           bool round) {
     if (radius <= 0 || thickness <= 0 || sweep <= 0) {
         return;
     }
@@ -2598,6 +2616,13 @@ void inkcell_fb_stroke_arc(const struct inkcell_draw_state *state, int cx, int c
     const int32_t from = inkcell_fb_wrap_turn(start);
     inkcell_fb_turn_vector(from, &sx, &sy);
     inkcell_fb_turn_vector(from + sweep, &ex, &ey);
+    /* The round ends, when asked for: a disc the band's width at each end of the midline. A
+       disc centred on the midline lies wholly inside the annulus, so the rejects below still
+       hold for it. A whole ring has no ends. */
+    const bool capped = round && !whole;
+    const int64_t mid2 = (int64_t)INKCELL_FB_AA_FIXED * (radius + inner);
+    const int64_t cap = (int64_t)INKCELL_FB_AA_FIXED * thickness;
+    const int64_t cap_sq = cap * cap / 4;
 
     /*
      * Only the part of the ring that is on the panel.
@@ -2655,7 +2680,10 @@ void inkcell_fb_stroke_arc(const struct inkcell_draw_state *state, int cx, int c
                         const bool within = major ? !(((int64_t)ex * oy - (int64_t)ey * ox) > 0 &&
                                                       (ox * (int64_t)sy - oy * (int64_t)sx) > 0)
                                                   : (from_start >= 0 && to_end >= 0);
-                        if (!within) {
+                        if (!within &&
+                            !(capped &&
+                              (inkcell_fb_arc_cap_within(ox, oy, mid2, sx, sy, cap_sq) ||
+                               inkcell_fb_arc_cap_within(ox, oy, mid2, ex, ey, cap_sq)))) {
                             continue;
                         }
                     }
@@ -2665,6 +2693,17 @@ void inkcell_fb_stroke_arc(const struct inkcell_draw_state *state, int cx, int c
             inkcell_fb_blend_pixel(state, px, py, color, covered);
         }
     }
+}
+
+void inkcell_fb_stroke_arc(const struct inkcell_draw_state *state, int cx, int cy, int radius,
+                           int thickness, int32_t start, int32_t sweep, struct inkcell_rgb color) {
+    inkcell_fb_arc(state, cx, cy, radius, thickness, start, sweep, color, false);
+}
+
+void inkcell_fb_stroke_arc_round(const struct inkcell_draw_state *state, int cx, int cy, int radius,
+                                 int thickness, int32_t start, int32_t sweep,
+                                 struct inkcell_rgb color) {
+    inkcell_fb_arc(state, cx, cy, radius, thickness, start, sweep, color, true);
 }
 
 /* ---- strokes and washes ---------------------------------------------------------------------- */

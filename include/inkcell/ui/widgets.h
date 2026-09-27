@@ -30,7 +30,7 @@
  *   widgets/bubble.h    the transcript: a message, and the separator between two of them
  *   widgets/card.h      a card, built row by row and then drawn
  *   widgets/control.h   the switch, the checkbox and radio, the segmented button, the field
- *   widgets/meter.h     a quantity as a length, and a reading over time
+ *   widgets/meter.h     a quantity as a length or a ring, a job's stages, a reading over time
  *   widgets/overlay.h   the dialog, the menu, the bottom sheet, the snackbar, the QR
  *   widgets/scroll.h    a viewport over content in pixels, its rail, the large title
  *   widgets/keyboard.h  the on-screen keyboard's grid, over the model in ui/keyboard.h

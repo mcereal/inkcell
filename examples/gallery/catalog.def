@@ -62,6 +62,15 @@ INKCELL_STR_ENTRY(HEAD_FAB_SIZES,     "Sizes")
 INKCELL_STR_ENTRY(HEAD_FAB_COLLAPSE,  "Collapsing")
 INKCELL_STR_ENTRY(HEAD_TILES,         "Tiles")
 INKCELL_STR_ENTRY(HEAD_COVERS,        "Covers")
+INKCELL_STR_ENTRY(HEAD_PROGRESS,      "Progress")
+
+/* The stages of the job the progress page draws, and what its two columns say about it. */
+INKCELL_STR_ENTRY(STEP_DOWNLOAD,      "Download")
+INKCELL_STR_ENTRY(STEP_VERIFY,        "Verify")
+INKCELL_STR_ENTRY(STEP_INSTALL,       "Install")
+INKCELL_STR_ENTRY(STEP_FINISH,        "Finish")
+INKCELL_STR_ENTRY(PROGRESS_UNDER_WAY, "Installing")
+INKCELL_STR_ENTRY(PROGRESS_STOPPED,   "Could not install")
 
 /* ---- verbs ------------------------------------------------------------------------------------
  *
