@@ -536,7 +536,160 @@ static size_t inkcell_fb_action_fit(const struct inkcell_draw_state *state,
     return end;
 }
 
-size_t inkcell_fb_draw_action_bar(const struct inkcell_draw_state *state,
+/* ---- the link mark ----------------------------------------------------------------------- */
+
+enum { INKCELL_FB_LINK_SENT = 0, INKCELL_FB_LINK_RECEIVED = 1 };
+
+/*
+ * How lit one arrow is, 0..INKCELL_ANIM_ONE, having seen `count`.
+ *
+ * A change relights it from full and lets it go out over twice the long motion, held at full
+ * for the first half and faded over the second - there is no ease-in curve here, and a light
+ * that starts dimming the moment it comes on is one that a glance mostly misses. The first count
+ * is adopted unlit (see struct inkcell_fb_link_mark), and so is every count while `live` is
+ * false, so a link coming up does not flash for the frames exchanged before it was drawn.
+ */
+static int32_t inkcell_fb_link_glow(struct inkcell_draw_state *state, size_t which, uint32_t count,
+                                    bool live) {
+    struct inkcell_fb_link_pulse *pulse = &state->link_pulse[which];
+    if (!pulse->seeded || !live) {
+        pulse->seeded = true;
+        pulse->seen = count;
+        inkcell_anim_set(&pulse->glow, 0);
+        return 0;
+    }
+    if (count != pulse->seen) {
+        pulse->seen = count;
+        inkcell_anim_set(&pulse->glow, INKCELL_ANIM_ONE);
+        inkcell_anim_to(&pulse->glow, state->now_ms, 0,
+                        2U * inkcell_fb_motion(state, INKCELL_MOTION_LONG), INKCELL_EASE_LINEAR);
+    }
+    const int32_t left = inkcell_anim_value(&pulse->glow, state->now_ms);
+    return left >= INKCELL_ANIM_ONE / 2 ? INKCELL_ANIM_ONE : 2 * left;
+}
+
+/* The mark's pieces, measured once for the width and again for the drawing. */
+struct inkcell_fb_link_metrics {
+    int glyph; /* the text row's height: everything is centred on it */
+    int dot;
+    int icon; /* the icon's cell, 0 for none */
+    int arrow_w;
+    int arrow_h;
+    int arrows; /* the column the pair stands in, 0 for none */
+    int gap;
+    int w;
+};
+
+static struct inkcell_fb_link_metrics
+inkcell_fb_link_measure(const struct inkcell_draw_state *state,
+                        const struct inkcell_fb_link_mark *mark, int small) {
+    struct inkcell_fb_link_metrics m = {0};
+    if (!mark->shown) {
+        return m;
+    }
+    m.glyph = inkcell_scale_px((int)inkcell_fb_font(state)->height, small);
+    m.gap = inkcell_fb_char_adv(state, small) / 2;
+    /* About an x-height, so the dot reads as punctuation beside the words rather than as a
+       button. Never under three pixels, the smallest disc that is still round. */
+    m.dot = m.glyph / 2 > 3 ? m.glyph / 2 : 3;
+    m.w = m.dot;
+    if (inkcell_icon_is_valid(mark->icon)) {
+        m.icon = inkcell_fb_icon_box(state, small);
+        m.w += m.gap + m.icon;
+    }
+    if (mark->traffic) {
+        /*
+         * Two solid heads stacked, out over in, each an odd width so it has a middle pixel to
+         * be a point, and half as tall as it is wide plus the point - a right angle, which is
+         * the sharpest a head gets before the stair-steps on its sides are all a reader sees.
+         */
+        m.arrow_w = (m.glyph / 2) | 1;
+        if (m.arrow_w < 5) {
+            m.arrow_w = 5;
+        }
+        m.arrow_h = m.arrow_w / 2 + 1;
+        m.arrows = m.arrow_w;
+        m.w += m.gap + m.arrows;
+    }
+    return m;
+}
+
+/* One solid head, pointing up or down, in the box its top-left corner starts. */
+static void inkcell_fb_link_arrow(const struct inkcell_draw_state *state, int x, int y, int w,
+                                  int h, bool up, struct inkcell_rgb ink) {
+    for (int row = 0; row < h; ++row) {
+        const int from_point = up ? row : h - 1 - row;
+        int span = 2 * from_point + 1;
+        if (span > w) {
+            span = w;
+        }
+        inkcell_fb_fill_rect(state, x + (w - span) / 2, y + row, span, 1, ink);
+    }
+}
+
+/*
+ * Draws the mark with its left edge at `x` and the text row it sits in starting at `y` - the
+ * same `y` inkcell_fb_draw_text() is handed - and returns how wide it was.
+ */
+static int inkcell_fb_draw_link_mark(struct inkcell_draw_state *state,
+                                     const struct inkcell_fb_link_mark *mark,
+                                     const struct inkcell_fb_link_metrics *m, int x, int y,
+                                     int small, enum inkcell_tone ink_tone,
+                                     struct inkcell_rgb ground) {
+    const int32_t sent =
+        inkcell_fb_link_glow(state, INKCELL_FB_LINK_SENT, mark->sent, mark->traffic);
+    const int32_t received =
+        inkcell_fb_link_glow(state, INKCELL_FB_LINK_RECEIVED, mark->received, mark->traffic);
+    if (!mark->shown || m->w <= 0) {
+        return 0;
+    }
+    const int left = x;
+
+    inkcell_fb_fill_round_rect(state, x, y + (m->glyph - m->dot) / 2, m->dot, m->dot, m->dot / 2,
+                               inkcell_fb_tone_color(state, mark->tone));
+    x += m->dot;
+
+    if (m->icon > 0) {
+        x += m->gap;
+        inkcell_fb_draw_icon(state, x, y, mark->icon, small, inkcell_fb_tone_color(state, ink_tone),
+                             ground);
+        x += m->icon;
+    }
+
+    if (m->arrows > 0) {
+        x += m->gap;
+        /*
+         * Unlit is faint rather than absent. Arrows that appear only when something moves are
+         * a line that shifts about on its own; arrows that are always there and brighten are
+         * a fixture that says "and now", which is what the eye catches in a corner.
+         */
+        const struct inkcell_rgb idle =
+            inkcell_fb_fade(inkcell_fb_tone_color(state, INKCELL_TONE_DIM), ground, 600);
+        /* Lit in the strong neutral rather than in a family: the dot beside it is already
+           saying green, amber or red, and an arrow in one of those would be read as the link's
+           state rather than as its traffic. */
+        const struct inkcell_rgb lit = inkcell_fb_tone_color(state, INKCELL_TONE_STRONG);
+        const int between = m->arrow_h / 2 > 1 ? m->arrow_h / 2 : 1;
+        const int top = y + (m->glyph - (2 * m->arrow_h + between)) / 2;
+        /*
+         * Declared before the arrows are drawn, and on every frame they are drawn. A frame
+         * repainted under a band lets through only what was declared *before* it was filled,
+         * so damage said afterwards would copy pixels nothing redrew; and the frame an arrow
+         * goes out on is one where nothing is lit or moving any more, so damage said only
+         * while lit would leave it at its last shade. It is a few pixels either way.
+         */
+        inkcell_fb_animation_damage(state, x - 1, top - 1, m->arrow_w + 2,
+                                    2 * m->arrow_h + between + 2);
+        inkcell_fb_link_arrow(state, x, top, m->arrow_w, m->arrow_h, true,
+                              inkcell_fb_fade(lit, idle, INKCELL_ANIM_ONE - sent));
+        inkcell_fb_link_arrow(state, x, top + m->arrow_h + between, m->arrow_w, m->arrow_h, false,
+                              inkcell_fb_fade(lit, idle, INKCELL_ANIM_ONE - received));
+        x += m->arrows;
+    }
+    return x - left;
+}
+
+size_t inkcell_fb_draw_action_bar(struct inkcell_draw_state *state,
                                   const struct inkcell_fb_layout *layout,
                                   const struct inkcell_fb_action_bar *bar) {
     const int small = layout->small;
@@ -594,14 +747,25 @@ size_t inkcell_fb_draw_action_bar(const struct inkcell_draw_state *state,
         x += inkcell_fb_draw_action_hint(state, bar->more, x, keys_y, small, false) + gap;
     }
 
-    if (bar->status == NULL || bar->status[0] == '\0') {
-        return shown;
-    }
+    /*
+     * The link mark, then the words. The mark is always handed its counts, drawn or not, so an
+     * arrow that was off the frame for a while does not flash for everything it missed on the
+     * frame it comes back - see inkcell_fb_link_glow().
+     */
+    const struct inkcell_fb_link_metrics mark = inkcell_fb_link_measure(state, &bar->link, small);
+    const struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW);
+    const bool words = bar->status != NULL && bar->status[0] != '\0';
+    /* A full cell between the mark and the words, where the mark's own pieces keep half of
+       one: the mark is one thing, and the words are a second. */
+    const int sep = inkcell_fb_char_adv(state, small);
     /* Sized to the line builder that produced it, not to the toast that used to share this row:
        a status line is a transport state and a radio's advertised name, and a name is only
        bounded by what the radio says it is called. */
     char status[INKCELL_LINE_MAX];
-    inkwell_str_copy(status, sizeof status, bar->status);
+    status[0] = '\0';
+    if (words) {
+        inkwell_str_copy(status, sizeof status, bar->status);
+    }
 
     if (compact) {
         /*
@@ -611,31 +775,63 @@ size_t inkcell_fb_draw_action_bar(const struct inkcell_draw_state *state,
          * dropped entirely when the room will not hold a few cells of it: a status cut to one
          * letter says nothing, and the app bar's indicator is where a compact frame carries
          * the fact anyway.
+         *
+         * The words go before the mark does. The mark is the answer to "is it up, is it doing
+         * anything"; the words are which radio, which a reader already knows.
          */
         const int trailing = inkcell_fb_content_x(state) + inkcell_fb_content_w(state);
         const int avail = trailing - x;
-        if (avail < 4 * inkcell_fb_char_adv(state, small)) {
-            return shown;
+        const bool fits_mark = mark.w > 0 && mark.w <= avail;
+        const int word_room = avail - (fits_mark ? mark.w + sep : 0);
+        bool draw_words = words && word_room >= 4 * inkcell_fb_char_adv(state, small);
+        while (draw_words && inkcell_fb_text_width(state, status, small) > word_room) {
+            const size_t cells = inkcell_text_cells(status);
+            if (cells <= 1U) {
+                draw_words = false;
+                break;
+            }
+            inkcell_text_cell_truncate(status, cells - 1U);
         }
-        while (inkcell_fb_text_width(state, status, small) > avail) {
+        const int text_w = draw_words ? inkcell_fb_text_width(state, status, small) : 0;
+        int sx = trailing - text_w - (fits_mark ? mark.w + (draw_words ? sep : 0) : 0);
+        const struct inkcell_fb_link_metrics none = {0};
+        sx += inkcell_fb_draw_link_mark(state, &bar->link, fits_mark ? &mark : &none, sx, keys_y,
+                                        small, bar->status_tone, ground);
+        if (draw_words) {
+            if (fits_mark) {
+                sx += sep;
+            }
+            inkcell_fb_draw_text(state, sx, keys_y, status, small,
+                                 inkcell_fb_tone_color(state, bar->status_tone), ground);
+        }
+        return shown;
+    }
+
+    const int status_y = keys_y - inkcell_step_px(small) + inkcell_fb_line_adv(state, small) +
+                         inkcell_fb_space_at(state, INKCELL_SPACE_XS, small);
+    int sx = inkcell_fb_content_x(state);
+    const int drawn = inkcell_fb_draw_link_mark(state, &bar->link, &mark, sx, status_y, small,
+                                                bar->status_tone, ground);
+    if (!words) {
+        return shown;
+    }
+    if (drawn > 0) {
+        /* Fitted by measure into what the mark left, rather than by the row's column count,
+           which is the whole row's and would run the name off the end of the panel. */
+        sx += drawn + sep;
+        const int word_room = inkcell_fb_content_x(state) + inkcell_fb_content_w(state) - sx;
+        while (inkcell_fb_text_width(state, status, small) > word_room) {
             const size_t cells = inkcell_text_cells(status);
             if (cells <= 1U) {
                 return shown;
             }
             inkcell_text_cell_truncate(status, cells - 1U);
         }
-        inkcell_fb_draw_text(state, trailing - inkcell_fb_text_width(state, status, small), keys_y,
-                             status, small, inkcell_fb_tone_color(state, bar->status_tone),
-                             inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
-        return shown;
+    } else {
+        inkcell_fb_fit(status, inkcell_fb_row_cols(state, small));
     }
-
-    inkcell_fb_fit(status, inkcell_fb_row_cols(state, small));
-    inkcell_fb_draw_text(state, inkcell_fb_content_x(state),
-                         keys_y - inkcell_step_px(small) + inkcell_fb_line_adv(state, small) +
-                             inkcell_fb_space_at(state, INKCELL_SPACE_XS, small),
-                         status, small, inkcell_fb_tone_color(state, bar->status_tone),
-                         inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
+    inkcell_fb_draw_text(state, sx, status_y, status, small,
+                         inkcell_fb_tone_color(state, bar->status_tone), ground);
     return shown;
 }
 

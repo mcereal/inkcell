@@ -26,6 +26,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ---- the frame ------------------------------------------------------------------------------
  *
  * Where the chrome ends and the body begins, before any of it has been drawn.
@@ -209,6 +213,46 @@ void inkcell_fb_draw_banner(const struct inkcell_draw_state *state,
  * itself would be back to computing a y coordinate in a screen renderer.
  */
 
+/*
+ * The link, as a mark at the head of the status line: a dot for its state, the symbol of what
+ * carries it, and two arrows that light when frames go out and come in.
+ *
+ * Words alone made the reader *read* to find out whether anything was attached, and nothing on
+ * the frame said whether the link was doing anything at all. A phone answers both in the corner
+ * with a coloured dot and a pair of arrows that blink, and that is read without being read -
+ * which is the whole of what a status line is for.
+ *
+ * **Counts, not times.** The application hands over how many frames it has sent and received,
+ * and the widget lights an arrow when its count changes. A deadline would have to be on the
+ * clock this state is driven by, which is the backend's rather than the application's, and a
+ * capture stepping time would see it expire between two frames nobody drew. A count only has
+ * to be different, so a snapshot that never mentions time can still say "something arrived".
+ * The first count the widget sees is adopted rather than flashed, so a frame that opens onto a
+ * link that has been busy for an hour does not claim that anything just happened.
+ *
+ * The arrows fade over the theme's long motion, and a count that keeps changing keeps them lit:
+ * a burst of forty frames is one steady light, not forty blinks nobody could count.
+ *
+ * Zeroed, it draws nothing, so a bar that does not know about a link is the bar it always was.
+ */
+struct inkcell_fb_link_mark {
+    /* Draw the mark at all. */
+    bool shown;
+    /* The dot: INKCELL_TONE_SUCCESS for a link that is up, _WARNING for one on its way,
+       _ERROR or _DIM for none. The meaning is the application's; the widget only paints it. */
+    enum inkcell_tone tone;
+    /* What carries the link, in the status line's own tone. INKCELL_ICON_NONE for the dot
+       alone. */
+    enum inkcell_icon icon;
+    /* Draw the arrows. Off while there is no link to have traffic on, because two unlit arrows
+       beside "not connected" say that something could be moving when nothing could. */
+    bool traffic;
+    /* Running counts of the frames sent and received; see above. Any change lights the arrow,
+       including one back to zero. */
+    uint32_t sent;
+    uint32_t received;
+};
+
 struct inkcell_fb_action_bar {
     const struct inkcell_button_action *items;
     size_t count;
@@ -223,6 +267,12 @@ struct inkcell_fb_action_bar {
      */
     const char *status;
     enum inkcell_tone status_tone;
+    /*
+     * The link's mark, ahead of the status words. On a compact bar, where the status rides the
+     * end of the keycap row, the words are dropped for room before the mark is: the mark is the
+     * answer and the words are the detail.
+     */
+    struct inkcell_fb_link_mark link;
     /*
      * How many of `items` the bar shows before the rest go behind `more`. 0 shows every one of
      * them, which is the bar as it always was.
@@ -275,8 +325,11 @@ int inkcell_fb_action_bar_height(const struct inkcell_draw_state *state,
  * room and what it held back for `limit` are both the tail of the array, so one index says
  * where the menu behind `more` starts - see inkcell_fb_action_bar_menu(). A screen keeps it from
  * the frame it drew, the way it keeps a FAB's box.
+ *
+ * The state is not const because the link mark remembers the counts it last saw there - see
+ * struct inkcell_fb_link_mark.
  */
-size_t inkcell_fb_draw_action_bar(const struct inkcell_draw_state *state,
+size_t inkcell_fb_draw_action_bar(struct inkcell_draw_state *state,
                                   const struct inkcell_fb_layout *layout,
                                   const struct inkcell_fb_action_bar *bar);
 
@@ -816,5 +869,9 @@ void inkcell_fb_draw_rule(const struct inkcell_draw_state *state, int x, int y, 
 /* "Messages (12)", or "Messages (12, +40 older)" when a ring has dropped some. */
 void inkcell_fb_title_count(char *out, size_t out_len, const char *name, uint32_t count,
                             uint32_t dropped);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_CHROME_H */

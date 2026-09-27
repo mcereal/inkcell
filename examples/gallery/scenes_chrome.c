@@ -66,11 +66,22 @@ void gallery_scene_chrome(struct inkcell_draw_state *state) {
         {INKCELL_BUTTON_Y, (inkcell_str_id)GALLERY_STR_ACT_RETRY},
         {INKCELL_BUTTON_SELECT, (inkcell_str_id)GALLERY_STR_ACT_DISMISS},
     };
-    const struct inkcell_fb_action_bar action = {
+    /* The link mark: up, carried over Bluetooth, and something just sent. Drawn twice because
+       the first count a mark sees is adopted rather than flashed - the second draw is the frame
+       after a send, which is the one worth a picture: one arrow lit and one not. */
+    struct inkcell_fb_action_bar action = {
         .items = k_items,
         .count = sizeof k_items / sizeof k_items[0],
         .status = gallery_text(GALLERY_STR_BANNER_SUPPORTING),
         .status_tone = INKCELL_TONE_DIM,
+        .link = {.shown = true,
+                 .tone = INKCELL_TONE_SUCCESS,
+                 .icon = INKCELL_ICON_BLUETOOTH,
+                 .traffic = true,
+                 .sent = 7U,
+                 .received = 3U},
     };
+    inkcell_fb_draw_action_bar(state, &layout, &action);
+    action.link.sent = 8U;
     inkcell_fb_draw_action_bar(state, &layout, &action);
 }

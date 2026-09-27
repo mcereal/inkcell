@@ -464,3 +464,83 @@ INKCELL_TEST_CASE(action_tip_is_live_for_its_journey_and_no_longer, unit) {
     app_bar_close(&h);
     record_success(test_name);
 }
+
+/* ---- the link mark ------------------------------------------------------------------------ */
+
+/* A full bar with the link up and carrying traffic, at the counts given. */
+static void link_mark_draw(struct app_bar_harness *h, const struct inkcell_fb_layout *layout,
+                           bool traffic, uint32_t sent, uint32_t received) {
+    const struct inkcell_fb_action_bar bar = {
+        .items = k_ab_items,
+        .count = 2U,
+        .status = "status",
+        .link = {.shown = true,
+                 .tone = INKCELL_TONE_SUCCESS,
+                 .icon = INKCELL_ICON_BLUETOOTH,
+                 .traffic = traffic,
+                 .sent = sent,
+                 .received = received},
+    };
+    inkcell_fb_draw_action_bar(h->state, layout, &bar);
+}
+
+INKCELL_TEST_CASE(link_mark_adopts_the_first_count_it_sees_unlit, unit) {
+    struct app_bar_harness h;
+    INKCELL_TEST_FAIL_IF(!app_bar_open(&h, INKCELL_CAPTURE_WIDTH), "the capture should open");
+    inkcell_fb_state_set_now(h.state, 1000U);
+    const struct inkcell_fb_layout layout = inkcell_fb_layout_begin(h.state, true, false);
+
+    link_mark_draw(&h, &layout, true, 500U, 900U);
+    AB_CHECK(inkcell_fb_state_animating(h.state),
+             "a link busy since before the frame opened has not just done anything");
+    link_mark_draw(&h, &layout, true, 500U, 900U);
+    AB_CHECK(inkcell_fb_state_animating(h.state), "and an unchanged count lights nothing");
+    app_bar_close(&h);
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(link_mark_lights_on_a_change_and_goes_out_by_itself, unit) {
+    struct app_bar_harness h;
+    INKCELL_TEST_FAIL_IF(!app_bar_open(&h, INKCELL_CAPTURE_WIDTH), "the capture should open");
+    inkcell_fb_state_set_now(h.state, 1000U);
+    const struct inkcell_fb_layout layout = inkcell_fb_layout_begin(h.state, true, false);
+
+    link_mark_draw(&h, &layout, true, 1U, 1U);
+    link_mark_draw(&h, &layout, true, 1U, 2U);
+    AB_CHECK(!inkcell_fb_state_animating(h.state),
+             "a frame received is owed the frames that fade its arrow");
+
+    /* Twice the long motion is the whole pulse; a millisecond past it the arrow is out. */
+    const uint32_t pulse = 2U * inkcell_fb_motion(h.state, INKCELL_MOTION_LONG);
+    inkcell_fb_state_set_now(h.state, 1000U + pulse / 2U);
+    link_mark_draw(&h, &layout, true, 1U, 2U);
+    AB_CHECK(!inkcell_fb_state_animating(h.state), "halfway through it is still going");
+    inkcell_fb_state_set_now(h.state, 1000U + pulse + 1U);
+    h.state->animation_damage.valid = false;
+    link_mark_draw(&h, &layout, true, 1U, 2U);
+    AB_CHECK(inkcell_fb_state_animating(h.state),
+             "and once it has faded nothing keeps the repaint timer running");
+    AB_CHECK(!h.state->animation_damage.valid,
+             "but the frame it goes out on still says where, or a clipped frame keeps the shade");
+
+    link_mark_draw(&h, &layout, true, 2U, 2U);
+    AB_CHECK(!inkcell_fb_state_animating(h.state), "the other arrow lights on its own count");
+    app_bar_close(&h);
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(link_mark_without_traffic_never_lights, unit) {
+    struct app_bar_harness h;
+    INKCELL_TEST_FAIL_IF(!app_bar_open(&h, INKCELL_CAPTURE_WIDTH), "the capture should open");
+    inkcell_fb_state_set_now(h.state, 1000U);
+    const struct inkcell_fb_layout layout = inkcell_fb_layout_begin(h.state, true, false);
+
+    link_mark_draw(&h, &layout, false, 1U, 1U);
+    link_mark_draw(&h, &layout, false, 9U, 9U);
+    AB_CHECK(inkcell_fb_state_animating(h.state), "no arrows drawn, so none to light");
+    link_mark_draw(&h, &layout, true, 9U, 9U);
+    AB_CHECK(inkcell_fb_state_animating(h.state),
+             "and the counts it missed while off are not replayed when the arrows come back");
+    app_bar_close(&h);
+    record_success(test_name);
+}
