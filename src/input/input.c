@@ -570,7 +570,8 @@ void inkcell_input_handle_device_event(struct inkcell_input *input, int source_f
            promised it would not. The same for a key the policy made ours when it went down.
            Other face buttons keep whatever the kernel does with them. */
         if (value == 2 &&
-            (inkcell_input_key_is_direction(key) || inkcell_input_repeat_owns(input, type, code))) {
+            (inkcell_input_key_is_direction(key) ||
+             (inkcell_input_repeat_owns(input, type, code) && !inkcell_input_key_holds(key)))) {
             return;
         }
     } else if (type == EV_ABS) {
