@@ -516,9 +516,12 @@ INKCELL_TEST_CASE(link_mark_lights_on_a_change_and_goes_out_by_itself, unit) {
     link_mark_draw(&h, &layout, true, 1U, 2U);
     AB_CHECK(!inkcell_fb_state_animating(h.state), "halfway through it is still going");
     inkcell_fb_state_set_now(h.state, 1000U + pulse + 1U);
+    h.state->animation_damage.valid = false;
     link_mark_draw(&h, &layout, true, 1U, 2U);
     AB_CHECK(inkcell_fb_state_animating(h.state),
              "and once it has faded nothing keeps the repaint timer running");
+    AB_CHECK(!h.state->animation_damage.valid,
+             "but the frame it goes out on still says where, or a clipped frame keeps the shade");
 
     link_mark_draw(&h, &layout, true, 2U, 2U);
     AB_CHECK(!inkcell_fb_state_animating(h.state), "the other arrow lights on its own count");

@@ -50,6 +50,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct inkcell_fb_glyph_cache;
 struct inkcell_fb_thread_cache;
 struct inkcell_fb_render_cache;
@@ -1659,5 +1663,9 @@ void inkcell_fb_app_frame_begin(struct inkcell_draw_state *state);
 /* Draws one whole frame, by handing `snapshot` to the installed app. A state with no app
    installed draws nothing, which leaves the cleared panel the present() is about to show. */
 void inkcell_fb_render(struct inkcell_draw_state *state, const void *snapshot);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_UI_FB_DRAW_H */

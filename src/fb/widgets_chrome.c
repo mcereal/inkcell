@@ -671,21 +671,19 @@ static int inkcell_fb_draw_link_mark(struct inkcell_draw_state *state,
         const struct inkcell_rgb lit = inkcell_fb_tone_color(state, INKCELL_TONE_STRONG);
         const int between = m->arrow_h / 2 > 1 ? m->arrow_h / 2 : 1;
         const int top = y + (m->glyph - (2 * m->arrow_h + between)) / 2;
+        /*
+         * Declared before the arrows are drawn, and on every frame they are drawn. A frame
+         * repainted under a band lets through only what was declared *before* it was filled,
+         * so damage said afterwards would copy pixels nothing redrew; and the frame an arrow
+         * goes out on is one where nothing is lit or moving any more, so damage said only
+         * while lit would leave it at its last shade. It is a few pixels either way.
+         */
+        inkcell_fb_animation_damage(state, x - 1, top - 1, m->arrow_w + 2,
+                                    2 * m->arrow_h + between + 2);
         inkcell_fb_link_arrow(state, x, top, m->arrow_w, m->arrow_h, true,
                               inkcell_fb_fade(lit, idle, INKCELL_ANIM_ONE - sent));
         inkcell_fb_link_arrow(state, x, top + m->arrow_h + between, m->arrow_w, m->arrow_h, false,
                               inkcell_fb_fade(lit, idle, INKCELL_ANIM_ONE - received));
-        /*
-         * While either is lit the next frame will differ from this one here and nowhere else,
-         * so say so: a frame redrawn under the damage band repaints only this, and a fading
-         * arrow costs its own few pixels rather than the panel.
-         */
-        if (sent > 0 || received > 0 ||
-            inkcell_anim_active(&state->link_pulse[INKCELL_FB_LINK_SENT].glow, state->now_ms) ||
-            inkcell_anim_active(&state->link_pulse[INKCELL_FB_LINK_RECEIVED].glow, state->now_ms)) {
-            inkcell_fb_animation_damage(state, x - 1, top - 1, m->arrow_w + 2,
-                                        2 * m->arrow_h + between + 2);
-        }
         x += m->arrows;
     }
     return x - left;

@@ -26,6 +26,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ---- the frame ------------------------------------------------------------------------------
  *
  * Where the chrome ends and the body begins, before any of it has been drawn.
@@ -865,5 +869,9 @@ void inkcell_fb_draw_rule(const struct inkcell_draw_state *state, int x, int y, 
 /* "Messages (12)", or "Messages (12, +40 older)" when a ring has dropped some. */
 void inkcell_fb_title_count(char *out, size_t out_len, const char *name, uint32_t count,
                             uint32_t dropped);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_CHROME_H */
