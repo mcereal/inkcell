@@ -122,8 +122,10 @@ static void inkcell_input_load_quit_keys(void) {
  * event loop, and it covers the arrow keys of a USB keyboard too - where the kernel would
  * repeat, ours takes over, so both devices scroll at the same speed.
  *
- * Only the four directions repeat. A, B, X and Y confirm or go back, and a held confirm that
- * fired forty times would be a trap rather than a convenience.
+ * The four directions repeat, and so does any other key the application's repeat policy
+ * says yes to at the press - see inkcell_input_set_repeat_policy(). Unasked, A, B, X and Y
+ * confirm or go back, and a held confirm that fired forty times would be a trap rather than a
+ * convenience.
  */
 #define INKCELL_INPUT_REPEAT_DELAY_MS 350U /* held this long before the first repeat */
 #define INKCELL_INPUT_REPEAT_MS 90U        /* then a row this often */
@@ -203,9 +205,18 @@ static bool inkcell_input_key_holds(enum inkcell_key key) {
     return key == INKCELL_KEY_B;
 }
 
-static bool inkcell_input_key_repeats(enum inkcell_key key) {
+static bool inkcell_input_key_is_direction(enum inkcell_key key) {
     return key == INKCELL_KEY_UP || key == INKCELL_KEY_DOWN || key == INKCELL_KEY_LEFT ||
            key == INKCELL_KEY_RIGHT;
+}
+
+/* B is never the policy's: a held B is the hold, not a repeat. */
+static bool inkcell_input_key_repeats(const struct inkcell_input *input, enum inkcell_key key) {
+    if (inkcell_input_key_is_direction(key)) {
+        return true;
+    }
+    return key != INKCELL_KEY_NONE && !inkcell_input_key_holds(key) && input->repeats != NULL &&
+           input->repeats(input->repeats_userdata, key);
 }
 
 /* True when the hold in progress was started by this exact evdev event, which is what makes a
@@ -267,7 +278,7 @@ static void inkcell_input_repeat_start(struct inkcell_input *input, enum inkcell
         inkcell_input_repeat_schedule(input);
         return;
     }
-    if (!inkcell_input_key_repeats(key) || inkcell_input_repeat_delay_ms(0U) == 0U) {
+    if (!inkcell_input_key_repeats(input, key) || inkcell_input_repeat_delay_ms(0U) == 0U) {
         inkcell_input_repeat_cancel(input);
         return;
     }
@@ -508,6 +519,15 @@ void inkcell_input_set_handler(struct inkcell_input *input, inkcell_key_handler 
     input->key_userdata = userdata;
 }
 
+void inkcell_input_set_repeat_policy(struct inkcell_input *input, inkcell_key_repeats_fn repeats,
+                                     void *userdata) {
+    if (input == NULL) {
+        return;
+    }
+    input->repeats = repeats;
+    input->repeats_userdata = userdata;
+}
+
 void inkcell_input_handle_event(struct inkcell_input *input, uint16_t type, uint16_t code,
                                 int32_t value) {
     inkcell_input_handle_device_event(input, -1, type, code, value);
@@ -547,8 +567,10 @@ void inkcell_input_handle_device_event(struct inkcell_input *input, int source_f
         /* A direction is repeated by our timer or by nothing at all, never by the kernel: a
            keyboard whose autorepeat we also honoured would take two rows per step, and with
            <PREFIX>_KEY_REPEAT_DELAY_MS=0 it would still scroll on hold after the knob
-           promised it would not. Face buttons keep whatever the kernel does with them. */
-        if (value == 2 && inkcell_input_key_repeats(key)) {
+           promised it would not. The same for a key the policy made ours when it went down.
+           Other face buttons keep whatever the kernel does with them. */
+        if (value == 2 &&
+            (inkcell_input_key_is_direction(key) || inkcell_input_repeat_owns(input, type, code))) {
             return;
         }
     } else if (type == EV_ABS) {
@@ -567,6 +589,10 @@ void inkcell_input_handle_device_event(struct inkcell_input *input, int source_f
             const bool was_down = (input->triggers_down & bit) != 0U;
             if (pressed == INKCELL_KEY_NONE) {
                 input->triggers_down = (uint8_t)(input->triggers_down & (uint8_t)~bit);
+                /* The trigger's release, which ends a repeat the policy gave it. */
+                if (was_down && inkcell_input_repeat_owns(input, type, code)) {
+                    inkcell_input_repeat_cancel(input);
+                }
                 return;
             }
             if (was_down) {
