@@ -218,6 +218,22 @@ bool inkcell_keyboard_insert_text(const struct inkcell_keyboard_layout *layout, 
     return keyboard_insert(text, size, keyboard_cap(layout, size), strlen(text), input);
 }
 
+/* A panel change, from any of the three routes to one: the ring, the layer key and the shift.
+   Arriving on the capitals straight after spending them locks them; anything else lets go. */
+static void keyboard_caps_on_panel(struct inkcell_keyboard *kb, uint8_t from) {
+    const bool relock = from == (uint8_t)INKCELL_KB_LOWER && kb->layer == INKCELL_KB_UPPER &&
+                        kb->caps == (uint8_t)INKCELL_KB_CAPS_SPENT;
+    kb->caps = (uint8_t)(relock ? INKCELL_KB_CAPS_LOCKED : INKCELL_KB_CAPS_OFF);
+}
+
+/* An edit that is not a capital, and did change the text: a one-shot capital is no longer the last
+   thing typed. A lock survives it - a space and a correction are part of typing in capitals. */
+static void keyboard_caps_on_edit(struct inkcell_keyboard *kb) {
+    if (kb != NULL && kb->caps == (uint8_t)INKCELL_KB_CAPS_SPENT) {
+        kb->caps = (uint8_t)INKCELL_KB_CAPS_OFF;
+    }
+}
+
 bool inkcell_keyboard_insert_text_at_caret(struct inkcell_keyboard *kb,
                                            const struct inkcell_keyboard_layout *layout, char *text,
                                            size_t size, const char *input) {
@@ -226,7 +242,11 @@ bool inkcell_keyboard_insert_text_at_caret(struct inkcell_keyboard *kb,
         return false;
     }
     const size_t at = keyboard_caret_normalise(kb, text);
-    return keyboard_insert(text, size, keyboard_cap(layout, size), at, input);
+    if (!keyboard_insert(text, size, keyboard_cap(layout, size), at, input)) {
+        return false;
+    }
+    keyboard_caps_on_edit(kb);
+    return true;
 }
 
 /*
@@ -261,22 +281,6 @@ void inkcell_keyboard_reset(struct inkcell_keyboard *kb) {
     kb->emoji_page = 0U;
     kb->caret_back = 0U;
     kb->caps = (uint8_t)INKCELL_KB_CAPS_OFF;
-}
-
-/* A panel change, from any of the three routes to one: the ring, the layer key and the shift.
-   Arriving on the capitals straight after spending them locks them; anything else lets go. */
-static void keyboard_caps_on_panel(struct inkcell_keyboard *kb, uint8_t from) {
-    const bool relock = from == (uint8_t)INKCELL_KB_LOWER && kb->layer == INKCELL_KB_UPPER &&
-                        kb->caps == (uint8_t)INKCELL_KB_CAPS_SPENT;
-    kb->caps = (uint8_t)(relock ? INKCELL_KB_CAPS_LOCKED : INKCELL_KB_CAPS_OFF);
-}
-
-/* An edit that is not a capital: a one-shot capital is no longer the last thing typed. A lock
-   survives it - a space and a correction are part of typing in capitals. */
-static void keyboard_caps_on_edit(struct inkcell_keyboard *kb) {
-    if (kb->caps == (uint8_t)INKCELL_KB_CAPS_SPENT) {
-        kb->caps = (uint8_t)INKCELL_KB_CAPS_OFF;
-    }
 }
 
 const char *inkcell_keyboard_cell(const struct inkcell_keyboard *kb,
@@ -431,13 +435,15 @@ static enum inkcell_keyboard_result keyboard_action(struct inkcell_keyboard *kb,
         inkcell_keyboard_panel_step(kb, layout, 1);
         return INKCELL_KEYBOARD_CONSUMED;
     case INKCELL_KB_ACTION_SPACE:
-        (void)keyboard_insert(text, size, keyboard_cap(layout, size),
-                              inkcell_keyboard_caret(kb, text), " ");
-        keyboard_caps_on_edit(kb);
+        if (keyboard_insert(text, size, keyboard_cap(layout, size),
+                            inkcell_keyboard_caret(kb, text), " ")) {
+            keyboard_caps_on_edit(kb);
+        }
         return INKCELL_KEYBOARD_CONSUMED;
     case INKCELL_KB_ACTION_DELETE:
-        (void)keyboard_delete(text, inkcell_keyboard_caret(kb, text));
-        keyboard_caps_on_edit(kb);
+        if (keyboard_delete(text, inkcell_keyboard_caret(kb, text))) {
+            keyboard_caps_on_edit(kb);
+        }
         return INKCELL_KEYBOARD_CONSUMED;
     case INKCELL_KB_ACTION_SUBMIT:
         return INKCELL_KEYBOARD_SUBMIT;
@@ -517,13 +523,15 @@ enum inkcell_keyboard_result inkcell_keyboard_key(struct inkcell_keyboard *kb,
         return INKCELL_KEYBOARD_DISMISS;
     case INKCELL_KEY_X:
         /* Backspace, where a pad-driven keyboard puts it. */
-        (void)keyboard_delete(text, inkcell_keyboard_caret(kb, text));
-        keyboard_caps_on_edit(kb);
+        if (keyboard_delete(text, inkcell_keyboard_caret(kb, text))) {
+            keyboard_caps_on_edit(kb);
+        }
         return INKCELL_KEYBOARD_CONSUMED;
     case INKCELL_KEY_Y:
-        (void)keyboard_insert(text, size, keyboard_cap(layout, size),
-                              inkcell_keyboard_caret(kb, text), " ");
-        keyboard_caps_on_edit(kb);
+        if (keyboard_insert(text, size, keyboard_cap(layout, size),
+                            inkcell_keyboard_caret(kb, text), " ")) {
+            keyboard_caps_on_edit(kb);
+        }
         return INKCELL_KEYBOARD_CONSUMED;
     case INKCELL_KEY_L1:
     case INKCELL_KEY_R1:
