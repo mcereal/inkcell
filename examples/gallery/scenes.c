@@ -119,6 +119,8 @@ static const struct gallery_scene k_scenes[] = {
      */
     {"app_bar", gallery_scene_app_bar, 0U, 0U, 0U},
     {"app_bar_narrow", gallery_scene_app_bar, 0U, 440U, 0U},
+    /* A long job's own screen: the dial as its subject, and the steps under it. */
+    {"progress", gallery_scene_progress, 0U, 0U, 0U},
 };
 
 const struct gallery_scene *gallery_scenes(size_t *count) {

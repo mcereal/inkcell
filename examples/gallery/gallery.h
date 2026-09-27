@@ -161,6 +161,7 @@ void gallery_scene_list_grouped(struct inkcell_draw_state *state);
 void gallery_scene_list_sections(struct inkcell_draw_state *state);
 void gallery_scene_list_plain(struct inkcell_draw_state *state);
 void gallery_scene_app_bar(struct inkcell_draw_state *state);
+void gallery_scene_progress(struct inkcell_draw_state *state);
 
 /* ---- shared scene furniture --------------------------------------------------------------------
  *

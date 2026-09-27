@@ -242,13 +242,26 @@ void inkcell_fb_draw_meter(struct inkcell_draw_state *state, const struct inkcel
    that still reads as an arc travelling rather than as a ring with a bite out of it. */
 #define INKCELL_FB_DIAL_SWEEP 250
 
+/* The side-to-thickness ratio a large ring is drawn at when the caller states no thickness:
+   the proportion of the progress rings on phones, where the band reads as a stroke and the
+   figure inside still has the room. */
+#define INKCELL_FB_DIAL_WEIGHT 24
+
 /*
  * The reading in the middle of the ring, or nothing.
  *
  * Nothing is a real answer here rather than a failure. The hole is small, a figure clipped to
  * fit it is a figure nobody can read, and an ellipsis inside a dial says even less than the arc
- * already does - so this tries the body scale, then the smaller one chrome is set in, and if
- * neither fits it leaves the ring to speak for itself.
+ * already does - so this tries each size from the largest a glyph is drawn at down, and if none
+ * fits it leaves the ring to speak for itself.
+ *
+ * From the largest because a dial is where the reading is the subject: a ring that fills half a
+ * screen with a body-sized "62%" in it is a ring with a caption, not a reading. The display
+ * and headline sizes are held to a tighter height than the smaller ones, though - two fifths
+ * of the hole - because a figure that fills its ring edge to edge crowds the arc it is reading
+ * out, and at that point the next size down is the better answer. A dial in a row or a card
+ * is small enough that neither large role fits, and it gets the body or the label size exactly
+ * as it always did.
  *
  * Measured against the square that fits *inside* the hole, not the hole's diameter: a line as
  * wide as the circle is a line whose ends are outside it. Seven tenths is the inscribed square,
@@ -256,12 +269,25 @@ void inkcell_fb_draw_meter(struct inkcell_draw_state *state, const struct inkcel
  */
 static void inkcell_fb_dial_label(const struct inkcell_draw_state *state,
                                   const struct inkcell_fb_dial *dial, int cx, int cy, int side,
-                                  int thickness) {
-    if (dial->label == NULL || dial->label[0] == '\0') {
-        return;
-    }
+                                  int thickness, struct inkcell_rgb ink) {
     const int hole = side - 2 * thickness;
     if (hole <= 0) {
+        return;
+    }
+    if (dial->label == NULL || dial->label[0] == '\0') {
+        /* The icon instead, held to the large figures' height, from the largest scale down. */
+        if (dial->icon == INKCELL_ICON_NONE) {
+            return;
+        }
+        for (int scale = INKCELL_FB_ICON_SCALE_MAX; scale > 0; scale -= INKCELL_SCALE(1)) {
+            if (inkcell_fb_icon_drawn(state, scale) > hole * 2 / 5) {
+                continue;
+            }
+            const int height = inkcell_scale_px((int)inkcell_fb_font(state)->height, scale);
+            inkcell_fb_draw_icon(state, cx - inkcell_fb_icon_box(state, scale) / 2, cy - height / 2,
+                                 dial->icon, scale, ink, inkcell_fb_color(state, dial->ground));
+            return;
+        }
         return;
     }
     const int room = hole * 7 / 10;
@@ -274,9 +300,18 @@ static void inkcell_fb_dial_label(const struct inkcell_draw_state *state,
      * a centred reading slides left and right by a pixel or two as its digits change, which is
      * the one motion in a dial that does not mean anything.
      */
+    /* The display role at the largest scale a glyph is drawn at, for the dial that is the
+       whole of its screen: the theme's display size is set for a title, and a reading a screen
+       is about can be larger than its title. */
+    struct inkcell_type_style largest = inkcell_fb_type_style(state, INKCELL_TYPE_DISPLAY);
+    largest.scale = INKCELL_SCALE_MAX;
     const struct inkcell_type_style styles[] = {
+        inkcell_type_style_tabular(largest),
+        inkcell_type_style_tabular(inkcell_fb_type_style(state, INKCELL_TYPE_DISPLAY)),
+        inkcell_type_style_tabular(inkcell_fb_type_style(state, INKCELL_TYPE_HEADLINE)),
         inkcell_type_style_tabular(inkcell_fb_type_style(state, INKCELL_TYPE_BODY)),
         inkcell_type_style_tabular(inkcell_fb_type_style(state, INKCELL_TYPE_LABEL))};
+    const size_t large = 3U; /* the first three are held to the tighter height */
     for (size_t i = 0U; i < sizeof styles / sizeof styles[0]; ++i) {
         const struct inkcell_type_style *style = &styles[i];
         if (style->scale <= 0) {
@@ -284,7 +319,8 @@ static void inkcell_fb_dial_label(const struct inkcell_draw_state *state,
         }
         const int width = inkcell_fb_text_width_styled(state, dial->label, style);
         const int height = inkcell_scale_px((int)inkcell_fb_font(state)->height, style->scale);
-        if (width > room || height > room) {
+        const int tallest = i < large ? hole * 2 / 5 : room;
+        if (width > room || height > tallest) {
             continue;
         }
         /* The glyph body is centred, not the line advance: the advance carries the gap accents
@@ -314,8 +350,15 @@ void inkcell_fb_draw_dial(struct inkcell_draw_state *state, const struct inkcell
     const int side = r.w < r.h ? r.w : r.h;
     /* The caller's, or the state's when it named none - never recomputed from a scale the
        caller may not have sized against. See `thickness` on struct inkcell_fb_dial. */
-    const int thickness =
+    int thickness =
         dial->thickness > 0 ? dial->thickness : inkcell_fb_dial_thickness(state, state->scale);
+    /* Unstated, a ring grows heavier with its size past the bar's weight: a hero ring drawn at
+       a row's thickness is a hairline round a figure. Only upwards, and only in proportion to
+       a side the caller chose, so a dial sized with inkcell_fb_dial_min_side() is exactly the
+       ring it measured. */
+    if (dial->thickness <= 0 && side / INKCELL_FB_DIAL_WEIGHT > thickness) {
+        thickness = side / INKCELL_FB_DIAL_WEIGHT;
+    }
     if (side < 3 * thickness) {
         return; /* no room for a ring with a hole in it; see inkcell_fb_dial_min_side() */
     }
@@ -362,8 +405,9 @@ void inkcell_fb_draw_dial(struct inkcell_draw_state *state, const struct inkcell
          */
         const int32_t turn = inkcell_anim_loop(&state->anim, dial->id, state->now_ms,
                                                inkcell_fb_motion(state, INKCELL_MOTION_LOOP));
-        inkcell_fb_stroke_arc(state, cx, cy, radius, thickness, turn, INKCELL_FB_DIAL_SWEEP, ink);
-        inkcell_fb_dial_label(state, dial, cx, cy, side, thickness);
+        inkcell_fb_stroke_arc_round(state, cx, cy, radius, thickness, turn, INKCELL_FB_DIAL_SWEEP,
+                                    ink);
+        inkcell_fb_dial_label(state, dial, cx, cy, side, thickness, ink);
         return;
     }
 
@@ -384,9 +428,158 @@ void inkcell_fb_draw_dial(struct inkcell_draw_state *state, const struct inkcell
         sweep = 1;
     }
     if (sweep > 0) {
-        inkcell_fb_stroke_arc(state, cx, cy, radius, thickness, 0, sweep, ink);
+        inkcell_fb_stroke_arc_round(state, cx, cy, radius, thickness, 0, sweep, ink);
     }
-    inkcell_fb_dial_label(state, dial, cx, cy, side, thickness);
+    inkcell_fb_dial_label(state, dial, cx, cy, side, thickness, ink);
+}
+
+/* ---- the steps ------------------------------------------------------------------------------ */
+
+/* The marker's side: an icon's drawn size with a ring's worth of air round it, so the tick sits
+   inside the disc rather than touching its edge. */
+static int inkcell_fb_steps_marker(const struct inkcell_draw_state *state, int scale) {
+    return inkcell_fb_icon_drawn(state, scale) +
+           2 * inkcell_fb_space_at(state, INKCELL_SPACE_XS, scale);
+}
+
+int inkcell_fb_steps_height(const struct inkcell_draw_state *state, int scale) {
+    /* The names' role at `scale` rather than at the body's: the role is an offset from the body
+       scale, so a row measured at another scale carries the same offset from that one. */
+    int label = scale + inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL) - state->scale;
+    if (label < INKCELL_SCALE_MIN) {
+        label = INKCELL_SCALE_MIN;
+    }
+    if (label > INKCELL_SCALE_MAX) {
+        label = INKCELL_SCALE_MAX;
+    }
+    return inkcell_fb_steps_marker(state, scale) +
+           inkcell_fb_space_at(state, INKCELL_SPACE_SM, scale) +
+           inkcell_scale_px((int)inkcell_fb_font(state)->height, label);
+}
+
+/* The largest glyph multiplier whose icon fits inside `box` - the checkbox's question, asked of
+   a marker. Zero draws the disc and no mark. */
+static int inkcell_fb_steps_icon_scale(const struct inkcell_draw_state *state, int box) {
+    for (int scale = state->scale; scale > 0; scale -= INKCELL_SCALE(1)) {
+        if (inkcell_fb_icon_drawn(state, scale) <= box) {
+            return scale;
+        }
+    }
+    return 0;
+}
+
+void inkcell_fb_draw_steps(const struct inkcell_draw_state *state,
+                           const struct inkcell_fb_steps *steps) {
+    if (steps == NULL || steps->count == 0U || steps->rect.w <= 0 || steps->labels == NULL) {
+        return;
+    }
+    const struct inkcell_fb_rect r = steps->rect;
+    const int marker = inkcell_fb_steps_marker(state, state->scale);
+    const int column = r.w / (int)steps->count;
+    if (column <= 0 || marker <= 0) {
+        return;
+    }
+    const struct inkcell_rgb ground = inkcell_fb_color(state, steps->ground);
+    const struct inkcell_rgb track = inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK);
+    const enum inkcell_tone tone = inkcell_fb_meter_tone(steps->tone);
+    const struct inkcell_rgb ink = inkcell_fb_tone_color(state, tone);
+    const enum inkcell_family family = inkcell_tone_family(tone);
+
+    /*
+     * The line first, so the markers sit on it rather than under it. One segment per gap,
+     * centre to centre, inked as far as the stage under way and on the track after - the same
+     * two colours a meter's fill and track are, so a row of steps under a dial reads as the
+     * same kind of thing.
+     */
+    const int line = inkcell_fb_meter_thickness(state, state->scale) / 2 > 0
+                         ? inkcell_fb_meter_thickness(state, state->scale) / 2
+                         : 1;
+    const int mid_y = r.y + marker / 2;
+    for (size_t i = 0U; i + 1U < steps->count; ++i) {
+        const int from = r.x + column * (int)i + column / 2 + marker / 2;
+        const int to = r.x + column * (int)(i + 1U) + column / 2 - marker / 2;
+        if (to <= from) {
+            continue;
+        }
+        inkcell_fb_fill_rect(state, from, mid_y - line / 2, to - from, line,
+                             i < steps->current ? ink : track);
+    }
+
+    const int icon_scale =
+        inkcell_fb_steps_icon_scale(state, marker - 2 * inkcell_fb_space(state, INKCELL_SPACE_XS));
+    const int icon_top_pad =
+        icon_scale > 0
+            ? (marker - inkcell_scale_px((int)inkcell_fb_font(state)->height, icon_scale)) / 2
+            : 0;
+    for (size_t i = 0U; i < steps->count; ++i) {
+        const int x = r.x + column * (int)i + (column - marker) / 2;
+        const bool done = i < steps->current;
+        const bool now = i == steps->current;
+        if (done || (now && steps->halted)) {
+            /* A filled disc with its mark in the ink the theme paired with that fill. */
+            const struct inkcell_paint paint = inkcell_fb_paint(
+                state, now ? INKCELL_FAMILY_ERROR : family, INKCELL_SLOT_BASE, INKCELL_STATE_REST);
+            inkcell_fb_fill_round_rect(state, x, r.y, marker, marker, marker / 2, paint.fill);
+            if (icon_scale > 0) {
+                inkcell_fb_draw_icon(
+                    state, x + (marker - inkcell_fb_icon_box(state, icon_scale)) / 2,
+                    r.y + icon_top_pad, now ? INKCELL_ICON_CLOSE : INKCELL_ICON_CHECK, icon_scale,
+                    paint.ink, paint.fill);
+            }
+        } else if (now) {
+            /* Ringed, with a dot in it: under way, and not yet done. */
+            inkcell_fb_fill_round_rect(state, x, r.y, marker, marker, marker / 2, ground);
+            inkcell_fb_stroke_round_rect(state, x, r.y, marker, marker, marker / 2, line * 2, ink);
+            const int dot = marker / 3;
+            inkcell_fb_fill_round_rect(state, x + (marker - dot) / 2, r.y + (marker - dot) / 2, dot,
+                                       dot, dot / 2, ink);
+        } else {
+            inkcell_fb_fill_round_rect(state, x, r.y, marker, marker, marker / 2, ground);
+            inkcell_fb_stroke_round_rect(state, x, r.y, marker, marker, marker / 2, line, track);
+        }
+    }
+
+    /*
+     * The names, measured. Every one when the widest fits its column with a gap either side;
+     * otherwise the one under way alone, which may borrow its neighbours' room because they
+     * are not being drawn.
+     */
+    const struct inkcell_type_style style = inkcell_fb_type_style(state, INKCELL_TYPE_LABEL);
+    const int gap = inkcell_fb_space(state, INKCELL_SPACE_SM);
+    int widest = 0;
+    for (size_t i = 0U; i < steps->count; ++i) {
+        if (steps->labels[i] != NULL) {
+            const int w = inkcell_fb_text_width_styled(state, steps->labels[i], &style);
+            widest = w > widest ? w : widest;
+        }
+    }
+    const bool all = widest + gap <= column;
+    const int text_y = r.y + marker + inkcell_fb_space(state, INKCELL_SPACE_SM);
+    for (size_t i = 0U; i < steps->count; ++i) {
+        const char *label = steps->labels[i];
+        const bool now = i == steps->current;
+        if (label == NULL || (!all && !now)) {
+            continue;
+        }
+        const int w = inkcell_fb_text_width_styled(state, label, &style);
+        if (w > r.w) {
+            /* Wider than the whole row: no position keeps it inside, and a name drawn over its
+               neighbour is worse than the marker standing alone. */
+            continue;
+        }
+        int x = r.x + column * (int)i + (column - w) / 2;
+        if (x + w > r.x + r.w) {
+            x = r.x + r.w - w;
+        }
+        if (x < r.x) {
+            x = r.x;
+        }
+        const enum inkcell_color color = now                  ? INKCELL_COLOR_TEXT_STRONG
+                                         : i < steps->current ? INKCELL_COLOR_TEXT
+                                                              : INKCELL_COLOR_TEXT_DIM;
+        inkcell_fb_draw_text_styled(state, x, text_y, label, &style, inkcell_fb_color(state, color),
+                                    ground);
+    }
 }
 
 /* ---- the slider ----------------------------------------------------------------------------- */

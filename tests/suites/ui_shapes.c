@@ -127,6 +127,49 @@ INKCELL_TEST_CASE(shapes_stroke_leaves_its_interior_alone, unit) {
     record_success(test_name);
 }
 
+/*
+ * The round-ended arc reaches half a band past each end of its sweep and no further - which is
+ * the whole of the difference from the square one, and the reason a caller cutting a gauge at a
+ * boundary still has the square one to reach for.
+ */
+INKCELL_TEST_CASE(shapes_round_arc_caps_reach_past_the_sweep, unit) {
+    struct shapes_page page;
+    INKCELL_TEST_FAIL_IF(!shapes_open(&page), "the capture should open");
+
+    const int cx = 128;
+    const int cy = 128;
+    const int radius = 60;
+    const int band = 10;
+    const int arm = radius - band / 2;
+
+    inkcell_fb_stroke_arc(page.state, cx, cy, radius, band, 0, 250, k_ink);
+    INKCELL_TEST_FAIL_IF(shapes_at(&page, cx - 4, cy - arm) != 0,
+                         "a square end should stop at the start ray");
+    INKCELL_TEST_FAIL_IF(shapes_at(&page, cx + arm, cy + 3) != 0,
+                         "a square end should stop at the end ray");
+
+    inkcell_fb_clear(page.state, k_ground);
+    inkcell_fb_stroke_arc_round(page.state, cx, cy, radius, band, 0, 250, k_ink);
+    INKCELL_TEST_FAIL_IF(shapes_at(&page, cx + 4, cy - arm) == 0,
+                         "a round arc should still cover its own sweep");
+    INKCELL_TEST_FAIL_IF(shapes_at(&page, cx - 4, cy - arm) == 0,
+                         "a round end should reach back past the start ray");
+    INKCELL_TEST_FAIL_IF(shapes_at(&page, cx + arm, cy + 3) == 0,
+                         "a round end should reach on past the end ray");
+    INKCELL_TEST_FAIL_IF(shapes_at(&page, cx - 9, cy - arm) != 0,
+                         "a round end should reach half a band, not more");
+    INKCELL_TEST_FAIL_IF(shapes_at(&page, cx - arm, cy) != 0,
+                         "a round end should not change where the arc goes");
+
+    /* A whole ring has no ends, so it is the square ring exactly. */
+    inkcell_fb_clear(page.state, k_ground);
+    inkcell_fb_stroke_arc_round(page.state, cx, cy, radius, band, 0, 1000, k_ink);
+    INKCELL_TEST_FAIL_IF(shapes_at(&page, cx, cy) != 0, "a whole ring should leave its middle");
+
+    inkcell_capture_close(page.capture);
+    record_success(test_name);
+}
+
 INKCELL_TEST_CASE(shapes_arc_sweeps_clockwise_from_the_top, unit) {
     struct shapes_page page;
     INKCELL_TEST_FAIL_IF(!shapes_open(&page), "the capture should open");

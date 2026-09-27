@@ -1536,6 +1536,20 @@ void inkcell_fb_stroke_arc(const struct inkcell_draw_state *state, int cx, int c
                            int thickness, int32_t start, int32_t sweep, struct inkcell_rgb color);
 
 /*
+ * The same arc with round ends: a half-disc the band's width past each end of the sweep.
+ *
+ * What a progress ring is drawn with. A square end on a thick ring reads as a ring that has
+ * been cut, and at the start of a reading - a few permille - it is a sliver nobody can see; a
+ * round one reads as a stroke that has been drawn that far, and is a dot from the first
+ * permille. The ends reach half a band past the sweep on either side, so a caller that needs
+ * the arc to *stop* at a boundary - a segment of a pie, a band on a gauge - wants the square
+ * one above. A whole ring has no ends and draws exactly as the square one does.
+ */
+void inkcell_fb_stroke_arc_round(const struct inkcell_draw_state *state, int cx, int cy, int radius,
+                                 int thickness, int32_t start, int32_t sweep,
+                                 struct inkcell_rgb color);
+
+/*
  * A straight stroke `thickness` wide with round ends, anti-aliased.
  *
  * (`x0`, `y0`) and (`x1`, `y1`) are the top-left corners of the pen's square at each end, which
