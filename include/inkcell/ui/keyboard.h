@@ -174,6 +174,23 @@ struct inkcell_keyboard {
      * the text grows back - and one inside a cell steps back to its start.
      */
     uint16_t caret_back;
+    /*
+     * Capitals held on, enum inkcell_kb_caps.
+     *
+     * The capitals are one-shot, like a phone's shift, and that was right for a sentence and a
+     * trap for a callsign: every letter of "KF7ABC" cost a press of R1 first. So the phone's other
+     * half is here too, on the only gesture this pad has for it - the shift again, straight after
+     * the capital it spent. A capital typed, then back to the capitals before anything else is
+     * typed or deleted, holds them on until the panel changes. The d-pad does not count as
+     * "anything else": walking to the next letter is what a second capital needs.
+     */
+    uint8_t caps;
+};
+
+enum inkcell_kb_caps {
+    INKCELL_KB_CAPS_OFF = 0,
+    INKCELL_KB_CAPS_SPENT, /* the last edit was a one-shot capital; the shift again locks */
+    INKCELL_KB_CAPS_LOCKED,
 };
 
 /*
@@ -288,7 +305,8 @@ void inkcell_keyboard_panel_step(struct inkcell_keyboard *kb,
 
 /* Between lower and upper, from wherever: the shift, for an application that has a key to
    spare for it. inkcell_keyboard_key() gives it none - the triggers move the caret, and R1 from
-   the letters reaches the same one-shot capitals. */
+   the letters reaches the same one-shot capitals. Either, straight after a capital, locks the
+   capitals on - see `caps`. */
 void inkcell_keyboard_shift(struct inkcell_keyboard *kb);
 
 /*

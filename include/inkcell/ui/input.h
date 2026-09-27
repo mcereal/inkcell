@@ -32,6 +32,8 @@ struct inkcell_input_host {
 };
 
 typedef void (*inkcell_key_handler)(void *userdata, enum inkcell_key key);
+/* Whether a held `key` should repeat; see inkcell_input_set_repeat_policy(). */
+typedef bool (*inkcell_key_repeats_fn)(void *userdata, enum inkcell_key key);
 
 /*
  * How many nodes may be watched at once.
@@ -67,6 +69,10 @@ struct inkcell_input {
        `repeat_source_fd` the device it came from, so a hold ends when that device goes away. */
     int repeat_timer_fd;
     int repeat_source_fd;
+    /* Which keys besides the four directions repeat while held, asked at each press - see
+       inkcell_input_set_repeat_policy(). NULL, the zeroed struct's answer, is none of them. */
+    inkcell_key_repeats_fn repeats;
+    void *repeats_userdata;
     enum inkcell_key repeat_key;
     uint16_t repeat_type;
     uint16_t repeat_code;
@@ -86,6 +92,26 @@ void inkcell_input_shutdown(struct inkcell_input *input);
 
 void inkcell_input_set_handler(struct inkcell_input *input, inkcell_key_handler handler,
                                void *userdata);
+
+/*
+ * Which other keys this layer repeats while held.
+ *
+ * The four directions always do and nothing else does by default, because a face button
+ * confirms or goes back and a held confirm that fired forty times would be a trap. That is
+ * about this layer's own timer: a device whose kernel autorepeats a face button (a USB keyboard's
+ * Enter, say) still delivers those repeats as it always has, whatever the policy answered. But
+ * whether a press is a confirm is the application's to know, not the pad's: the same X that arms a
+ * delete on one screen is a backspace on an on-screen keyboard, where clearing a sentence one press
+ * per character is the trap instead. So the application is asked, at the moment the key goes down,
+ * and a key it says yes to repeats on the directions' timer and ramp. B is never asked - its
+ * hold is INKCELL_KEY_B_HELD. The triggers can be answered for too: they are axes, and their
+ * return below the press threshold is the release that ends the repeat.
+ *
+ * Asked at the press rather than once, because the answer is about what is on screen: a
+ * keyboard closing mid-hold is a later press, and the next hold asks again.
+ */
+void inkcell_input_set_repeat_policy(struct inkcell_input *input, inkcell_key_repeats_fn repeats,
+                                     void *userdata);
 
 /* One raw evdev event (type/code/value as in struct input_event). Public so the mapping can be
    tested without a device: quit keys stop the loop, everything else is translated and handed

@@ -160,7 +160,10 @@ void inkcell_fb_draw_keyboard(const struct inkcell_draw_state *state,
                 .focused = (kb->row == row && kb->col == col),
                 .variant = INKCELL_FB_BUTTON_TEXT,
                 .shape = INKCELL_SHAPE_SM,
-                .idle_tone = INKCELL_TONE_NORMAL,
+                /* Locked capitals and one-shot ones are the same letters, so the lock is said
+                   in the letters' ink: the accent while it holds, see `caps`. */
+                .idle_tone = kb->caps == (uint8_t)INKCELL_KB_CAPS_LOCKED ? INKCELL_TONE_PRIMARY
+                                                                         : INKCELL_TONE_NORMAL,
                 .scale = key_scale,
                 /* Only the emoji layer's cells are sprites, and the button ignores this for the
                    three layers that are not - so the grid is described once for all four. */

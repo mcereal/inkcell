@@ -266,6 +266,72 @@ INKCELL_TEST_CASE(keyboard_shift_is_one_shot_when_it_types, unit) {
 }
 
 /*
+ * The shift again, straight after the capital it spent, holds the capitals on - the gesture a
+ * callsign needs, where one-shot capitals cost a press of R1 per letter. Walking the cursor to
+ * the next letter does not stand it down; typing something else first does, and so does leaving
+ * the panel.
+ */
+INKCELL_TEST_CASE(keyboard_second_shift_after_a_capital_locks_the_capitals, unit) {
+    const struct inkcell_keyboard_layout layout = bare_layout();
+    struct inkcell_keyboard kb;
+    inkcell_keyboard_reset(&kb);
+    char text[16] = "";
+
+    kb.row = 1U; /* the letter rows: q w e r t ... */
+    kb.col = 0U;
+    inkcell_keyboard_panel_step(&kb, &layout, 1); /* R1: abc -> ABC */
+    (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_A, text, sizeof text);
+    INKCELL_TEST_FAIL_IF(kb.layer != INKCELL_KB_LOWER, "the first capital is still one-shot");
+    (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_RIGHT, text, sizeof text);
+    inkcell_keyboard_panel_step(&kb, &layout, 1);
+    INKCELL_TEST_FAIL_IF(kb.caps != INKCELL_KB_CAPS_LOCKED,
+                         "the shift again after a capital should lock the capitals");
+    (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_A, text, sizeof text);
+    (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_Y, text, sizeof text);
+    (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_RIGHT, text, sizeof text);
+    (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_A, text, sizeof text);
+    INKCELL_TEST_FAIL_IF(strcmp(text, "QW E") != 0 || kb.layer != INKCELL_KB_UPPER,
+                         "locked capitals should hold through letters and a space");
+
+    /* Leaving the panel lets go; coming back is one-shot again. */
+    inkcell_keyboard_panel_step(&kb, &layout, -1);
+    INKCELL_TEST_FAIL_IF(kb.caps != INKCELL_KB_CAPS_OFF, "leaving the capitals should unlock");
+    inkcell_keyboard_panel_step(&kb, &layout, 1);
+    (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_A, text, sizeof text);
+    INKCELL_TEST_FAIL_IF(kb.layer != INKCELL_KB_LOWER, "a fresh shift should be one-shot");
+
+    /* A backspace that deleted nothing is not an edit: the shift after it still locks. */
+    char one[4] = "";
+    struct inkcell_keyboard fresh;
+    inkcell_keyboard_reset(&fresh);
+    fresh.row = 1U;
+    inkcell_keyboard_shift(&fresh);
+    (void)inkcell_keyboard_key(&fresh, &layout, INKCELL_KEY_A, one, sizeof one);
+    (void)inkcell_keyboard_key(&fresh, &layout, INKCELL_KEY_L2, one, sizeof one);
+    (void)inkcell_keyboard_key(&fresh, &layout, INKCELL_KEY_X, one, sizeof one);
+    inkcell_keyboard_shift(&fresh);
+    INKCELL_TEST_FAIL_IF(fresh.caps != INKCELL_KB_CAPS_LOCKED,
+                         "a delete that changed nothing should not stand the lock gesture down");
+
+    /* Host text is typing too: after it, the shift is an ordinary one. */
+    inkcell_keyboard_reset(&fresh);
+    one[0] = '\0';
+    fresh.row = 1U;
+    inkcell_keyboard_shift(&fresh);
+    (void)inkcell_keyboard_key(&fresh, &layout, INKCELL_KEY_A, one, sizeof one);
+    (void)inkcell_keyboard_insert_text_at_caret(&fresh, &layout, one, sizeof one, "x");
+    inkcell_keyboard_shift(&fresh);
+    INKCELL_TEST_FAIL_IF(fresh.caps == INKCELL_KB_CAPS_LOCKED,
+                         "host text between the capital and the shift should not lock");
+
+    /* Something typed between the capital and the shift: an ordinary sentence, no lock. */
+    (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_A, text, sizeof text);
+    inkcell_keyboard_shift(&kb);
+    INKCELL_TEST_FAIL_IF(kb.caps == INKCELL_KB_CAPS_LOCKED,
+                         "a shift after a lower-case letter should not lock");
+}
+
+/*
  * All of an emoji or none of it.
  *
  * The cap is a byte count and an emoji is four of them, so appending as far as the cap would
