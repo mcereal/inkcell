@@ -170,3 +170,47 @@ INKCELL_TEST_CASE(steps_a_narrow_row_keeps_the_name_under_way, unit) {
     inkcell_capture_close(page.capture);
     record_success(test_name);
 }
+
+/* A name wider than the whole row has nowhere inside it to go, and is left off rather than
+   drawn over whatever is beside the row. */
+INKCELL_TEST_CASE(steps_a_name_wider_than_the_row_is_left_off, unit) {
+    struct steps_page page;
+    INKCELL_TEST_FAIL_IF(!steps_open(&page), "the capture should open");
+
+    static const char *const k_long[] = {"A", "A name far too long for any row this narrow", "C",
+                                         "D"};
+    /* Room for four markers, and for no name as long as the second one. */
+    const int narrow = 240;
+    const struct inkcell_fb_steps steps = {
+        .rect = {.x = 0,
+                 .y = 0,
+                 .w = narrow,
+                 .h = inkcell_fb_steps_height(page.state, page.state->scale)},
+        .labels = k_long,
+        .count = 4U,
+        .current = 1U,
+        .tone = INKCELL_TONE_PRIMARY,
+        .ground = INKCELL_COLOR_BG,
+    };
+    inkcell_fb_draw_steps(page.state, &steps);
+    INKCELL_TEST_FAIL_IF(steps_inked(&page, narrow, 0, (int)STEPS_W - narrow, STEPS_H),
+                         "nothing should be drawn past the row's right edge");
+
+    inkcell_capture_close(page.capture);
+    record_success(test_name);
+}
+
+/* Measured at a scale that is not the body's, the names are measured at it too. */
+INKCELL_TEST_CASE(steps_height_follows_the_scale_it_is_asked_at, unit) {
+    struct steps_page page;
+    INKCELL_TEST_FAIL_IF(!steps_open(&page), "the capture should open");
+    const int body = inkcell_fb_steps_height(page.state, page.state->scale);
+    const int larger = inkcell_fb_steps_height(page.state, page.state->scale + INKCELL_SCALE(1));
+    const int larger_marker =
+        inkcell_fb_icon_drawn(page.state, page.state->scale + INKCELL_SCALE(1)) -
+        inkcell_fb_icon_drawn(page.state, page.state->scale);
+    INKCELL_TEST_FAIL_IF(larger - body <= larger_marker,
+                         "a larger scale should grow the names' line too, not only the markers");
+    inkcell_capture_close(page.capture);
+    record_success(test_name);
+}

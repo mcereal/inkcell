@@ -443,10 +443,18 @@ static int inkcell_fb_steps_marker(const struct inkcell_draw_state *state, int s
 }
 
 int inkcell_fb_steps_height(const struct inkcell_draw_state *state, int scale) {
-    const struct inkcell_type_style style = inkcell_fb_type_style(state, INKCELL_TYPE_LABEL);
+    /* The names' role at `scale` rather than at the body's: the role is an offset from the body
+       scale, so a row measured at another scale carries the same offset from that one. */
+    int label = scale + inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL) - state->scale;
+    if (label < INKCELL_SCALE_MIN) {
+        label = INKCELL_SCALE_MIN;
+    }
+    if (label > INKCELL_SCALE_MAX) {
+        label = INKCELL_SCALE_MAX;
+    }
     return inkcell_fb_steps_marker(state, scale) +
            inkcell_fb_space_at(state, INKCELL_SPACE_SM, scale) +
-           inkcell_scale_px((int)inkcell_fb_font(state)->height, style.scale);
+           inkcell_scale_px((int)inkcell_fb_font(state)->height, label);
 }
 
 /* The largest glyph multiplier whose icon fits inside `box` - the checkbox's question, asked of
@@ -554,6 +562,11 @@ void inkcell_fb_draw_steps(const struct inkcell_draw_state *state,
             continue;
         }
         const int w = inkcell_fb_text_width_styled(state, label, &style);
+        if (w > r.w) {
+            /* Wider than the whole row: no position keeps it inside, and a name drawn over its
+               neighbour is worse than the marker standing alone. */
+            continue;
+        }
         int x = r.x + column * (int)i + (column - w) / 2;
         if (x + w > r.x + r.w) {
             x = r.x + r.w - w;

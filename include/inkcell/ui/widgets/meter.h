@@ -24,6 +24,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ---- the meter --------------------------------------------------------------------------- *
  *
  * A quantity as a length: how much of the air the mesh is using, how much of a download has
@@ -794,5 +798,9 @@ uint32_t inkcell_fb_chart_reading_rows(const struct inkcell_draw_state *state,
 void inkcell_fb_draw_chart(const struct inkcell_draw_state *state,
                            const struct inkcell_fb_layout *layout,
                            const struct inkcell_fb_chart *chart);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_METER_H */
