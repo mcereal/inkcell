@@ -260,6 +260,23 @@ void inkcell_keyboard_reset(struct inkcell_keyboard *kb) {
     kb->layer = (uint8_t)INKCELL_KB_LOWER;
     kb->emoji_page = 0U;
     kb->caret_back = 0U;
+    kb->caps = (uint8_t)INKCELL_KB_CAPS_OFF;
+}
+
+/* A panel change, from any of the three routes to one: the ring, the layer key and the shift.
+   Arriving on the capitals straight after spending them locks them; anything else lets go. */
+static void keyboard_caps_on_panel(struct inkcell_keyboard *kb, uint8_t from) {
+    const bool relock = from == (uint8_t)INKCELL_KB_LOWER && kb->layer == INKCELL_KB_UPPER &&
+                        kb->caps == (uint8_t)INKCELL_KB_CAPS_SPENT;
+    kb->caps = (uint8_t)(relock ? INKCELL_KB_CAPS_LOCKED : INKCELL_KB_CAPS_OFF);
+}
+
+/* An edit that is not a capital: a one-shot capital is no longer the last thing typed. A lock
+   survives it - a space and a correction are part of typing in capitals. */
+static void keyboard_caps_on_edit(struct inkcell_keyboard *kb) {
+    if (kb->caps == (uint8_t)INKCELL_KB_CAPS_SPENT) {
+        kb->caps = (uint8_t)INKCELL_KB_CAPS_OFF;
+    }
 }
 
 const char *inkcell_keyboard_cell(const struct inkcell_keyboard *kb,
@@ -377,21 +394,25 @@ void inkcell_keyboard_panel_step(struct inkcell_keyboard *kb,
     if (next < 0) {
         next += panels;
     }
+    const uint8_t from = kb->layer;
     if (next < (int)INKCELL_KB_ASCII_LAYERS) {
         kb->layer = (uint8_t)next;
         kb->emoji_page = 0U;
-        return;
+    } else {
+        kb->layer = (uint8_t)INKCELL_KB_EMOJI;
+        kb->emoji_page = (uint8_t)(next - (int)INKCELL_KB_ASCII_LAYERS);
     }
-    kb->layer = (uint8_t)INKCELL_KB_EMOJI;
-    kb->emoji_page = (uint8_t)(next - (int)INKCELL_KB_ASCII_LAYERS);
+    keyboard_caps_on_panel(kb, from);
 }
 
 void inkcell_keyboard_shift(struct inkcell_keyboard *kb) {
     if (kb == NULL) {
         return;
     }
+    const uint8_t from = kb->layer;
     kb->emoji_page = 0U;
     kb->layer = (uint8_t)((kb->layer == INKCELL_KB_UPPER) ? INKCELL_KB_LOWER : INKCELL_KB_UPPER);
+    keyboard_caps_on_panel(kb, from);
 }
 
 /* Columns in the row the cursor is on: the action row is five wide under ten narrow ones. */
@@ -412,9 +433,11 @@ static enum inkcell_keyboard_result keyboard_action(struct inkcell_keyboard *kb,
     case INKCELL_KB_ACTION_SPACE:
         (void)keyboard_insert(text, size, keyboard_cap(layout, size),
                               inkcell_keyboard_caret(kb, text), " ");
+        keyboard_caps_on_edit(kb);
         return INKCELL_KEYBOARD_CONSUMED;
     case INKCELL_KB_ACTION_DELETE:
         (void)keyboard_delete(text, inkcell_keyboard_caret(kb, text));
+        keyboard_caps_on_edit(kb);
         return INKCELL_KEYBOARD_CONSUMED;
     case INKCELL_KB_ACTION_SUBMIT:
         return INKCELL_KEYBOARD_SUBMIT;
@@ -469,13 +492,17 @@ enum inkcell_keyboard_result inkcell_keyboard_key(struct inkcell_keyboard *kb,
         const char *const cell = inkcell_keyboard_cell(kb, layout, kb->row, kb->col, scratch);
         if (keyboard_insert(text, size, keyboard_cap(layout, size),
                             inkcell_keyboard_caret(kb, text), cell)) {
-            /* One capital, then back to lower case, like a phone keyboard. The emoji layer
-               deliberately does not do the same: a run of them is the normal way to use it, and
-               a picker that closed itself after one would be a picker nobody uses twice.
-               Conditional on the character actually going in, so a field that is full does not
-               silently spend the shift the user is still holding for the next one. */
-            if (kb->layer == INKCELL_KB_UPPER) {
+            /* One capital, then back to lower case, like a phone keyboard - unless the capitals
+               are locked, see `caps`. The emoji layer deliberately does not do the same: a run
+               of them is the normal way to use it, and a picker that closed itself after one
+               would be a picker nobody uses twice. Conditional on the character actually going
+               in, so a field that is full does not silently spend the shift the user is still
+               holding for the next one. */
+            if (kb->layer == INKCELL_KB_UPPER && kb->caps != (uint8_t)INKCELL_KB_CAPS_LOCKED) {
                 kb->layer = (uint8_t)INKCELL_KB_LOWER;
+                kb->caps = (uint8_t)INKCELL_KB_CAPS_SPENT;
+            } else {
+                keyboard_caps_on_edit(kb);
             }
         }
         return INKCELL_KEYBOARD_CONSUMED;
@@ -491,10 +518,12 @@ enum inkcell_keyboard_result inkcell_keyboard_key(struct inkcell_keyboard *kb,
     case INKCELL_KEY_X:
         /* Backspace, where a pad-driven keyboard puts it. */
         (void)keyboard_delete(text, inkcell_keyboard_caret(kb, text));
+        keyboard_caps_on_edit(kb);
         return INKCELL_KEYBOARD_CONSUMED;
     case INKCELL_KEY_Y:
         (void)keyboard_insert(text, size, keyboard_cap(layout, size),
                               inkcell_keyboard_caret(kb, text), " ");
+        keyboard_caps_on_edit(kb);
         return INKCELL_KEYBOARD_CONSUMED;
     case INKCELL_KEY_L1:
     case INKCELL_KEY_R1:
