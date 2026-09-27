@@ -172,7 +172,7 @@ struct inkcell_fb_layout gallery_frame(struct inkcell_draw_state *state, enum ga
                                        size_t tab);
 
 /* The keycap row, drawn last because it sits over a body that was laid out before it. */
-void gallery_footer(const struct inkcell_draw_state *state, const struct inkcell_fb_layout *layout);
+void gallery_footer(struct inkcell_draw_state *state, const struct inkcell_fb_layout *layout);
 
 /* A section heading inside a scene's body, and the row it leaves the next thing standing on. */
 int gallery_section(const struct inkcell_draw_state *state, const struct inkcell_fb_layout *layout,

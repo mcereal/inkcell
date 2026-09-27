@@ -103,6 +103,13 @@ bool inkcell_fb_state_animating(const struct inkcell_draw_state *state) {
             return true;
         }
     }
+    /* The link mark's arrows are owed the frames that fade them, and the one that puts them
+       out: an arrow left lit because nothing else moved says traffic that has stopped. */
+    for (size_t i = 0U; i < sizeof state->link_pulse / sizeof state->link_pulse[0]; ++i) {
+        if (inkcell_anim_active(&state->link_pulse[i].glow, state->now_ms)) {
+            return true;
+        }
+    }
     return inkcell_anim_active(&state->slide, state->now_ms) ||
            inkcell_anim_active(&state->focus_ring.travel, state->now_ms) ||
            inkcell_anim_active(&state->list_glide.travel, state->now_ms) ||

@@ -153,8 +153,7 @@ struct inkcell_fb_layout gallery_frame(struct inkcell_draw_state *state, enum ga
     return layout;
 }
 
-void gallery_footer(const struct inkcell_draw_state *state,
-                    const struct inkcell_fb_layout *layout) {
+void gallery_footer(struct inkcell_draw_state *state, const struct inkcell_fb_layout *layout) {
     static const struct inkcell_button_action k_items[] = {
         {INKCELL_BUTTON_A, (inkcell_str_id)GALLERY_STR_ACT_SELECT},
         {INKCELL_BUTTON_B, (inkcell_str_id)GALLERY_STR_ACT_BACK},

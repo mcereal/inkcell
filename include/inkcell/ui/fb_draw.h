@@ -330,6 +330,19 @@ void inkcell_fb_overlay_reset(struct inkcell_draw_state *state);
 void inkcell_fb_overlay_drop(struct inkcell_draw_state *state, uint32_t id);
 
 /*
+ * One of the link mark's arrows: the count it last saw, and how lit it still is.
+ *
+ * On the state rather than in the animation table because a pulse is not a value easing to a
+ * target: the table animates towards whatever it is handed, and what the mark is handed is a
+ * count whose size means nothing - only that it moved. See struct inkcell_fb_link_mark.
+ */
+struct inkcell_fb_link_pulse {
+    uint32_t seen;
+    bool seeded;
+    struct inkcell_anim glow; /* INKCELL_ANIM_ONE lit, 0 idle */
+};
+
+/*
  * Everything one frame is drawn with.
  *
  * Four kinds of thing, and the split is worth naming because only the first is a backend's:
@@ -442,6 +455,8 @@ struct inkcell_draw_state {
     char snackbar[INKCELL_FB_SNACKBAR_MAX];
     uint64_t
         snackbar_until_ms; /* the deadline that identifies it; see struct inkcell_fb_snackbar */
+    /* The link mark's two arrows, sent and then received; see struct inkcell_fb_link_pulse. */
+    struct inkcell_fb_link_pulse link_pulse[2];
     /*
      * The place the last frame was drawn for, and how far the current one has slid into view.
      *
