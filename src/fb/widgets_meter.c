@@ -269,12 +269,25 @@ void inkcell_fb_draw_meter(struct inkcell_draw_state *state, const struct inkcel
  */
 static void inkcell_fb_dial_label(const struct inkcell_draw_state *state,
                                   const struct inkcell_fb_dial *dial, int cx, int cy, int side,
-                                  int thickness) {
-    if (dial->label == NULL || dial->label[0] == '\0') {
-        return;
-    }
+                                  int thickness, struct inkcell_rgb ink) {
     const int hole = side - 2 * thickness;
     if (hole <= 0) {
+        return;
+    }
+    if (dial->label == NULL || dial->label[0] == '\0') {
+        /* The icon instead, held to the large figures' height, from the largest scale down. */
+        if (dial->icon == INKCELL_ICON_NONE) {
+            return;
+        }
+        for (int scale = INKCELL_FB_ICON_SCALE_MAX; scale > 0; scale -= INKCELL_SCALE(1)) {
+            if (inkcell_fb_icon_drawn(state, scale) > hole * 2 / 5) {
+                continue;
+            }
+            const int height = inkcell_scale_px((int)inkcell_fb_font(state)->height, scale);
+            inkcell_fb_draw_icon(state, cx - inkcell_fb_icon_box(state, scale) / 2, cy - height / 2,
+                                 dial->icon, scale, ink, inkcell_fb_color(state, dial->ground));
+            return;
+        }
         return;
     }
     const int room = hole * 7 / 10;
@@ -394,7 +407,7 @@ void inkcell_fb_draw_dial(struct inkcell_draw_state *state, const struct inkcell
                                                inkcell_fb_motion(state, INKCELL_MOTION_LOOP));
         inkcell_fb_stroke_arc_round(state, cx, cy, radius, thickness, turn, INKCELL_FB_DIAL_SWEEP,
                                     ink);
-        inkcell_fb_dial_label(state, dial, cx, cy, side, thickness);
+        inkcell_fb_dial_label(state, dial, cx, cy, side, thickness, ink);
         return;
     }
 
@@ -417,7 +430,7 @@ void inkcell_fb_draw_dial(struct inkcell_draw_state *state, const struct inkcell
     if (sweep > 0) {
         inkcell_fb_stroke_arc_round(state, cx, cy, radius, thickness, 0, sweep, ink);
     }
-    inkcell_fb_dial_label(state, dial, cx, cy, side, thickness);
+    inkcell_fb_dial_label(state, dial, cx, cy, side, thickness, ink);
 }
 
 /* ---- the steps ------------------------------------------------------------------------------ */

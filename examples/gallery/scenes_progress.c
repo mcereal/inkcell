@@ -50,7 +50,9 @@ static void gallery_progress_column(struct inkcell_draw_state *state, int x, int
         .scale = {.min = 0, .max = 1000},
         .tone = halted ? INKCELL_TONE_ERROR : INKCELL_TONE_PRIMARY,
         .ground = INKCELL_COLOR_BG,
-        .label = figure,
+        /* A job that stopped has no reading worth the middle of the ring; it says so. */
+        .label = halted ? NULL : figure,
+        .icon = halted ? INKCELL_ICON_CLOSE : INKCELL_ICON_NONE,
     };
     inkcell_fb_draw_dial(state, &dial);
 

@@ -311,3 +311,34 @@ INKCELL_TEST_CASE(dial_is_drawn_at_the_thickness_it_was_measured_at, unit) {
     inkcell_capture_close(page.capture);
     record_success(test_name);
 }
+
+/* A ring with no figure can carry an icon instead - the tick on a finished job - and a ring
+   with neither leaves its middle to the ground, as it always has. */
+INKCELL_TEST_CASE(dial_carries_an_icon_when_it_has_no_figure, unit) {
+    struct dial_page page;
+    INKCELL_TEST_FAIL_IF(!dial_open(&page), "the capture should open");
+    const uint32_t ground = dial_at(&page, DIAL_CX, DIAL_CY);
+
+    struct inkcell_fb_dial plain = dial_of(1000, 0x0D21);
+    inkcell_fb_draw_dial(page.state, &plain);
+    bool inked = false;
+    for (int y = DIAL_CY - 20; y < DIAL_CY + 20 && !inked; ++y) {
+        for (int x = DIAL_CX - 20; x < DIAL_CX + 20; ++x) {
+            inked = inked || dial_at(&page, x, y) != ground;
+        }
+    }
+    INKCELL_TEST_FAIL_IF(inked, "a ring with nothing to say should leave its middle alone");
+
+    struct inkcell_fb_dial ticked = dial_of(1000, 0x0D22);
+    ticked.icon = INKCELL_ICON_CHECK;
+    inkcell_fb_draw_dial(page.state, &ticked);
+    for (int y = DIAL_CY - 20; y < DIAL_CY + 20 && !inked; ++y) {
+        for (int x = DIAL_CX - 20; x < DIAL_CX + 20; ++x) {
+            inked = inked || dial_at(&page, x, y) != ground;
+        }
+    }
+    INKCELL_TEST_FAIL_IF(!inked, "a ring with an icon should draw it in its middle");
+
+    inkcell_capture_close(page.capture);
+    record_success(test_name);
+}

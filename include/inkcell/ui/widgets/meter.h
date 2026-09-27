@@ -201,6 +201,14 @@ struct inkcell_fb_dial {
      * quarters of what? - so a caller with room should fill this.
      */
     const char *label;
+    /*
+     * What goes in the middle when there is no figure to put there: a tick on a ring that has
+     * finished, a cross on one that stopped. Drawn in the ring's own ink, at the largest icon
+     * scale the hole holds under the figure's own height rule. INKCELL_ICON_NONE (0) draws
+     * nothing, and a `label` wins over it - a reading is always the better answer when there
+     * is one.
+     */
+    enum inkcell_icon icon;
 };
 
 /* What a ring at `scale` should be thick, which is the bar's thickness there - so a dial and a
