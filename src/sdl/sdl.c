@@ -702,7 +702,25 @@ static void inkcell_backend_sdl_present(void *state_ptr, const void *snapshot, v
 #endif
     inkcell_fb_render(state, snapshot);
     panel->presented = true;
+    /*
+     * Where the hover was lit on the frame before this one, asked of that frame's boxes before
+     * they are replaced. If this frame moved or dropped the hovered box, those pixels belong to
+     * no box the new map knows, so they are declared here - under a clip band the next frame
+     * would otherwise leave them lit.
+     */
+    const uint32_t hovered = state->hover;
+    struct inkcell_focus_rect lit = {0, 0, 0, 0};
+    const bool was_lit =
+        hovered != INKCELL_FOCUS_NONE && inkcell_focus_rect_of(&panel->pointer_map, hovered, &lit);
     inkcell_sdl_keep_boxes(panel);
+    if (was_lit) {
+        struct inkcell_focus_rect now = {0, 0, 0, 0};
+        if (!inkcell_focus_rect_of(&panel->pointer_map, hovered, &now) || now.x != lit.x ||
+            now.y != lit.y || now.w != lit.w || now.h != lit.h) {
+            inkcell_fb_hover_damage(state, lit);
+            inkcell_sdl_request_frame(panel);
+        }
+    }
     /* A frame can move what is under a mouse that did not move - see inkcell_sdl_sync_hover(). */
     inkcell_sdl_sync_hover(panel);
 #if defined(__APPLE__)

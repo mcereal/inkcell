@@ -310,6 +310,14 @@ bool inkcell_fb_hovered(const struct inkcell_draw_state *state, uint32_t id) {
     return state != NULL && state->pointer && id != INKCELL_FOCUS_NONE && state->hover == id;
 }
 
+void inkcell_fb_hover_damage(struct inkcell_draw_state *state, struct inkcell_focus_rect box) {
+    if (state == NULL) {
+        return;
+    }
+    const int pad = inkcell_fb_focus_ring_reach(state);
+    pointer_damage_add(state, box.x - pad, box.y - pad, box.w + 2 * pad, box.h + 2 * pad);
+}
+
 bool inkcell_fb_set_hover(struct inkcell_draw_state *state, const struct inkcell_focus_map *map,
                           uint32_t id) {
     if (state == NULL || state->hover == id) {

@@ -550,3 +550,16 @@ INKCELL_TEST_CASE(focus_a_button_takes_the_hover_layer_under_the_pointer, unit) 
     ring_close(&h);
     record_success(test_name);
 }
+
+/* A box the hover was lit on, from a frame since replaced, is the next frame's damage. */
+INKCELL_TEST_CASE(focus_hover_damage_declares_a_box_from_a_replaced_frame, unit) {
+    struct ring_harness h;
+    INKCELL_TEST_FAIL_IF(!ring_open(&h), "the capture should open");
+    inkcell_fb_hover_damage(h.state, (struct inkcell_focus_rect){300, 400, 50, 20});
+    const struct inkcell_fb_damage_rect d = h.state->pointer_damage;
+    INKCELL_TEST_FAIL_IF_CLEANUP(!d.valid || d.x > 300 || d.y > 400 || d.right < 350 ||
+                                     d.bottom < 420,
+                                 ring_close(&h), "the old box should be covered");
+    ring_close(&h);
+    record_success(test_name);
+}

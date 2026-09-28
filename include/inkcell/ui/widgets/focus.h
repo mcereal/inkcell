@@ -163,6 +163,14 @@ bool inkcell_fb_hovered(const struct inkcell_draw_state *state, uint32_t id);
 bool inkcell_fb_set_hover(struct inkcell_draw_state *state, const struct inkcell_focus_map *map,
                           uint32_t id);
 
+/*
+ * Declares `box` - where the hover was drawn on a frame that has since been replaced - as the next
+ * frame's damage. For a backend swapping the map a hover was found in for a new one: the new map
+ * no longer says where the old frame lit, and inkcell_fb_set_hover() only knows the map it is
+ * handed.
+ */
+void inkcell_fb_hover_damage(struct inkcell_draw_state *state, struct inkcell_focus_rect box);
+
 #ifdef __cplusplus
 }
 #endif
