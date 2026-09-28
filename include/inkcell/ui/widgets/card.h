@@ -24,6 +24,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ---- cards --------------------------------------------------------------------------------
  *
  * A card: a titled panel that groups rows which belong together.
@@ -369,5 +373,9 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_draw_state *state,
 
 bool inkcell_fb_draw_card(struct inkcell_draw_state *state, const struct inkcell_fb_layout *layout,
                           int *y, const struct inkcell_fb_card *card);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_CARD_H */
