@@ -7,6 +7,7 @@
 
 #include "inkcell/ui/widgets/bubble.h"
 #include "inkcell/ui/widgets/chrome.h"
+#include "inkcell/ui/widgets/focus.h"
 
 #include "inkcell/ui/emoji.h"
 #include "inkcell/ui/layout.h"
@@ -400,7 +401,12 @@ static int inkcell_fb_bubble_draw_wrapped(const struct inkcell_draw_state *state
 
 void inkcell_fb_draw_bubble(const struct inkcell_draw_state *state,
                             const struct inkcell_fb_layout *layout, int y,
-                            const struct inkcell_fb_bubble *bubble) {
+                            const struct inkcell_fb_bubble *asked) {
+    /* The cursor's ring and fill are its cue, and a reader on the pointer is not shown one - see
+       inkcell_fb_cursor_shown(). Everything else about the bubble is as it was asked for. */
+    struct inkcell_fb_bubble shown = *asked;
+    shown.focused = asked->focused && inkcell_fb_cursor_shown(state);
+    const struct inkcell_fb_bubble *const bubble = &shown;
     const struct inkcell_fb_bubble_metrics metrics =
         inkcell_fb_bubble_measure(state, layout, bubble);
     const int adv = inkcell_fb_char_adv(state, state->scale);

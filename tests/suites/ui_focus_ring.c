@@ -420,3 +420,84 @@ INKCELL_TEST_CASE(focus_ring_does_not_travel_where_there_is_no_distance, unit) {
     ring_close(&h);
     record_success(test_name);
 }
+
+/*
+ * A reader on the pointer is not shown the cursor: no ring, and one that comes back when a key is
+ * pressed lands on its box rather than flying in from where it was hidden.
+ */
+INKCELL_TEST_CASE(focus_ring_is_hidden_from_a_reader_on_the_pointer, unit) {
+    struct ring_harness h;
+    INKCELL_TEST_FAIL_IF(!ring_open(&h), "the capture should open");
+    h.state->pointer = true;
+
+    inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_LEFT);
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_set_cursor_hidden(h.state, true), ring_close(&h),
+                                 "hiding the cursor should be a change");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_set_cursor_hidden(h.state, true), ring_close(&h),
+                                 "and hiding it twice is not");
+    inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_LEFT);
+    struct inkcell_focus_rect at = {0, 0, 0, 0};
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_focus_ring_rect(h.state, &at, NULL), ring_close(&h),
+                                 "a hidden cursor has no ring");
+
+    (void)inkcell_fb_set_cursor_hidden(h.state, false);
+    inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_RIGHT);
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_focus_ring_rect(h.state, &at, NULL) || at.x != 500,
+                                 ring_close(&h),
+                                 "a ring shown again should adopt its box, not travel to it");
+    ring_close(&h);
+    record_success(test_name);
+}
+
+/* A panel has no other way to be read, so its cursor is shown whatever the flag says. */
+INKCELL_TEST_CASE(focus_cursor_is_always_shown_on_a_panel, unit) {
+    struct ring_harness h;
+    INKCELL_TEST_FAIL_IF(!ring_open(&h), "the capture should open");
+    h.state->cursor_hidden = true;
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_cursor_shown(h.state), ring_close(&h),
+                                 "a frame with no pointer should always show its cursor");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_hovered(h.state, RING_ID_LEFT), ring_close(&h),
+                                 "and nothing on it is ever under a pointer");
+    ring_close(&h);
+    record_success(test_name);
+}
+
+/*
+ * The hover moves between frames, so it says where it moved: the box it left and the box it
+ * reached are the next frame's damage, and nothing else is.
+ */
+INKCELL_TEST_CASE(focus_hover_damages_the_boxes_it_leaves_and_reaches, unit) {
+    struct ring_harness h;
+    INKCELL_TEST_FAIL_IF(!ring_open(&h), "the capture should open");
+    h.state->pointer = true;
+
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_set_hover(h.state, &h.map, RING_ID_LEFT),
+                                 ring_close(&h), "a hover onto a box should be a change");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_set_hover(h.state, &h.map, RING_ID_LEFT),
+                                 ring_close(&h), "and the same box again is not");
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_hovered(h.state, RING_ID_LEFT) ||
+                                     inkcell_fb_hovered(h.state, RING_ID_RIGHT),
+                                 ring_close(&h), "only the box under the pointer is hovered");
+    const struct inkcell_fb_damage_rect first = h.state->pointer_damage;
+    INKCELL_TEST_FAIL_IF_CLEANUP(!first.valid || first.x > 100 || first.right < 180 ||
+                                     first.y > 100 || first.bottom < 140 || first.right > 400,
+                                 ring_close(&h), "the damage should be the box reached, and small");
+
+    h.state->pointer_damage = (struct inkcell_fb_damage_rect){0};
+    (void)inkcell_fb_set_hover(h.state, &h.map, RING_ID_BELOW);
+    const struct inkcell_fb_damage_rect moved = h.state->pointer_damage;
+    INKCELL_TEST_FAIL_IF_CLEANUP(!moved.valid || moved.y > 100 || moved.bottom < 340,
+                                 ring_close(&h),
+                                 "a move should damage the box left and the box reached");
+
+    /* Carried into the next frame's damage, where the clip band will find it. */
+    inkcell_fb_app_frame_begin(h.state);
+    INKCELL_TEST_FAIL_IF_CLEANUP(h.state->pointer_damage.valid || !h.state->animation_damage.valid,
+                                 ring_close(&h), "the next frame should take the hover's damage");
+
+    (void)inkcell_fb_set_hover(h.state, &h.map, INKCELL_FOCUS_NONE);
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_hovered(h.state, RING_ID_BELOW), ring_close(&h),
+                                 "a pointer off every box hovers nothing");
+    ring_close(&h);
+    record_success(test_name);
+}

@@ -484,7 +484,7 @@ static void inkcell_fb_text_field_value_mid(const struct inkcell_draw_state *sta
     const struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH);
     struct inkcell_fb_wrap_ctx wctx;
     const struct inkcell_wrap_metric metric = inkcell_fb_wrap_metric(&wctx, state, scale);
-    const size_t budget = inkcell_fb_wrap_budget(&wctx, layout->body_w);
+    const size_t budget = inkcell_fb_wrap_budget(&wctx, inkcell_fb_content_w(state));
     /*
      * The cells above are a nominal count, and wrapping spends more than that: a word pushed
      * whole to the next line leaves room unused, and the face is proportional. So the window is
@@ -515,7 +515,9 @@ static void inkcell_fb_text_field_value_mid(const struct inkcell_draw_state *sta
     }
     struct inkcell_wrap wrap;
     inkcell_wrap_begin_measured(&wrap, tail, budget, &metric);
-    const int x = inkcell_fb_margin(state);
+    /* The content column's edge, which is where the box's gutter ends - not the panel's margin,
+       which is the same place on a panel of one pane and the wrong one in a detail pane. */
+    const int x = inkcell_fb_content_x(state);
     int y = top + inkcell_step_px(scale);
     bool placed = false;
     for (uint32_t drawn = 0U; drawn < lines; ++drawn) {
@@ -589,11 +591,19 @@ void inkcell_fb_draw_text_field(const struct inkcell_draw_state *state,
      */
     const int edge = inkcell_fb_edge(state);
     const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_MD);
-    inkcell_fb_fill_round_rect(
-        state, box_x, top, box_w, box_h, radius + edge,
-        inkcell_fb_color(state, field->error ? INKCELL_COLOR_ERROR : INKCELL_COLOR_OUTLINE));
-    inkcell_fb_fill_round_rect(state, box_x + edge, top + edge, box_w - 2 * edge, box_h - 2 * edge,
-                               radius, inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
+    const int rim = field->lit && !field->error ? 2 * edge : edge;
+    inkcell_fb_fill_round_rect(state, box_x, top, box_w, box_h, radius + edge,
+                               field->error ? inkcell_fb_color(state, INKCELL_COLOR_ERROR)
+                               : field->lit ? inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY)
+                                            : inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
+    inkcell_fb_fill_round_rect(state, box_x + rim, top + rim, box_w - 2 * rim, box_h - 2 * rim,
+                               radius + edge - rim,
+                               inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
+    if (field->target != INKCELL_FOCUS_NONE) {
+        inkcell_fb_target_register(
+            state, field->target,
+            &(const struct inkcell_fb_rect){.x = box_x, .y = top, .w = box_w, .h = box_h});
+    }
 
     /*
      * The value, with the caret on the end of it, showing the *tail* when it is longer than the
@@ -602,7 +612,14 @@ void inkcell_fb_draw_text_field(const struct inkcell_draw_state *state,
      * than splitting one down the middle.
      */
     const size_t value_len = field->value != NULL ? strlen(field->value) : 0U;
-    if (field->caret && field->caret_back > 0U && field->caret_back <= value_len) {
+    if (value_len == 0U && field->placeholder != NULL && field->placeholder[0] != '\0') {
+        /* The caret has nothing to follow yet, and the lit outline already says the field is
+           the one being typed into - so the words are the whole of an empty field. */
+        inkcell_fb_draw_wrapped_at(state, margin, top + inkcell_step_px(scale), field->placeholder,
+                                   (size_t)inkcell_fb_content_w(state), (int)lines,
+                                   inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
+                                   inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
+    } else if (field->caret && field->caret_back > 0U && field->caret_back <= value_len) {
         inkcell_fb_text_field_value_mid(state, layout, top, field, value_len - field->caret_back);
     } else {
         char shown[INKCELL_LINE_MAX];
@@ -616,9 +633,10 @@ void inkcell_fb_draw_text_field(const struct inkcell_draw_state *state,
         }
         /* The value sits a scale down from the box's own top edge, which is the inset every other
            container here gives its contents. */
-        inkcell_fb_draw_wrapped(state, top + inkcell_step_px(scale), tail, (size_t)layout->body_w,
-                                (int)lines, inkcell_fb_tone_color(state, INKCELL_TONE_STRONG),
-                                inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
+        inkcell_fb_draw_wrapped_at(state, margin, top + inkcell_step_px(scale), tail,
+                                   (size_t)inkcell_fb_content_w(state), (int)lines,
+                                   inkcell_fb_tone_color(state, INKCELL_TONE_STRONG),
+                                   inkcell_fb_color(state, INKCELL_COLOR_SURFACE_HIGH));
     }
     top += box_h;
 

@@ -220,6 +220,11 @@ void inkcell_fb_draw_focus_ring(struct inkcell_draw_state *state,
     if (state == NULL) {
         return;
     }
+    /* A reader on the pointer is not shown the cursor, and a ring that comes back when they
+       press a key adopts the box it lands on rather than flying in from where it was hidden. */
+    if (!inkcell_fb_cursor_shown(state)) {
+        id = INKCELL_FOCUS_NONE;
+    }
     struct inkcell_focus_rect target = {0, 0, 0, 0};
     int radius = 0;
     uint32_t group = 0U;
@@ -264,5 +269,62 @@ bool inkcell_fb_focus_ring_rect(const struct inkcell_draw_state *state,
     if (radius != NULL) {
         *radius = at_radius;
     }
+    return true;
+}
+
+/* ---- a pointer's reader ---------------------------------------------------------------- */
+
+/* The union of `box` into the damage carried to the next frame - see `pointer_damage`. */
+static void pointer_damage_add(struct inkcell_draw_state *state, int x, int y, int w, int h) {
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    struct inkcell_fb_damage_rect *const damage = &state->pointer_damage;
+    const int right = x + w;
+    const int bottom = y + h;
+    if (!damage->valid) {
+        *damage = (struct inkcell_fb_damage_rect){
+            .x = x, .y = y, .right = right, .bottom = bottom, .valid = true};
+        return;
+    }
+    damage->x = x < damage->x ? x : damage->x;
+    damage->y = y < damage->y ? y : damage->y;
+    damage->right = right > damage->right ? right : damage->right;
+    damage->bottom = bottom > damage->bottom ? bottom : damage->bottom;
+}
+
+bool inkcell_fb_cursor_shown(const struct inkcell_draw_state *state) {
+    return state == NULL || !state->pointer || !state->cursor_hidden;
+}
+
+bool inkcell_fb_set_cursor_hidden(struct inkcell_draw_state *state, bool hidden) {
+    if (state == NULL || state->cursor_hidden == hidden) {
+        return false;
+    }
+    state->cursor_hidden = hidden;
+    pointer_damage_add(state, 0, 0, inkcell_fb_panel_width(state), inkcell_fb_panel_height(state));
+    return true;
+}
+
+bool inkcell_fb_hovered(const struct inkcell_draw_state *state, uint32_t id) {
+    return state != NULL && state->pointer && id != INKCELL_FOCUS_NONE && state->hover == id;
+}
+
+bool inkcell_fb_set_hover(struct inkcell_draw_state *state, const struct inkcell_focus_map *map,
+                          uint32_t id) {
+    if (state == NULL || state->hover == id) {
+        return false;
+    }
+    /* Out past the box by the ring's reach, as the ring's own damage is: a hover layer is drawn
+       inside the box, but a component is free to draw it to the box's edge and round it. */
+    const int pad = inkcell_fb_focus_ring_reach(state);
+    const uint32_t ends[2] = {state->hover, id};
+    for (size_t i = 0U; i < 2U; ++i) {
+        struct inkcell_focus_rect box;
+        if (ends[i] != INKCELL_FOCUS_NONE && inkcell_focus_rect_of(map, ends[i], &box)) {
+            pointer_damage_add(state, box.x - pad, box.y - pad, box.w + 2 * pad, box.h + 2 * pad);
+        }
+    }
+    state->hover = id;
     return true;
 }
