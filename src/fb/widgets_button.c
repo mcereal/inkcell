@@ -7,6 +7,7 @@
  */
 
 #include "inkcell/ui/widgets/button.h"
+#include "inkcell/ui/widgets/focus.h"
 
 #include "inkcell/ui/emoji.h"
 
@@ -21,7 +22,9 @@
  */
 struct inkcell_fb_button_paint inkcell_fb_button_paint(const struct inkcell_draw_state *state,
                                                        const struct inkcell_fb_button *button) {
-    const bool focused = button->focused;
+    /* The cursor's fill is its cue, and a reader on the pointer is not shown one - see
+       inkcell_fb_cursor_shown(). The button is still marked as the cursor's below. */
+    const bool focused = button->focused && inkcell_fb_cursor_shown(state);
     switch (button->variant) {
     case INKCELL_FB_BUTTON_FILLED:
         /* The neutral cursor surface, not a family: a keyboard key is a place to press, not a

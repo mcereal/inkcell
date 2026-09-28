@@ -501,3 +501,26 @@ INKCELL_TEST_CASE(focus_hover_damages_the_boxes_it_leaves_and_reaches, unit) {
     ring_close(&h);
     record_success(test_name);
 }
+
+/* A button draws its cursor fill only where the cursor is shown - a keyboard's key under a mouse
+   reads as any other key until a key is pressed. */
+INKCELL_TEST_CASE(focus_a_button_hides_its_cursor_fill_from_the_pointer, unit) {
+    struct ring_harness h;
+    INKCELL_TEST_FAIL_IF(!ring_open(&h), "the capture should open");
+    const struct inkcell_fb_button key = {.variant = INKCELL_FB_BUTTON_FILLED, .focused = true};
+    const struct inkcell_fb_button rest = {.variant = INKCELL_FB_BUTTON_FILLED};
+    h.state->pointer = true;
+    (void)inkcell_fb_set_cursor_hidden(h.state, true);
+    const struct inkcell_rgb hidden = inkcell_fb_button_paint(h.state, &key).paint.fill;
+    const struct inkcell_rgb resting = inkcell_fb_button_paint(h.state, &rest).paint.fill;
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        hidden.r != resting.r || hidden.g != resting.g || hidden.b != resting.b, ring_close(&h),
+        "a focused button should paint as at rest for a reader on the pointer");
+    (void)inkcell_fb_set_cursor_hidden(h.state, false);
+    const struct inkcell_rgb shown = inkcell_fb_button_paint(h.state, &key).paint.fill;
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        shown.r == resting.r && shown.g == resting.g && shown.b == resting.b, ring_close(&h),
+        "and take its cursor fill again once a key is pressed");
+    ring_close(&h);
+    record_success(test_name);
+}

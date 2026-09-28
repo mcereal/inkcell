@@ -268,8 +268,8 @@ struct inkcell_fb_text_field {
     /* The value is not something the field will accept - the outline and the counter take the
        bad tone. Nothing here decides that; a screen does. */
     bool error;
-    /* What the field is for, dim, in place of an empty value: "Message #LongFast". NULL or ""
-       for none - the device's keyboard screens name the job in their heading instead. */
+    /* What the field is for, dim, in place of an empty value - a prompt the application words.
+       NULL or "" for none, which suits a field whose screen names the job in its heading. */
     const char *placeholder;
     /* The field has the keyboard, and its outline says so in the accent. A field that is the
        only thing on its screen has no need to; one that shares a pane with a transcript does. */

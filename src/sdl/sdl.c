@@ -364,11 +364,27 @@ static uint32_t inkcell_sdl_hover_target(const struct inkcell_sdl_panel *panel) 
     return inkcell_focus_hit(&panel->pointer_map, panel->pointer_x, panel->pointer_y);
 }
 
-/* The hover brought up to date with the pointer and the last frame's boxes, and a frame asked
-   for when it moved. */
+/*
+ * The hover and the system cursor brought up to date with the pointer and the last frame's boxes,
+ * and a frame asked for when the hover moved. Asked on a move and after every frame: a frame can
+ * move a box under a pointer that did not move - a list scrolled by the wheel, a screen changed
+ * by a click - and both the lit row and the hand have to follow it then, not at the next nudge.
+ *
+ * The cursor only on a change: SDL_SetCursor() redraws it, and a mouse moving across a row is
+ * dozens of events.
+ */
 static void inkcell_sdl_sync_hover(struct inkcell_sdl_panel *panel) {
-    if (inkcell_fb_set_hover(&panel->state, &panel->pointer_map, inkcell_sdl_hover_target(panel))) {
+    const uint32_t target = inkcell_sdl_hover_target(panel);
+    if (inkcell_fb_set_hover(&panel->state, &panel->pointer_map, target)) {
         inkcell_sdl_request_frame(panel);
+    }
+    if (panel->arrow == NULL || panel->hand == NULL) {
+        return;
+    }
+    const bool pointing = target != INKCELL_FOCUS_NONE;
+    if (pointing != panel->pointing) {
+        panel->pointing = pointing;
+        SDL_SetCursor(pointing ? panel->hand : panel->arrow);
     }
 }
 
@@ -687,8 +703,7 @@ static void inkcell_backend_sdl_present(void *state_ptr, const void *snapshot, v
     inkcell_fb_render(state, snapshot);
     panel->presented = true;
     inkcell_sdl_keep_boxes(panel);
-    /* A frame can move what is under a mouse that did not move - a list scrolled by the wheel
-       is the ordinary case - and the row lit is the one under it now. */
+    /* A frame can move what is under a mouse that did not move - see inkcell_sdl_sync_hover(). */
     inkcell_sdl_sync_hover(panel);
 #if defined(__APPLE__)
     /* ...and after it, because a frame is where the application gets to change the theme. The
@@ -994,23 +1009,13 @@ static void inkcell_sdl_handle_wheel(struct inkcell_sdl_panel *panel,
     }
 }
 
-/* The hand over something a click would do, and the arrow everywhere else. Only on a change:
-   SDL_SetCursor() redraws the cursor, and a mouse moving across a row is dozens of events. */
+/* Where the pointer is, for the hover and the hand - see inkcell_sdl_sync_hover(). */
 static void inkcell_sdl_handle_motion(struct inkcell_sdl_panel *panel,
                                       const SDL_MouseMotionEvent *motion) {
     panel->pointer_x = motion->x;
     panel->pointer_y = motion->y;
     panel->pointer_inside = true;
     inkcell_sdl_sync_hover(panel);
-    if (panel->arrow == NULL || panel->hand == NULL) {
-        return;
-    }
-    const bool pointing = inkcell_pointer_over_target(&panel->pointer_map, motion->x, motion->y,
-                                                      panel->on_click != NULL);
-    if (pointing != panel->pointing) {
-        panel->pointing = pointing;
-        SDL_SetCursor(pointing ? panel->hand : panel->arrow);
-    }
 }
 
 static int inkcell_sdl_pump(int fd, uint32_t events, void *userdata) {
