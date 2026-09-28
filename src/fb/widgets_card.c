@@ -32,12 +32,9 @@ struct inkcell_fb_card_metrics {
     int pad;      /* the inset from the side edges to the content */
     int pad_y;    /* the inset from the top and bottom edges */
     int edge;     /* the hairline's thickness, and the only edge the layout knows about */
-    /* What is actually painted around the panel: the hairline, or the thicker focus ring. It is
-       deliberately not `edge`, because `edge` is in the content inset and in the box height -
-       so a ring that widened it would move the card's text and shift every card below it by a
-       few pixels for no reason but the cursor arriving. The ring grows *inward*, into the
-       padding, which is what keeps the outer geometry a fact about the card rather than about
-       what is focused. */
+    /* What is actually painted around the panel: the hairline on an outlined card, nothing on
+       the others. Kept apart from `edge`, which is in the content inset and the box height, so
+       whether a variant paints its edge never moves the card's text. */
     int ring;
     int radius; /* corner radius, clamped by inkcell_fb_fill_round_rect() anyway */
     /* The header line: the heading, and the verbs against its far edge. 0 when there is
@@ -53,7 +50,7 @@ struct inkcell_fb_card_metrics {
     size_t label_cols;
     int gap;                     /* to the next card */
     enum inkcell_color fill;     /* the variant's surface */
-    struct inkcell_rgb edge_ink; /* the hairline, or the focus ring when a verb is focused */
+    struct inkcell_rgb edge_ink; /* the hairline, where the variant paints one */
 };
 
 static struct inkcell_fb_card_metrics
@@ -93,39 +90,7 @@ inkcell_fb_card_measure(const struct inkcell_draw_state *state,
         m.fill = INKCELL_COLOR_SURFACE;
         break;
     }
-    /*
-     * The focus ring. A card holding the focused verb is the one the next press acts on, and
-     * that has to be findable before any of it is read - so it is the edge that changes rather
-     * than the fill, drawn in the accent and at twice the thickness. See inkcell_fb_draw_card().
-     *
-     * Only what is painted changes. `m.edge` stays the hairline, so the content inset, the
-     * label column and the box height are the same whether the card is focused or not; the
-     * extra thickness is taken out of the padding instead, capped so it can never reach the
-     * text. Widening the layout edge here made a card grow when the cursor arrived and pushed
-     * every card under it down the panel, which is a repaint of the whole screen to say one
-     * thing about one card.
-     */
-    bool focused = false;
-    for (uint32_t i = 0U; i < card->action_count && i < INKCELL_FB_CARD_ACTIONS_MAX; ++i) {
-        focused = focused || card->actions[i].focused;
-    }
-    /*
-     * A filled card has no edge.
-     *
-     * It had one - every card did, whatever its variant - and a stack of hairline boxes is what
-     * makes a screen read as an instrument panel rather than as a page: an outline says "this is
-     * a region of a form", where a fill says "this is a thing". The tiers already carry the
-     * distance from the ground, which is the job the edge was doing twice.
-     *
-     * The outlined variant keeps it, because its fill *is* the ground and the edge is then the
-     * whole of what says the card is there. And the focus ring stays on every variant: it is not
-     * decoration, it is which card the next press acts on, and that has to be findable before
-     * anything is read.
-     */
-    if (focused) {
-        m.ring = m.edge * 2;
-        m.edge_ink = inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY);
-    } else if (card->variant == INKCELL_FB_CARD_OUTLINED) {
+    if (card->variant == INKCELL_FB_CARD_OUTLINED) {
         m.ring = m.edge;
         m.edge_ink = inkcell_fb_color(state, INKCELL_COLOR_OUTLINE);
     } else {
@@ -177,9 +142,8 @@ inkcell_fb_card_measure(const struct inkcell_draw_state *state,
      *
      * The verbs sit in the card's top corner, and the card's inset was sized for text, which
      * has nothing drawn around it. A focused verb does: the focus ring is painted *outside* the
-     * button, and on the card holding it the card's own edge is the doubled focus ring too. At
-     * the card's inset those two met with no pixel between them - a pill touching, and at some
-     * scales overlapping, the outline it sits inside.
+     * button, and at the card's inset it met the card's own edge with no pixel between them - a
+     * pill touching, and at some scales overlapping, the outline it sits inside.
      *
      * So the verbs keep the card's widest edge, the ring's reach and a step of air from the
      * top and far sides, and the heading moves down with them so the two still share a line.
@@ -713,10 +677,8 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_draw_state *state,
      * is every fill a variant can put behind it - and the outlined variant, whose fill *is* the
      * ground, is why it has to hold against all three rather than against the panel's own.
      *
-     * On the card holding the focused verb both of those change: the ink is the accent and the
-     * painted thickness is doubled, which is the focus ring. Only the *painted* thickness - the
-     * panel is the same size and its content starts in the same place either way, so the ring
-     * grows inward into the padding. See inkcell_fb_card_measure().
+     * Neither changes when a verb on the card is focused: the verb carries the focus ring, and
+     * only the verb. See inkcell_fb_card_measure().
      */
     const int top = *y;
     /*
@@ -751,12 +713,19 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_draw_state *state,
      *
      * Laid out from the right so the first one declared ends up leftmost, which is the order
      * the screen cursor walks them in - a strip that packed from the left would have reversed
-     * that on any card with two. They are text buttons: a word in the accent, and a fill only
-     * under the cursor, which is what keeps three cards' worth of verbs from competing with the
-     * numbers they are about and makes the focused one unmistakable with no second cue.
+     * that on any card with two.
+     *
+     * They are tonal pills: the accent's container at rest, its full strength under the cursor.
+     * They were text buttons - a word in the accent and a fill only under the cursor - and a
+     * word in the accent is exactly what the card's heading is, so a verb at rest read as a
+     * second label rather than as something to press. A pill is what every other pressable
+     * thing on the frame looks like (a tab, a chip, a keycap), and the container is held back
+     * far enough that three cards' worth of them still sit behind the numbers they are about.
      */
     const int content_right = m.content_x + (int)m.cols * inkcell_fb_char_adv(state, state->scale);
-    const int gap = inkcell_fb_space(state, INKCELL_SPACE_XS);
+    /* Wider than the gap between two words: two filled pills close together read as one
+       lozenge with a seam in it. */
+    const int gap = inkcell_fb_space(state, INKCELL_SPACE_MD);
     int actions_x = content_right - m.verb_right;
     const int header_y = row_y + m.verb_top;
     if (m.button_h > 0) {
@@ -790,9 +759,8 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_draw_state *state,
                 .icon = INKCELL_ICON_NONE,
                 .label = card->actions[i].label,
                 .focused = card->actions[i].focused,
-                .variant = INKCELL_FB_BUTTON_TEXT,
+                .variant = INKCELL_FB_BUTTON_TONAL,
                 .shape = INKCELL_SHAPE_FULL,
-                .idle_tone = INKCELL_TONE_PRIMARY,
                 .ground = m.fill,
                 .scale = layout->small,
                 /* Only the ones this loop reaches, which is `drawn` of them and not

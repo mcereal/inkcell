@@ -1345,8 +1345,18 @@ void inkcell_fb_list_subheader_icon(const struct inkcell_draw_state *state,
 
 /* The width a note's body wraps to. The list's own columns: a paragraph indented past the rows
    around it would be a second left margin on a panel that has room for one. */
-static size_t inkcell_fb_note_cols(const struct inkcell_draw_state *state) {
-    return inkcell_fb_row_cols(state, state->scale);
+/*
+ * The width a note's paragraph wraps to, in pixels: the row's own text box.
+ *
+ * Measured, not counted. This was the row's width in *cells* - the nominal advance divided
+ * into it - and a paragraph wrapped to a count of cells set in a proportional face breaks
+ * wherever the count runs out rather than where the words stop fitting. Ordinary prose is
+ * narrower than the nominal cell, so every line ended a fifth of the way short of the edge
+ * and a help screen read as a column two thirds as wide as the panel it was on.
+ */
+static size_t inkcell_fb_note_width(const struct inkcell_draw_state *state) {
+    const struct inkcell_fb_row_box box = inkcell_fb_row_box(state);
+    return box.text_right > box.text_x ? (size_t)(box.text_right - box.text_x) : 1U;
 }
 
 uint32_t inkcell_fb_list_note_steps(const struct inkcell_draw_state *state, const char *heading,
@@ -1358,7 +1368,8 @@ uint32_t inkcell_fb_list_note_steps(const struct inkcell_draw_state *state, cons
        the list model counts in those. The air the smaller glyphs free goes above it, exactly as
        it does on a subheader. */
     uint32_t steps = (heading != NULL && heading[0] != '\0') ? 1U : 0U;
-    steps += inkcell_wrap_lines(body != NULL ? body : "", inkcell_fb_note_cols(state));
+    steps += inkcell_fb_wrapped_lines(state, body != NULL ? body : "", inkcell_fb_note_width(state),
+                                      state->scale);
     /* A note with nothing in it is still a row: a zero-height row would put every row under it
        at the wrong offset, which is the failure the whole heights mechanism exists to prevent. */
     return steps > 0U ? steps : 1U;
@@ -1413,16 +1424,16 @@ void inkcell_fb_list_note(const struct inkcell_draw_state *state, struct inkcell
      * loses the tail of a sentence instead of painting it over the next note. Losing text is
      * visible; overlapping it is not, which is the trade this file makes everywhere.
      */
-    uint32_t drawn = titled ? 1U : 0U;
-    struct inkcell_wrap wrap;
-    inkcell_wrap_begin(&wrap, body != NULL ? body : "", inkcell_fb_note_cols(state));
-    while (drawn < rows && inkcell_wrap_next(&wrap)) {
-        inkcell_fb_draw_text(state, margin, y, wrap.line, state->scale,
-                             lifted ? inkcell_fb_focus_ink(state, INKCELL_TONE_NORMAL, false)
-                                    : inkcell_fb_tone_color(state, INKCELL_TONE_NORMAL),
-                             ground);
-        y += body_line;
-        drawn++;
+    const uint32_t drawn = titled ? 1U : 0U;
+    if (drawn < rows) {
+        /* The same measure inkcell_fb_list_note_steps() counted with, so the lines drawn are
+           the lines the model was told about. */
+        (void)inkcell_fb_draw_wrapped_at(
+            state, margin, y, body != NULL ? body : "", inkcell_fb_note_width(state),
+            (int)(rows - drawn),
+            lifted ? inkcell_fb_focus_ink(state, INKCELL_TONE_NORMAL, false)
+                   : inkcell_fb_tone_color(state, INKCELL_TONE_NORMAL),
+            ground);
     }
 
     inkcell_fb_list_band_end(list, band);
