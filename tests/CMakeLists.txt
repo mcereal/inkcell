@@ -20,6 +20,7 @@ set(INKCELL_TEST_SUITES
     suites/ui_dial.c
     suites/ui_steps.c
     suites/ui_elevation.c
+    suites/ui_emoji.c
     suites/ui_fab.c
     suites/ui_icon.c
     suites/ui_input_repeat.c
@@ -45,8 +46,18 @@ endif()
 
 add_executable(inkcell_tests
     framework/inkcell_test.c
+    support/emoji_support.c
     ${INKCELL_TEST_SUITES}
 )
+
+# Without a pack compiled into the library the suite hands the same one over at run time; see
+# support/emoji_support.c. It needs the generated file and the seam it is compiled against.
+if(NOT INKCELL_EMOJI)
+    target_compile_definitions(inkcell_tests PRIVATE INKCELL_TEST_EMOJI_HANDED_OVER)
+    target_include_directories(inkcell_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../src/generated
+        ${CMAKE_CURRENT_SOURCE_DIR}/../src/theme)
+endif()
 
 target_include_directories(inkcell_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(inkcell_tests PRIVATE inkcell inkwell::inkwell inkcell_options)
@@ -80,7 +91,10 @@ endif()
 # A digest rather than committed images, because a page is 1024x768 and hundreds of them in git
 # would be binary every clone pays for. When one differs, `make gallery`
 # produces the pictures to look at; CI uploads them for the same reason.
-if(TARGET inkcell_gallery)
+#
+# The manifest is of the default build, pack compiled in: with INKCELL_EMOJI OFF every emoji on
+# every page is a replacement box, and a digest of that is a test of nothing.
+if(TARGET inkcell_gallery AND INKCELL_EMOJI)
     add_test(NAME inkcell_golden
              COMMAND inkcell_gallery --check ${CMAKE_CURRENT_SOURCE_DIR}/golden/manifest.txt)
     set_tests_properties(inkcell_golden PROPERTIES LABELS golden)

@@ -294,7 +294,7 @@ static void inkcell_fb_grid_chrome(const struct inkcell_draw_state *state,
  * over: which multiplier fits is a fact about this geometry, and a screen that worked it out
  * would be computing a glyph size. The three kinds differ only in what they measure - an icon
  * by its drawn width and the glyph body's height, initials by the width of those particular
- * letters, a sprite by the whole multiple of its own grid that fits - and all three are
+ * letters, an emoji by the square that fits - and all three are
  * centred on the glyph body rather than on the line advance, because the advance carries the
  * gap accents hang in and counting it sits the picture low in the tile.
  */

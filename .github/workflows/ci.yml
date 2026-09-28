@@ -32,6 +32,13 @@ jobs:
           - name: no SDL (gcc)
             cc: gcc
             args: "-DINKCELL_WITH_SDL=OFF"
+          # The same for the emoji pack, which a small target leaves out and hands over at run
+          # time. The suite runs whole here - it hands the pack over itself - so this is also
+          # the job that proves the run-time path draws what the built-in one does. No emoji
+          # cache either, so the path that renders every time is the one tested.
+          - name: no emoji pack (gcc)
+            cc: gcc
+            args: "-DINKCELL_EMOJI=OFF -DINKCELL_EMOJI_CACHE_SLOTS=0"
     steps:
       # inkwell is a submodule and inkcell does not build without it; the default checkout
       # leaves a gitlink and an empty directory, which fails at the add_subdirectory().

@@ -27,6 +27,11 @@ option(INKCELL_BUILD_TESTS "Build inkcell's own test binary" ${INKCELL_IS_TOP_LE
 option(INKCELL_BUILD_EXAMPLES "Build the component gallery" ${INKCELL_IS_TOP_LEVEL})
 option(INKCELL_ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(INKCELL_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
+# The emoji pack is about a megabyte of outlines. ON compiles it in; OFF compiles in nothing,
+# and a program that wants emoji hands a pack over at run time (inkcell_emoji_load_file()) -
+# for a target whose flash is short, or that keeps the pack in a partition of its own. Either
+# way the header and every symbol are the same; see include/inkcell/ui/emoji.h.
+option(INKCELL_EMOJI "Compile the emoji pack into the library" ON)
 
 # The same INTERFACE-target trick mesh-client uses, for the same reason: -fsanitize=address has
 # to reach the compile *and* the link, and a variable holding one of them can be applied to a
@@ -66,10 +71,10 @@ add_library(inkcell STATIC
     src/theme/font_ui.c
     src/theme/icon.c
     src/theme/emoji.c
+    src/theme/emoji_raster.c
     # the glyph tables scripts/gen-{emoji,icons,font}.py write. 42k lines and none of it read
     # by a human, which is why it is its own directory: a count of this codebase should be a
-    # count of what somebody wrote.
-    src/generated/emoji_glyphs.c
+    # count of what somebody wrote. The emoji pack is added below, when INKCELL_EMOJI asks.
     src/generated/font_ui_glyphs.c
     src/generated/font_ui_bold_glyphs.c
     src/generated/icon_glyphs.c
@@ -138,6 +143,18 @@ target_include_directories(inkcell PUBLIC
 # that several files share (src/fb/list_internal.h) is included by its neighbours and is not
 # part of the surface.
 target_include_directories(inkcell PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/fb)
+# And src/theme, for the one seam the generated emoji pack is compiled against.
+target_include_directories(inkcell PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/theme)
+
+# Text-sized emoji kept drawn, 4 KB a slot; 0 keeps none. See inkcell_fb_emoji_cached().
+set(INKCELL_EMOJI_CACHE_SLOTS 64 CACHE STRING "Text-sized emoji the fb backend keeps drawn")
+target_compile_definitions(inkcell PRIVATE INKCELL_EMOJI_CACHE_SLOTS=${INKCELL_EMOJI_CACHE_SLOTS})
+
+if(INKCELL_EMOJI)
+    target_sources(inkcell PRIVATE src/generated/emoji_pack.c)
+else()
+    target_sources(inkcell PRIVATE src/theme/emoji_builtin_none.c)
+endif()
 # PRIVATE: no inkcell public header includes an inkwell one, so a consumer does not need
 # inkwell's include path to use this. CMake still propagates the *link* requirement, which a
 # static library does need.
