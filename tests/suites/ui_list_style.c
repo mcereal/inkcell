@@ -645,3 +645,37 @@ INKCELL_TEST_CASE(list_style_an_accent_row_takes_the_mark_from_what_is_beneath, 
     INKCELL_TEST_FAIL_IF(again != STYLE_ID_ROW, "a plain mark after it should take the ring back");
     record_success(test_name);
 }
+
+/*
+ * A plain list - the look a list opened with no style gets - lights the row under the pointer,
+ * as a styled one does. A sidebar of targets is the case: the reader is on the pointer, so the
+ * cursor draws nothing, and the hover is the only cue there is.
+ */
+INKCELL_TEST_CASE(list_style_a_plain_list_lights_the_row_under_the_pointer, unit) {
+    struct style_harness h;
+    INKCELL_TEST_FAIL_IF(!style_harness_open(&h, true), "the capture should open");
+    h.state->pointer = true;
+    h.state->cursor_hidden = true;
+    h.state->hover = STYLE_ID_ROW + 1U;
+    struct inkcell_fb_list list = inkcell_fb_list_begin(&h.layout, 2U, 0U);
+    inkcell_fb_list_targets(&list, STYLE_ID_ROW);
+    const struct inkcell_fb_row_box box = inkcell_fb_row_box(h.state);
+    const int x = box.x + (box.w * 3) / 4;
+    const int first = list.y - inkcell_step_px(h.state->scale) + list.line / 2;
+    const int second = first + list.line;
+    uint32_t index = 0U;
+    while (inkcell_fb_list_next(&list, &index)) {
+        inkcell_fb_list_row(h.state, &list, index, "r", INKCELL_TONE_NORMAL);
+    }
+    const struct inkcell_rgb bg = inkcell_fb_color(h.state, INKCELL_COLOR_BG);
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        !style_same_rgb(style_pixel(&h, x, first), bg), style_harness_close(&h),
+        "the cursor's row should draw nothing for a reader on the pointer");
+    INKCELL_TEST_FAIL_IF_CLEANUP(style_same_rgb(style_pixel(&h, x, second), bg),
+                                 style_harness_close(&h),
+                                 "the row under the pointer should take the hover layer");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_focus_marked(&h.map) != INKCELL_FOCUS_NONE,
+                                 style_harness_close(&h), "a list of targets marks nothing");
+    style_harness_close(&h);
+    record_success(test_name);
+}

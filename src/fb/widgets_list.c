@@ -522,6 +522,13 @@ struct inkcell_fb_list_cue inkcell_fb_list_row_cue(const struct inkcell_draw_sta
            asked for nothing new must come out of this the same pixels it always did. */
         struct inkcell_fb_list_cue cue;
         cue.focused = inkcell_fb_list_cues_cursor(state, list, index);
+        /* A row under the pointer takes the hover layer here too: a plain list is the look a
+           list opened without one gets, and a sidebar of targets is no less a sidebar for it. */
+        if (!cue.focused && inkcell_fb_list_hovered(state, list, index)) {
+            return inkcell_fb_list_cue(state, list, index, inkcell_fb_list_box_top(state, list),
+                                       (int)(rows > 0U ? rows : 1U) * list->line,
+                                       INKCELL_TONE_NORMAL, false);
+        }
         cue.lifted = cue.focused;
         cue.rest = inkcell_fb_list_ground(list, index);
         cue.ground = inkcell_fb_draw_row_fill_on(state, list->y, rows, cue.focused, cue.rest);

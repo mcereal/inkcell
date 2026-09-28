@@ -41,6 +41,10 @@
 
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * How long a move takes, as a token rather than a number: the same one a control acknowledging
  * a press takes, because that is what this is. The curve is INKCELL_EASE_OUT for the same
@@ -158,5 +162,9 @@ bool inkcell_fb_hovered(const struct inkcell_draw_state *state, uint32_t id);
  */
 bool inkcell_fb_set_hover(struct inkcell_draw_state *state, const struct inkcell_focus_map *map,
                           uint32_t id);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_FOCUS_H */

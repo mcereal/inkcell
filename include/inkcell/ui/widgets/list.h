@@ -24,6 +24,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * ---- the list's look ----
  *
@@ -723,5 +727,9 @@ uint32_t inkcell_fb_list_note_steps(const struct inkcell_draw_state *state, cons
 
 void inkcell_fb_list_note(const struct inkcell_draw_state *state, struct inkcell_fb_list *list,
                           uint32_t index, const char *heading, const char *body);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_LIST_H */

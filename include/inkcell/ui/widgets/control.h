@@ -21,6 +21,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * A switch: a boolean the eye reads without reading a word.
  *
@@ -285,5 +289,9 @@ int inkcell_fb_text_field_height(const struct inkcell_draw_state *state,
 void inkcell_fb_draw_text_field(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_layout *layout, int *y,
                                 const struct inkcell_fb_text_field *field);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_CONTROL_H */
