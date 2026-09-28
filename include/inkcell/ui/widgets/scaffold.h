@@ -17,9 +17,14 @@
  *
  *   compact    a navigation bar across the bottom (or the tab strip across the top - see enum
  *              inkcell_fb_compact_nav for why an application may keep it)
- *   medium     a navigation rail down the leading edge - and, once the detail would hold a
- *              whole measure beside the list, the split below
- *   expanded   the rail, and the body split into a list pane and a detail pane
+ *   medium     a navigation rail down the leading edge, collapsed to its icons - and, once the
+ *              detail would hold a whole measure beside the list, the split below
+ *   expanded   the rail expanded into rows of icon and word, and the body split into a list
+ *              pane and a detail pane
+ *
+ * The rail's two widths are also the reader's to choose between: with a toggle id the rail
+ * draws the press at its head that folds and unfolds it (enum inkcell_fb_rail), and the
+ * application keeps the answer.
  *
  * The split follows the detail rather than the class. The detail is running text and is held to
  * a measure; the list is short rows read by their leading edge and reads the same at two fifths
@@ -77,6 +82,11 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /*
  * Where the destinations went. Answered by the scaffold and read back off the frame, so a backend
@@ -90,8 +100,44 @@ enum inkcell_fb_nav_placement {
     INKCELL_FB_NAV_TOP,
     /* A navigation bar across the bottom: one equal cell per destination, icon over label. */
     INKCELL_FB_NAV_BOTTOM,
-    /* A navigation rail down the leading edge: the same cells, stacked. */
+    /* A navigation rail down the leading edge: icons alone, or rows of icon and word - see
+       enum inkcell_fb_rail. */
     INKCELL_FB_NAV_RAIL,
+};
+
+/*
+ * Which of its two widths a rail is drawn at.
+ *
+ * Collapsed is a column of icons; expanded is a row per destination with the icon and its word
+ * side by side, which is the sidebar every desktop application draws. The words are the
+ * difference between a rail a newcomer can read and one a regular can ignore, and which of the
+ * two a reader is changes with the reader rather than with the window - so an application that
+ * offers the toggle keeps the choice and hands it back here every frame.
+ *
+ * AUTO is the zero value and is the class's answer for an application that has not been told:
+ * expanded where the window has room to spare (the expanded class), collapsed on a medium one
+ * where the body wants every column. An expanded rail whose words would not fit the width a rail
+ * may take (twenty columns of body text) is drawn collapsed whatever was asked, and
+ * `frame.rail_expanded` says which it came out.
+ */
+enum inkcell_fb_rail {
+    INKCELL_FB_RAIL_AUTO = 0,
+    INKCELL_FB_RAIL_COLLAPSED,
+    INKCELL_FB_RAIL_EXPANDED,
+};
+
+/*
+ * What a press on the rail's toggle does, as an offset from `rail_toggle_id`.
+ *
+ * Two ids rather than one, because the press means opposite things depending on which rail was
+ * drawn, and the application answering a click has only the id to go on: by the time it arrives
+ * the frame it landed on is gone, and on AUTO the application never knew which width it was.
+ * The id says what the reader saw - three bars asking to expand, or the folding arrow asking to
+ * collapse - so the answer is a store, not a guess.
+ */
+enum inkcell_fb_rail_toggle {
+    INKCELL_FB_RAIL_TOGGLE_EXPAND = 0,
+    INKCELL_FB_RAIL_TOGGLE_COLLAPSE = 1,
 };
 
 /*
@@ -121,6 +167,15 @@ struct inkcell_fb_scaffold {
     size_t count;
     size_t active;
     enum inkcell_fb_compact_nav compact_nav;
+    /* Which width the rail is drawn at, on a frame that has one. See enum inkcell_fb_rail. */
+    enum inkcell_fb_rail rail;
+    /*
+     * The toggle at the rail's head, registered as `rail_toggle_id + INKCELL_FB_RAIL_TOGGLE_*`
+     * (so two consecutive ids are taken). INKCELL_FOCUS_NONE - zero - draws no toggle, and a
+     * rail without one is whatever `rail` says, which is what an application that has not
+     * wired up the click gets.
+     */
+    uint32_t rail_toggle_id;
     /* Whether an action bar will be passed to inkcell_fb_scaffold_end(). Needed now rather than
        then for the reason inkcell_fb_layout_begin() needs it: the body is laid out long before
        the bar is drawn. */
@@ -170,6 +225,8 @@ struct inkcell_fb_scaffold_frame {
     /* The frame's own class, from the whole region - not a pane's. */
     enum inkcell_width_class width;
     enum inkcell_fb_nav_placement nav;
+    /* Whether the rail came out expanded. False for every placement but the rail. */
+    bool rail_expanded;
     /* Where the destinations are drawn: the strip, the bar or the rail. Empty for none. */
     struct inkcell_box nav_box;
     /* The viewport: the region less the destinations. Everything the screen and the action bar
@@ -235,11 +292,21 @@ void inkcell_fb_scaffold_end(struct inkcell_draw_state *state,
 
 /*
  * The room the destinations take, without drawing them: the bottom bar's height, or the rail's
- * width. For a backend or a test that has to know before a frame is drawn. 0 for the top strip,
- * whose height is inkcell_fb_nav_bar_height().
+ * width - collapsed, and expanded. For a backend or a test that has to know before a frame is
+ * drawn. 0 for the top strip, whose height is inkcell_fb_nav_bar_height().
+ *
+ * The expanded width is 0 when the words would not fit the rail's cap, which is the case in which
+ * the scaffold draws the rail collapsed however it was asked.
  */
 int inkcell_fb_scaffold_bar_height(const struct inkcell_draw_state *state);
 int inkcell_fb_scaffold_rail_width(const struct inkcell_draw_state *state,
                                    const struct inkcell_fb_chip *destinations, size_t count);
+int inkcell_fb_scaffold_rail_expanded_width(const struct inkcell_draw_state *state,
+                                            const struct inkcell_fb_chip *destinations,
+                                            size_t count);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_SCAFFOLD_H */

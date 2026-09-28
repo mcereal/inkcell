@@ -237,6 +237,144 @@ INKCELL_TEST_CASE(scaffold_rail_holds_the_window_buttons, unit) {
     record_success(test_name);
 }
 
+/* AUTO is the class's answer: the rail folds to its icons where the body wants the columns and
+   unfolds into words where the window has room to spare. Either can be asked for outright. */
+INKCELL_TEST_CASE(scaffold_rail_expands_on_an_expanded_frame_unless_told, unit) {
+    struct inkcell_draw_state *state = NULL;
+    struct inkcell_capture *capture =
+        scaffold_open(INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT, INKCELL_SCALE(3), &state);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+    const int collapsed = inkcell_fb_scaffold_rail_width(state, k_destinations, SCAFFOLD_COUNT);
+    const int expanded =
+        inkcell_fb_scaffold_rail_expanded_width(state, k_destinations, SCAFFOLD_COUNT);
+    INKCELL_TEST_FAIL_IF_CLEANUP(expanded <= collapsed, inkcell_capture_close(capture),
+                                 "the expanded rail is wider than its icons");
+
+    struct inkcell_fb_scaffold scaffold = {.destinations = k_destinations, .count = SCAFFOLD_COUNT};
+    struct inkcell_fb_scaffold_frame frame;
+    inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+    inkcell_fb_scaffold_end(state, &frame, NULL);
+    INKCELL_TEST_FAIL_IF_CLEANUP(frame.rail_expanded || frame.content.x != collapsed,
+                                 inkcell_capture_close(capture),
+                                 "a medium frame's rail is collapsed by default");
+
+    scaffold.rail = INKCELL_FB_RAIL_EXPANDED;
+    inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+    inkcell_fb_scaffold_end(state, &frame, NULL);
+    INKCELL_TEST_FAIL_IF_CLEANUP(!frame.rail_expanded || frame.content.x != expanded,
+                                 inkcell_capture_close(capture),
+                                 "a medium frame expands its rail when asked");
+    inkcell_capture_close(capture);
+
+    capture = scaffold_open(SCAFFOLD_WIDE_W, SCAFFOLD_WIDE_H, INKCELL_SCALE(3), &state);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the wide capture should open");
+    scaffold.rail = INKCELL_FB_RAIL_AUTO;
+    inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+    inkcell_fb_scaffold_end(state, &frame, NULL);
+    INKCELL_TEST_FAIL_IF_CLEANUP(!frame.rail_expanded, inkcell_capture_close(capture),
+                                 "an expanded frame's rail is expanded by default");
+    scaffold.rail = INKCELL_FB_RAIL_COLLAPSED;
+    inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+    inkcell_fb_scaffold_end(state, &frame, NULL);
+    INKCELL_TEST_FAIL_IF_CLEANUP(frame.rail_expanded ||
+                                     frame.content.x != inkcell_fb_scaffold_rail_width(
+                                                            state, k_destinations, SCAFFOLD_COUNT),
+                                 inkcell_capture_close(capture), "and collapses when asked");
+
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
+/* A label too long for the rail's cap cannot be laid out as a row, so the rail keeps its icons
+   rather than taking the body's columns to spell it. */
+INKCELL_TEST_CASE(scaffold_rail_stays_collapsed_when_its_words_do_not_fit, unit) {
+    struct inkcell_draw_state *state = NULL;
+    struct inkcell_capture *capture =
+        scaffold_open(SCAFFOLD_WIDE_W, SCAFFOLD_WIDE_H, INKCELL_SCALE(3), &state);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+    const struct inkcell_fb_chip wordy[] = {
+        {.icon = INKCELL_ICON_MESSAGES,
+         .label = "An improbably long destination name that no rail could hold",
+         .focus_id = 11U},
+    };
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_scaffold_rail_expanded_width(state, wordy, 1U) != 0,
+                                 inkcell_capture_close(capture),
+                                 "words past the cap have no expanded width");
+    const struct inkcell_fb_scaffold scaffold = {
+        .destinations = wordy, .count = 1U, .rail = INKCELL_FB_RAIL_EXPANDED};
+    struct inkcell_fb_scaffold_frame frame;
+    inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+    inkcell_fb_scaffold_end(state, &frame, NULL);
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        frame.rail_expanded || frame.content.x != inkcell_fb_scaffold_rail_width(state, wordy, 1U),
+        inkcell_capture_close(capture), "the rail is drawn collapsed however it was asked");
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
+/*
+ * The toggle is registered under the offset that says what a press will do, so the application
+ * answers a click from the id alone. With no id there is no toggle, and the destinations start
+ * where they always did.
+ */
+INKCELL_TEST_CASE(scaffold_rail_toggle_says_what_a_press_does, unit) {
+    struct inkcell_draw_state *state = NULL;
+    struct inkcell_capture *capture =
+        scaffold_open(INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT, INKCELL_SCALE(3), &state);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+    struct inkcell_focus_item storage[16];
+    struct inkcell_focus_map map;
+    const uint32_t base = 40U;
+    const uint32_t expand = base + (uint32_t)INKCELL_FB_RAIL_TOGGLE_EXPAND;
+    const uint32_t collapse = base + (uint32_t)INKCELL_FB_RAIL_TOGGLE_COLLAPSE;
+    struct inkcell_focus_rect rect;
+    struct inkcell_focus_rect first;
+
+    inkcell_focus_begin(&map, storage, 16U);
+    inkcell_fb_set_focus_map(state, &map);
+    struct inkcell_fb_scaffold scaffold = {.destinations = k_destinations, .count = SCAFFOLD_COUNT};
+    struct inkcell_fb_scaffold_frame frame;
+    inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+    inkcell_fb_scaffold_end(state, &frame, NULL);
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_focus_rect_of(&map, expand, &rect) ||
+                                     inkcell_focus_rect_of(&map, collapse, &rect),
+                                 inkcell_capture_close(capture), "no id, no toggle");
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_focus_rect_of(&map, k_destinations[0].focus_id, &first),
+                                 inkcell_capture_close(capture),
+                                 "the first destination is registered");
+
+    inkcell_focus_begin(&map, storage, 16U);
+    scaffold.rail_toggle_id = base;
+    inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+    inkcell_fb_scaffold_end(state, &frame, NULL);
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        !inkcell_focus_rect_of(&map, expand, &rect) || inkcell_focus_rect_of(&map, collapse, &rect),
+        inkcell_capture_close(capture), "a collapsed rail's toggle expands it");
+    struct inkcell_focus_rect below;
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        !inkcell_focus_rect_of(&map, k_destinations[0].focus_id, &below) || below.y <= first.y,
+        inkcell_capture_close(capture), "the destinations move down to make room for the toggle");
+    INKCELL_TEST_FAIL_IF_CLEANUP(rect.x + rect.w > frame.nav_box.w, inkcell_capture_close(capture),
+                                 "the toggle is inside the rail");
+
+    inkcell_focus_begin(&map, storage, 16U);
+    scaffold.rail = INKCELL_FB_RAIL_EXPANDED;
+    inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+    inkcell_fb_scaffold_end(state, &frame, NULL);
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        inkcell_focus_rect_of(&map, expand, &rect) || !inkcell_focus_rect_of(&map, collapse, &rect),
+        inkcell_capture_close(capture), "an expanded rail's toggle collapses it");
+    /* An expanded row is the whole row, so a click on the word reaches it. */
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        !inkcell_focus_rect_of(&map, k_destinations[0].focus_id, &rect) ||
+            rect.w <= inkcell_fb_scaffold_rail_width(state, k_destinations, SCAFFOLD_COUNT),
+        inkcell_capture_close(capture), "an expanded row is wider than a collapsed rail");
+
+    inkcell_fb_set_focus_map(state, NULL);
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
 INKCELL_TEST_CASE(scaffold_expanded_splits_a_screen_that_has_a_detail, unit) {
     struct inkcell_draw_state *state = NULL;
     struct inkcell_capture *capture =
