@@ -571,6 +571,13 @@ struct inkcell_draw_state {
      * read through inkcell_fb_region(), never here. See that function for what it moves.
      */
     struct inkcell_box region;
+    /*
+     * The frame's content is not being held to the reading measure: inkcell_fb_content_column()
+     * is the region less its margins however wide that is. False - measured - is the zero value,
+     * so a frame nobody said anything about is capped exactly as it always was. Set through
+     * inkcell_fb_set_measured(), never here.
+     */
+    bool unmeasured;
 };
 
 /*
@@ -1027,6 +1034,30 @@ struct inkcell_box inkcell_fb_region(const struct inkcell_draw_state *state);
  * is "all of it".
  */
 struct inkcell_box inkcell_fb_set_region(struct inkcell_draw_state *state, struct inkcell_box box);
+
+/*
+ * Whether the content column is held to the reading measure, and what it was, for the caller to
+ * put back.
+ *
+ * The measure is for text: a paragraph set across a maximised window cannot be read, so above
+ * the compact class the column is capped and centred. Some content is not text. A map, a canvas,
+ * a grid of tiles - their subject *is* the room, and capping them would leave a hand's width of
+ * window empty either side of a ribbon. Those screens already draw their canvas into
+ * inkcell_fb_full_box(); what they could not do was put their chrome over it, because the app
+ * bar and everything else placed against the column stayed in the centred measure, and the
+ * heading floated over the middle of a canvas that ran to both edges.
+ *
+ * So a screen whose body is not running text turns the measure off for as long as it draws, and
+ * its heading, its canvas and the line under it share one pair of edges. It is a question about
+ * the whole frame's content, not about one widget, which is why it is a switch here rather than
+ * a flag on the app bar: every widget placed against the column follows it without learning a
+ * parameter, exactly as they follow the region.
+ *
+ * The scaffold puts it back to measured at the top of every frame (inkcell_fb_scaffold_begin()),
+ * so a screen that forgets to restore it costs the rest of its own frame and nothing after.
+ * A compact surface is never capped, so on a handheld this changes nothing.
+ */
+bool inkcell_fb_set_measured(struct inkcell_draw_state *state, bool measured);
 
 /*
  * The column's leading edge and its width, for the callers that want one number.
