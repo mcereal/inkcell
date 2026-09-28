@@ -1264,6 +1264,27 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
     if (inkwell_env_bool("SDL_VSYNC", "SDL vsync", false)) {
         flags |= SDL_RENDERER_PRESENTVSYNC;
     }
+#if defined(_WIN32)
+    /*
+     * No render batching, on Windows.
+     *
+     * SDL2's Direct3D 9 renderer - the first one it tries there - loses the window for good on
+     * a resize when batching is on: the device is reset for the new back buffer, every call
+     * after it reports success, and the window stays white until the process exits. Direct3D
+     * 11 and OpenGL do not, and neither does Direct3D 9 unbatched. A frame here is one clear
+     * and one quad, so batching has nothing to save.
+     *
+     * Only where nobody has said otherwise: a hint the host set, or SDL_RENDER_BATCHING in the
+     * environment, is theirs to keep, and SDL_GetHint() answers for both. Cleared again once
+     * the renderer has read it, and cleared rather than reset - a NULL value is "unset" on
+     * every SDL2, where SDL_ResetHint() is 2.24's - so no renderer the host makes later lives
+     * with this one's choice.
+     */
+    const bool batching_ours = SDL_GetHint(SDL_HINT_RENDER_BATCHING) == NULL;
+    if (batching_ours) {
+        SDL_SetHintWithPriority(SDL_HINT_RENDER_BATCHING, "0", SDL_HINT_DEFAULT);
+    }
+#endif
     panel->renderer = SDL_CreateRenderer(panel->window, -1, flags);
     if (panel->renderer == NULL) {
         /* No accelerated renderer is a development host with no GL, or the dummy video driver
@@ -1273,6 +1294,11 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
                          SDL_GetError());
         panel->renderer = SDL_CreateRenderer(panel->window, -1, SDL_RENDERER_SOFTWARE);
     }
+#if defined(_WIN32)
+    if (batching_ours) {
+        SDL_SetHintWithPriority(SDL_HINT_RENDER_BATCHING, NULL, SDL_HINT_DEFAULT);
+    }
+#endif
     if (panel->renderer == NULL) {
         inkwell_log_warn("ui", "SDL_CreateRenderer failed: %s", SDL_GetError());
         SDL_DestroyWindow(panel->window);
