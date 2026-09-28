@@ -1401,9 +1401,9 @@ void inkcell_fb_draw_icon(const struct inkcell_draw_state *state, int x, int y,
  *
  * A sprite inside a line of text is one cell and is bounded by the glyph scale; a keycap on
  * the keyboard's emoji layer is sized to the *key* instead, which on the Brick's panel is four
- * times that and on a wider one more. The bound is what the per-column map inside is sized
- * for, and it is generous rather than tight - the cost of the slack is a few hundred bytes of
- * stack for the length of one call.
+ * times that and on a wider one more. The bound is what the filter's buffers inside are sized
+ * for, and it is generous rather than tight - the slack is a few tens of kilobytes of static
+ * storage, and a box asked for beyond it is drawn at the bound, centred.
  */
 #define INKCELL_FB_EMOJI_BOX_MAX 192
 
@@ -1412,15 +1412,16 @@ void inkcell_fb_draw_icon(const struct inkcell_draw_state *state, int x, int y,
  *
  * The primitive under the emoji cells inkcell_fb_draw_text() lays into a line, exposed because a
  * keycap is the one place a sprite is sized to the box it sits in rather than to the text
- * around it. An emoji takes no ink and no ground: it carries its own colours and draws only
- * its opaque pixels, so whatever the caller has already filled shows through the margin.
+ * around it. An emoji takes no ink and no ground: it carries its own colours and its own
+ * opacity, so whatever the caller has already filled shows through the margin and its outline
+ * blends into that rather than stepping.
  */
 void inkcell_fb_draw_emoji_box(const struct inkcell_draw_state *state, int x, int top, int box,
                                uint16_t sprite);
 
-/* The box to ask inkcell_fb_draw_emoji_box() for when there is `box` pixels of room: the whole
-   multiple of the sprite's own grid that fits, so every source pixel lands on a square of the same
-   size rather than on a mix of two. Returns small boxes - a text cell - unchanged. */
+/* The box inkcell_fb_draw_emoji_box() will fill when there is `box` pixels of room: all of it,
+   up to INKCELL_FB_EMOJI_BOX_MAX. A sprite is resampled smoothly to any size, so a caller centring
+   a sprite in a key centres what this returns and loses nothing to a grid. */
 int inkcell_fb_emoji_box_fit(int box);
 /*
  * Wrapped body text from the leading margin, and from an explicit left edge.

@@ -84,11 +84,20 @@ size_t inkcell_emoji_match(const uint32_t *codepoints, size_t count, uint16_t *s
 }
 
 void inkcell_emoji_decode(uint16_t sprite, uint8_t out[INKCELL_EMOJI_SIZE * INKCELL_EMOJI_SIZE]) {
+    inkcell_emoji_decode_alpha(sprite, out, NULL);
+}
+
+void inkcell_emoji_decode_alpha(uint16_t sprite,
+                                uint8_t index[INKCELL_EMOJI_SIZE * INKCELL_EMOJI_SIZE],
+                                uint8_t alpha[INKCELL_EMOJI_SIZE * INKCELL_EMOJI_SIZE]) {
     const size_t pixels = (size_t)INKCELL_EMOJI_SIZE * INKCELL_EMOJI_SIZE;
-    if (out == NULL) {
+    if (index == NULL) {
         return;
     }
-    memset(out, INKCELL_EMOJI_TRANSPARENT, pixels);
+    memset(index, INKCELL_EMOJI_TRANSPARENT, pixels);
+    if (alpha != NULL) {
+        memset(alpha, 0, pixels);
+    }
 
     const struct inkcell_emoji_table *table = &inkcell_emoji_table;
     const uint32_t start = table->run_offsets[sprite];
@@ -96,10 +105,18 @@ void inkcell_emoji_decode(uint16_t sprite, uint8_t out[INKCELL_EMOJI_SIZE * INKC
 
     size_t written = 0;
     for (uint32_t run = start; run < end && written < pixels; ++run) {
-        const uint8_t count = table->runs[run * 2U];
-        const uint8_t index = table->runs[run * 2U + 1U];
-        for (uint8_t i = 0; i < count && written < pixels; ++i) {
-            out[written++] = index;
+        const uint8_t head = table->runs[run * 2U];
+        const uint8_t value = table->runs[run * 2U + 1U];
+        const unsigned count = (head & 0x1FU) + 1U;
+        /* A level widens to the top of its step, so the most opaque of eight is 255 exactly and
+           an interior pixel is drawn as a store rather than a blend. */
+        const uint8_t opacity =
+            value == INKCELL_EMOJI_TRANSPARENT ? 0U : (uint8_t)((head & 0xE0U) | 0x1FU);
+        for (unsigned i = 0; i < count && written < pixels; ++i) {
+            if (alpha != NULL) {
+                alpha[written] = opacity;
+            }
+            index[written++] = value;
         }
     }
 }

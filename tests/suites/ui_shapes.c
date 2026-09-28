@@ -1,7 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 /*
- * The drawing primitives: the anti-aliased fill, the ring, and the arc.
+ * The drawing primitives: the anti-aliased fill, the ring, the arc, and the emoji sprite.
  *
  * These are checked by looking at the pixels, because that is what they produce and there is
  * nothing else to look at. The golden sheet already compares whole pages and would catch a
@@ -15,6 +15,7 @@
 
 #include "framework/inkcell_test.h"
 
+#include "inkcell/ui/emoji.h"
 #include "inkcell/ui/fb_capture.h"
 #include "inkcell/ui/fb_draw.h"
 
@@ -407,5 +408,160 @@ INKCELL_TEST_CASE(shapes_wash_fades_from_top_to_bottom, unit) {
     INKCELL_TEST_FAIL_IF(mixed < 185 || mixed > 196, "a wash should blend with what is under it");
 
     inkcell_capture_close(page.capture);
+    record_success(test_name);
+}
+
+/* ---- emoji sprites ------------------------------------------------------------------------ */
+
+static uint16_t shapes_sprite(uint32_t codepoint) {
+    uint16_t sprite = 0U;
+    const uint32_t codepoints[] = {codepoint};
+    return inkcell_emoji_match(codepoints, 1U, &sprite) == 1U ? sprite : UINT16_MAX;
+}
+
+/* The whole pixel, B,G,R as one number: a sprite is not grey, so one channel no longer says
+   everything. */
+static uint32_t shapes_rgb_at(const struct shapes_page *page, int x, int y) {
+    const uint8_t *px = &page->pixels[(size_t)y * page->stride + (size_t)x * 4U];
+    return (uint32_t)px[0] | ((uint32_t)px[1] << 8) | ((uint32_t)px[2] << 16);
+}
+
+/* How many different colours a `box` square at (x, y) holds, up to `limit`. */
+static int shapes_colours(const struct shapes_page *page, int x, int y, int box, int limit) {
+    static uint32_t seen[4096];
+    int count = 0;
+    for (int dy = 0; dy < box; ++dy) {
+        for (int dx = 0; dx < box && count < limit; ++dx) {
+            const uint32_t rgb = shapes_rgb_at(page, x + dx, y + dy);
+            bool known = false;
+            for (int i = 0; i < count && !known; ++i) {
+                known = seen[i] == rgb;
+            }
+            if (!known) {
+                seen[count++] = rgb;
+            }
+        }
+    }
+    return count;
+}
+
+/* A sprite's opacity comes back graded rather than cut: solid inside, transparent in the margin,
+   and a ring of steps between them, which is what the outline is drawn from. */
+INKCELL_TEST_CASE(emoji_sprite_keeps_its_edge_opacity, unit) {
+    const uint16_t sprite = shapes_sprite(0x1F600U); /* grinning face - a disc */
+    INKCELL_TEST_FAIL_IF(sprite == UINT16_MAX, "the grinning face should be in the table");
+
+    uint8_t index[INKCELL_EMOJI_SIZE * INKCELL_EMOJI_SIZE];
+    uint8_t alpha[INKCELL_EMOJI_SIZE * INKCELL_EMOJI_SIZE];
+    inkcell_emoji_decode_alpha(sprite, index, alpha);
+
+    int solid = 0;
+    int partial = 0;
+    for (size_t i = 0; i < sizeof index; ++i) {
+        INKCELL_TEST_FAIL_IF((index[i] == INKCELL_EMOJI_TRANSPARENT) != (alpha[i] == 0U),
+                             "a pixel is transparent by its index and its opacity alike");
+        solid += alpha[i] == 255U;
+        partial += alpha[i] > 0U && alpha[i] < 255U;
+    }
+    INKCELL_TEST_FAIL_IF(solid == 0, "a disc should have a solid interior");
+    INKCELL_TEST_FAIL_IF(partial == 0, "a disc's rim should be partly opaque");
+    INKCELL_TEST_FAIL_IF(alpha[0] != 0U, "the corner of a disc's square is the margin");
+
+    record_success(test_name);
+}
+
+/* The same sprite over black and over white: the interior is the sprite's own on both, the
+   margin is the ground on both, and the rim is neither - it mixes with what is under it. A
+   sprite cut at a threshold would have no pixel in that last group. */
+INKCELL_TEST_CASE(emoji_outline_blends_into_the_ground, unit) {
+    const uint16_t sprite = shapes_sprite(0x1F600U);
+    INKCELL_TEST_FAIL_IF(sprite == UINT16_MAX, "the grinning face should be in the table");
+
+    struct shapes_page dark;
+    struct shapes_page light;
+    INKCELL_TEST_FAIL_IF(!shapes_open(&dark) || !shapes_open(&light), "the captures should open");
+    inkcell_fb_clear(light.state, k_ink);
+
+    const int box = 64;
+    inkcell_fb_draw_emoji_box(dark.state, 20, 20, box, sprite);
+    inkcell_fb_draw_emoji_box(light.state, 20, 20, box, sprite);
+
+    INKCELL_TEST_FAIL_IF(shapes_rgb_at(&dark, 20 + box / 2, 20 + box / 2) !=
+                             shapes_rgb_at(&light, 20 + box / 2, 20 + box / 2),
+                         "the middle of the face is the sprite's own colour on any ground");
+    INKCELL_TEST_FAIL_IF(shapes_rgb_at(&dark, 20, 20) != 0U ||
+                             shapes_rgb_at(&light, 20, 20) != 0xFFFFFFU,
+                         "the corner of the box is the margin, left as the ground");
+
+    int blended = 0;
+    for (int dy = 0; dy < box; ++dy) {
+        for (int dx = 0; dx < box; ++dx) {
+            const uint32_t on_dark = shapes_rgb_at(&dark, 20 + dx, 20 + dy);
+            const uint32_t on_light = shapes_rgb_at(&light, 20 + dx, 20 + dy);
+            blended += on_dark != on_light && on_dark != 0U && on_light != 0xFFFFFFU;
+        }
+    }
+    INKCELL_TEST_FAIL_IF(blended < 20, "the face's outline should blend into the ground");
+
+    inkcell_capture_close(dark.capture);
+    inkcell_capture_close(light.capture);
+    record_success(test_name);
+}
+
+/* Drawn four times its stored size, a sprite is a gradient rather than a grid of squares: a
+   nearest-neighbour enlargement has exactly the colours the sprite had at its own size, and a
+   filtered one has the steps between them too. */
+INKCELL_TEST_CASE(emoji_enlarged_is_smooth, unit) {
+    const uint16_t sprite = shapes_sprite(0x1F600U);
+    INKCELL_TEST_FAIL_IF(sprite == UINT16_MAX, "the grinning face should be in the table");
+
+    struct shapes_page page;
+    INKCELL_TEST_FAIL_IF(!shapes_open(&page), "the capture should open");
+
+    const int stored = INKCELL_EMOJI_SIZE;
+    const int large = 4 * INKCELL_EMOJI_SIZE;
+    inkcell_fb_draw_emoji_box(page.state, 4, 4, stored, sprite);
+    inkcell_fb_draw_emoji_box(page.state, 4, 4 + stored + 4, large, sprite);
+
+    const int at_size = shapes_colours(&page, 4, 4, stored, 4096);
+    const int enlarged = shapes_colours(&page, 4, 4 + stored + 4, large, 4096);
+    INKCELL_TEST_FAIL_IF(enlarged <= 2 * at_size,
+                         "an enlarged sprite should have the colours between its pixels");
+
+    inkcell_capture_close(page.capture);
+    record_success(test_name);
+}
+
+/* Every size from one pixel to past the filter's bound draws inside its box and nowhere else,
+   and past the bound it draws the largest it can, centred. */
+INKCELL_TEST_CASE(emoji_box_stays_in_its_box, unit) {
+    const uint16_t sprite = shapes_sprite(0x1F600U);
+    INKCELL_TEST_FAIL_IF(sprite == UINT16_MAX, "the grinning face should be in the table");
+    INKCELL_TEST_FAIL_IF(inkcell_fb_emoji_box_fit(20) != 20 || inkcell_fb_emoji_box_fit(100) != 100,
+                         "a box inside the bound is used whole");
+    INKCELL_TEST_FAIL_IF(inkcell_fb_emoji_box_fit(INKCELL_FB_EMOJI_BOX_MAX + 40) !=
+                             INKCELL_FB_EMOJI_BOX_MAX,
+                         "a box past the bound is the bound");
+
+    for (int box = 1; box <= (int)SHAPES_W - 16; ++box) {
+        struct shapes_page page;
+        INKCELL_TEST_FAIL_IF(!shapes_open(&page), "the capture should open");
+        inkcell_fb_draw_emoji_box(page.state, 8, 8, box, sprite);
+
+        int inside = 0;
+        for (int y = 0; y < (int)SHAPES_H; ++y) {
+            for (int x = 0; x < (int)SHAPES_W; ++x) {
+                if (shapes_rgb_at(&page, x, y) == 0U) {
+                    continue;
+                }
+                INKCELL_TEST_FAIL_IF(x < 8 || y < 8 || x >= 8 + box || y >= 8 + box,
+                                     "a sprite drew outside the box it was given");
+                ++inside;
+            }
+        }
+        INKCELL_TEST_FAIL_IF(box >= 4 && inside == 0, "a sprite should draw something");
+        inkcell_capture_close(page.capture);
+    }
+
     record_success(test_name);
 }

@@ -1921,13 +1921,157 @@ void inkcell_fb_draw_glyph(const struct inkcell_draw_state *state, int x, int y,
 }
 
 /*
- * The emoji palette, packed into the surface's pixels once.
+ * One sprite, decoded and premultiplied: each channel already carries its pixel's opacity.
  *
- * compose_color() depends only on the surface's pixel format, which never changes while a
- * surface is open, so the 255 palette entries are packed on first use and reused. The signature
- * guards the case of a second open with a different format - the tests do exactly that.
+ * Premultiplied because that is the form a filter can average. Mixing a transparent pixel's
+ * colour into its opaque neighbour's would pull a dark fringe in round every outline - the
+ * transparent margin's colour is whatever the quantiser left there - and weighted by opacity
+ * it contributes nothing, which is what it is.
+ *
+ * A row of identical reactions or a repeated emoji in a name redraws the same sprite many
+ * times per frame, so keep the last one decoded.
  */
-static uint64_t inkcell_fb_format_signature(const struct inkcell_draw_state *state) {
+static const uint8_t (*inkcell_fb_emoji_source(uint16_t sprite))[4] {
+    static uint8_t source[INKCELL_EMOJI_SIZE * INKCELL_EMOJI_SIZE][4];
+    static uint16_t cached_sprite;
+    static bool valid;
+
+    if (!valid || cached_sprite != sprite) {
+        uint8_t index[INKCELL_EMOJI_SIZE * INKCELL_EMOJI_SIZE];
+        uint8_t alpha[INKCELL_EMOJI_SIZE * INKCELL_EMOJI_SIZE];
+        inkcell_emoji_decode_alpha(sprite, index, alpha);
+        /* The palette once, rather than a call per pixel: a sprite is a thousand of them. */
+        static uint8_t palette[256][3];
+        static bool palette_ready;
+        if (!palette_ready) {
+            for (unsigned i = 0; i < 256U; ++i) {
+                if (!inkcell_emoji_color((uint8_t)i, palette[i])) {
+                    memset(palette[i], 0, sizeof palette[i]);
+                }
+            }
+            palette_ready = true;
+        }
+        for (size_t i = 0; i < sizeof index; ++i) {
+            const uint8_t *rgb = palette[index[i]];
+            const uint32_t a = alpha[i];
+            for (size_t c = 0; c < 3U; ++c) {
+                source[i][c] = (uint8_t)((rgb[c] * a + 127U) / 255U);
+            }
+            source[i][3] = (uint8_t)a;
+        }
+        cached_sprite = sprite;
+        valid = true;
+    }
+    return (const uint8_t(*)[4])source;
+}
+
+/*
+ * The box to actually draw a sprite in, given the room for one.
+ *
+ * The room, up to the most the filter below is sized for. A sprite is resampled smoothly to
+ * whatever it is asked for, so there is no multiple of the stored grid worth snapping to - that
+ * was a nearest-neighbour concern, where 81 px was a mix of five- and six-pixel blocks - and a
+ * caller centring what this returns loses none of the key to it.
+ */
+int inkcell_fb_emoji_box_fit(int box) {
+    return box > INKCELL_FB_EMOJI_BOX_MAX ? INKCELL_FB_EMOJI_BOX_MAX : box;
+}
+
+/* The weights one destination pixel takes from a row (or a column) of the sprite. They sum to
+   exactly INKCELL_FB_EMOJI_ONE, so a flat fill comes out the colour it went in. */
+#define INKCELL_FB_EMOJI_ONE 256U
+
+struct inkcell_fb_emoji_taps {
+    uint8_t first;
+    uint8_t count;
+    uint16_t weight[INKCELL_EMOJI_SIZE + 1];
+};
+
+/*
+ * Where destination pixel `d` of `box` samples the sprite along one axis.
+ *
+ * Two filters, one per direction, because each is right only one way. Drawn smaller - a text
+ * cell - a destination pixel covers several source pixels and averages them by how much of
+ * each it covers, so a thin stroke fades rather than vanishing between samples. Drawn larger -
+ * a keycap - it lies between two source pixels and mixes them by distance, which is what turns
+ * a grid of squares into a gradient. Area averaging upward would still be squares, with a
+ * softened seam between each.
+ *
+ * Integer throughout for the reason the anti-aliased shapes are: the golden sheet digests these
+ * pixels on every compiler, and a weight that depended on a float's rounding would be a test
+ * that passes on one machine and not on the next.
+ */
+static void inkcell_fb_emoji_taps(int d, int box, struct inkcell_fb_emoji_taps *out) {
+    const int size = INKCELL_EMOJI_SIZE;
+    if (box >= size) {
+        /* The destination pixel's centre in source pixels is ((2d + 1) * size - box) / (2 * box)
+           - kept as that fraction so nothing rounds before the weight does. */
+        const int centre = (2 * d + 1) * size - box;
+        const int denom = 2 * box;
+        if (centre <= 0) {
+            *out = (struct inkcell_fb_emoji_taps){.first = 0U, .count = 1U};
+            out->weight[0] = INKCELL_FB_EMOJI_ONE;
+            return;
+        }
+        const int left = centre / denom;
+        if (left >= size - 1) {
+            *out = (struct inkcell_fb_emoji_taps){.first = (uint8_t)(size - 1), .count = 1U};
+            out->weight[0] = INKCELL_FB_EMOJI_ONE;
+            return;
+        }
+        const unsigned right_weight =
+            (unsigned)(((centre % denom) * (int)INKCELL_FB_EMOJI_ONE + denom / 2) / denom);
+        *out = (struct inkcell_fb_emoji_taps){.first = (uint8_t)left, .count = 2U};
+        out->weight[0] = (uint16_t)(INKCELL_FB_EMOJI_ONE - right_weight);
+        out->weight[1] = (uint16_t)right_weight;
+        return;
+    }
+
+    /* Measured in 1/box of a source pixel, destination pixel d spans [d * size, (d + 1) * size)
+       and source pixel j spans [j * box, (j + 1) * box). Each weight is the overlap, taken as
+       the difference of two running totals so the rounding cannot leave the sum one short. */
+    const int start = d * size;
+    const int end = start + size;
+    const int first = start / box;
+    const int last = (end - 1) / box;
+    out->first = (uint8_t)first;
+    out->count = (uint8_t)(last - first + 1);
+    int covered = 0;
+    for (int j = first; j <= last; ++j) {
+        const int from = j * box > start ? j * box : start;
+        const int to = (j + 1) * box < end ? (j + 1) * box : end;
+        const int before = covered;
+        covered += to - from;
+        out->weight[j - first] =
+            (uint16_t)((unsigned)covered * INKCELL_FB_EMOJI_ONE / (unsigned)size -
+                       (unsigned)before * INKCELL_FB_EMOJI_ONE / (unsigned)size);
+    }
+}
+
+/*
+ * compose_color() as three tables, one per channel, OR'd together.
+ *
+ * A filtered sprite is hardly ever two neighbouring pixels of one colour, so it packs a colour
+ * per pixel where a glyph packs one per run, and compose_color() is too much arithmetic for
+ * that. It is also exactly separable: a channel's bits land in their own field, and whatever it
+ * adds that is not a channel (an alpha field, or the opaque byte of a 32-bit pixel) is the same
+ * for every colour. So each table holds a channel's bits alone, `fixed` holds the rest, and the
+ * answer is the one compose_color() gives.
+ *
+ * Built once per pixel format; the signature is what notices a second surface in another, which
+ * the tests do.
+ */
+struct inkcell_fb_emoji_packing {
+    uint32_t channel[3][256];
+    uint32_t fixed;
+};
+
+static const struct inkcell_fb_emoji_packing *
+inkcell_fb_emoji_packing(const struct inkcell_draw_state *state) {
+    static struct inkcell_fb_emoji_packing packing;
+    static uint64_t signature;
+    static bool valid;
+
     const struct inkcell_pixel_format *fmt = &state->surface.format;
     uint64_t sig = fmt->bits_per_pixel;
     const struct inkcell_channel *fields[4] = {&fmt->r, &fmt->g, &fmt->b, &fmt->a};
@@ -1935,74 +2079,56 @@ static uint64_t inkcell_fb_format_signature(const struct inkcell_draw_state *sta
         sig = sig * 131U + fields[i]->offset;
         sig = sig * 131U + fields[i]->length;
     }
-    return sig;
-}
-
-#define INKCELL_FB_EMOJI_PALETTE_SLOTS 256
-
-static const uint32_t *inkcell_fb_emoji_palette(const struct inkcell_draw_state *state,
-                                                const bool **opaque_out) {
-    static uint32_t packed[INKCELL_FB_EMOJI_PALETTE_SLOTS];
-    static bool opaque[INKCELL_FB_EMOJI_PALETTE_SLOTS];
-    static uint64_t signature;
-    static bool valid;
-
-    const uint64_t sig = inkcell_fb_format_signature(state);
     if (!valid || sig != signature) {
-        for (size_t i = 0; i < INKCELL_FB_EMOJI_PALETTE_SLOTS; ++i) {
-            uint8_t rgb[3];
-            opaque[i] = inkcell_emoji_color((uint8_t)i, rgb);
-            packed[i] = opaque[i] ? compose_color(state, rgb[0], rgb[1], rgb[2]) : 0U;
+        packing.fixed = compose_color(state, 0U, 0U, 0U);
+        for (unsigned v = 0; v < 256U; ++v) {
+            const uint8_t value = (uint8_t)v;
+            packing.channel[0][v] = compose_color(state, value, 0U, 0U) & ~packing.fixed;
+            packing.channel[1][v] = compose_color(state, 0U, value, 0U) & ~packing.fixed;
+            packing.channel[2][v] = compose_color(state, 0U, 0U, value) & ~packing.fixed;
         }
         signature = sig;
         valid = true;
     }
-    *opaque_out = opaque;
-    return packed;
+    return &packing;
 }
 
-/* Decoding a sprite is a run-length expansion into 256 bytes. A row of identical reactions or a
-   repeated node emoji redraws the same sprite many times per frame, so keep the last one. */
-static const uint8_t *inkcell_fb_emoji_pixels(uint16_t sprite) {
-    static uint8_t pixels[INKCELL_EMOJI_SIZE * INKCELL_EMOJI_SIZE];
-    static uint16_t cached_sprite;
-    static bool valid;
-
-    if (!valid || cached_sprite != sprite) {
-        inkcell_emoji_decode(sprite, pixels);
-        cached_sprite = sprite;
-        valid = true;
+/* One pixel of a sprite, over what is already on the panel at `px`. The colour is
+   premultiplied, so the ground only has to be scaled by what the sprite leaves of it - and an
+   opaque pixel leaves nothing, so it is a store without the read. */
+static inline void inkcell_fb_emoji_store(const struct inkcell_draw_state *state, uint8_t *px,
+                                          size_t bpp, const uint8_t pixel[4],
+                                          const struct inkcell_fb_emoji_packing *packing) {
+    uint8_t mixed[3] = {pixel[0], pixel[1], pixel[2]};
+    if (pixel[3] < 255U) {
+        const struct inkcell_rgb ground = decompose_color(state, inkcell_fb_load_pixel(px, bpp));
+        const uint8_t ground_rgb[3] = {ground.r, ground.g, ground.b};
+        const unsigned keep = 255U - pixel[3];
+        for (size_t c = 0; c < 3U; ++c) {
+            const unsigned value = pixel[c] + (ground_rgb[c] * keep + 127U) / 255U;
+            mixed[c] = (uint8_t)(value > 255U ? 255U : value);
+        }
     }
-    return pixels;
-}
-
-/*
- * The box to actually draw a sprite in, given the room for one.
- *
- * Nearest neighbour divides evenly or it does not: at 81 px a 16 px sprite lands as a mix of
- * five- and six-pixel blocks, and on a face that is one eye a pixel wider than the other. At 80
- * every source pixel is the same 5x5 square, which reads as pixel art rather than as a
- * distortion - so a sprite with room to spare is drawn at the whole multiple that fits and the
- * leftover goes to the margin, where nothing is drawn anyway.
- *
- * Only once there is a multiple worth snapping to. Inside a line of text the box is a text cell
- * - 20 px at the body scale - and rounding that down to 16 would spend a fifth of the glyph to
- * tidy up an unevenness nothing can see at that size.
- */
-int inkcell_fb_emoji_box_fit(int box) {
-    if (box < 2 * INKCELL_EMOJI_SIZE) {
-        return box;
-    }
-    return box - box % INKCELL_EMOJI_SIZE;
+    const uint32_t packed = packing->channel[0][mixed[0]] | packing->channel[1][mixed[1]] |
+                            packing->channel[2][mixed[2]] | packing->fixed;
+    inkcell_fb_store_span(px, 1, packed, bpp);
 }
 
 /*
  * Draw one emoji sprite into a square `box` pixels on a side, top-left at (x, y).
  *
- * Sampling is nearest-neighbour from the stored 16x16, and anything smoother would need to
- * blend against a background this function cannot see (rows under the cursor are filled a
- * different colour). In a text cell that is a small upscale of pixel art - 15 px at the tab
- * scale, 20 px at the body scale - and the staircase is invisible on fills this flat.
+ * Resampled in two passes - across each source row into `across`, then down those columns - with
+ * the weights inkcell_fb_emoji_taps() gives, and blended at the edge into whatever is under it.
+ * That blend used to be the reason this was nearest-neighbour: the ground a sprite lands on is
+ * not one colour (rows under the cursor are filled differently) and a caller could not say what
+ * it was. It no longer has to. This backend draws into a buffer in RAM and reads the ground back
+ * - see the anti-aliased shapes above - so only a partly opaque pixel costs a read, and there is
+ * only a ring of those.
+ *
+ * A row is clipped once and then written a pixel at a time through a packing table, because a
+ * filtered sprite has almost no runs to coalesce - it is a gradient, which is the point - and
+ * at a keycap's size a trip through the clip and compose_color() for every pixel would be most
+ * of what a page of forty of them costs.
  *
  * Emoji carry no ink colour and take none. Their own is the point of having them: the red of a
  * flag and the yellow of a lightning bolt are most of what makes one recognisable at 20 px.
@@ -2012,77 +2138,114 @@ void inkcell_fb_draw_emoji_box(const struct inkcell_draw_state *state, int x, in
     if (box <= 0) {
         return;
     }
+    /* Larger than the filter is sized for: the largest it can do, centred in what was asked.
+       Nothing on a real panel asks for this; the capture tool at a wide geometry can. */
+    const int drawn = inkcell_fb_emoji_box_fit(box);
+    x += (box - drawn) / 2;
+    top += (box - drawn) / 2;
 
-    const uint8_t *pixels = inkcell_fb_emoji_pixels(sprite);
-    const bool *opaque = NULL;
-    const uint32_t *palette = inkcell_fb_emoji_palette(state, &opaque);
+    const uint8_t(*source)[4] = inkcell_fb_emoji_source(sprite);
+    const struct inkcell_fb_emoji_packing *packing = inkcell_fb_emoji_packing(state);
+    const size_t bpp = state->surface.bytes_per_pixel;
+    const size_t stride = state->surface.stride;
 
-    /*
-     * A whole multiple - what inkcell_fb_emoji_box_fit() hands back, so every keycap - is walked in
-     * *source* pixels rather than destination ones: each one is a square block, so a run of
-     * equal neighbours is one rectangle however large the block is.
-     *
-     * Same pixels as the general path below, which is why this is a fast path rather than a
-     * second renderer: at a keycap's size that one would compare a palette index per
-     * destination pixel, and a page of forty sprites at five times each is a quarter of a
-     * million of them for a grid that redraws on every press.
-     *
-     * It is also where a box too wide for the general path's column map lands, snapped to the
-     * whole multiple inside it and centred in what was asked for. The alternative was the bug
-     * this replaced: the bound sat above this path although this path has no use for the map,
-     * so on a panel with room for a key over INKCELL_FB_EMOJI_BOX_MAX across - which the capture
-     * tool will render - every emoji keycap drew nothing at all and the focused one drew a bare
-     * fill. A cap costing a shift of at most fifteen pixels at that size is one nobody sees.
-     */
-    const int drawn = box > INKCELL_FB_EMOJI_BOX_MAX ? inkcell_fb_emoji_box_fit(box) : box;
-    if (drawn % INKCELL_EMOJI_SIZE == 0) {
-        const int block = drawn / INKCELL_EMOJI_SIZE;
-        const int inset = (box - drawn) / 2;
-        for (int sy = 0; sy < INKCELL_EMOJI_SIZE; ++sy) {
-            const uint8_t *src_row = &pixels[sy * INKCELL_EMOJI_SIZE];
-            int sx = 0;
-            while (sx < INKCELL_EMOJI_SIZE) {
-                const uint8_t index = src_row[sx];
-                int end = sx + 1;
-                while (end < INKCELL_EMOJI_SIZE && src_row[end] == index) {
-                    ++end;
-                }
-                if (opaque[index]) {
-                    inkcell_fb_fill_packed(state, x + inset + sx * block, top + inset + sy * block,
-                                           (end - sx) * block, block, palette[index]);
-                }
-                sx = end;
-            }
+    /* Static rather than on the stack: together they are tens of kilobytes, and this backend
+       draws from one thread. The column taps are the same for every row, so they are worked out
+       once per call. */
+    static struct inkcell_fb_emoji_taps columns[INKCELL_FB_EMOJI_BOX_MAX];
+    static uint16_t across[INKCELL_EMOJI_SIZE][INKCELL_FB_EMOJI_BOX_MAX][4];
+    bool across_ready = false;
+
+    for (int dy = 0; dy < drawn; ++dy) {
+        /* Clipped first, and once per row rather than per pixel: the box says which of the
+           row's pixels land and how far into the row the first of them is. A frame that
+           repaints one band - a press on the keyboard is one - leaves most sprites wholly
+           outside it, and those cost a clip per row and no filtering at all. */
+        struct inkcell_fb_clipped_box span;
+        if (!inkcell_fb_clip_box(state, x, top + dy, drawn, 1, &span)) {
+            continue;
         }
-        return;
-    }
+        uint8_t *out = state->surface.pixels + (size_t)span.y * stride + (size_t)span.x * bpp;
+        if ((size_t)(out - state->surface.pixels) + (size_t)span.w * bpp > state->surface.size) {
+            continue;
+        }
 
-    /* Nearest-neighbour source column per destination column. Identical for every row, so the
-       division runs once per column instead of once per pixel. Anything wider than the map has
-       already been drawn above, so this is only ever a text cell's worth. */
-    int sx_map[INKCELL_FB_EMOJI_BOX_MAX];
-    if (box > (int)(sizeof sx_map / sizeof sx_map[0])) {
-        return;
-    }
-    for (int dx = 0; dx < box; ++dx) {
-        sx_map[dx] = dx * INKCELL_EMOJI_SIZE / box;
-    }
+        if (!across_ready) {
+            for (int dx = 0; dx < drawn; ++dx) {
+                inkcell_fb_emoji_taps(dx, drawn, &columns[dx]);
+            }
+            for (int sy = 0; sy < INKCELL_EMOJI_SIZE; ++sy) {
+                const uint8_t(*row)[4] = &source[sy * INKCELL_EMOJI_SIZE];
+                for (int dx = 0; dx < drawn; ++dx) {
+                    const struct inkcell_fb_emoji_taps *taps = &columns[dx];
+                    uint16_t *to = across[sy][dx];
+                    if (taps->count == 2U) {
+                        /* Every enlargement, and so every keycap: written out, because a loop
+                           over a count the compiler cannot see is most of the cost. */
+                        const uint8_t *a = row[taps->first];
+                        const uint8_t *b = row[taps->first + 1U];
+                        const unsigned wa = taps->weight[0];
+                        const unsigned wb = taps->weight[1];
+                        for (size_t c = 0; c < 4U; ++c) {
+                            to[c] = (uint16_t)(a[c] * wa + b[c] * wb);
+                        }
+                        continue;
+                    }
+                    unsigned sum[4] = {0U, 0U, 0U, 0U};
+                    for (unsigned t = 0; t < taps->count; ++t) {
+                        const uint8_t *px = row[taps->first + t];
+                        for (size_t c = 0; c < 4U; ++c) {
+                            sum[c] += px[c] * (unsigned)taps->weight[t];
+                        }
+                    }
+                    for (size_t c = 0; c < 4U; ++c) {
+                        to[c] = (uint16_t)sum[c];
+                    }
+                }
+            }
+            across_ready = true;
+        }
 
-    /* Emoji are mostly flat fills, so coalescing equal-index neighbours into one span turns
-       most rows into a handful of writes. */
-    for (int dy = 0; dy < box; ++dy) {
-        const uint8_t *src_row = &pixels[(dy * INKCELL_EMOJI_SIZE / box) * INKCELL_EMOJI_SIZE];
-        int dx = 0;
-        while (dx < box) {
-            const uint8_t index = src_row[sx_map[dx]];
-            int end = dx + 1;
-            while (end < box && src_row[sx_map[end]] == index) {
-                ++end;
+        struct inkcell_fb_emoji_taps rows;
+        inkcell_fb_emoji_taps(dy, drawn, &rows);
+        for (int i = 0; i < span.w; ++i, out += bpp) {
+            const int dx = span.dx + i;
+            /* Opacity first: the margin is a good share of every sprite, and a pixel with none
+               has no colour to work out either - premultiplied, it is all zero. */
+            uint32_t sum[4] = {0U, 0U, 0U, 0U};
+            if (rows.count == 2U) {
+                const uint16_t *a = across[rows.first][dx];
+                const uint16_t *b = across[rows.first + 1U][dx];
+                if ((a[3] | b[3]) == 0U) {
+                    continue;
+                }
+                for (size_t c = 0; c < 4U; ++c) {
+                    sum[c] = a[c] * (uint32_t)rows.weight[0] + b[c] * (uint32_t)rows.weight[1];
+                }
+            } else {
+                for (unsigned t = 0; t < rows.count; ++t) {
+                    sum[3] += across[rows.first + t][dx][3] * (uint32_t)rows.weight[t];
+                }
+                if (sum[3] == 0U) {
+                    continue;
+                }
+                for (unsigned t = 0; t < rows.count; ++t) {
+                    const uint16_t *px = across[rows.first + t][dx];
+                    for (size_t c = 0; c < 3U; ++c) {
+                        sum[c] += px[c] * (uint32_t)rows.weight[t];
+                    }
+                }
             }
-            if (opaque[index]) {
-                inkcell_fb_fill_packed(state, x + dx, top + dy, end - dx, 1, palette[index]);
+            uint8_t pixel[4];
+            const uint32_t half = INKCELL_FB_EMOJI_ONE * INKCELL_FB_EMOJI_ONE / 2U;
+            for (size_t c = 0; c < 4U; ++c) {
+                const uint32_t value =
+                    (sum[c] + half) / (INKCELL_FB_EMOJI_ONE * INKCELL_FB_EMOJI_ONE);
+                pixel[c] = (uint8_t)(value > 255U ? 255U : value);
             }
-            dx = end;
+            if (pixel[3] != 0U) {
+                inkcell_fb_emoji_store(state, out, bpp, pixel, packing);
+            }
         }
     }
 }
