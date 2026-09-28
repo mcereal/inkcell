@@ -21,6 +21,7 @@
 
 #include <limits.h>
 #include <stdint.h>
+#include <string.h>
 
 #define SHAPES_W 256U
 #define SHAPES_H 256U
@@ -426,46 +427,29 @@ static uint32_t shapes_rgb_at(const struct shapes_page *page, int x, int y) {
     return (uint32_t)px[0] | ((uint32_t)px[1] << 8) | ((uint32_t)px[2] << 16);
 }
 
-/* How many different colours a `box` square at (x, y) holds, up to `limit`. */
-static int shapes_colours(const struct shapes_page *page, int x, int y, int box, int limit) {
-    static uint32_t seen[4096];
-    int count = 0;
-    for (int dy = 0; dy < box; ++dy) {
-        for (int dx = 0; dx < box && count < limit; ++dx) {
-            const uint32_t rgb = shapes_rgb_at(page, x + dx, y + dy);
-            bool known = false;
-            for (int i = 0; i < count && !known; ++i) {
-                known = seen[i] == rgb;
-            }
-            if (!known) {
-                seen[count++] = rgb;
-            }
-        }
-    }
-    return count;
-}
-
-/* A sprite's opacity comes back graded rather than cut: solid inside, transparent in the margin,
-   and a ring of steps between them, which is what the outline is drawn from. */
-INKCELL_TEST_CASE(emoji_sprite_keeps_its_edge_opacity, unit) {
+/* An emoji's opacity comes out graded rather than cut: solid inside, transparent in the margin,
+   and a ring of steps between them, which is the outline's anti-aliasing. */
+INKCELL_TEST_CASE(emoji_keeps_its_edge_opacity, unit) {
     const uint16_t sprite = shapes_sprite(0x1F600U); /* grinning face - a disc */
     INKCELL_TEST_FAIL_IF(sprite == UINT16_MAX, "the grinning face should be in the table");
 
-    uint8_t index[INKCELL_EMOJI_SIZE * INKCELL_EMOJI_SIZE];
-    uint8_t alpha[INKCELL_EMOJI_SIZE * INKCELL_EMOJI_SIZE];
-    inkcell_emoji_decode_alpha(sprite, index, alpha);
+    static uint8_t pixels[32 * 32][4];
+    INKCELL_TEST_FAIL_IF(inkcell_emoji_render(sprite, 32, 0, 32, pixels) != 0,
+                         "the grinning face should render");
 
     int solid = 0;
     int partial = 0;
-    for (size_t i = 0; i < sizeof index; ++i) {
-        INKCELL_TEST_FAIL_IF((index[i] == INKCELL_EMOJI_TRANSPARENT) != (alpha[i] == 0U),
-                             "a pixel is transparent by its index and its opacity alike");
-        solid += alpha[i] == 255U;
-        partial += alpha[i] > 0U && alpha[i] < 255U;
+    for (size_t i = 0; i < 32U * 32U; ++i) {
+        for (size_t c = 0; c < 3U; ++c) {
+            INKCELL_TEST_FAIL_IF(pixels[i][c] > pixels[i][3],
+                                 "a premultiplied channel is never brighter than its opacity");
+        }
+        solid += pixels[i][3] == 255U;
+        partial += pixels[i][3] > 0U && pixels[i][3] < 255U;
     }
     INKCELL_TEST_FAIL_IF(solid == 0, "a disc should have a solid interior");
     INKCELL_TEST_FAIL_IF(partial == 0, "a disc's rim should be partly opaque");
-    INKCELL_TEST_FAIL_IF(alpha[0] != 0U, "the corner of a disc's square is the margin");
+    INKCELL_TEST_FAIL_IF(pixels[0][3] != 0U, "the corner of a disc's square is the margin");
 
     record_success(test_name);
 }
@@ -508,27 +492,58 @@ INKCELL_TEST_CASE(emoji_outline_blends_into_the_ground, unit) {
     record_success(test_name);
 }
 
-/* Drawn four times its stored size, a sprite is a gradient rather than a grid of squares: a
-   nearest-neighbour enlargement has exactly the colours the sprite had at its own size, and a
-   filtered one has the steps between them too. */
-INKCELL_TEST_CASE(emoji_enlarged_is_smooth, unit) {
+/*
+ * Drawn large, an emoji's edge is as sharp as it is drawn small: one pixel of anti-aliasing
+ * between the ground and the solid disc, whatever the size.
+ *
+ * This is the property the outlines exist for. A bitmap stored at one size and enlarged has an
+ * edge as wide as the enlargement - four pixels of ramp at four times - because the filter can
+ * only spread the one stored pixel of edge across the pixels it became.
+ */
+INKCELL_TEST_CASE(emoji_enlarged_stays_sharp, unit) {
     const uint16_t sprite = shapes_sprite(0x1F600U);
     INKCELL_TEST_FAIL_IF(sprite == UINT16_MAX, "the grinning face should be in the table");
 
-    struct shapes_page page;
-    INKCELL_TEST_FAIL_IF(!shapes_open(&page), "the capture should open");
+    static uint8_t band[INKCELL_EMOJI_BAND * 128][4];
+    for (int box = 16; box <= 128; box *= 2) {
+        /* The disc's widest row is its middle, and the band holding it is the one to draw. */
+        const int first = box / 2 - (box < INKCELL_EMOJI_BAND ? box : INKCELL_EMOJI_BAND) / 2;
+        const int rows = box < INKCELL_EMOJI_BAND ? box : INKCELL_EMOJI_BAND;
+        INKCELL_TEST_FAIL_IF(inkcell_emoji_render(sprite, box, first, rows, band) != 0,
+                             "the grinning face should render");
+        uint8_t(*middle)[4] = &band[(size_t)(box / 2 - first) * (size_t)box];
+        int ramp = 0;
+        for (int x = 0; x < box / 2 && middle[x][3] < 255U; ++x) {
+            ramp += middle[x][3] > 0U;
+        }
+        INKCELL_TEST_FAIL_IF(ramp > 2, "an enlarged edge should stay a pixel or two wide");
+        INKCELL_TEST_FAIL_IF(middle[box / 2][3] != 255U, "the middle of the face is solid");
+    }
 
-    const int stored = INKCELL_EMOJI_SIZE;
-    const int large = 4 * INKCELL_EMOJI_SIZE;
-    inkcell_fb_draw_emoji_box(page.state, 4, 4, stored, sprite);
-    inkcell_fb_draw_emoji_box(page.state, 4, 4 + stored + 4, large, sprite);
+    record_success(test_name);
+}
 
-    const int at_size = shapes_colours(&page, 4, 4, stored, 4096);
-    const int enlarged = shapes_colours(&page, 4, 4 + stored + 4, large, 4096);
-    INKCELL_TEST_FAIL_IF(enlarged <= 2 * at_size,
-                         "an enlarged sprite should have the colours between its pixels");
+/* A large emoji drawn in bands is the same emoji drawn in any other bands: a row depends on the
+   outline and the size, never on where the band it was drawn in started. */
+INKCELL_TEST_CASE(emoji_bands_agree, unit) {
+    const uint16_t sprite = shapes_sprite(0x1F98AU); /* the fox - curves, points, layers */
+    INKCELL_TEST_FAIL_IF(sprite == UINT16_MAX, "the fox should be in the table");
 
-    inkcell_capture_close(page.capture);
+    const int box = 96;
+    static uint8_t whole[96 * 96][4];
+    static uint8_t band[INKCELL_EMOJI_BAND * 96][4];
+    for (int first = 0; first < box; first += INKCELL_EMOJI_BAND) {
+        INKCELL_TEST_FAIL_IF(
+            inkcell_emoji_render(sprite, box, first, INKCELL_EMOJI_BAND, &whole[first * box]) != 0,
+            "the fox should render");
+    }
+    for (int first = 5; first + 7 <= box; first += 7) {
+        INKCELL_TEST_FAIL_IF(inkcell_emoji_render(sprite, box, first, 7, band) != 0,
+                             "the fox should render in any band");
+        INKCELL_TEST_FAIL_IF(memcmp(band, &whole[first * box], (size_t)(7 * box) * 4U) != 0,
+                             "a band should match the same rows drawn in another band");
+    }
+
     record_success(test_name);
 }
 

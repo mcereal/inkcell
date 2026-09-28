@@ -1,39 +1,264 @@
 #include "inkcell/ui/emoji.h"
 
+#include "emoji_internal.h"
 #include "inkcell/ui/font5x7.h"
+#include "inkwell/base/file.h"
 #include "inkwell/base/text.h"
 
+#include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 
-/* Deepest sequence the generator emits is nine codepoints; the walker never needs more. */
-#define EMOJI_MAX_LOOKAHEAD 16
+/* The walker reads this far ahead, which is as long as any sequence the pack may hold. */
+#define EMOJI_MAX_LOOKAHEAD INKCELL_EMOJI_LONGEST
 
-static const struct inkcell_emoji_single *emoji_find_single(uint32_t codepoint) {
-    const struct inkcell_emoji_table *table = &inkcell_emoji_table;
-    uint32_t low = 0;
-    uint32_t high = table->single_count;
-    while (low < high) {
-        const uint32_t mid = low + (high - low) / 2U;
-        if (table->singles[mid].codepoint < codepoint) {
-            low = mid + 1U;
-        } else {
-            high = mid;
-        }
+#define EMOJI_HEADER_BYTES 44U
+#define EMOJI_VERSION 1U
+#define EMOJI_SINGLE_BYTES 8U
+#define EMOJI_SEQUENCE_BYTES 12U
+#define EMOJI_LAYER_BYTES 4U
+
+/*
+ * The pack in use. Unset until something first asks, so that a program which hands its own
+ * pack over before drawing never parses the built-in one, and one that never draws an emoji
+ * never parses anything.
+ */
+static struct inkcell_emoji_pack g_pack;
+static enum { EMOJI_UNSET, EMOJI_READY, EMOJI_NONE } g_state = EMOJI_UNSET;
+/* What inkcell_emoji_load_file() read, kept for as long as it is the pack in use. */
+static uint8_t *g_loaded;
+static uint32_t g_generation;
+
+/* Take `bytes` bytes off the front of what is left, or fail: every section is located this
+   way, so a count that claims more than the pack holds is caught here and nowhere later. */
+static const uint8_t *emoji_take(const uint8_t **at, size_t *left, uint64_t bytes) {
+    if (bytes > *left) {
+        return NULL;
     }
-    if (low < table->single_count && table->singles[low].codepoint == codepoint) {
-        return &table->singles[low];
-    }
-    return NULL;
+    const uint8_t *section = *at;
+    *at += bytes;
+    *left -= (size_t)bytes;
+    return section;
 }
 
-/* First entry whose leading codepoint is `codepoint`, or the count when there is none. */
-static uint32_t emoji_sequence_lower_bound(uint32_t codepoint) {
-    const struct inkcell_emoji_table *table = &inkcell_emoji_table;
+/* Offsets that never step backwards and end inside what they index. */
+static int emoji_offsets_ok(const uint8_t *offsets, uint32_t count, uint32_t limit) {
+    uint32_t previous = 0U;
+    for (uint32_t i = 0; i <= count; ++i) {
+        const uint32_t offset = inkcell_emoji_le32(&offsets[(size_t)i * 4U]);
+        if (offset < previous || offset > limit) {
+            return 0;
+        }
+        previous = offset;
+    }
+    return inkcell_emoji_le32(offsets) == 0U;
+}
+
+/*
+ * Parse and check a whole pack. Everything the rasteriser and the match later index by is
+ * bounded here - a layer's path and colour, a glyph's layers, an entry's glyph and tail - so
+ * that a pack which arrived as a file, and could be anything, cannot send either of them out
+ * of the bytes. The one thing left to check as it is read is the path data itself, whose
+ * varints the rasteriser decodes against its path's end.
+ */
+static int emoji_parse(const uint8_t *bytes, size_t size, struct inkcell_emoji_pack *pack) {
+    if (bytes == NULL || size < EMOJI_HEADER_BYTES || memcmp(bytes, "ICEM", 4U) != 0 ||
+        inkcell_emoji_le16(&bytes[4]) != EMOJI_VERSION) {
+        return -EINVAL;
+    }
+    struct inkcell_emoji_pack p = {0};
+    p.grid = inkcell_emoji_le16(&bytes[6]);
+    p.colour_count = inkcell_emoji_le32(&bytes[8]);
+    p.path_count = inkcell_emoji_le32(&bytes[12]);
+    const uint32_t path_bytes = inkcell_emoji_le32(&bytes[16]);
+    p.glyph_count = inkcell_emoji_le32(&bytes[20]);
+    const uint32_t layer_count = inkcell_emoji_le32(&bytes[24]);
+    p.single_count = inkcell_emoji_le32(&bytes[28]);
+    p.sequence_count = inkcell_emoji_le32(&bytes[32]);
+    p.tail_count = inkcell_emoji_le32(&bytes[36]);
+    p.longest = bytes[40];
+    if (p.grid == 0U || p.longest > INKCELL_EMOJI_LONGEST || p.glyph_count > UINT16_MAX + 1U) {
+        return -EINVAL;
+    }
+
+    const uint8_t *at = bytes + EMOJI_HEADER_BYTES;
+    size_t left = size - EMOJI_HEADER_BYTES;
+    p.colours = emoji_take(&at, &left, (uint64_t)p.colour_count * 4U);
+    p.path_offsets = emoji_take(&at, &left, ((uint64_t)p.path_count + 1U) * 4U);
+    p.paths = emoji_take(&at, &left, path_bytes);
+    p.layer_offsets = emoji_take(&at, &left, ((uint64_t)p.glyph_count + 1U) * 4U);
+    p.layers = emoji_take(&at, &left, (uint64_t)layer_count * EMOJI_LAYER_BYTES);
+    p.singles = emoji_take(&at, &left, (uint64_t)p.single_count * EMOJI_SINGLE_BYTES);
+    p.sequences = emoji_take(&at, &left, (uint64_t)p.sequence_count * EMOJI_SEQUENCE_BYTES);
+    p.tail = emoji_take(&at, &left, (uint64_t)p.tail_count * 4U);
+    if (p.colours == NULL || p.path_offsets == NULL || p.paths == NULL || p.layer_offsets == NULL ||
+        p.layers == NULL || p.singles == NULL || p.sequences == NULL || p.tail == NULL ||
+        left != 0U) {
+        return -EINVAL;
+    }
+
+    if (!emoji_offsets_ok(p.path_offsets, p.path_count, path_bytes) ||
+        !emoji_offsets_ok(p.layer_offsets, p.glyph_count, layer_count)) {
+        return -EINVAL;
+    }
+    for (uint32_t i = 0; i < layer_count; ++i) {
+        const uint8_t *layer = &p.layers[(size_t)i * EMOJI_LAYER_BYTES];
+        if (inkcell_emoji_le16(layer) >= p.path_count ||
+            inkcell_emoji_le16(&layer[2]) >= p.colour_count) {
+            return -EINVAL;
+        }
+    }
+    for (uint32_t i = 0; i < p.single_count; ++i) {
+        if (inkcell_emoji_le16(&p.singles[(size_t)i * EMOJI_SINGLE_BYTES + 4U]) >= p.glyph_count) {
+            return -EINVAL;
+        }
+    }
+    for (uint32_t i = 0; i < p.sequence_count; ++i) {
+        const uint8_t *entry = &p.sequences[(size_t)i * EMOJI_SEQUENCE_BYTES];
+        const uint32_t tail = inkcell_emoji_le32(&entry[4]);
+        const uint8_t length = entry[10];
+        if (inkcell_emoji_le16(&entry[8]) >= p.glyph_count || length < 2U || length > p.longest ||
+            (uint64_t)tail + length - 1U > p.tail_count) {
+            return -EINVAL;
+        }
+    }
+
+    *pack = p;
+    return 0;
+}
+
+uint32_t inkcell_emoji_generation(void) {
+    return g_generation;
+}
+
+const struct inkcell_emoji_pack *inkcell_emoji_pack(void) {
+    if (g_state == EMOJI_UNSET) {
+        size_t size = 0U;
+        const uint8_t *builtin = inkcell_emoji_builtin(&size);
+        g_state =
+            builtin != NULL && emoji_parse(builtin, size, &g_pack) == 0 ? EMOJI_READY : EMOJI_NONE;
+    }
+    return g_state == EMOJI_READY ? &g_pack : NULL;
+}
+
+int inkcell_emoji_use_pack(const void *bytes, size_t size) {
+    if (bytes == NULL) {
+        g_generation++;
+        g_state = EMOJI_NONE;
+        free(g_loaded);
+        g_loaded = NULL;
+        return 0;
+    }
+    struct inkcell_emoji_pack parsed;
+    const int rc = emoji_parse(bytes, size, &parsed);
+    if (rc != 0) {
+        return rc;
+    }
+    g_generation++;
+    g_pack = parsed;
+    g_state = EMOJI_READY;
+    if ((const uint8_t *)bytes != g_loaded) {
+        free(g_loaded);
+        g_loaded = NULL;
+    }
+    return 0;
+}
+
+int inkcell_emoji_use_builtin(void) {
+    free(g_loaded);
+    g_loaded = NULL;
+    g_generation++;
+    g_state = EMOJI_UNSET;
+    return inkcell_emoji_pack() != NULL ? 0 : -ENOENT;
+}
+
+/* Generous for a pack of every emoji there is, and a refusal rather than an allocation of
+   whatever a stray path names. */
+#define EMOJI_FILE_MAX (16U * 1024U * 1024U)
+
+int inkcell_emoji_load_file(const char *path) {
+    size_t size = 0U;
+    uint8_t *bytes = inkwell_file_read(path, EMOJI_FILE_MAX, &size);
+    if (bytes == NULL) {
+        return -ENOENT;
+    }
+    struct inkcell_emoji_pack parsed;
+    const int rc = emoji_parse(bytes, size, &parsed);
+    if (rc != 0) {
+        free(bytes);
+        return rc;
+    }
+    free(g_loaded);
+    g_loaded = bytes;
+    g_generation++;
+    g_pack = parsed;
+    g_state = EMOJI_READY;
+    return 0;
+}
+
+bool inkcell_emoji_available(void) {
+    return inkcell_emoji_pack() != NULL;
+}
+
+int inkcell_emoji_summary(struct inkcell_emoji_summary *out) {
+    const struct inkcell_emoji_pack *pack = inkcell_emoji_pack();
+    if (pack == NULL || out == NULL) {
+        return -ENOENT;
+    }
+    *out = (struct inkcell_emoji_summary){.glyphs = pack->glyph_count,
+                                          .singles = pack->single_count,
+                                          .sequences = pack->sequence_count,
+                                          .longest = pack->longest};
+    return 0;
+}
+
+static uint32_t emoji_single_codepoint(const struct inkcell_emoji_pack *pack, uint32_t i) {
+    return inkcell_emoji_le32(&pack->singles[(size_t)i * EMOJI_SINGLE_BYTES]);
+}
+
+static uint32_t emoji_sequence_first(const struct inkcell_emoji_pack *pack, uint32_t i) {
+    return inkcell_emoji_le32(&pack->sequences[(size_t)i * EMOJI_SEQUENCE_BYTES]);
+}
+
+size_t inkcell_emoji_entry(uint32_t index, uint32_t codepoints[INKCELL_EMOJI_LONGEST],
+                           uint16_t *sprite) {
+    const struct inkcell_emoji_pack *pack = inkcell_emoji_pack();
+    if (pack == NULL || codepoints == NULL) {
+        return 0U;
+    }
+    if (index < pack->single_count) {
+        codepoints[0] = emoji_single_codepoint(pack, index);
+        if (sprite != NULL) {
+            *sprite = inkcell_emoji_le16(&pack->singles[(size_t)index * EMOJI_SINGLE_BYTES + 4U]);
+        }
+        return 1U;
+    }
+    index -= pack->single_count;
+    if (index >= pack->sequence_count) {
+        return 0U;
+    }
+    const uint8_t *entry = &pack->sequences[(size_t)index * EMOJI_SEQUENCE_BYTES];
+    const uint8_t *tail = &pack->tail[(size_t)inkcell_emoji_le32(&entry[4]) * 4U];
+    const uint8_t length = entry[10];
+    codepoints[0] = inkcell_emoji_le32(entry);
+    for (uint8_t part = 1; part < length; ++part) {
+        codepoints[part] = inkcell_emoji_le32(&tail[(size_t)(part - 1U) * 4U]);
+    }
+    if (sprite != NULL) {
+        *sprite = inkcell_emoji_le16(&entry[8]);
+    }
+    return length;
+}
+
+/* First index in [0, count) whose key is not below `codepoint`, over a table of `width`-byte
+   rows keyed by the u32 at their front: both lookup tables are bisected this way. */
+static uint32_t emoji_lower_bound(const uint8_t *rows, uint32_t count, size_t width,
+                                  uint32_t codepoint) {
     uint32_t low = 0;
-    uint32_t high = table->sequence_count;
+    uint32_t high = count;
     while (low < high) {
         const uint32_t mid = low + (high - low) / 2U;
-        if (table->sequences[mid].first < codepoint) {
+        if (inkcell_emoji_le32(&rows[(size_t)mid * width]) < codepoint) {
             low = mid + 1U;
         } else {
             high = mid;
@@ -43,97 +268,43 @@ static uint32_t emoji_sequence_lower_bound(uint32_t codepoint) {
 }
 
 size_t inkcell_emoji_match(const uint32_t *codepoints, size_t count, uint16_t *sprite) {
-    if (codepoints == NULL || count == 0U) {
+    const struct inkcell_emoji_pack *pack = inkcell_emoji_pack();
+    if (pack == NULL || codepoints == NULL || count == 0U) {
         return 0U;
     }
 
-    const struct inkcell_emoji_table *table = &inkcell_emoji_table;
-
     /* Sequences are stored longest first within a leading codepoint, so the first one that
        fits is the greediest match: a regional-indicator pair is a flag, not two letters. */
-    for (uint32_t i = emoji_sequence_lower_bound(codepoints[0]);
-         i < table->sequence_count && table->sequences[i].first == codepoints[0]; ++i) {
-        const struct inkcell_emoji_sequence *entry = &table->sequences[i];
-        if (entry->length > count) {
+    for (uint32_t i = emoji_lower_bound(pack->sequences, pack->sequence_count, EMOJI_SEQUENCE_BYTES,
+                                        codepoints[0]);
+         i < pack->sequence_count && emoji_sequence_first(pack, i) == codepoints[0]; ++i) {
+        const uint8_t *entry = &pack->sequences[(size_t)i * EMOJI_SEQUENCE_BYTES];
+        const uint8_t length = entry[10];
+        if (length > count) {
             continue;
         }
-        const uint32_t *tail = &table->sequence_tail[entry->tail];
+        const uint8_t *tail = &pack->tail[(size_t)inkcell_emoji_le32(&entry[4]) * 4U];
         bool matched = true;
-        for (uint8_t part = 1; part < entry->length; ++part) {
-            if (codepoints[part] != tail[part - 1U]) {
-                matched = false;
-                break;
-            }
+        for (uint8_t part = 1; part < length && matched; ++part) {
+            matched = codepoints[part] == inkcell_emoji_le32(&tail[(size_t)(part - 1U) * 4U]);
         }
         if (matched) {
             if (sprite != NULL) {
-                *sprite = entry->sprite;
+                *sprite = inkcell_emoji_le16(&entry[8]);
             }
-            return entry->length;
+            return length;
         }
     }
 
-    const struct inkcell_emoji_single *single = emoji_find_single(codepoints[0]);
-    if (single != NULL) {
+    const uint32_t single =
+        emoji_lower_bound(pack->singles, pack->single_count, EMOJI_SINGLE_BYTES, codepoints[0]);
+    if (single < pack->single_count && emoji_single_codepoint(pack, single) == codepoints[0]) {
         if (sprite != NULL) {
-            *sprite = single->sprite;
+            *sprite = inkcell_emoji_le16(&pack->singles[(size_t)single * EMOJI_SINGLE_BYTES + 4U]);
         }
         return 1U;
     }
     return 0U;
-}
-
-void inkcell_emoji_decode(uint16_t sprite, uint8_t out[INKCELL_EMOJI_SIZE * INKCELL_EMOJI_SIZE]) {
-    inkcell_emoji_decode_alpha(sprite, out, NULL);
-}
-
-void inkcell_emoji_decode_alpha(uint16_t sprite,
-                                uint8_t index[INKCELL_EMOJI_SIZE * INKCELL_EMOJI_SIZE],
-                                uint8_t alpha[INKCELL_EMOJI_SIZE * INKCELL_EMOJI_SIZE]) {
-    const size_t pixels = (size_t)INKCELL_EMOJI_SIZE * INKCELL_EMOJI_SIZE;
-    if (index == NULL) {
-        return;
-    }
-    memset(index, INKCELL_EMOJI_TRANSPARENT, pixels);
-    if (alpha != NULL) {
-        memset(alpha, 0, pixels);
-    }
-
-    const struct inkcell_emoji_table *table = &inkcell_emoji_table;
-    const uint32_t start = table->run_offsets[sprite];
-    const uint32_t end = table->run_offsets[sprite + 1U];
-
-    size_t written = 0;
-    for (uint32_t run = start; run < end && written < pixels; ++run) {
-        const uint8_t head = table->runs[run * 2U];
-        const uint8_t value = table->runs[run * 2U + 1U];
-        const unsigned count = (head & 0x1FU) + 1U;
-        /* A level widens to the top of its step, so the most opaque of eight is 255 exactly and
-           an interior pixel is drawn as a store rather than a blend. */
-        const uint8_t opacity =
-            value == INKCELL_EMOJI_TRANSPARENT ? 0U : (uint8_t)((head & 0xE0U) | 0x1FU);
-        for (unsigned i = 0; i < count && written < pixels; ++i) {
-            if (alpha != NULL) {
-                alpha[written] = opacity;
-            }
-            index[written++] = value;
-        }
-    }
-}
-
-bool inkcell_emoji_color(uint8_t index, uint8_t rgb[3]) {
-    if (index == INKCELL_EMOJI_TRANSPARENT || rgb == NULL) {
-        return false;
-    }
-    const struct inkcell_emoji_table *table = &inkcell_emoji_table;
-    const uint16_t slot = (uint16_t)(index - 1U);
-    if (slot >= table->palette_size) {
-        return false;
-    }
-    rgb[0] = table->palette[slot][0];
-    rgb[1] = table->palette[slot][1];
-    rgb[2] = table->palette[slot][2];
-    return true;
 }
 
 bool inkcell_emoji_is_zero_width(uint32_t codepoint) {

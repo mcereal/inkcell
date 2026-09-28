@@ -23,7 +23,7 @@ codecs.
 | **Themes** | Colours by *role*, not by name. Four themes ship; a new one is a table. |
 | **Fonts** | A 5x7 pixel face and a proportional UI face in two weights, all as coverage rather than 1-bit masks, resampled into whatever cell the theme asks for. |
 | **Type** | Seven roles - display, headline, title, body, supporting body, label, caption - and a role is a size, a weight, a letter-spacing and a line height together, not a size with the rest left to the renderer. Sizes are offsets from the body scale, so a reader who turns the text up keeps the hierarchy. Figures can be set tabular, so a reading redrawn once a second does not move sideways under the eye. |
-| **Glyphs** | Emoji, icons and font tables, generated (`scripts/gen-*.py`) and committed. |
+| **Glyphs** | Icons and font tables, and the emoji pack - outlines drawn at any size - generated (`scripts/gen-*.py`) and committed. The pack is optional (`-DINKCELL_EMOJI=OFF`) and can be handed over at run time instead. |
 | **Layout** | Lines measured in *cells*, scroll windows, text wrapping done once for both the measure and the draw pass. |
 | **The content column** | One answer to "how wide should this be", which stopped being "how wide is the surface" the moment a window could be dragged. Content sits in a column capped at the reading measure; fills still bleed edge to edge. |
 | **Stacks** | A row or a column of unlike things, declared and then resolved: a basis, a share of what is left over, a floor to shrink to. What is placed adds up to the room exactly, and what will not fit is given up from the tail rather than drawn past the edge - so a screen states its shape instead of advancing a `y` cursor by hand. |
@@ -282,4 +282,6 @@ window is standing in for the device rather than being a surface of its own.
 
 ## Licence
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). What was generated from somebody else's work carries its own
+licence in [`licenses/`](licenses): the emoji are Twemoji's, under CC-BY 4.0, which asks an
+application that shows them for an attribution line.
