@@ -27,7 +27,8 @@ struct inkcell_fb_button_paint inkcell_fb_button_paint(const struct inkcell_draw
        pointer it takes the hover layer instead: the lightest state there is, over whatever the
        button stands on at rest. */
     const bool focused = button->focused && inkcell_fb_cursor_shown(state);
-    const bool hovered = !focused && inkcell_fb_hovered(state, button->focus_id);
+    const bool hovered = !focused && (inkcell_fb_hovered(state, button->focus_id) ||
+                                      inkcell_fb_hovered(state, button->hover_id));
     switch (button->variant) {
     case INKCELL_FB_BUTTON_FILLED:
         /* The neutral cursor surface, not a family: a keyboard key is a place to press, not a
@@ -220,9 +221,22 @@ struct inkcell_fb_rect inkcell_fb_chip_box(const struct inkcell_draw_state *stat
         .h = inkcell_fb_line_adv(state, scale)};
 }
 
+/* inkcell_fb_draw_chip(), lit under the pointer when it is over `hover_id` - the id the strip
+   registered for the chip. */
+static int inkcell_fb_draw_chip_for(const struct inkcell_draw_state *state, int x, int y,
+                                    enum inkcell_icon icon, const char *label, bool active,
+                                    enum inkcell_color ground, int scale, uint32_t hover_id);
+
 int inkcell_fb_draw_chip(const struct inkcell_draw_state *state, int x, int y,
                          enum inkcell_icon icon, const char *label, bool active,
                          enum inkcell_color ground, int scale) {
+    return inkcell_fb_draw_chip_for(state, x, y, icon, label, active, ground, scale,
+                                    INKCELL_FOCUS_NONE);
+}
+
+static int inkcell_fb_draw_chip_for(const struct inkcell_draw_state *state, int x, int y,
+                                    enum inkcell_icon icon, const char *label, bool active,
+                                    enum inkcell_color ground, int scale, uint32_t hover_id) {
     const int width = inkcell_fb_chip_width(state, icon, label, scale);
     const struct inkcell_fb_button button = {
         .rect = inkcell_fb_chip_box(state, x, y, icon, label, scale),
@@ -234,6 +248,7 @@ int inkcell_fb_draw_chip(const struct inkcell_draw_state *state, int x, int y,
         .idle_tone = INKCELL_TONE_DIM,
         .ground = ground,
         .scale = scale,
+        .hover_id = hover_id,
     };
     inkcell_fb_draw_button(state, &button);
     return x + width;
@@ -350,8 +365,9 @@ int inkcell_fb_draw_chip_strip(const struct inkcell_draw_state *state, int x, in
                would have been. */
             inkcell_fb_focus_register_shaped(state, chips[i].focus_id, &box, INKCELL_SHAPE_FULL);
         }
-        const int after =
-            inkcell_fb_draw_chip(state, x, y, chips[i].icon, label, i == active, ground, scale);
+        const int after = inkcell_fb_draw_chip_for(
+            state, x, y, chips[i].icon, label, i == active, ground, scale,
+            box.x + box.w <= limit ? chips[i].focus_id : INKCELL_FOCUS_NONE);
         const int badge = inkcell_fb_chip_badge_width(state, chips[i].badge, labels, scale);
         if (badge > 0) {
             inkcell_fb_draw_chip_badge(state, after - inkcell_fb_char_adv(state, scale), y,

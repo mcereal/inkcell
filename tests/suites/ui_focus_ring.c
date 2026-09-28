@@ -563,3 +563,47 @@ INKCELL_TEST_CASE(focus_hover_damage_declares_a_box_from_a_replaced_frame, unit)
     ring_close(&h);
     record_success(test_name);
 }
+
+/* A button a composite control registered under an id of its own lights for that id. */
+INKCELL_TEST_CASE(focus_a_button_lights_for_the_id_its_control_registered, unit) {
+    struct ring_harness h;
+    INKCELL_TEST_FAIL_IF(!ring_open(&h), "the capture should open");
+    h.state->pointer = true;
+    const struct inkcell_fb_button cell = {.variant = INKCELL_FB_BUTTON_TEXT,
+                                           .hover_id = RING_ID_RIGHT};
+    const struct inkcell_fb_button_paint rest = inkcell_fb_button_paint(h.state, &cell);
+    h.state->hover = RING_ID_RIGHT;
+    const struct inkcell_fb_button_paint over = inkcell_fb_button_paint(h.state, &cell);
+    INKCELL_TEST_FAIL_IF_CLEANUP(rest.has_fill || !over.has_fill, ring_close(&h),
+                                 "the button should light for its control's id");
+    ring_close(&h);
+    record_success(test_name);
+}
+
+/* A field a pointer can press strengthens its outline under the pointer. */
+INKCELL_TEST_CASE(focus_a_pressable_field_outlines_itself_under_the_pointer, unit) {
+    struct ring_harness h;
+    INKCELL_TEST_FAIL_IF(!ring_open(&h), "the capture should open");
+    h.state->pointer = true;
+    const struct inkcell_fb_layout layout = inkcell_fb_layout_begin(h.state, false, false);
+    const struct inkcell_fb_text_field field = {.value = "", .target = RING_ID_BELOW};
+    const int x = inkcell_fb_content_x(h.state) + inkcell_fb_content_w(h.state) / 2;
+    const int top = layout.body_y;
+    struct inkcell_rgb edge[2];
+    for (int i = 0; i < 2; ++i) {
+        h.state->hover = i == 0 ? INKCELL_FOCUS_NONE : RING_ID_BELOW;
+        int y = top;
+        inkcell_fb_draw_text_field(h.state, &layout, &y, &field);
+        uint32_t width = 0U;
+        uint32_t height = 0U;
+        size_t stride = 0U;
+        const uint8_t *px = inkcell_capture_pixels(h.capture, &width, &height, &stride);
+        const uint8_t *p = px + (size_t)top * stride + (size_t)x * 4U;
+        edge[i] = (struct inkcell_rgb){.r = p[2], .g = p[1], .b = p[0]};
+    }
+    INKCELL_TEST_FAIL_IF_CLEANUP(edge[0].r == edge[1].r && edge[0].g == edge[1].g &&
+                                     edge[0].b == edge[1].b,
+                                 ring_close(&h), "the outline should change under the pointer");
+    ring_close(&h);
+    record_success(test_name);
+}

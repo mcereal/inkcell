@@ -7,6 +7,7 @@
 
 #include "inkcell/ui/widgets/button.h"
 #include "inkcell/ui/widgets/control.h"
+#include "inkcell/ui/widgets/focus.h"
 
 #include "inkcell/ui/anim.h"
 #include "inkcell/ui/emoji.h"
@@ -592,9 +593,13 @@ void inkcell_fb_draw_text_field(const struct inkcell_draw_state *state,
     const int edge = inkcell_fb_edge(state);
     const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_MD);
     const int rim = field->lit && !field->error ? 2 * edge : edge;
+    /* Under the pointer a field that can be pressed says so in its outline - a step towards the
+       ink, below the accent that says it has the keyboard and the red that says it is wrong. */
+    const bool hovered = inkcell_fb_hovered(state, field->target);
     inkcell_fb_fill_round_rect(state, box_x, top, box_w, box_h, radius + edge,
                                field->error ? inkcell_fb_color(state, INKCELL_COLOR_ERROR)
                                : field->lit ? inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY)
+                               : hovered    ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM)
                                             : inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
     inkcell_fb_fill_round_rect(state, box_x + rim, top + rim, box_w - 2 * rim, box_h - 2 * rim,
                                radius + edge - rim,

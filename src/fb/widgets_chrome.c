@@ -457,6 +457,14 @@ static void inkcell_fb_action_targets(const struct inkcell_draw_state *state,
     }
 }
 
+/* The id a hint lights under: the first key it presses, which is the whole hint for every hint
+   but a pair - and a pair is the arrows, which a pointer's bar does not draw. */
+static uint32_t inkcell_fb_action_hover_id(enum inkcell_button button) {
+    enum inkcell_key keys[2];
+    return inkcell_button_keys(button, keys) > 0U ? INKCELL_FOCUS_ACTION_KEY(keys[0])
+                                                  : INKCELL_FOCUS_NONE;
+}
+
 /*
  * One hint, drawn from `x` on the keycap row: a verb-only button to a pointer, a cap and its verb
  * to everyone else. Returns the width it took, so the loop that places a row of them is the
@@ -483,6 +491,7 @@ static int inkcell_fb_draw_action_hint(const struct inkcell_draw_state *state,
             .shape = INKCELL_SHAPE_SM,
             .ground = INKCELL_COLOR_SURFACE_LOW,
             .scale = small,
+            .hover_id = inkcell_fb_action_hover_id(action->button),
         };
         inkcell_fb_draw_button(state, &verb);
         inkcell_fb_action_targets(state, action->button, x, verb.rect.y, w, verb.rect.h);
@@ -500,6 +509,7 @@ static int inkcell_fb_draw_action_hint(const struct inkcell_draw_state *state,
         .shape = INKCELL_SHAPE_SM,
         .ground = INKCELL_COLOR_SURFACE_LOW,
         .scale = small,
+        .hover_id = inkcell_fb_action_hover_id(action->button),
     };
     inkcell_fb_draw_button(state, &key);
 
@@ -2325,6 +2335,7 @@ struct inkcell_fb_rect inkcell_fb_draw_fab(struct inkcell_draw_state *state,
         .focused = fab->focused,
         .variant = INKCELL_FB_BUTTON_TONAL,
         .family = fab->family,
+        .hover_id = fab->focus_id,
     };
     const struct inkcell_fb_button_paint paint = inkcell_fb_button_paint(state, &spec);
 

@@ -101,6 +101,14 @@ struct inkcell_fb_button {
      */
     uint32_t focus_id;
     /*
+     * The id a control built from this button registered for it itself, when that is not
+     * `focus_id`: a tab cell registering the whole cell, a hint registering the key it presses.
+     * Never registered here - it is only what the pointer's hover is compared with, so the
+     * button lights under the pointer wherever the click would land. INKCELL_FOCUS_NONE (zero)
+     * for none.
+     */
+    uint32_t hover_id;
+    /*
      * Draw a label that is one emoji and nothing else as the button's *face*: at the size of
      * the box rather than at the glyph scale, centred in it.
      *
