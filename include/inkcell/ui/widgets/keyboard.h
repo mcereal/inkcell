@@ -80,7 +80,7 @@ void inkcell_fb_draw_keyboard(const struct inkcell_draw_state *state,
  * For a screen that docks the keyboard under something else rather than giving it the body. The
  * grid grows into whatever it is handed, so a screen that wants to keep content above it hands it
  * this much - starting inkcell_fb_draw_keyboard() at the footer less this height - and the keys
- * come out the size they are on a handheld, where the grid is always at its floor.
+ * come out at their floor, the size a row was before the grid learned to grow into the body.
  */
 int inkcell_fb_keyboard_min_height(const struct inkcell_draw_state *state,
                                    const struct inkcell_fb_layout *layout);
