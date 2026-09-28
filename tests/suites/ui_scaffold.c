@@ -443,3 +443,66 @@ INKCELL_TEST_CASE(scaffold_compact_footer_keeps_one_row, unit) {
     inkcell_capture_close(capture);
     record_success(test_name);
 }
+
+INKCELL_TEST_CASE(scaffold_unmeasured_content_runs_to_the_region_and_resets_next_frame, unit) {
+    struct inkcell_draw_state *state = NULL;
+    struct inkcell_capture *capture =
+        scaffold_open(SCAFFOLD_WIDE_W, SCAFFOLD_WIDE_H, INKCELL_SCALE(3), &state);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+
+    const struct inkcell_fb_scaffold scaffold = {
+        .destinations = k_destinations, .count = SCAFFOLD_COUNT, .footer = true};
+    struct inkcell_fb_scaffold_frame frame;
+    inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+    INKCELL_TEST_FAIL_IF(frame.width == INKCELL_WIDTH_COMPACT, "the wide page is not compact");
+    const struct inkcell_box measured = inkcell_fb_content_column(state);
+    const struct inkcell_box region = inkcell_fb_region(state);
+    const int margin = inkcell_fb_margin(state);
+    INKCELL_TEST_FAIL_IF(measured.w >= region.w - 2 * margin,
+                         "a wide frame's column is held to the measure");
+
+    INKCELL_TEST_FAIL_IF(!inkcell_fb_set_measured(state, false), "a frame starts measured");
+    const struct inkcell_box full = inkcell_fb_content_column(state);
+    INKCELL_TEST_FAIL_IF(full.x != region.x + margin || full.w != region.w - 2 * margin,
+                         "an unmeasured column is the region less its margins");
+    inkcell_fb_scaffold_end(state, &frame, NULL);
+
+    /* Left off on purpose: the next frame is measured again all the same. */
+    inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+    const struct inkcell_box again = inkcell_fb_content_column(state);
+    INKCELL_TEST_FAIL_IF(again.x != measured.x || again.w != measured.w,
+                         "the scaffold puts the measure back at the top of a frame");
+    inkcell_fb_scaffold_end(state, &frame, NULL);
+
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(scaffold_unmeasured_frame_lays_out_its_heading_without_the_measure, unit) {
+    struct inkcell_draw_state *state = NULL;
+    struct inkcell_capture *capture =
+        scaffold_open(SCAFFOLD_WIDE_W, SCAFFOLD_WIDE_H, INKCELL_SCALE(3), &state);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+
+    const struct inkcell_fb_app_bar bar = {.title = "Map"};
+    struct inkcell_fb_scaffold scaffold = {
+        .destinations = k_destinations, .count = SCAFFOLD_COUNT, .footer = true, .app_bar = &bar};
+    struct inkcell_fb_scaffold_frame frame;
+    inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+    const int measured_w = frame.layout.body_w;
+    inkcell_fb_scaffold_end(state, &frame, NULL);
+
+    /* Asked for through the scaffold, it reaches the heading and the layout the scaffold made -
+       which a call after begin could not. */
+    scaffold.unmeasured = true;
+    inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+    const struct inkcell_box region = inkcell_fb_region(state);
+    const int full_w = region.w - 2 * inkcell_fb_margin(state);
+    INKCELL_TEST_FAIL_IF(measured_w >= full_w, "a wide frame's layout is held to the measure");
+    INKCELL_TEST_FAIL_IF(frame.layout.body_w != full_w,
+                         "an unmeasured frame's layout runs to the region less its margins");
+    inkcell_fb_scaffold_end(state, &frame, NULL);
+
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}

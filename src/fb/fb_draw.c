@@ -752,6 +752,15 @@ struct inkcell_box inkcell_fb_set_region(struct inkcell_draw_state *state, struc
     return was;
 }
 
+bool inkcell_fb_set_measured(struct inkcell_draw_state *state, bool measured) {
+    if (state == NULL) {
+        return true;
+    }
+    const bool was = !state->unmeasured;
+    state->unmeasured = !measured;
+    return was;
+}
+
 struct inkcell_box inkcell_fb_content_column(const struct inkcell_draw_state *state) {
     const struct inkcell_box region = inkcell_fb_region(state);
     struct inkcell_box column = {
@@ -773,7 +782,8 @@ struct inkcell_box inkcell_fb_content_column(const struct inkcell_draw_state *st
      * there is genuinely room to spare, and spending it on a wider column rather than on
      * margins is the thing that makes a maximised window unreadable.
      */
-    if (inkcell_fb_width_class(state) == INKCELL_WIDTH_COMPACT) {
+    if ((state != NULL && state->unmeasured) ||
+        inkcell_fb_width_class(state) == INKCELL_WIDTH_COMPACT) {
         return column;
     }
     return inkcell_box_measure(column, inkcell_fb_measure_width(state, INKCELL_WIDTH_MEASURE_COLS));
