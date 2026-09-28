@@ -136,7 +136,7 @@ struct inkcell_fb_bubble {
  * descenders and a gap after that, and on the UI face the line advance has no room left for
  * either: its descenders reach the bottom of the glyph cell, a step short of the next line. A
  * bubble counted in rows either clipped its own last line or cost a whole blank row per message;
- * counted in pixels it costs the two steps it actually needs. inkcell_transcript_window_px() is
+ * counted in pixels it costs the three steps it actually needs. inkcell_transcript_window_px() is
  * the window that places items measured this way.
  */
 int inkcell_fb_bubble_height(const struct inkcell_draw_state *state,

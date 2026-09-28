@@ -403,7 +403,29 @@ static size_t inkcell_fb_figure_cols(const struct inkcell_draw_state *state, con
  */
 static int inkcell_fb_status_scale(const struct inkcell_draw_state *state,
                                    const struct inkcell_type_style *meta) {
-    return meta != NULL ? inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL) : state->scale;
+    return inkcell_fb_type_scale(state, meta != NULL ? INKCELL_TYPE_LABEL : INKCELL_TYPE_BODY_SOFT);
+}
+
+/*
+ * A capsule inside a row: its words a size under the row's, and the capsule centred on the
+ * row's own line rather than on its words.
+ *
+ * Both halves are about fitting. A capsule round words of the row's own size is a line advance
+ * tall - the whole row, on a compact list - so it met the rows either side and, on the last row
+ * of a card, sat on the card's border. A size smaller leaves it a margin inside the row on
+ * every density, and centring it on the row's line rather than on the smaller cell keeps that
+ * margin even above and below.
+ */
+static struct inkcell_fb_rect inkcell_fb_item_capsule(const struct inkcell_draw_state *state,
+                                                      int baseline, int x, const char *text,
+                                                      int chip_scale, int *text_y) {
+    const int row = inkcell_fb_line_adv(state, state->scale);
+    const int line = inkcell_fb_line_adv(state, chip_scale);
+    const int cell = inkcell_scale_px((int)inkcell_fb_font(state)->height, chip_scale);
+    const int top = baseline - inkcell_step_px(state->scale) + (row - line) / 2;
+    *text_y = top + (line - cell) / 2;
+    return (struct inkcell_fb_rect){
+        .x = x, .y = top, .w = inkcell_fb_badge_width(state, text, chip_scale), .h = line};
 }
 
 /* `meta` is the tiered list's caption style, NULL on a uniform one: the one slot kind a style
@@ -613,15 +635,8 @@ static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
             return;
         }
         int text_y = baseline;
-        if (chip_scale != scale) {
-            /* A smaller capsule is centred on the headline's line, the way the app bar seats
-               its badge on the title. */
-            text_y =
-                baseline +
-                (inkcell_fb_line_adv(state, scale) - inkcell_fb_line_adv(state, chip_scale)) / 2;
-        }
-        const struct inkcell_fb_rect box = inkcell_fb_capsule_box(
-            state, g->text_right - width, text_y, trailing->text, chip_scale);
+        const struct inkcell_fb_rect box = inkcell_fb_item_capsule(
+            state, baseline, g->text_right - width, trailing->text, chip_scale, &text_y);
         inkcell_fb_draw_state_chip(state, &box, text_y, trailing->text, trailing->tone,
                                    lifted ? INKCELL_COLOR_SURFACE_SEL : rest_role, value_ink,
                                    chip_scale);
@@ -1055,14 +1070,16 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
                chip never runs under a trailing slot - and drawn as words when it does not fit,
                which is the fallback the row has because the caller supplied the text either
                way. */
+            const int chip_scale = inkcell_fb_status_scale(state, NULL);
             const int chip_w =
-                item->value_chip ? inkcell_fb_badge_width(state, item->value, scale) : 0;
+                item->value_chip ? inkcell_fb_badge_width(state, item->value, chip_scale) : 0;
             if (chip_w > 0 && chip_w <= (int)value_cols * inkcell_fb_char_adv(state, scale)) {
-                const struct inkcell_fb_rect box =
-                    inkcell_fb_capsule_box(state, value_x, g.head_y, item->value, scale);
-                inkcell_fb_draw_state_chip(state, &box, g.head_y, item->value, item->tone,
+                int chip_y = g.head_y;
+                const struct inkcell_fb_rect box = inkcell_fb_item_capsule(
+                    state, g.head_y, value_x, item->value, chip_scale, &chip_y);
+                inkcell_fb_draw_state_chip(state, &box, chip_y, item->value, item->tone,
                                            lifted ? INKCELL_COLOR_SURFACE_SEL : rest_role, head_ink,
-                                           scale);
+                                           chip_scale);
             } else {
                 inkcell_fb_item_piece(state, value_x, g.head_y, item->value, value_cols, head_ink,
                                       ground);

@@ -19,6 +19,8 @@
 #include "inkcell/ui/widgets/bubble.h"
 #include "inkcell/ui/widgets/button.h"
 #include "inkcell/ui/widgets/chrome.h"
+#include "inkcell/ui/widgets/item.h"
+#include "inkcell/ui/widgets/list.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -177,11 +179,11 @@ INKCELL_TEST_CASE(bubble_keeps_its_last_line_inside, unit) {
             const int height = inkcell_fb_bubble_height(page.state, &layout, &bubbles[i]);
             inkcell_fb_draw_bubble(page.state, &layout, y, &bubbles[i]);
             /* The box starts a step above `y` - the room an accent on the first line hangs in -
-               so the band above that is ground too. At the foot, the extent ends with a step
-               of ground and then the step the next box starts in, so everything from two
+               so the band above that is ground too. At the foot, the extent ends with two steps
+               of ground and then the step the next box starts in, so everything from three
                steps short of the extent down is ground. */
             const bool above = bubble_band_untouched(&page, 0, y - step);
-            const bool below = bubble_band_untouched(&page, y + height - 2 * step, page.h);
+            const bool below = bubble_band_untouched(&page, y + height - 3 * step, page.h);
             inkcell_capture_close(page.capture);
             INKCELL_TEST_FAIL_IF(!above, "a bubble should paint nothing above its box");
             INKCELL_TEST_FAIL_IF(!below, "a bubble should paint nothing in the gap under it");
@@ -219,5 +221,40 @@ INKCELL_TEST_CASE(text_fit_cuts_by_pixels_and_marks_the_cut, unit) {
     INKCELL_TEST_FAIL_IF(untouched != 2U || strcmp(whole, "gy") != 0,
                          "a line that fits should be left alone");
     INKCELL_TEST_FAIL_IF(tight_w > two, "a line with no room for the mark should still fit");
+    record_success(test_name);
+}
+
+/*
+ * A state chip in a row's value column stays inside the row's own line: nothing it paints is
+ * above the line or reaches the next one. A capsule a whole line tall met the rows either side
+ * and, on a card's last row, sat on the card's border.
+ */
+INKCELL_TEST_CASE(capsule_value_chip_stays_inside_its_row, unit) {
+    for (size_t t = 0U; t < inkcell_theme_count(); ++t) {
+        struct bubble_page page;
+        INKCELL_TEST_FAIL_IF(!bubble_open(&page, inkcell_theme_at(t)), "the capture should open");
+        struct inkcell_fb_layout layout = inkcell_fb_layout_begin(page.state, false, false);
+        /* The cursor on the second row, which is never drawn: the first is a row at rest. */
+        struct inkcell_fb_list list = inkcell_fb_list_begin(&layout, 2U, 1U);
+        const int step = inkcell_step_px(page.state->scale);
+        const int top = list.y - step;
+        const int bottom = top + list.line;
+        uint32_t index = 0U;
+        while (inkcell_fb_list_next(&list, &index)) {
+            if (index != 0U) {
+                continue;
+            }
+            const struct inkcell_fb_list_item item = {.label = "Via",
+                                                      .label_cols = 6U,
+                                                      .value = BUBBLE_DESCENDERS,
+                                                      .value_chip = true,
+                                                      .tone = INKCELL_TONE_NORMAL};
+            inkcell_fb_list_item(page.state, &list, index, &item);
+        }
+        const bool inside =
+            bubble_band_untouched(&page, 0, top) && bubble_band_untouched(&page, bottom, page.h);
+        inkcell_capture_close(page.capture);
+        INKCELL_TEST_FAIL_IF(!inside, "a row's chip should stay inside the row's line");
+    }
     record_success(test_name);
 }
