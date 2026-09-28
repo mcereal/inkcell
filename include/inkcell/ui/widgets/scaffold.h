@@ -149,6 +149,14 @@ struct inkcell_fb_scaffold {
     bool split;
     /* The progress hairline: the client is waiting on something. */
     bool busy;
+    /*
+     * The body is not running text - a map, a canvas - so the frame is laid out without the
+     * reading measure (inkcell_fb_set_measured()). Applied at the top of begin, before the app
+     * bar and the layout are measured, which is the only point it can reach them: set before
+     * begin it would be a leftover, and after it the heading is already drawn in the measure.
+     * Every frame states it, so a screen's choice never outlives its own frame.
+     */
+    bool unmeasured;
     /* The persistent notice, across the whole content viewport. NULL, or one whose text is empty,
        draws nothing. */
     const struct inkcell_fb_banner *banner;

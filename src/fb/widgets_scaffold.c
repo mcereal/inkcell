@@ -343,9 +343,10 @@ void inkcell_fb_scaffold_begin(struct inkcell_draw_state *state,
     }
     *frame = (struct inkcell_fb_scaffold_frame){0};
     frame->saved_region = state->region;
-    /* Every frame starts measured: a screen that turned the measure off for its canvas answers
-       for its own frame and not for whichever screen is drawn next. */
-    (void)inkcell_fb_set_measured(state, true);
+    /* Every frame states its measure before anything is placed against the column, the app bar
+       and the layout's widths included: a screen that turned the measure off answers for its own
+       frame and not for whichever screen is drawn next. */
+    (void)inkcell_fb_set_measured(state, !scaffold->unmeasured);
 
     const struct inkcell_box whole = inkcell_fb_region(state);
     const int small = inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL);

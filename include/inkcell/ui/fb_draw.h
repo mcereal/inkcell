@@ -1053,8 +1053,11 @@ struct inkcell_box inkcell_fb_set_region(struct inkcell_draw_state *state, struc
  * a flag on the app bar: every widget placed against the column follows it without learning a
  * parameter, exactly as they follow the region.
  *
- * The scaffold puts it back to measured at the top of every frame (inkcell_fb_scaffold_begin()),
- * so a screen that forgets to restore it costs the rest of its own frame and nothing after.
+ * The scaffold sets it at the top of every frame from `struct inkcell_fb_scaffold`'s
+ * `unmeasured` (inkcell_fb_scaffold_begin()), which is how a screen whose heading the scaffold
+ * draws asks for it: that heading is placed before the screen draws anything. A screen that
+ * draws its own heading may turn it off here instead; either way a screen that forgets to
+ * restore it costs the rest of its own frame and nothing after.
  * A compact surface is never capped, so on a handheld this changes nothing.
  */
 bool inkcell_fb_set_measured(struct inkcell_draw_state *state, bool measured);
