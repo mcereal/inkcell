@@ -1728,11 +1728,8 @@ inkcell_fb_app_bar_draw_large(const struct inkcell_draw_state *state,
     if (badge_w > 0) {
         const int badge_h = inkcell_scale_px((int)inkcell_fb_font(state)->height, small);
         const int text_y = layout->body_y + (collapsed_h - badge_h) / 2;
-        const struct inkcell_fb_rect box = {.x = right - badge_w,
-                                            .y = text_y - inkcell_step_px(small),
-                                            .w = badge_w,
-                                            .h = inkcell_fb_line_adv(state, small) -
-                                                 inkcell_step_px(small)};
+        const struct inkcell_fb_rect box =
+            inkcell_fb_capsule_box(state, right - badge_w, text_y, bar->badge, small);
         inkcell_fb_draw_badge(state, &box, text_y, bar->badge, bar->badge_family, small);
         right -= badge_w + inkcell_fb_char_adv(state, small);
     }
@@ -1970,11 +1967,8 @@ struct inkcell_fb_app_bar_fit inkcell_fb_draw_app_bar(const struct inkcell_draw_
            carries the gap accents hang in, and counting it would sit the capsule low. */
         const int badge_h = inkcell_scale_px((int)inkcell_fb_font(state)->height, small);
         const int text_y = y + (title_h - badge_h) / 2;
-        const struct inkcell_fb_rect box = {.x = right - badge_w,
-                                            .y = text_y - inkcell_step_px(small),
-                                            .w = badge_w,
-                                            .h = inkcell_fb_line_adv(state, small) -
-                                                 inkcell_step_px(small)};
+        const struct inkcell_fb_rect box =
+            inkcell_fb_capsule_box(state, right - badge_w, text_y, bar->badge, small);
         inkcell_fb_draw_badge(state, &box, text_y, bar->badge, bar->badge_family, small);
         right -= badge_w + inkcell_fb_char_adv(state, small);
     }
@@ -1985,14 +1979,14 @@ struct inkcell_fb_app_bar_fit inkcell_fb_draw_app_bar(const struct inkcell_draw_
         struct inkcell_line line;
         inkcell_line_reset(&line);
         inkcell_line_printf(&line, "%s", bar->title != NULL ? bar->title : "");
-        /* Fitted to the room *this* scale leaves between the two slots, not to the body's column
-           count. Bigger glyphs mean fewer of them, and a title measured against a column count
-           it is not drawn at is a title that runs off the panel. */
-        const int room = right > text_x ? (right - text_x) / adv : 0;
-        inkcell_line_fit(&line, (size_t)(room > 0 ? room : 0));
-        inkcell_fb_draw_text_weight(state, text_x, y, inkcell_line_text(&line), scale,
-                                    inkcell_fb_type_weight(state, INKCELL_TYPE_TITLE), title_ink,
-                                    ground);
+        /* Fitted to the pixels *this* scale and weight leave between the two slots, not to the
+           body's column count or to a count of nominal cells: a title of wide capitals in the
+           heavier cut is wider than its cells say, and was the title that ran off the panel. */
+        const enum inkcell_weight weight = inkcell_fb_type_weight(state, INKCELL_TYPE_TITLE);
+        const struct inkcell_type_style style = inkcell_type_style_plain(scale, weight);
+        (void)inkcell_fb_text_fit(state, line.text, sizeof line.text,
+                                  right > text_x ? right - text_x : 0, &style);
+        inkcell_fb_draw_text_weight(state, text_x, y, line.text, scale, weight, title_ink, ground);
     }
 
     /*

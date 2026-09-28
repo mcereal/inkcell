@@ -36,6 +36,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Long enough for the widest thing drawn: a 233-byte message plus a peer name and a tag. */
 #define INKCELL_LINE_MAX 400U
 
@@ -177,11 +181,24 @@ size_t inkcell_wrap_widest_measured(const char *text, size_t budget,
 struct inkcell_transcript {
     uint32_t first; /* first item drawn */
     uint32_t count; /* items drawn, starting at `first` */
-    uint32_t pad;   /* blank rows above `first`, so the newest lands on the last row */
+    uint32_t pad;   /* blank rows above `first` (pixels, from the _px form), so the newest
+                       lands at the bottom */
 };
 
 struct inkcell_transcript inkcell_transcript_window(const uint8_t *heights, uint32_t count,
                                                     uint32_t cursor, uint32_t rows);
+
+/*
+ * The same window over items measured in pixels, into a body `height` pixels tall; `pad` comes
+ * back in pixels too.
+ *
+ * For items that are not a whole number of rows, which is what a chat bubble is - its text is
+ * whole lines, and the padding round them is not (see inkcell_fb_bubble_height()). Wider
+ * heights than the row form, because a long message is a few hundred pixels tall. The rules
+ * are the row form's, term for term; only the unit changed.
+ */
+struct inkcell_transcript inkcell_transcript_window_px(const uint16_t *heights, uint32_t count,
+                                                       uint32_t cursor, uint32_t height);
 
 /*
  * A window onto `count` items with the cursor kept on screen.
@@ -921,5 +938,9 @@ void inkcell_series_project_over(const struct inkcell_series *series, struct ink
  */
 void inkcell_series_project_within(const struct inkcell_series *series, struct inkcell_scale scale,
                                    uint32_t from, uint32_t to, struct inkcell_polyline *out);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_LAYOUT_H */

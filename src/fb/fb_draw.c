@@ -1629,6 +1629,55 @@ int inkcell_fb_text_width_styled(const struct inkcell_draw_state *state, const c
     return widest > 0 ? widest : 0;
 }
 
+size_t inkcell_fb_text_fit(const struct inkcell_draw_state *state, char *text, size_t size,
+                           int width, const struct inkcell_type_style *style) {
+    if (text == NULL || size == 0U) {
+        return 0U;
+    }
+    const size_t len = strlen(text);
+    if (inkcell_fb_text_width_styled(state, text, style) <= width) {
+        return len;
+    }
+    static const char k_mark[] = "\xE2\x80\xA6"; /* the ellipsis */
+    const int mark = inkcell_fb_text_width_styled(state, k_mark, style);
+    /* Forward over the cells the measure itself walks, keeping every one whose advance still
+       leaves room for the mark. Counting the tracking after each kept cell overstates the line
+       by one step at most, which errs towards a cut one cell early rather than a line that
+       reaches past the edge it was fitted to. */
+    const struct fb_text_run run = fb_text_run(state, style);
+    int pen = 0;
+    size_t keep = 0U;
+    for (;;) {
+        const struct inkcell_text_cell cell = inkcell_text_cell_next(&text[keep]);
+        if (cell.bytes == 0U) {
+            break;
+        }
+        const int advance = fb_text_run_advance(state, &run, &cell);
+        if (pen + advance + mark > width) {
+            break;
+        }
+        pen += advance;
+        keep += cell.bytes;
+    }
+    /* The mark goes against the last word rather than after a space, and it has to fit the
+       caller's buffer; stepping back one byte at a time lands on a character boundary because
+       a continuation byte is never one. */
+    while (keep > 0U && text[keep - 1U] == ' ') {
+        keep -= 1U;
+    }
+    while (keep > 0U && keep + sizeof k_mark > size) {
+        do {
+            keep -= 1U;
+        } while (keep > 0U && ((unsigned char)text[keep] & 0xC0U) == 0x80U);
+    }
+    if (mark > width || keep + sizeof k_mark > size) {
+        text[keep] = '\0';
+        return keep;
+    }
+    memcpy(&text[keep], k_mark, sizeof k_mark);
+    return keep + sizeof k_mark - 1U;
+}
+
 /*
  * How many nominal cells `text` needs - its measured width, rounded up to the grid.
  *

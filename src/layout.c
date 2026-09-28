@@ -620,11 +620,23 @@ size_t inkcell_wrap_widest_measured(const char *text, size_t budget,
 
 /* ---- the transcript window ------------------------------------------------------------------ */
 
-struct inkcell_transcript inkcell_transcript_window(const uint8_t *heights, uint32_t count,
-                                                    uint32_t cursor, uint32_t rows) {
+/* One item's height, whichever width the caller measured them in. */
+struct inkcell_transcript_heights {
+    const uint8_t *narrow;
+    const uint16_t *wide;
+};
+
+static uint32_t inkcell_transcript_height(struct inkcell_transcript_heights heights, uint32_t i) {
+    return heights.narrow != NULL ? heights.narrow[i] : heights.wide[i];
+}
+
+/* The window itself, over rows or pixels alike: nothing below knows which unit it is adding. */
+static struct inkcell_transcript
+inkcell_transcript_window_in(struct inkcell_transcript_heights heights, uint32_t count,
+                             uint32_t cursor, uint32_t rows) {
     struct inkcell_transcript window;
     memset(&window, 0, sizeof window);
-    if (heights == NULL || count == 0U || rows == 0U) {
+    if ((heights.narrow == NULL && heights.wide == NULL) || count == 0U || rows == 0U) {
         return window;
     }
     if (cursor >= count) {
@@ -633,7 +645,7 @@ struct inkcell_transcript inkcell_transcript_window(const uint8_t *heights, uint
 
     uint32_t total = 0U;
     for (uint32_t i = 0; i < count; ++i) {
-        total += heights[i];
+        total += inkcell_transcript_height(heights, i);
     }
     if (total <= rows) {
         /* Everything fits, so the slack goes above it: a two-message thread opens with those two
@@ -647,9 +659,9 @@ struct inkcell_transcript inkcell_transcript_window(const uint8_t *heights, uint
     /* Pinned to the newest: walk back from the end while the items still fit. */
     uint32_t first = count;
     uint32_t used = 0U;
-    while (first > 0U && used + heights[first - 1U] <= rows) {
+    while (first > 0U && used + inkcell_transcript_height(heights, first - 1U) <= rows) {
         first -= 1U;
-        used += heights[first];
+        used += inkcell_transcript_height(heights, first);
     }
     if (first == count) {
         /* The newest item alone is taller than the body. Draw it anyway and let it clip at the
@@ -669,13 +681,25 @@ struct inkcell_transcript inkcell_transcript_window(const uint8_t *heights, uint
        item being read is whole rather than the one hanging off the top edge. */
     uint32_t last = cursor;
     used = 0U;
-    while (last < count && used + heights[last] <= rows) {
-        used += heights[last];
+    while (last < count && used + inkcell_transcript_height(heights, last) <= rows) {
+        used += inkcell_transcript_height(heights, last);
         last += 1U;
     }
     window.first = cursor;
     window.count = last > cursor ? last - cursor : 1U;
     return window;
+}
+
+struct inkcell_transcript inkcell_transcript_window(const uint8_t *heights, uint32_t count,
+                                                    uint32_t cursor, uint32_t rows) {
+    return inkcell_transcript_window_in((struct inkcell_transcript_heights){.narrow = heights},
+                                        count, cursor, rows);
+}
+
+struct inkcell_transcript inkcell_transcript_window_px(const uint16_t *heights, uint32_t count,
+                                                       uint32_t cursor, uint32_t height) {
+    return inkcell_transcript_window_in((struct inkcell_transcript_heights){.wide = heights}, count,
+                                        cursor, height);
 }
 
 struct inkcell_scroll_thumb inkcell_list_thumb(const struct inkcell_list *list, int track,

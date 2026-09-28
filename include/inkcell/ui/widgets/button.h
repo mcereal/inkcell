@@ -25,6 +25,10 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * How much of itself a button shows when the cursor is not on it.
  *
@@ -269,6 +273,25 @@ int inkcell_fb_draw_chip_strip(const struct inkcell_draw_state *state, int x, in
 int inkcell_fb_badge_width(const struct inkcell_draw_state *state, const char *text, int scale);
 
 /*
+ * The capsule's box for words whose cell starts at `text_y`: inkcell_fb_badge_width() wide, a
+ * line advance tall, and centred on the glyph cell.
+ *
+ * On the cell, not on the line the caller happens to be laying out, and that is the whole of
+ * why it is a function. Every capsule used to be the row's slot - a scale step above the words
+ * and a step short of the line - which is a box drawn for the 5x7 face, whose letters stop a
+ * row above the bottom of the line. The UI face keeps its descenders *inside* its cell, down to
+ * the last row of it, so the same box put the tail of every "y" and "g" a step below the
+ * capsule it was written in: "any relay" hanging out of its own pill. Centring on the cell
+ * holds for both faces, because it is measured off the font rather than remembered from one.
+ *
+ * A line advance tall rather than a cell, so the capsule has air above the capitals and below
+ * the descenders on every face - and no taller, so a capsule on a list row stays inside the
+ * row's own line.
+ */
+struct inkcell_fb_rect inkcell_fb_capsule_box(const struct inkcell_draw_state *state, int x,
+                                              int text_y, const char *text, int scale);
+
+/*
  * Draws it: the capsule fills `box`, the words start at `text_y` - the same origin
  * inkcell_fb_draw_text() takes - inset by the padding inkcell_fb_badge_width() charged for.
  *
@@ -292,15 +315,24 @@ void inkcell_fb_draw_badge(const struct inkcell_draw_state *state,
  * button wears and is therefore already a pair the theme was validated on.
  *
  * A tone that names no family has no container to fill with - "the state it is normally in" is
- * not one of the six things a family means - so the neutral chip is a *ring* instead: the
- * theme's outline, the row's own `ground` inside it and the row's own `ink` on that. Which is
- * also the more honest shape, and Material's own: a filled chip is a state worth reporting, an
- * outlined one a state worth checking. `ground` and `ink` are the row's because that is what the
- * capsule's inside is; a caller that is not a list row hands in whatever it is drawing on.
+ * not one of the six things a family means - so the neutral chip takes the neutral pair a
+ * resting button wears: the cursor surface under the text drawn on it, with the theme's outline
+ * round the edge. The outline is what finds the capsule on a theme whose cursor surface sits
+ * close to its cards; the fill is what makes it read as a tag rather than as a word somebody
+ * drew a ring round, which is how the ring alone read - "not verified" in an outline looked
+ * like plain text with a stray border, and nothing about it said it was a state. On the row
+ * under the cursor, `ground` is already that surface, so the chip steps to the pressed one.
+ * `ground` and `ink` are the row's; a caller that is not a list row hands in whatever it is
+ * drawing on. Neither chip paints its words in `ink` - both use the ink the theme validated
+ * against the chip's own fill - so it says what the row would have drawn, not what the chip does.
  */
 void inkcell_fb_draw_state_chip(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_rect *box, int text_y, const char *text,
                                 enum inkcell_tone tone, enum inkcell_color ground,
                                 struct inkcell_rgb ink, int scale);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_BUTTON_H */

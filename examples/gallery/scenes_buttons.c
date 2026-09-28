@@ -92,8 +92,7 @@ void gallery_scene_buttons(struct inkcell_draw_state *state) {
     static const char *const k_counts[] = {"1", "9", "12", "99+"};
     for (size_t i = 0U; i < sizeof k_counts / sizeof k_counts[0]; ++i) {
         const int w = inkcell_fb_badge_width(state, k_counts[i], scale);
-        const struct inkcell_fb_rect rect = {
-            .x = x, .y = y, .w = w, .h = inkcell_fb_line_adv(state, scale)};
+        const struct inkcell_fb_rect rect = inkcell_fb_capsule_box(state, x, y, k_counts[i], scale);
         inkcell_fb_draw_badge(state, &rect, y, k_counts[i],
                               (enum inkcell_family)(INKCELL_FAMILY_PRIMARY + (int)i), scale);
         x += w + inkcell_fb_space(state, INKCELL_SPACE_SM);

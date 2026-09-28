@@ -319,10 +319,44 @@ inkcell_fb_bubble_measure(const struct inkcell_draw_state *state,
     return metrics;
 }
 
-uint32_t inkcell_fb_bubble_rows(const struct inkcell_draw_state *state,
-                                const struct inkcell_fb_layout *layout,
-                                const struct inkcell_fb_bubble *bubble) {
-    return inkcell_fb_bubble_measure(state, layout, bubble).rows;
+/*
+ * The box's bottom edge, measured from the top of the bubble's last line: the glyph cell, then a
+ * scale step of padding under it.
+ *
+ * Off the cell rather than off the line, because the cell is where the ink stops. The 5x7 face
+ * leaves a row of the line empty under its letters and the UI face does not - its descenders
+ * reach the bottom of the cell - so a box that stopped a step short of the line, which is what
+ * a bubble used to be, put the tail of every "g" and "y" on its last line outside it.
+ */
+static int inkcell_fb_bubble_foot(const struct inkcell_draw_state *state) {
+    return inkcell_scale_px((int)inkcell_fb_font(state)->height, state->scale) +
+           inkcell_step_px(state->scale);
+}
+
+/*
+ * What a bubble occupies from the `y` it is drawn at to the `y` of the one after it: its
+ * separator's line, then the box - which starts a step above its first line - and two steps of
+ * ground under the box. Two because the cursor's ring takes one of them, and a ring that met the
+ * next bubble read as the two messages being one block; the other is the air that keeps them
+ * apart whether or not the cursor is on either.
+ */
+static int inkcell_fb_bubble_extent(const struct inkcell_draw_state *state,
+                                    const struct inkcell_fb_layout *layout,
+                                    const struct inkcell_fb_bubble *bubble,
+                                    const struct inkcell_fb_bubble_metrics *metrics) {
+    const bool separated = inkcell_fb_bubble_has(bubble->separator);
+    const uint32_t box_rows = metrics->rows - (separated ? 1U : 0U);
+    const int above = separated ? layout->line : 0;
+    const int lines = box_rows > 0U ? (int)(box_rows - 1U) * layout->line : 0;
+    return above + lines + inkcell_fb_bubble_foot(state) + 3 * inkcell_step_px(state->scale);
+}
+
+int inkcell_fb_bubble_height(const struct inkcell_draw_state *state,
+                             const struct inkcell_fb_layout *layout,
+                             const struct inkcell_fb_bubble *bubble) {
+    const struct inkcell_fb_bubble_metrics metrics =
+        inkcell_fb_bubble_measure(state, layout, bubble);
+    return inkcell_fb_bubble_extent(state, layout, bubble, &metrics);
 }
 
 void inkcell_fb_draw_separator(const struct inkcell_draw_state *state, int y, const char *label,
@@ -379,15 +413,17 @@ void inkcell_fb_draw_bubble(const struct inkcell_draw_state *state,
     }
 
     /* The box: content plus half a cell of padding each side, against the edge the direction
-       names. The fill stops a scale short of the row it ends on, so stacked bubbles read as
-       separate messages rather than as one block. */
+       names. It runs from a step above the first line to a step under the last line's glyph
+       cell - see inkcell_fb_bubble_foot() - and inkcell_fb_bubble_extent() leaves two steps of
+       ground after it, so stacked bubbles read as separate messages rather than as one block. */
     const int pad = adv / 2 > 0 ? adv / 2 : 1;
     const int box_w = (int)metrics.width + 2 * pad;
     const int box_x = bubble->outbound
                           ? inkcell_fb_content_x(state) + inkcell_fb_content_w(state) - box_w
                           : inkcell_fb_content_x(state);
     const uint32_t box_rows = metrics.rows - (inkcell_fb_bubble_has(bubble->separator) ? 1U : 0U);
-    const int box_h = (int)box_rows * layout->line - inkcell_step_px(scale);
+    const int box_h = (box_rows > 0U ? (int)(box_rows - 1U) * layout->line : 0) +
+                      inkcell_fb_bubble_foot(state) + inkcell_step_px(scale);
 
     const struct inkcell_paint paint = inkcell_fb_bubble_paint(state, bubble);
     const struct inkcell_rgb fill = paint.fill;
@@ -402,14 +438,15 @@ void inkcell_fb_draw_bubble(const struct inkcell_draw_state *state,
      * outer edge alone, which at arm's length on the Brick read as a stray line rather than as
      * "this one".
      *
-     * Outward on three sides, which costs no layout: a bubble is a step shorter than the rows it
-     * stands in, so the step of ground beside and below it is already its own and the ring only
-     * paints it. Drawn inward it ate that step out of the text and clipped a descender on the
-     * last line. The top is the exception, and takes the ring out of the fill's own padding
-     * instead: the step *above* a bubble is where the row before it lets its descenders hang -
-     * the last line of the previous message, or this bubble's own separator - and those are
-     * drawn first, so a ring there would paint over them. The accent shape goes first and the
-     * fill over it, so the ring follows the corners rather than squaring them off.
+     * Outward on three sides, which costs no layout: a bubble leaves two steps of ground under
+     * its box - inkcell_fb_bubble_extent() - so the step beside and below it is already its own,
+     * the ring only paints it, and a step of ground still separates it from the next bubble. Drawn
+     * inward it ate that step out of the text and clipped a descender on the last line. The top is
+     * the exception, and takes the ring out of the fill's own padding instead: the step *above* a
+     * bubble is where the row before it lets its descenders hang - the last line of the previous
+     * message, or this bubble's own separator - and those are drawn first, so a ring there would
+     * paint over them. The accent shape goes first and the fill over it, so the ring follows the
+     * corners rather than squaring them off.
      */
     const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_MD);
     const int top = y - inkcell_step_px(scale);
@@ -428,7 +465,7 @@ void inkcell_fb_draw_bubble(const struct inkcell_draw_state *state,
         struct inkcell_line line;
         inkcell_line_reset(&line);
         inkcell_line_printf(&line, "%s", bubble->name);
-        inkcell_line_fit(&line, adv > 0 ? metrics.width / (size_t)adv : metrics.width);
+        (void)inkcell_fb_text_fit(state, line.text, sizeof line.text, (int)metrics.width, NULL);
         /* Ours is dimmed and theirs takes the primary: on our own bubble the name is a
            reminder, on theirs it is the thing being looked for. An alert overrides both - it is
            the one bubble whose heading is the point rather than the label on the point. A
@@ -442,7 +479,7 @@ void inkcell_fb_draw_bubble(const struct inkcell_draw_state *state,
                 name_color = inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY);
             }
         }
-        inkcell_fb_draw_text(state, text_x, y, inkcell_line_text(&line), scale, name_color, fill);
+        inkcell_fb_draw_text(state, text_x, y, line.text, scale, name_color, fill);
         y += layout->line;
     }
 
@@ -459,9 +496,10 @@ void inkcell_fb_draw_bubble(const struct inkcell_draw_state *state,
         struct inkcell_line quote;
         inkcell_line_reset(&quote);
         inkcell_line_printf(&quote, "%s", bubble->quote);
-        inkcell_line_fit(&quote, metrics.quote_width);
+        (void)inkcell_fb_text_fit(state, quote.text, sizeof quote.text, (int)metrics.quote_width,
+                                  NULL);
         inkcell_fb_draw_text(state, text_x + (int)INKCELL_FB_BUBBLE_QUOTE_INDENT * adv, y,
-                             inkcell_line_text(&quote), scale, quiet, fill);
+                             quote.text, scale, quiet, fill);
         y += layout->line;
     }
 
