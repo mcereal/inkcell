@@ -7,7 +7,9 @@ the generated file, so the build stays dependency-free and CI never reaches the 
     python3 -m venv .venv && .venv/bin/pip install fonttools pillow
     curl -sSLo NotoColorEmoji.ttf \
         https://github.com/googlefonts/noto-emoji/raw/main/fonts/NotoColorEmoji.ttf
-    .venv/bin/python scripts/gen-emoji.py NotoColorEmoji.ttf src/ui/generated/emoji_glyphs.c
+    .venv/bin/python scripts/gen-emoji.py NotoColorEmoji.ttf src/generated/emoji_glyphs.c
+
+The font now lives at 2D/fonts/NotoColorEmoji.ttf in that repository.
 
 Noto Color Emoji is under the SIL Open Font License; licenses/OFL-NotoColorEmoji.txt travels
 with the generated data.
@@ -20,8 +22,10 @@ from collections import defaultdict
 from fontTools.ttLib import TTFont
 from PIL import Image
 
-SIZE = 16          # sprite edge, in pixels
-ALPHA_CUTOFF = 96  # below this a source pixel becomes transparent
+SIZE = 32          # sprite edge, in pixels - INKCELL_EMOJI_SIZE, which must match
+ALPHA_FLOOR = 16   # below this a source pixel is transparent outright
+ALPHA_LEVELS = 8   # opacity steps a run can carry; see alpha_level()
+RUN_MAX = 256 // ALPHA_LEVELS  # the longest run the count bits left over can say
 PALETTE_COLORS = 255  # index 0 is reserved for transparent
 
 
@@ -77,23 +81,46 @@ def build_palette(images):
     return quantized, [tuple(raw[i * 3 : i * 3 + 3]) for i in range(PALETTE_COLORS)]
 
 
-def rle(indices):
-    """(count, index) pairs, counts capped at 255. Emoji are flat fills inside a transparent
-    margin, so this is where most of the raw megabyte goes."""
+def alpha_level(alpha):
+    """An opaque-enough source alpha as one of ALPHA_LEVELS steps, the nearest of 31, 63, ...
+    255 - what the runtime widens a level back to (`level << 5 | 31`).
+
+    The edge is the point of keeping any of this. A sprite cut at one alpha threshold has a
+    staircase for an outline, and scaling it smoothly only blurs the staircase; with its
+    anti-aliasing kept, the outline survives being drawn at any size."""
+    return max(0, min(ALPHA_LEVELS - 1, (alpha + 16) // 32 - 1))
+
+
+def rle(pixels):
+    """(head, index) pairs over (index, level) pixels, where head is the level in the top three
+    bits and the run length less one in the bottom five. Emoji are flat fills inside a
+    transparent margin, so this is where most of the raw megabytes go."""
     out = []
-    run_index = indices[0]
+    current = pixels[0]
     run = 0
-    for value in indices:
-        if value != run_index or run == 255:
-            out.append((run, run_index))
-            run_index = value
+    for value in pixels:
+        if value != current or run == RUN_MAX:
+            out.append(((current[1] << 5) | (run - 1), current[0]))
+            current = value
             run = 0
         run += 1
-    out.append((run, run_index))
+    out.append(((current[1] << 5) | (run - 1), current[0]))
     return out
 
 
-def c_string(data, per_line=24):
+def c_byte(byte):
+    """One byte inside a C string literal, as itself when that is safe and shorter.
+
+    Printable ASCII is one character instead of four, which is most of why the file is half the
+    size it would be as hex escapes. The exceptions: the quote and the backslash need escaping,
+    '?' could start a trigraph, and an octal escape swallows up to three digits - so every escape
+    is three digits long, and a digit after one is unaffected."""
+    if 0x20 <= byte < 0x7F and byte not in (0x22, 0x5C, 0x3F):
+        return chr(byte)
+    return "\\%03o" % byte
+
+
+def c_string(data, per_line=48):
     """Binary as a C string literal rather than a braced list of integers.
 
     This is not cosmetic. A braced initialiser of a million elements is a million expressions
@@ -102,7 +129,7 @@ def c_string(data, per_line=24):
     lines = []
     for i in range(0, len(data), per_line):
         chunk = data[i : i + per_line]
-        lines.append('    "' + "".join("\\x%02X" % b for b in chunk) + '"')
+        lines.append('    "' + "".join(c_byte(b) for b in chunk) + '"')
     return "\n".join(lines) if lines else '    ""'
 
 
@@ -132,18 +159,19 @@ def main():
     for row, (codepoints, image) in enumerate(entries):
         band = quantized.crop((0, row * SIZE, SIZE, (row + 1) * SIZE))
         alpha = image.getchannel("A")
-        indices = bytes(
-            # Index 0 means transparent, so every opaque colour shifts up by one.
-            0 if a < ALPHA_CUTOFF else index + 1
+        pixels = tuple(
+            # Index 0 means transparent, so every opaque colour shifts up by one. A transparent
+            # pixel carries level 0 so that the whole margin is one value and runs as one.
+            (0, 0) if a < ALPHA_FLOOR else (index + 1, alpha_level(a))
             for index, a in zip(band.getdata(), alpha.getdata())
         )
-        if indices not in unique:
-            unique[indices] = len(offsets)
+        if pixels not in unique:
+            unique[pixels] = len(offsets)
             offsets.append(len(runs) // 2)
-            for count, index in rle(list(indices)):
-                runs.append(count)
+            for head, index in rle(pixels):
+                runs.append(head)
                 runs.append(index)
-        sprite_ids.append((codepoints, unique[indices]))
+        sprite_ids.append((codepoints, unique[pixels]))
     offsets.append(len(runs) // 2)
 
     singles = [(cp[0], i) for cp, i in sprite_ids if len(cp) == 1]
@@ -192,7 +220,8 @@ def main():
             w("    " + row.rstrip() + "\n")
         w("};\n\n")
 
-        w("/* Run-length pairs, a count of 1-255 followed by the palette index it repeats.\n")
+        w("/* Run-length pairs: a head byte - the opacity level in the top three bits, the run\n")
+        w("   length less one in the bottom five - and the palette index it repeats.\n")
         w("   Written as a string literal so the compiler sees a few tokens instead of a\n")
         w("   million integer expressions; the trailing NUL a literal carries is unused. */\n")
         w("static const uint8_t k_runs[] =\n")
