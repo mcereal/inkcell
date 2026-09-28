@@ -18,6 +18,7 @@
 
 #include "inkcell/ui/emoji.h"
 #include "inkcell/ui/widgets/button.h"
+#include "inkcell/ui/widgets/focus.h"
 
 #include <string.h>
 
@@ -476,7 +477,9 @@ void inkcell_fb_grid_tile(const struct inkcell_draw_state *state, struct inkcell
     }
     inkcell_fb_grid_chrome(state, grid);
 
-    const bool focused = inkcell_fb_grid_is_cursor(grid, index);
+    /* The tile's own cue, and so not a reader on the pointer's - see inkcell_fb_cursor_shown().
+       The tile is still the cursor's, and is marked as it where the grid registers. */
+    const bool focused = inkcell_fb_grid_is_cursor(grid, index) && inkcell_fb_cursor_shown(state);
     const enum inkcell_state ui_state = focused ? INKCELL_STATE_FOCUSED : INKCELL_STATE_REST;
     /*
      * One statement decides the colour, and it is the tile's tone.
