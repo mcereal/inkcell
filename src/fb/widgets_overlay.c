@@ -6,6 +6,7 @@
  */
 
 #include "inkcell/ui/widgets/button.h"
+#include "inkcell/ui/widgets/focus.h"
 #include "inkcell/ui/widgets/overlay.h"
 
 #include "inkcell/i18n/strings.h"
@@ -471,7 +472,10 @@ void inkcell_fb_draw_dialog_at(const struct inkcell_draw_state *state, struct in
         .icon = INKCELL_ICON_CHECK,
         .label = m.accept_label,
         .focused = accept_focused,
-        .variant = accept_focused ? INKCELL_FB_BUTTON_TONAL : INKCELL_FB_BUTTON_TEXT,
+        /* The fill is the cursor's, and a reader on the pointer is shown no cursor: both answers
+           are then the same weight and the check and the label say which is which. */
+        .variant = accept_focused && inkcell_fb_cursor_shown(state) ? INKCELL_FB_BUTTON_TONAL
+                                                                    : INKCELL_FB_BUTTON_TEXT,
         /* The dialog's family, so a destructive confirm is a red pill rather than a red word on
            the ordinary one - and the ink on it is the one checked against that red. */
         .family = accept_family,
@@ -734,10 +738,21 @@ void inkcell_fb_draw_menu(const struct inkcell_draw_state *state, struct inkcell
          * mixed into the wrong ground is a highlight that is the right colour on one surface
          * and a smudge on the other.
          */
+        const uint32_t focus_id = menu->focus_ids != NULL ? menu->focus_ids[i]
+                                                          : (menu->focus_base != INKCELL_FOCUS_NONE
+                                                                 ? menu->focus_base + (uint32_t)i
+                                                                 : INKCELL_FOCUS_NONE);
+        /* The cursor's fill for a reader on the keys, the lighter hover layer for one on the
+           pointer - who opened the menu with a click and has no cursor to be shown. */
+        enum inkcell_state row_state = INKCELL_STATE_REST;
+        if (live && focused && inkcell_fb_cursor_shown(state)) {
+            row_state = INKCELL_STATE_FOCUSED;
+        } else if (live && inkcell_fb_hovered(state, focus_id)) {
+            row_state = INKCELL_STATE_HOVERED;
+        }
         struct inkcell_rgb row_ground = inkcell_fb_color(state, ground);
-        if (focused && live) {
-            row_ground =
-                inkcell_fb_state_layer(state, ground, INKCELL_COLOR_TEXT, INKCELL_STATE_FOCUSED);
+        if (row_state != INKCELL_STATE_REST) {
+            row_ground = inkcell_fb_state_layer(state, ground, INKCELL_COLOR_TEXT, row_state);
             inkcell_fb_fill_round_rect(state, box.x + pad / 2, y, box.w - pad, row_h,
                                        inkcell_fb_radius(state, INKCELL_SHAPE_SM), row_ground);
         }
@@ -765,10 +780,6 @@ void inkcell_fb_draw_menu(const struct inkcell_draw_state *state, struct inkcell
                                  row_ground);
         }
 
-        const uint32_t focus_id = menu->focus_ids != NULL ? menu->focus_ids[i]
-                                                          : (menu->focus_base != INKCELL_FOCUS_NONE
-                                                                 ? menu->focus_base + (uint32_t)i
-                                                                 : INKCELL_FOCUS_NONE);
         if (live && focus_id != INKCELL_FOCUS_NONE) {
             /* The box the highlight paints, so the ring lands on what the fill covers rather
                than on the text inside it - inkcell_fb_list_row()'s rule. */

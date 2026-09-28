@@ -85,6 +85,7 @@ const struct inkcell_backend *inkcell_backend_sdl(void) {
 
 #include "inkcell/ui/input_codes.h"
 #include "inkcell/ui/pointer.h"
+#include "inkcell/ui/widgets/focus.h"
 
 #if defined(__APPLE__)
 #include "inkcell/ui/widgets/chrome.h"
@@ -184,6 +185,11 @@ struct inkcell_sdl_panel {
     SDL_Cursor *arrow;
     SDL_Cursor *hand;
     bool pointing;
+    /* Where the pointer last was, in the frame's pixels, and whether it is over the window at
+       all - so the hover can be found again when a frame moves what is under a still mouse. */
+    int pointer_x;
+    int pointer_y;
+    bool pointer_inside;
     /*
      * The title bar, on a Mac - see src/sdl/sdl_cocoa.h.
      *
@@ -342,6 +348,50 @@ static void inkcell_sdl_request_frame(struct inkcell_sdl_panel *panel) {
     panel->frame_requested = true;
     if (panel->request_frame != NULL) {
         panel->request_frame(panel->frame_userdata);
+    }
+}
+
+/*
+ * What is under the pointer, as far as a hover goes: something a click would do, or nothing.
+ * The same answer as the hand cursor's, so a row lights up exactly where the hand appears.
+ */
+static uint32_t inkcell_sdl_hover_target(const struct inkcell_sdl_panel *panel) {
+    if (!panel->pointer_inside ||
+        !inkcell_pointer_over_target(&panel->pointer_map, panel->pointer_x, panel->pointer_y,
+                                     panel->on_click != NULL)) {
+        return INKCELL_FOCUS_NONE;
+    }
+    return inkcell_focus_hit(&panel->pointer_map, panel->pointer_x, panel->pointer_y);
+}
+
+/*
+ * The hover and the system cursor brought up to date with the pointer and the last frame's boxes,
+ * and a frame asked for when the hover moved. Asked on a move and after every frame: a frame can
+ * move a box under a pointer that did not move - a list scrolled by the wheel, a screen changed
+ * by a click - and both the lit row and the hand have to follow it then, not at the next nudge.
+ *
+ * The cursor only on a change: SDL_SetCursor() redraws it, and a mouse moving across a row is
+ * dozens of events.
+ */
+static void inkcell_sdl_sync_hover(struct inkcell_sdl_panel *panel) {
+    const uint32_t target = inkcell_sdl_hover_target(panel);
+    if (inkcell_fb_set_hover(&panel->state, &panel->pointer_map, target)) {
+        inkcell_sdl_request_frame(panel);
+    }
+    if (panel->arrow == NULL || panel->hand == NULL) {
+        return;
+    }
+    const bool pointing = target != INKCELL_FOCUS_NONE;
+    if (pointing != panel->pointing) {
+        panel->pointing = pointing;
+        SDL_SetCursor(pointing ? panel->hand : panel->arrow);
+    }
+}
+
+/* The reader reached for the mouse, or for the keys: the cursor's cue goes, or comes back. */
+static void inkcell_sdl_show_cursor(struct inkcell_sdl_panel *panel, bool shown) {
+    if (inkcell_fb_set_cursor_hidden(&panel->state, !shown)) {
+        inkcell_sdl_request_frame(panel);
     }
 }
 
@@ -652,7 +702,27 @@ static void inkcell_backend_sdl_present(void *state_ptr, const void *snapshot, v
 #endif
     inkcell_fb_render(state, snapshot);
     panel->presented = true;
+    /*
+     * Where the hover was lit on the frame before this one, asked of that frame's boxes before
+     * they are replaced. If this frame moved or dropped the hovered box, those pixels belong to
+     * no box the new map knows, so they are declared here - under a clip band the next frame
+     * would otherwise leave them lit.
+     */
+    const uint32_t hovered = state->hover;
+    struct inkcell_focus_rect lit = {0, 0, 0, 0};
+    const bool was_lit =
+        hovered != INKCELL_FOCUS_NONE && inkcell_focus_rect_of(&panel->pointer_map, hovered, &lit);
     inkcell_sdl_keep_boxes(panel);
+    if (was_lit) {
+        struct inkcell_focus_rect now = {0, 0, 0, 0};
+        if (!inkcell_focus_rect_of(&panel->pointer_map, hovered, &now) || now.x != lit.x ||
+            now.y != lit.y || now.w != lit.w || now.h != lit.h) {
+            inkcell_fb_hover_damage(state, lit);
+            inkcell_sdl_request_frame(panel);
+        }
+    }
+    /* A frame can move what is under a mouse that did not move - see inkcell_sdl_sync_hover(). */
+    inkcell_sdl_sync_hover(panel);
 #if defined(__APPLE__)
     /* ...and after it, because a frame is where the application gets to change the theme. The
        bar turns with the strip under it rather than a frame later, and a strip that changed
@@ -831,6 +901,11 @@ static void inkcell_sdl_handle_key(struct inkcell_sdl_panel *panel, const SDL_Ke
             break;
         }
         if (edit != INKCELL_KEY_NONE) {
+            /* Enter and Escape leave the field for a screen the keys are on; Backspace is only
+               typing, and says nothing about where the reader's hands are. */
+            if (edit != INKCELL_KEY_X) {
+                inkcell_sdl_show_cursor(panel, true);
+            }
             inkcell_sdl_deliver(panel, panel->on_key, edit, key->repeat == 0U);
             return;
         }
@@ -847,6 +922,9 @@ static void inkcell_sdl_handle_key(struct inkcell_sdl_panel *panel, const SDL_Ke
     if (mapped == INKCELL_KEY_NONE) {
         return;
     }
+    /* A key that moves or presses the cursor is the reader on the keys, and the cue is theirs
+       again. Typing and a shortcut are not: neither is about where the cursor is. */
+    inkcell_sdl_show_cursor(panel, true);
     inkcell_sdl_deliver(panel, panel->on_key, mapped, key->repeat == 0U);
 }
 
@@ -866,6 +944,9 @@ static void inkcell_sdl_handle_key(struct inkcell_sdl_panel *panel, const SDL_Ke
  */
 static void inkcell_sdl_handle_button(struct inkcell_sdl_panel *panel,
                                       const SDL_MouseButtonEvent *button) {
+    if (button->type == SDL_MOUSEBUTTONDOWN) {
+        inkcell_sdl_show_cursor(panel, false);
+    }
     if (button->button == SDL_BUTTON_X1) {
         /* The thumb button a browser goes back with. Back here is B, on the release so a
            held button is one press. */
@@ -938,6 +1019,7 @@ static void inkcell_sdl_handle_wheel(struct inkcell_sdl_panel *panel,
     /* Not negated for SDL_MOUSEWHEEL_FLIPPED. The number is already the one the system's own
        scrolling setting produced, and what `direction` adds is only which setting that was - a
        reader who chose natural scrolling expects this list to scroll the way their others do. */
+    inkcell_sdl_show_cursor(panel, false);
     const int steps = inkcell_pointer_wheel(&panel->pointer, dy);
     const enum inkcell_key key = steps > 0 ? INKCELL_KEY_UP : INKCELL_KEY_DOWN;
     for (int i = 0; i < (steps > 0 ? steps : -steps); ++i) {
@@ -945,19 +1027,13 @@ static void inkcell_sdl_handle_wheel(struct inkcell_sdl_panel *panel,
     }
 }
 
-/* The hand over something a click would do, and the arrow everywhere else. Only on a change:
-   SDL_SetCursor() redraws the cursor, and a mouse moving across a row is dozens of events. */
+/* Where the pointer is, for the hover and the hand - see inkcell_sdl_sync_hover(). */
 static void inkcell_sdl_handle_motion(struct inkcell_sdl_panel *panel,
                                       const SDL_MouseMotionEvent *motion) {
-    if (panel->arrow == NULL || panel->hand == NULL) {
-        return;
-    }
-    const bool pointing = inkcell_pointer_over_target(&panel->pointer_map, motion->x, motion->y,
-                                                      panel->on_click != NULL);
-    if (pointing != panel->pointing) {
-        panel->pointing = pointing;
-        SDL_SetCursor(pointing ? panel->hand : panel->arrow);
-    }
+    panel->pointer_x = motion->x;
+    panel->pointer_y = motion->y;
+    panel->pointer_inside = true;
+    inkcell_sdl_sync_hover(panel);
 }
 
 static int inkcell_sdl_pump(int fd, uint32_t events, void *userdata) {
@@ -996,6 +1072,10 @@ static int inkcell_sdl_pump(int fd, uint32_t events, void *userdata) {
             inkcell_sdl_handle_motion(panel, &event.motion);
             break;
         case SDL_WINDOWEVENT:
+            if (event.window.event == SDL_WINDOWEVENT_LEAVE) {
+                panel->pointer_inside = false;
+                inkcell_sdl_sync_hover(panel);
+            }
             if (event.window.event == SDL_WINDOWEVENT_CLOSE) {
                 inkcell_sdl_request_stop(panel);
                 return 0;
@@ -1396,6 +1476,8 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
     (void)inkcell_sdl_fit_scale(panel);
     inkcell_fb_set_app(state, context->app);
     state->pointer = true;
+    /* Nothing has been pressed yet, and a window is opened with the mouse: no cue until a key. */
+    state->cursor_hidden = true;
 
     panel->host = context->host;
     panel->on_key = context->on_key;

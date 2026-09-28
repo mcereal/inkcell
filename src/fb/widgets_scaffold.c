@@ -139,6 +139,8 @@ static void scaffold_draw_cell(const struct inkcell_draw_state *state,
         .idle_tone = INKCELL_TONE_DIM,
         .ground = INKCELL_COLOR_SURFACE_LOW,
         .scale = scaffold_icon_scale(state),
+        /* The cell is what is registered, and the indicator lights for anywhere in it. */
+        .hover_id = chip->focus_id,
     };
     inkcell_fb_draw_button(state, &button);
 

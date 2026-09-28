@@ -41,6 +41,10 @@
 
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * How long a move takes, as a token rather than a number: the same one a control acknowledging
  * a press takes, because that is what this is. The curve is INKCELL_EASE_OUT for the same
@@ -128,5 +132,47 @@ int inkcell_fb_focus_ring_reach(const struct inkcell_draw_state *state);
  */
 bool inkcell_fb_focus_ring_rect(const struct inkcell_draw_state *state,
                                 struct inkcell_focus_rect *rect, int *radius);
+
+/*
+ * Whether the cursor's cue is drawn this frame - false only on a pointer frame whose reader last
+ * clicked or scrolled rather than pressed a key. See `cursor_hidden` on the draw state.
+ *
+ * What a component asks before it draws a row, a bubble or a ring *as focused*. It is not asked
+ * before marking the map: the cursor is still the cursor, and the next key moves it from there.
+ */
+bool inkcell_fb_cursor_shown(const struct inkcell_draw_state *state);
+
+/*
+ * Hides or shows the cursor's cue, from the backend. A change is the whole panel's damage on the
+ * next frame, since the cue may be anywhere on it. Answers whether anything changed, which is
+ * whether the backend owes a frame.
+ */
+bool inkcell_fb_set_cursor_hidden(struct inkcell_draw_state *state, bool hidden);
+
+/*
+ * Whether the pointer is over `id` - which a component that registered `id` answers with its
+ * hover layer. Never for INKCELL_FOCUS_NONE, and never on a frame drawn without a pointer.
+ */
+bool inkcell_fb_hovered(const struct inkcell_draw_state *state, uint32_t id);
+
+/*
+ * The pointer moved onto `id` (INKCELL_FOCUS_NONE: onto nothing, or out of the window), looked up
+ * in `map` - the last frame's, which is the one under the pointer. The box it left and the one it
+ * reached are the next frame's damage. Answers whether the hover changed.
+ */
+bool inkcell_fb_set_hover(struct inkcell_draw_state *state, const struct inkcell_focus_map *map,
+                          uint32_t id);
+
+/*
+ * Declares `box` - where the hover was drawn on a frame that has since been replaced - as the next
+ * frame's damage. For a backend swapping the map a hover was found in for a new one: the new map
+ * no longer says where the old frame lit, and inkcell_fb_set_hover() only knows the map it is
+ * handed.
+ */
+void inkcell_fb_hover_damage(struct inkcell_draw_state *state, struct inkcell_focus_rect box);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_FOCUS_H */

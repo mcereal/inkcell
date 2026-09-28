@@ -747,3 +747,68 @@ INKCELL_TEST_CASE(focus_widgets_compose_into_one_screen, unit) {
     focus_harness_close(&h);
     record_success(test_name);
 }
+
+/* The colour inside a menu row, away from its words: the middle of the row's box, at its right. */
+static struct inkcell_rgb focus_menu_row_ground(const struct focus_harness *h, uint32_t id) {
+    struct inkcell_focus_rect row = {0, 0, 0, 0};
+    (void)inkcell_focus_rect_of(&h->map, id, &row);
+    uint32_t width = 0U;
+    uint32_t height = 0U;
+    size_t stride = 0U;
+    const uint8_t *pixels = inkcell_capture_pixels(h->capture, &width, &height, &stride);
+    const uint8_t *p =
+        pixels + (size_t)(row.y + row.h / 2) * stride + (size_t)(row.x + row.w - 4) * 4U;
+    return (struct inkcell_rgb){.r = p[2], .g = p[1], .b = p[0]};
+}
+
+/* One menu of two rows, cursor on the first, drawn with the reader on the pointer or the keys. */
+static bool focus_menu_drawn(bool pointer_reader, struct inkcell_rgb *first,
+                             struct inkcell_rgb *second) {
+    struct focus_harness h;
+    if (!focus_harness_open(&h, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT)) {
+        return false;
+    }
+    h.state->pointer = true;
+    h.state->cursor_hidden = pointer_reader;
+    h.state->hover = pointer_reader ? W_ID_ROW + 1U : INKCELL_FOCUS_NONE;
+    const struct inkcell_fb_menu_item items[] = {{.label = "One"}, {.label = "Two"}};
+    const struct inkcell_fb_menu menu = {
+        .items = items,
+        .count = 2U,
+        .cursor = 0U,
+        .focus_base = W_ID_ROW,
+    };
+    struct inkcell_fb_rect box = inkcell_fb_menu_box(h.state, &menu, INKCELL_CAPTURE_WIDTH);
+    box.x = 10;
+    box.y = 10;
+    inkcell_fb_draw_menu(h.state, box, &menu);
+    *first = focus_menu_row_ground(&h, W_ID_ROW);
+    *second = focus_menu_row_ground(&h, W_ID_ROW + 1U);
+    focus_harness_close(&h);
+    return true;
+}
+
+static bool focus_same_rgb(struct inkcell_rgb a, struct inkcell_rgb b) {
+    return a.r == b.r && a.g == b.g && a.b == b.b;
+}
+
+/*
+ * A menu opened with a right-click has no cursor to show: its first row is not lit as the
+ * cursor's, and the row under the pointer takes the hover layer instead.
+ */
+INKCELL_TEST_CASE(focus_widgets_menu_shows_the_hover_not_the_cursor_to_a_pointer, unit) {
+    struct inkcell_rgb keys_first;
+    struct inkcell_rgb keys_second;
+    struct inkcell_rgb mouse_first;
+    struct inkcell_rgb mouse_second;
+    INKCELL_TEST_FAIL_IF(!focus_menu_drawn(false, &keys_first, &keys_second) ||
+                             !focus_menu_drawn(true, &mouse_first, &mouse_second),
+                         "the capture should open");
+    INKCELL_TEST_FAIL_IF(focus_same_rgb(keys_first, keys_second),
+                         "on the keys the cursor's row should be lit");
+    INKCELL_TEST_FAIL_IF(!focus_same_rgb(mouse_first, keys_second),
+                         "on the pointer the cursor's row should be at rest");
+    INKCELL_TEST_FAIL_IF(focus_same_rgb(mouse_second, keys_second),
+                         "and the row under the pointer should take the hover layer");
+    record_success(test_name);
+}

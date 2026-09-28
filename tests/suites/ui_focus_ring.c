@@ -420,3 +420,190 @@ INKCELL_TEST_CASE(focus_ring_does_not_travel_where_there_is_no_distance, unit) {
     ring_close(&h);
     record_success(test_name);
 }
+
+/*
+ * A reader on the pointer is not shown the cursor: no ring, and one that comes back when a key is
+ * pressed lands on its box rather than flying in from where it was hidden.
+ */
+INKCELL_TEST_CASE(focus_ring_is_hidden_from_a_reader_on_the_pointer, unit) {
+    struct ring_harness h;
+    INKCELL_TEST_FAIL_IF(!ring_open(&h), "the capture should open");
+    h.state->pointer = true;
+
+    inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_LEFT);
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_set_cursor_hidden(h.state, true), ring_close(&h),
+                                 "hiding the cursor should be a change");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_set_cursor_hidden(h.state, true), ring_close(&h),
+                                 "and hiding it twice is not");
+    inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_LEFT);
+    struct inkcell_focus_rect at = {0, 0, 0, 0};
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_focus_ring_rect(h.state, &at, NULL), ring_close(&h),
+                                 "a hidden cursor has no ring");
+
+    (void)inkcell_fb_set_cursor_hidden(h.state, false);
+    inkcell_fb_draw_focus_ring(h.state, &h.map, RING_ID_RIGHT);
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_focus_ring_rect(h.state, &at, NULL) || at.x != 500,
+                                 ring_close(&h),
+                                 "a ring shown again should adopt its box, not travel to it");
+    ring_close(&h);
+    record_success(test_name);
+}
+
+/* A panel has no other way to be read, so its cursor is shown whatever the flag says. */
+INKCELL_TEST_CASE(focus_cursor_is_always_shown_on_a_panel, unit) {
+    struct ring_harness h;
+    INKCELL_TEST_FAIL_IF(!ring_open(&h), "the capture should open");
+    h.state->cursor_hidden = true;
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_cursor_shown(h.state), ring_close(&h),
+                                 "a frame with no pointer should always show its cursor");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_hovered(h.state, RING_ID_LEFT), ring_close(&h),
+                                 "and nothing on it is ever under a pointer");
+    ring_close(&h);
+    record_success(test_name);
+}
+
+/*
+ * The hover moves between frames, so it says where it moved: the box it left and the box it
+ * reached are the next frame's damage, and nothing else is.
+ */
+INKCELL_TEST_CASE(focus_hover_damages_the_boxes_it_leaves_and_reaches, unit) {
+    struct ring_harness h;
+    INKCELL_TEST_FAIL_IF(!ring_open(&h), "the capture should open");
+    h.state->pointer = true;
+
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_set_hover(h.state, &h.map, RING_ID_LEFT),
+                                 ring_close(&h), "a hover onto a box should be a change");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_set_hover(h.state, &h.map, RING_ID_LEFT),
+                                 ring_close(&h), "and the same box again is not");
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_hovered(h.state, RING_ID_LEFT) ||
+                                     inkcell_fb_hovered(h.state, RING_ID_RIGHT),
+                                 ring_close(&h), "only the box under the pointer is hovered");
+    const struct inkcell_fb_damage_rect first = h.state->pointer_damage;
+    INKCELL_TEST_FAIL_IF_CLEANUP(!first.valid || first.x > 100 || first.right < 180 ||
+                                     first.y > 100 || first.bottom < 140 || first.right > 400,
+                                 ring_close(&h), "the damage should be the box reached, and small");
+
+    h.state->pointer_damage = (struct inkcell_fb_damage_rect){0};
+    (void)inkcell_fb_set_hover(h.state, &h.map, RING_ID_BELOW);
+    const struct inkcell_fb_damage_rect moved = h.state->pointer_damage;
+    INKCELL_TEST_FAIL_IF_CLEANUP(!moved.valid || moved.y > 100 || moved.bottom < 340,
+                                 ring_close(&h),
+                                 "a move should damage the box left and the box reached");
+
+    /* Carried into the next frame's damage, where the clip band will find it. */
+    inkcell_fb_app_frame_begin(h.state);
+    INKCELL_TEST_FAIL_IF_CLEANUP(h.state->pointer_damage.valid || !h.state->animation_damage.valid,
+                                 ring_close(&h), "the next frame should take the hover's damage");
+
+    (void)inkcell_fb_set_hover(h.state, &h.map, INKCELL_FOCUS_NONE);
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_hovered(h.state, RING_ID_BELOW), ring_close(&h),
+                                 "a pointer off every box hovers nothing");
+    ring_close(&h);
+    record_success(test_name);
+}
+
+/* A button draws its cursor fill only where the cursor is shown - a keyboard's key under a mouse
+   reads as any other key until a key is pressed. */
+INKCELL_TEST_CASE(focus_a_button_hides_its_cursor_fill_from_the_pointer, unit) {
+    struct ring_harness h;
+    INKCELL_TEST_FAIL_IF(!ring_open(&h), "the capture should open");
+    const struct inkcell_fb_button key = {.variant = INKCELL_FB_BUTTON_FILLED, .focused = true};
+    const struct inkcell_fb_button rest = {.variant = INKCELL_FB_BUTTON_FILLED};
+    h.state->pointer = true;
+    (void)inkcell_fb_set_cursor_hidden(h.state, true);
+    const struct inkcell_rgb hidden = inkcell_fb_button_paint(h.state, &key).paint.fill;
+    const struct inkcell_rgb resting = inkcell_fb_button_paint(h.state, &rest).paint.fill;
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        hidden.r != resting.r || hidden.g != resting.g || hidden.b != resting.b, ring_close(&h),
+        "a focused button should paint as at rest for a reader on the pointer");
+    (void)inkcell_fb_set_cursor_hidden(h.state, false);
+    const struct inkcell_rgb shown = inkcell_fb_button_paint(h.state, &key).paint.fill;
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        shown.r == resting.r && shown.g == resting.g && shown.b == resting.b, ring_close(&h),
+        "and take its cursor fill again once a key is pressed");
+    ring_close(&h);
+    record_success(test_name);
+}
+
+/* Under the pointer a button takes the hover layer, in each of its three variants - the key, the
+   pill and the bare word. */
+INKCELL_TEST_CASE(focus_a_button_takes_the_hover_layer_under_the_pointer, unit) {
+    struct ring_harness h;
+    INKCELL_TEST_FAIL_IF(!ring_open(&h), "the capture should open");
+    h.state->pointer = true;
+    (void)inkcell_fb_set_cursor_hidden(h.state, true);
+    const enum inkcell_fb_button_variant variants[] = {
+        INKCELL_FB_BUTTON_FILLED, INKCELL_FB_BUTTON_TONAL, INKCELL_FB_BUTTON_TEXT};
+    for (size_t i = 0U; i < sizeof variants / sizeof variants[0]; ++i) {
+        const struct inkcell_fb_button button = {
+            .variant = variants[i], .family = INKCELL_FAMILY_PRIMARY, .focus_id = RING_ID_LEFT};
+        h.state->hover = INKCELL_FOCUS_NONE;
+        const struct inkcell_fb_button_paint rest = inkcell_fb_button_paint(h.state, &button);
+        h.state->hover = RING_ID_LEFT;
+        const struct inkcell_fb_button_paint over = inkcell_fb_button_paint(h.state, &button);
+        const bool same =
+            rest.has_fill == over.has_fill && rest.paint.fill.r == over.paint.fill.r &&
+            rest.paint.fill.g == over.paint.fill.g && rest.paint.fill.b == over.paint.fill.b;
+        INKCELL_TEST_FAIL_IF_CLEANUP(same || !over.has_fill, ring_close(&h),
+                                     "a button under the pointer should take the hover layer");
+    }
+    ring_close(&h);
+    record_success(test_name);
+}
+
+/* A box the hover was lit on, from a frame since replaced, is the next frame's damage. */
+INKCELL_TEST_CASE(focus_hover_damage_declares_a_box_from_a_replaced_frame, unit) {
+    struct ring_harness h;
+    INKCELL_TEST_FAIL_IF(!ring_open(&h), "the capture should open");
+    inkcell_fb_hover_damage(h.state, (struct inkcell_focus_rect){300, 400, 50, 20});
+    const struct inkcell_fb_damage_rect d = h.state->pointer_damage;
+    INKCELL_TEST_FAIL_IF_CLEANUP(!d.valid || d.x > 300 || d.y > 400 || d.right < 350 ||
+                                     d.bottom < 420,
+                                 ring_close(&h), "the old box should be covered");
+    ring_close(&h);
+    record_success(test_name);
+}
+
+/* A button a composite control registered under an id of its own lights for that id. */
+INKCELL_TEST_CASE(focus_a_button_lights_for_the_id_its_control_registered, unit) {
+    struct ring_harness h;
+    INKCELL_TEST_FAIL_IF(!ring_open(&h), "the capture should open");
+    h.state->pointer = true;
+    const struct inkcell_fb_button cell = {.variant = INKCELL_FB_BUTTON_TEXT,
+                                           .hover_id = RING_ID_RIGHT};
+    const struct inkcell_fb_button_paint rest = inkcell_fb_button_paint(h.state, &cell);
+    h.state->hover = RING_ID_RIGHT;
+    const struct inkcell_fb_button_paint over = inkcell_fb_button_paint(h.state, &cell);
+    INKCELL_TEST_FAIL_IF_CLEANUP(rest.has_fill || !over.has_fill, ring_close(&h),
+                                 "the button should light for its control's id");
+    ring_close(&h);
+    record_success(test_name);
+}
+
+/* A field a pointer can press strengthens its outline under the pointer. */
+INKCELL_TEST_CASE(focus_a_pressable_field_outlines_itself_under_the_pointer, unit) {
+    struct ring_harness h;
+    INKCELL_TEST_FAIL_IF(!ring_open(&h), "the capture should open");
+    h.state->pointer = true;
+    const struct inkcell_fb_layout layout = inkcell_fb_layout_begin(h.state, false, false);
+    const struct inkcell_fb_text_field field = {.value = "", .target = RING_ID_BELOW};
+    const int x = inkcell_fb_content_x(h.state) + inkcell_fb_content_w(h.state) / 2;
+    const int top = layout.body_y;
+    struct inkcell_rgb edge[2];
+    for (int i = 0; i < 2; ++i) {
+        h.state->hover = i == 0 ? INKCELL_FOCUS_NONE : RING_ID_BELOW;
+        int y = top;
+        inkcell_fb_draw_text_field(h.state, &layout, &y, &field);
+        uint32_t width = 0U;
+        uint32_t height = 0U;
+        size_t stride = 0U;
+        const uint8_t *px = inkcell_capture_pixels(h.capture, &width, &height, &stride);
+        const uint8_t *p = px + (size_t)top * stride + (size_t)x * 4U;
+        edge[i] = (struct inkcell_rgb){.r = p[2], .g = p[1], .b = p[0]};
+    }
+    INKCELL_TEST_FAIL_IF_CLEANUP(edge[0].r == edge[1].r && edge[0].g == edge[1].g &&
+                                     edge[0].b == edge[1].b,
+                                 ring_close(&h), "the outline should change under the pointer");
+    ring_close(&h);
+    record_success(test_name);
+}

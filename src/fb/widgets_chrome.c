@@ -11,6 +11,7 @@
 
 #include "inkcell/ui/widgets/button.h"
 #include "inkcell/ui/widgets/chrome.h"
+#include "inkcell/ui/widgets/focus.h"
 #include "inkcell/ui/widgets/meter.h"
 #include "inkcell/ui/widgets/scroll.h"
 
@@ -456,6 +457,14 @@ static void inkcell_fb_action_targets(const struct inkcell_draw_state *state,
     }
 }
 
+/* The id a hint lights under: the first key it presses, which is the whole hint for every hint
+   but a pair - and a pair is the arrows, which a pointer's bar does not draw. */
+static uint32_t inkcell_fb_action_hover_id(enum inkcell_button button) {
+    enum inkcell_key keys[2];
+    return inkcell_button_keys(button, keys) > 0U ? INKCELL_FOCUS_ACTION_KEY(keys[0])
+                                                  : INKCELL_FOCUS_NONE;
+}
+
 /*
  * One hint, drawn from `x` on the keycap row: a verb-only button to a pointer, a cap and its verb
  * to everyone else. Returns the width it took, so the loop that places a row of them is the
@@ -482,6 +491,7 @@ static int inkcell_fb_draw_action_hint(const struct inkcell_draw_state *state,
             .shape = INKCELL_SHAPE_SM,
             .ground = INKCELL_COLOR_SURFACE_LOW,
             .scale = small,
+            .hover_id = inkcell_fb_action_hover_id(action->button),
         };
         inkcell_fb_draw_button(state, &verb);
         inkcell_fb_action_targets(state, action->button, x, verb.rect.y, w, verb.rect.h);
@@ -499,6 +509,7 @@ static int inkcell_fb_draw_action_hint(const struct inkcell_draw_state *state,
         .shape = INKCELL_SHAPE_SM,
         .ground = INKCELL_COLOR_SURFACE_LOW,
         .scale = small,
+        .hover_id = inkcell_fb_action_hover_id(action->button),
     };
     inkcell_fb_draw_button(state, &key);
 
@@ -1299,8 +1310,16 @@ static void inkcell_fb_app_bar_icon_button(const struct inkcell_draw_state *stat
     struct inkcell_rgb ground = row->ground;
     if (focused && id != INKCELL_FOCUS_NONE) {
         inkcell_fb_focus_mark(state, id);
+    }
+    /* The cursor's fill for a reader on the keys, the hover's lighter one under a pointer - see
+       inkcell_fb_cursor_shown(). The mark above is the cursor's either way. */
+    if (focused && id != INKCELL_FOCUS_NONE && inkcell_fb_cursor_shown(state)) {
         ground = inkcell_fb_color(state, INKCELL_COLOR_SURFACE_ACTIVE);
         ink = inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL);
+        inkcell_fb_fill_round_rect(state, rect.x, rect.y, rect.w, rect.h,
+                                   inkcell_fb_radius(state, INKCELL_SHAPE_FULL), ground);
+    } else if (inkcell_fb_hovered(state, id)) {
+        ground = inkcell_theme_state_layer_for(state->theme, ground, ink, INKCELL_STATE_HOVERED);
         inkcell_fb_fill_round_rect(state, rect.x, rect.y, rect.w, rect.h,
                                    inkcell_fb_radius(state, INKCELL_SHAPE_FULL), ground);
     }
@@ -1513,8 +1532,15 @@ static void inkcell_fb_app_bar_draw_field(const struct inkcell_draw_state *state
         struct inkcell_rgb ground = fill;
         if (bar->clear_focused) {
             inkcell_fb_focus_mark(state, bar->clear_focus_id);
+        }
+        if (bar->clear_focused && inkcell_fb_cursor_shown(state)) {
             ground = inkcell_fb_color(state, INKCELL_COLOR_SURFACE_ACTIVE);
             ink = inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL);
+            inkcell_fb_fill_round_rect(state, clear.x, clear.y, clear.w, clear.h,
+                                       inkcell_fb_radius(state, INKCELL_SHAPE_FULL), ground);
+        } else if (inkcell_fb_hovered(state, bar->clear_focus_id)) {
+            ground =
+                inkcell_theme_state_layer_for(state->theme, ground, ink, INKCELL_STATE_HOVERED);
             inkcell_fb_fill_round_rect(state, clear.x, clear.y, clear.w, clear.h,
                                        inkcell_fb_radius(state, INKCELL_SHAPE_FULL), ground);
         }
@@ -2309,6 +2335,7 @@ struct inkcell_fb_rect inkcell_fb_draw_fab(struct inkcell_draw_state *state,
         .focused = fab->focused,
         .variant = INKCELL_FB_BUTTON_TONAL,
         .family = fab->family,
+        .hover_id = fab->focus_id,
     };
     const struct inkcell_fb_button_paint paint = inkcell_fb_button_paint(state, &spec);
 

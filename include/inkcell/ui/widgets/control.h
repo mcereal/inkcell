@@ -21,6 +21,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * A switch: a boolean the eye reads without reading a word.
  *
@@ -264,6 +268,15 @@ struct inkcell_fb_text_field {
     /* The value is not something the field will accept - the outline and the counter take the
        bad tone. Nothing here decides that; a screen does. */
     bool error;
+    /* What the field is for, dim, in place of an empty value - a prompt the application words.
+       NULL or "" for none, which suits a field whose screen names the job in its heading. */
+    const char *placeholder;
+    /* The field has the keyboard, and its outline says so in the accent. A field that is the
+       only thing on its screen has no need to; one that shares a pane with a transcript does. */
+    bool lit;
+    /* An id a pointer may press the box under (inkcell_fb_target_register()), or
+       INKCELL_FOCUS_NONE. A target rather than a stop: the d-pad reaches a field by a key. */
+    uint32_t target;
 };
 
 /* Pixels the field occupies, label and counter included - what a screen laying something out
@@ -276,5 +289,9 @@ int inkcell_fb_text_field_height(const struct inkcell_draw_state *state,
 void inkcell_fb_draw_text_field(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_layout *layout, int *y,
                                 const struct inkcell_fb_text_field *field);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_CONTROL_H */

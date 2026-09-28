@@ -24,6 +24,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * ---- the list's look ----
  *
@@ -217,6 +221,9 @@ struct inkcell_fb_list {
     /* What the d-pad calls the rows: item `index` is `focus_base + index`. Set by
        inkcell_fb_list_focus(), zero otherwise. */
     uint32_t focus_base;
+    /* The rows are a pointer's targets and not the d-pad's stops - see inkcell_fb_list_targets().
+     */
+    bool focus_targets;
     /*
      * ---- the glide ----
      *
@@ -485,6 +492,22 @@ struct inkcell_fb_list inkcell_fb_list_begin_visible(const struct inkcell_fb_lay
  */
 void inkcell_fb_list_focus(struct inkcell_fb_list *list, uint32_t base);
 
+/*
+ * Numbers the rows as inkcell_fb_list_focus() does, as targets a pointer may press and the d-pad
+ * never lands on, and never as the frame's mark.
+ *
+ * For a list on the panel that is not where the keys are: a sidebar standing beside the detail it
+ * opened. The detail has the cursor and its own rows; the list beside it still answers a click -
+ * a desktop's sidebar is always a click away - but a d-pad that could step into it would leave
+ * the detail by a route the keys have no way back from. Its rows light under a hovering pointer
+ * like any other, since that is the same id under the same box.
+ *
+ * Its cursor row is the *selection* - the item the detail is showing - and is drawn as one: the
+ * ACCENT cue whatever the list's own look, on every frame, keys or pointer. Never a ring or a
+ * fill, which is how the cursor proper says where it is, in the detail.
+ */
+void inkcell_fb_list_targets(struct inkcell_fb_list *list, uint32_t base);
+
 /* How long a glide takes: the token a control acknowledging a press takes, because that is what
    a list moving a row is. The same one the focus ring travels on, so the two agree on a frame
    where both are moving. */
@@ -708,5 +731,9 @@ uint32_t inkcell_fb_list_note_steps(const struct inkcell_draw_state *state, cons
 
 void inkcell_fb_list_note(const struct inkcell_draw_state *state, struct inkcell_fb_list *list,
                           uint32_t index, const char *heading, const char *body);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_LIST_H */

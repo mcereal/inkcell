@@ -407,6 +407,30 @@ struct inkcell_draw_state {
      */
     bool pointer;
     /*
+     * Whether the cursor is drawn, on a frame read with a pointer - see inkcell_fb_cursor_shown().
+     *
+     * A desktop shows where the keyboard is only while the keyboard is in use: a row somebody
+     * clicked is theirs to see, and a ring round the row they happened to land on at launch is
+     * noise. So the backend sets this on a click or a scroll and clears it on a key, and what
+     * it hides is the *cue* - the ring, the lifted row, the ring round a bubble. The cursor
+     * itself is untouched: it is still where the next key lands, and the list still windows
+     * round it. Always false on a panel, which has no other way to be read.
+     */
+    bool cursor_hidden;
+    /*
+     * The id under the pointer, or INKCELL_FOCUS_NONE - see inkcell_fb_hovered(). Set by the
+     * backend from the last frame's map on every move; a component that registered the id
+     * draws its hover layer while it matches.
+     */
+    uint32_t hover;
+    /*
+     * Where the pointer changed what is drawn since the last frame: the box the hover left and
+     * the one it arrived on, or the whole panel when the cursor was hidden or shown. Carried
+     * into the next frame's damage by inkcell_fb_app_frame_begin(), for the focus ring's
+     * reason - a change made between frames has no draw call of its own to declare it from.
+     */
+    struct inkcell_fb_damage_rect pointer_damage;
+    /*
      * Where this frame's pixels go, and how one is spelled.
      *
      * The only part of this structure a backend owns, and the only part of it that changes when
@@ -1676,6 +1700,10 @@ void inkcell_fb_focus_mark_cued(const struct inkcell_draw_state *state, uint32_t
  */
 void inkcell_fb_target_register(const struct inkcell_draw_state *state, uint32_t id,
                                 const struct inkcell_fb_rect *rect);
+/* The same, for a target drawn with rounded corners - `shape`'s radius on this theme. */
+void inkcell_fb_target_register_shaped(const struct inkcell_draw_state *state, uint32_t id,
+                                       const struct inkcell_fb_rect *rect,
+                                       enum inkcell_shape shape);
 
 /* Whether the app says it is owed another frame - what inkcell_fb_state_animating() adds to the
    animations when it decides whether one is due. */

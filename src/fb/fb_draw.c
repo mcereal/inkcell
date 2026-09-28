@@ -459,6 +459,15 @@ void inkcell_fb_target_register(const struct inkcell_draw_state *state, uint32_t
     inkcell_fb_focus_put(state, id, rect, 0, true);
 }
 
+void inkcell_fb_target_register_shaped(const struct inkcell_draw_state *state, uint32_t id,
+                                       const struct inkcell_fb_rect *rect,
+                                       enum inkcell_shape shape) {
+    if (state == NULL) {
+        return;
+    }
+    inkcell_fb_focus_put(state, id, rect, inkcell_fb_radius(state, shape), true);
+}
+
 bool inkcell_fb_app_pending(const struct inkcell_draw_state *state) {
     return state != NULL && state->app.pending != NULL && state->app.pending(state->app.ctx);
 }
@@ -562,6 +571,13 @@ void inkcell_fb_app_frame_begin(struct inkcell_draw_state *state) {
      * darken a step per frame for as long as the modal was up. That is why the span a layer
      * records covers its scrim's whole region and not just its own box.
      */
+    /* And whatever the pointer changed between frames - see `pointer_damage`. */
+    const struct inkcell_fb_damage_rect pointed = state->pointer_damage;
+    state->pointer_damage = (struct inkcell_fb_damage_rect){0};
+    if (pointed.valid) {
+        inkcell_fb_animation_damage(state, pointed.x, pointed.y, pointed.right - pointed.x,
+                                    pointed.bottom - pointed.y);
+    }
     for (uint32_t i = 0U; i < INKCELL_OVERLAY_SLOTS; ++i) {
         const struct inkcell_fb_damage_rect was = state->overlays[i].drawn;
         state->overlays[i].drawn = (struct inkcell_fb_damage_rect){0};
