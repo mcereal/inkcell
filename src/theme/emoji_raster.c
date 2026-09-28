@@ -260,8 +260,21 @@ struct raster_map {
     int32_t dy; /* the band's top, in FX */
 };
 
-static int32_t map_coord(const struct raster_map *m, int32_t v) {
-    return (int32_t)floor_div((int64_t)v * m->scale + m->grid / 2, m->grid);
+/*
+ * The furthest from the box a coordinate may land, in FX: 65536 pixels. An outline that reaches
+ * further is not an emoji, and bounding it here is what keeps every difference and product the
+ * edges are built from - a slope's run times its rise, in 64 bits - inside the types it is
+ * worked in, whatever a pack from a file says.
+ */
+#define COORD_LIMIT ((int64_t)65536 * FX)
+
+static bool map_coord(const struct raster_map *m, int64_t v, int32_t offset, int32_t *out) {
+    const int64_t mapped = floor_div(v * m->scale + m->grid / 2, m->grid) - offset;
+    if (mapped < -COORD_LIMIT || mapped > COORD_LIMIT) {
+        return false;
+    }
+    *out = (int32_t)mapped;
+    return true;
 }
 
 /*
@@ -277,8 +290,10 @@ static bool raster_path(struct raster *r, const uint8_t *at, const uint8_t *end,
     if (!read_varint(&at, end, &contours)) {
         return false;
     }
-    int32_t ux = 0;
-    int32_t uy = 0;
+    /* Wider than a coordinate, so that a delta taking one out of range is caught rather than
+       wrapped: the deltas are a file's to choose. */
+    int64_t ux = 0;
+    int64_t uy = 0;
     for (uint32_t k = 0; k < contours; ++k) {
         uint32_t points;
         if (!read_varint(&at, end, &points) || points == 0U) {
@@ -310,8 +325,10 @@ static bool raster_path(struct raster *r, const uint8_t *at, const uint8_t *end,
                 }
                 ux += unzigzag(zx);
                 uy += unzigzag(zy);
-                x = map_coord(m, ux);
-                y = map_coord(m, uy) - m->dy;
+                if (ux < INT32_MIN || ux > INT32_MAX || uy < INT32_MIN || uy > INT32_MAX ||
+                    !map_coord(m, ux, 0, &x) || !map_coord(m, uy, m->dy, &y)) {
+                    return false;
+                }
                 on = (flags[i / 8U] >> (i % 8U)) & 1U;
             } else {
                 x = first_x; /* close the contour */

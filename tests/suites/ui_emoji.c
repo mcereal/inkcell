@@ -57,6 +57,8 @@ static uint32_t zigzag(int32_t v) {
  * red, filed under U+1F7E5. `contours` is what the path claims to hold, so a caller can claim
  * more than it does.
  */
+static void emoji_build_path(struct emoji_pack_bytes *pack, const uint8_t *path, size_t n);
+
 static void emoji_build(struct emoji_pack_bytes *pack, int32_t x0, int32_t y0, int32_t x1,
                         int32_t y1, uint32_t contours) {
     uint8_t path[64];
@@ -72,6 +74,11 @@ static void emoji_build(struct emoji_pack_bytes *pack, int32_t x0, int32_t y0, i
         x = corners[i][0];
         y = corners[i][1];
     }
+    emoji_build_path(pack, path, n);
+}
+
+/* The same pack around path bytes the caller wrote, for a path no rectangle spells. */
+static void emoji_build_path(struct emoji_pack_bytes *pack, const uint8_t *path, size_t n) {
     const size_t path_bytes = (n + 3U) & ~(size_t)3U;
 
     uint8_t *b = pack->bytes;
@@ -288,6 +295,48 @@ INKCELL_TEST_CASE(emoji_pack_loads_from_a_file, unit) {
     INKCELL_TEST_FAIL_IF(emoji_square_glyph() != 0U, "leaving the loaded one in use");
     unlink(path);
     INKCELL_TEST_FAIL_IF(inkcell_emoji_load_file(path) != -ENOENT, "a missing file is refused");
+
+    emoji_restore();
+    record_success(test_name);
+}
+
+/* A pack whose deltas carry a coordinate past what an int32 holds - which parses, because the
+   layout is sound - is an outline that stops short, not arithmetic that overflows. */
+INKCELL_TEST_CASE(emoji_raster_refuses_a_coordinate_past_the_range, unit) {
+    static struct emoji_pack_bytes pack;
+    uint8_t path[64];
+    size_t n = put_varint(path, 1U);
+    n += put_varint(&path[n], 3U);
+    path[n++] = 0x07U;
+    n += put_varint(&path[n], zigzag(INT32_MAX)); /* x at the top of the range */
+    n += put_varint(&path[n], 0U);
+    n += put_varint(&path[n], zigzag(1)); /* and one past it */
+    n += put_varint(&path[n], 0U);
+    n += put_varint(&path[n], 0U);
+    n += put_varint(&path[n], zigzag(8));
+    emoji_build_path(&pack, path, n);
+    INKCELL_TEST_FAIL_IF(inkcell_emoji_use_pack(pack.bytes, pack.size) != 0,
+                         "the pack's layout is sound even though a path is not");
+
+    uint8_t out[8 * 8][4];
+    INKCELL_TEST_FAIL_IF(inkcell_emoji_render(0U, 8, 0, 8, out) != -EBADMSG,
+                         "a coordinate past the range is reported");
+
+    /* Inside an int32 but past any panel: scaled to pixels, still refused rather than wrapped. */
+    n = put_varint(path, 1U);
+    n += put_varint(&path[n], 3U);
+    path[n++] = 0x07U;
+    n += put_varint(&path[n], zigzag(INT32_MAX - 1));
+    n += put_varint(&path[n], 0U);
+    n += put_varint(&path[n], 0U);
+    n += put_varint(&path[n], zigzag(8));
+    n += put_varint(&path[n], zigzag(-(INT32_MAX - 1)));
+    n += put_varint(&path[n], 0U);
+    emoji_build_path(&pack, path, n);
+    INKCELL_TEST_FAIL_IF(inkcell_emoji_use_pack(pack.bytes, pack.size) != 0,
+                         "the pack's layout is sound");
+    INKCELL_TEST_FAIL_IF(inkcell_emoji_render(0U, 8, 0, 8, out) != -EBADMSG,
+                         "a coordinate no panel could hold is reported");
 
     emoji_restore();
     record_success(test_name);
