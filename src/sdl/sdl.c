@@ -1272,11 +1272,18 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
      * a resize when batching is on: the device is reset for the new back buffer, every call
      * after it reports success, and the window stays white until the process exits. Direct3D
      * 11 and OpenGL do not, and neither does Direct3D 9 unbatched. A frame here is one clear
-     * and one quad, so batching has nothing to save. At the default priority, so
-     * SDL_RENDER_BATCHING in the environment still decides, and reset once the renderer has
-     * read it, so a host's own renderer is not made to live with this one's choice.
+     * and one quad, so batching has nothing to save.
+     *
+     * Only where nobody has said otherwise: a hint the host set, or SDL_RENDER_BATCHING in the
+     * environment, is theirs to keep, and SDL_GetHint() answers for both. Cleared again once
+     * the renderer has read it, and cleared rather than reset - a NULL value is "unset" on
+     * every SDL2, where SDL_ResetHint() is 2.24's - so no renderer the host makes later lives
+     * with this one's choice.
      */
-    SDL_SetHintWithPriority(SDL_HINT_RENDER_BATCHING, "0", SDL_HINT_DEFAULT);
+    const bool batching_ours = SDL_GetHint(SDL_HINT_RENDER_BATCHING) == NULL;
+    if (batching_ours) {
+        SDL_SetHintWithPriority(SDL_HINT_RENDER_BATCHING, "0", SDL_HINT_DEFAULT);
+    }
 #endif
     panel->renderer = SDL_CreateRenderer(panel->window, -1, flags);
     if (panel->renderer == NULL) {
@@ -1287,8 +1294,10 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
                          SDL_GetError());
         panel->renderer = SDL_CreateRenderer(panel->window, -1, SDL_RENDERER_SOFTWARE);
     }
-#if defined(_WIN32) && SDL_VERSION_ATLEAST(2, 24, 0)
-    (void)SDL_ResetHint(SDL_HINT_RENDER_BATCHING);
+#if defined(_WIN32)
+    if (batching_ours) {
+        SDL_SetHintWithPriority(SDL_HINT_RENDER_BATCHING, NULL, SDL_HINT_DEFAULT);
+    }
 #endif
     if (panel->renderer == NULL) {
         inkwell_log_warn("ui", "SDL_CreateRenderer failed: %s", SDL_GetError());
