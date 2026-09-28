@@ -524,3 +524,29 @@ INKCELL_TEST_CASE(focus_a_button_hides_its_cursor_fill_from_the_pointer, unit) {
     ring_close(&h);
     record_success(test_name);
 }
+
+/* Under the pointer a button takes the hover layer, in each of its three variants - the key, the
+   pill and the bare word. */
+INKCELL_TEST_CASE(focus_a_button_takes_the_hover_layer_under_the_pointer, unit) {
+    struct ring_harness h;
+    INKCELL_TEST_FAIL_IF(!ring_open(&h), "the capture should open");
+    h.state->pointer = true;
+    (void)inkcell_fb_set_cursor_hidden(h.state, true);
+    const enum inkcell_fb_button_variant variants[] = {
+        INKCELL_FB_BUTTON_FILLED, INKCELL_FB_BUTTON_TONAL, INKCELL_FB_BUTTON_TEXT};
+    for (size_t i = 0U; i < sizeof variants / sizeof variants[0]; ++i) {
+        const struct inkcell_fb_button button = {
+            .variant = variants[i], .family = INKCELL_FAMILY_PRIMARY, .focus_id = RING_ID_LEFT};
+        h.state->hover = INKCELL_FOCUS_NONE;
+        const struct inkcell_fb_button_paint rest = inkcell_fb_button_paint(h.state, &button);
+        h.state->hover = RING_ID_LEFT;
+        const struct inkcell_fb_button_paint over = inkcell_fb_button_paint(h.state, &button);
+        const bool same =
+            rest.has_fill == over.has_fill && rest.paint.fill.r == over.paint.fill.r &&
+            rest.paint.fill.g == over.paint.fill.g && rest.paint.fill.b == over.paint.fill.b;
+        INKCELL_TEST_FAIL_IF_CLEANUP(same || !over.has_fill, ring_close(&h),
+                                     "a button under the pointer should take the hover layer");
+    }
+    ring_close(&h);
+    record_success(test_name);
+}

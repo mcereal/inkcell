@@ -23,16 +23,21 @@
 struct inkcell_fb_button_paint inkcell_fb_button_paint(const struct inkcell_draw_state *state,
                                                        const struct inkcell_fb_button *button) {
     /* The cursor's fill is its cue, and a reader on the pointer is not shown one - see
-       inkcell_fb_cursor_shown(). The button is still marked as the cursor's below. */
+       inkcell_fb_cursor_shown(). The button is still marked as the cursor's below. Under the
+       pointer it takes the hover layer instead: the lightest state there is, over whatever the
+       button stands on at rest. */
     const bool focused = button->focused && inkcell_fb_cursor_shown(state);
+    const bool hovered = !focused && inkcell_fb_hovered(state, button->focus_id);
     switch (button->variant) {
     case INKCELL_FB_BUTTON_FILLED:
         /* The neutral cursor surface, not a family: a keyboard key is a place to press, not a
            statement about what pressing it means. */
         return (struct inkcell_fb_button_paint){
             true,
-            {inkcell_fb_color(state,
-                              focused ? INKCELL_COLOR_SURFACE_ACTIVE : INKCELL_COLOR_SURFACE_SEL),
+            {focused   ? inkcell_fb_color(state, INKCELL_COLOR_SURFACE_ACTIVE)
+             : hovered ? inkcell_fb_state_layer(state, INKCELL_COLOR_SURFACE_SEL,
+                                                INKCELL_COLOR_TEXT_ON_SEL, INKCELL_STATE_HOVERED)
+                       : inkcell_fb_color(state, INKCELL_COLOR_SURFACE_SEL),
              inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL)}};
     case INKCELL_FB_BUTTON_TONAL:
         /* Under the cursor a tonal control commits to the family's full strength: the container
@@ -42,18 +47,26 @@ struct inkcell_fb_button_paint inkcell_fb_button_paint(const struct inkcell_draw
         return (struct inkcell_fb_button_paint){
             true, inkcell_fb_paint(state, button->family,
                                    focused ? INKCELL_SLOT_BASE : INKCELL_SLOT_CONTAINER,
-                                   INKCELL_STATE_REST)};
+                                   hovered ? INKCELL_STATE_HOVERED : INKCELL_STATE_REST)};
     case INKCELL_FB_BUTTON_TEXT:
     default:
-        return focused ? (struct inkcell_fb_button_paint){true,
-                                                          {inkcell_fb_color(
-                                                               state, INKCELL_COLOR_SURFACE_ACTIVE),
-                                                           inkcell_fb_color(
-                                                               state, INKCELL_COLOR_TEXT_ON_SEL)}}
-                       : (struct inkcell_fb_button_paint){
-                             false,
-                             {inkcell_fb_color(state, INKCELL_COLOR_BG),
-                              inkcell_fb_color(state, INKCELL_COLOR_TEXT)}};
+        if (focused) {
+            return (struct inkcell_fb_button_paint){
+                true,
+                {inkcell_fb_color(state, INKCELL_COLOR_SURFACE_ACTIVE),
+                 inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL)}};
+        }
+        if (hovered) {
+            return (struct inkcell_fb_button_paint){
+                true,
+                {inkcell_fb_state_layer(state, button->ground, INKCELL_COLOR_TEXT,
+                                        INKCELL_STATE_HOVERED),
+                 /* The word keeps its own tone: an accept is still the accent under a pointer. */
+                 inkcell_fb_tone_color(state, button->idle_tone)}};
+        }
+        return (struct inkcell_fb_button_paint){false,
+                                                {inkcell_fb_color(state, INKCELL_COLOR_BG),
+                                                 inkcell_fb_color(state, INKCELL_COLOR_TEXT)}};
     }
 }
 

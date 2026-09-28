@@ -11,6 +11,7 @@
 
 #include "inkcell/ui/widgets/button.h"
 #include "inkcell/ui/widgets/chrome.h"
+#include "inkcell/ui/widgets/focus.h"
 #include "inkcell/ui/widgets/meter.h"
 #include "inkcell/ui/widgets/scroll.h"
 
@@ -1299,8 +1300,16 @@ static void inkcell_fb_app_bar_icon_button(const struct inkcell_draw_state *stat
     struct inkcell_rgb ground = row->ground;
     if (focused && id != INKCELL_FOCUS_NONE) {
         inkcell_fb_focus_mark(state, id);
+    }
+    /* The cursor's fill for a reader on the keys, the hover's lighter one under a pointer - see
+       inkcell_fb_cursor_shown(). The mark above is the cursor's either way. */
+    if (focused && id != INKCELL_FOCUS_NONE && inkcell_fb_cursor_shown(state)) {
         ground = inkcell_fb_color(state, INKCELL_COLOR_SURFACE_ACTIVE);
         ink = inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL);
+        inkcell_fb_fill_round_rect(state, rect.x, rect.y, rect.w, rect.h,
+                                   inkcell_fb_radius(state, INKCELL_SHAPE_FULL), ground);
+    } else if (inkcell_fb_hovered(state, id)) {
+        ground = inkcell_theme_state_layer_for(state->theme, ground, ink, INKCELL_STATE_HOVERED);
         inkcell_fb_fill_round_rect(state, rect.x, rect.y, rect.w, rect.h,
                                    inkcell_fb_radius(state, INKCELL_SHAPE_FULL), ground);
     }
@@ -1513,8 +1522,15 @@ static void inkcell_fb_app_bar_draw_field(const struct inkcell_draw_state *state
         struct inkcell_rgb ground = fill;
         if (bar->clear_focused) {
             inkcell_fb_focus_mark(state, bar->clear_focus_id);
+        }
+        if (bar->clear_focused && inkcell_fb_cursor_shown(state)) {
             ground = inkcell_fb_color(state, INKCELL_COLOR_SURFACE_ACTIVE);
             ink = inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL);
+            inkcell_fb_fill_round_rect(state, clear.x, clear.y, clear.w, clear.h,
+                                       inkcell_fb_radius(state, INKCELL_SHAPE_FULL), ground);
+        } else if (inkcell_fb_hovered(state, bar->clear_focus_id)) {
+            ground =
+                inkcell_theme_state_layer_for(state->theme, ground, ink, INKCELL_STATE_HOVERED);
             inkcell_fb_fill_round_rect(state, clear.x, clear.y, clear.w, clear.h,
                                        inkcell_fb_radius(state, INKCELL_SHAPE_FULL), ground);
         }

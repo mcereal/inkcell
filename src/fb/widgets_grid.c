@@ -480,7 +480,11 @@ void inkcell_fb_grid_tile(const struct inkcell_draw_state *state, struct inkcell
     /* The tile's own cue, and so not a reader on the pointer's - see inkcell_fb_cursor_shown().
        The tile is still the cursor's, and is marked as it where the grid registers. */
     const bool focused = inkcell_fb_grid_is_cursor(grid, index) && inkcell_fb_cursor_shown(state);
-    const enum inkcell_state ui_state = focused ? INKCELL_STATE_FOCUSED : INKCELL_STATE_REST;
+    const bool hovered = !focused && grid->focus_base != INKCELL_FOCUS_NONE &&
+                         inkcell_fb_hovered(state, grid->focus_base + index);
+    const enum inkcell_state ui_state = focused   ? INKCELL_STATE_FOCUSED
+                                        : hovered ? INKCELL_STATE_HOVERED
+                                                  : INKCELL_STATE_REST;
     /*
      * One statement decides the colour, and it is the tile's tone.
      *
