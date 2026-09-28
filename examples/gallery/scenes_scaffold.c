@@ -5,8 +5,9 @@
  *
  * The same scene is three pictures depending on the room it is given, which is the assertion.
  * On the handheld panel at the body scale it is compact and the destinations are a bar across
- * the bottom; at the smaller scale the same panel is medium and they are a rail; on the wide page
- * it is expanded, the rail stays and the screen's list and its detail stand side by side. Nothing
+ * the bottom; at the smaller scale the same panel is medium and they are a rail of icons; on the
+ * wide page it is expanded, the rail unfolds into rows of icon and word, and the screen's list and
+ * its detail stand side by side. Nothing
  * in the scene branches on any of that - the screen says it *has* a detail and the scaffold
  * decides whether there is room to show it.
  *
@@ -86,6 +87,8 @@ static void scaffold_scene(struct inkcell_draw_state *state, enum inkcell_fb_com
         .footer = true,
         .split = true,
         .busy = true,
+        /* Any id draws the toggle at the rail's head; nothing here answers the click. */
+        .rail_toggle_id = 1U,
         .app_bar = &list_bar,
     };
 

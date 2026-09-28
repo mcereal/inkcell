@@ -258,3 +258,13 @@ INKCELL_ICON_ENTRY(MORE,        "more_vert")
 /* The heading has become a search field, and this is what the field is for. Drawn inside the
    field rather than as the bar's leading mark, which stays the way out. */
 INKCELL_ICON_ENTRY(SEARCH,      "search")
+
+/* ---- the rail's own furniture ---------------------------------------------------------------
+ *
+ * The press at the head of a navigation rail that widens it into labelled rows and narrows it
+ * back to icons (inkcell/ui/widgets/scaffold.h). The scaffold draws it itself, so, like the app
+ * bar's marks above, nobody else would supply it. Two ids because the two presses do opposite
+ * things: the three bars every platform draws on a collapsed rail, and the same bars with the
+ * arrow pointing back the way the rail will fold, which is Material's pair. */
+INKCELL_ICON_ENTRY(RAIL_EXPAND,   "menu")
+INKCELL_ICON_ENTRY(RAIL_COLLAPSE, "menu_open")
