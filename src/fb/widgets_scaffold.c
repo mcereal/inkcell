@@ -709,16 +709,17 @@ void inkcell_fb_scaffold_begin(struct inkcell_draw_state *state,
      */
     const int rule = inkcell_fb_rule_height(state, small);
     struct inkcell_box panes[2] = {{0}};
-    if (scaffold->split && frame->width != INKCELL_WIDTH_COMPACT) {
+    if (frame->width != INKCELL_WIDTH_COMPACT) {
         struct inkcell_stack row;
         inkcell_stack_begin(&row, frame->content, INKCELL_AXIS_X, rule);
         (void)inkcell_stack_add_grow(&row, 0, 2U);
         (void)inkcell_stack_add_grow(&row, 0, 3U);
         (void)inkcell_stack_resolve(&row, panes, 2U);
         (void)inkcell_fb_set_region(state, panes[1]);
-        frame->split = inkcell_fb_cols(state, state->scale) >= INKCELL_WIDTH_MEASURE_COLS;
+        frame->splittable = inkcell_fb_cols(state, state->scale) >= INKCELL_WIDTH_MEASURE_COLS;
         (void)inkcell_fb_set_region(state, frame->content);
     }
+    frame->split = scaffold->split && frame->splittable;
     if (frame->split) {
         frame->list = panes[0];
         frame->detail = panes[1];

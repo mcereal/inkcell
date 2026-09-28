@@ -160,6 +160,7 @@ INKCELL_TEST_CASE(scaffold_medium_puts_a_rail_beside_the_body, unit) {
     /* Medium, but the detail would be narrower than a measure beside the list: one pane. */
     INKCELL_TEST_FAIL_IF(frame.split,
                          "a medium frame too narrow for a measured detail is one pane");
+    INKCELL_TEST_FAIL_IF(frame.splittable, "and has no room for one either");
     INKCELL_TEST_FAIL_IF(frame.nav_box.x != 0 || frame.nav_box.w != rail ||
                              frame.nav_box.h != (int)INKCELL_CAPTURE_HEIGHT,
                          "the rail runs the leading edge, top to bottom");
@@ -457,6 +458,14 @@ INKCELL_TEST_CASE(scaffold_medium_splits_when_the_detail_gets_a_measure, unit) {
     INKCELL_TEST_FAIL_IF(detail.line == 0, "the detail pane should be there to draw into");
     INKCELL_TEST_FAIL_IF(inkcell_fb_cols(state, state->scale) < INKCELL_WIDTH_MEASURE_COLS,
                          "the detail pane should hold a whole measure");
+    inkcell_fb_scaffold_end(state, &frame, NULL);
+
+    /* The same window for a screen with no detail: one pane, but the room was there. */
+    const struct inkcell_fb_scaffold single = {
+        .destinations = k_destinations, .count = SCAFFOLD_COUNT, .footer = true};
+    inkcell_fb_scaffold_begin(state, &single, &frame);
+    INKCELL_TEST_FAIL_IF(frame.split, "a screen that did not ask is one pane");
+    INKCELL_TEST_FAIL_IF(!frame.splittable, "but the frame says a split would have fit");
     inkcell_fb_scaffold_end(state, &frame, NULL);
 
     inkcell_capture_close(capture);

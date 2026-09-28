@@ -237,6 +237,15 @@ struct inkcell_fb_scaffold_frame {
     struct inkcell_box list;
     struct inkcell_box detail;
     bool split;
+    /*
+     * Whether the frame had room for a split, asked for or not.
+     *
+     * For an application that has to decide something about a screen that is *not* a list and a
+     * detail by whether one would stand beside the other here - a keyboard it could dock under a
+     * detail instead of giving it the body, say. `split` cannot answer that, being false on every
+     * frame that did not ask.
+     */
+    bool splittable;
     /* The layout for the list pane (or the only one): chrome already drawn, `body_y` below it. */
     struct inkcell_fb_layout layout;
     /* Where the panes start: below the banner, which spans both. */
