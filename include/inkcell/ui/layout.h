@@ -36,6 +36,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Long enough for the widest thing drawn: a 233-byte message plus a peer name and a tag. */
 #define INKCELL_LINE_MAX 400U
 
@@ -934,5 +938,9 @@ void inkcell_series_project_over(const struct inkcell_series *series, struct ink
  */
 void inkcell_series_project_within(const struct inkcell_series *series, struct inkcell_scale scale,
                                    uint32_t from, uint32_t to, struct inkcell_polyline *out);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_LAYOUT_H */

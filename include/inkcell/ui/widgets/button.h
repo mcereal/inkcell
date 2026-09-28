@@ -25,6 +25,10 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * How much of itself a button shows when the cursor is not on it.
  *
@@ -326,5 +330,9 @@ void inkcell_fb_draw_state_chip(const struct inkcell_draw_state *state,
                                 const struct inkcell_fb_rect *box, int text_y, const char *text,
                                 enum inkcell_tone tone, enum inkcell_color ground,
                                 struct inkcell_rgb ink, int scale);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_BUTTON_H */

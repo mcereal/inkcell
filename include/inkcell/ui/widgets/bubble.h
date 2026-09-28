@@ -18,6 +18,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * A bubble's trailing run: the small marks and figures that ride the end of its last line.
  *
@@ -159,5 +163,9 @@ void inkcell_fb_draw_bubble(const struct inkcell_draw_state *state,
  */
 void inkcell_fb_draw_separator(const struct inkcell_draw_state *state, int y, const char *label,
                                enum inkcell_tone tone);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_BUBBLE_H */
