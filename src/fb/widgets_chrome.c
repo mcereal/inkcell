@@ -2069,28 +2069,37 @@ size_t inkcell_fb_app_bar_menu(const struct inkcell_fb_app_bar *bar,
     return out;
 }
 
-void inkcell_fb_draw_empty(const struct inkcell_draw_state *state,
-                           const struct inkcell_fb_layout *layout, enum inkcell_icon icon,
-                           const char *text) {
-    int y = layout->body_y;
-    uint32_t rows = layout->rows;
+/* Three rows for the empty state's symbol and one of air under it. */
+#define EMPTY_ICON_ROWS 4U
 
-    /*
-     * The icon is drawn at three glyph scales - a cell is one line tall, so three of them is
-     * three body rows and about a fifth of the panel - and it is only drawn when the screen has
-     * the rows to spare. An empty state is the one place with room for it, and the one place
-     * where a symbol says "nothing here yet" faster than the sentence under it does.
-     */
-    const int big = state->scale * 3;
-    const uint32_t cost = 4U; /* three rows for the symbol, one of air under it */
-    if (inkcell_icon_is_valid(icon) && big <= INKCELL_FB_ICON_SCALE_MAX && rows > cost + 1U) {
+/*
+ * Whether the empty state's symbol is drawn in `rows`.
+ *
+ * The icon is drawn at three glyph scales - a cell is one line tall, so three of them is three
+ * body rows and about a fifth of the panel - and it is only drawn when the screen has the rows to
+ * spare. An empty state is the one place with room for it, and the one place where a symbol says
+ * "nothing here yet" faster than the sentence under it does.
+ */
+static bool empty_has_icon(const struct inkcell_draw_state *state, enum inkcell_icon icon,
+                           uint32_t rows) {
+    return inkcell_icon_is_valid(icon) && state->scale * 3 <= INKCELL_FB_ICON_SCALE_MAX &&
+           rows > EMPTY_ICON_ROWS + 1U;
+}
+
+/* The empty state from `y` down, in `rows` body rows, the symbol decided by the caller - so a
+   caller that measured the block first draws the block it measured. */
+static void draw_empty_from(const struct inkcell_draw_state *state,
+                            const struct inkcell_fb_layout *layout, int y, uint32_t rows,
+                            bool with_icon, enum inkcell_icon icon, const char *text) {
+    if (with_icon) {
+        const int big = state->scale * 3;
         const int box = inkcell_fb_icon_box(state, big);
         const struct inkcell_box region = inkcell_fb_region(state);
         inkcell_fb_draw_icon(state, region.x + (region.w - box) / 2, y, icon, big,
                              inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
                              inkcell_fb_color(state, INKCELL_COLOR_BG));
-        y += (int)cost * layout->line;
-        rows -= cost;
+        y += (int)EMPTY_ICON_ROWS * layout->line;
+        rows -= EMPTY_ICON_ROWS;
     }
 
     /* Wrapped rather than drawn flat: these strings say which button to press next, and at a
@@ -2100,6 +2109,30 @@ void inkcell_fb_draw_empty(const struct inkcell_draw_state *state,
     (void)inkcell_fb_draw_wrapped_centered(state, y, text, (size_t)layout->body_w, (int)rows,
                                            inkcell_fb_tone_color(state, INKCELL_TONE_DIM),
                                            inkcell_fb_color(state, INKCELL_COLOR_BG));
+}
+
+void inkcell_fb_draw_empty(const struct inkcell_draw_state *state,
+                           const struct inkcell_fb_layout *layout, enum inkcell_icon icon,
+                           const char *text) {
+    draw_empty_from(state, layout, layout->body_y, layout->rows,
+                    empty_has_icon(state, icon, layout->rows), icon, text);
+}
+
+void inkcell_fb_draw_placeholder(const struct inkcell_draw_state *state,
+                                 const struct inkcell_fb_layout *layout, enum inkcell_icon icon,
+                                 const char *text) {
+    const bool with_icon = empty_has_icon(state, icon, layout->rows);
+    const uint32_t room = layout->rows - (with_icon ? EMPTY_ICON_ROWS : 0U);
+    uint32_t lines = inkcell_fb_wrapped_lines(state, text, (size_t)layout->body_w, state->scale);
+    if (lines > room) {
+        lines = room;
+    }
+    const int band = (int)layout->rows * layout->line;
+    const int block = (with_icon ? (int)EMPTY_ICON_ROWS * layout->line : 0) +
+                      (int)lines * inkcell_fb_line_adv(state, state->scale);
+    const int top = block < band ? (band - block) / 2 : 0;
+    draw_empty_from(state, layout, layout->body_y + top, (with_icon ? EMPTY_ICON_ROWS : 0U) + lines,
+                    with_icon, icon, text);
 }
 
 int inkcell_fb_rule_height(const struct inkcell_draw_state *state, int scale) {

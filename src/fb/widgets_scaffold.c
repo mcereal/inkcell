@@ -790,8 +790,20 @@ void inkcell_fb_scaffold_end(struct inkcell_draw_state *state,
         return;
     }
     (void)inkcell_fb_set_region(state, frame->content);
+    /*
+     * Under a split the bar is not held to the measure. The measure is for one column of text,
+     * and a split frame has two panes that between them already run edge to edge: a bar capped
+     * and centred under them stood its keycaps somewhere in the list pane's second half and its
+     * status in the middle of the detail's, under the edge of neither. Spanning the content, its
+     * keycaps lead under the list and its status trails under the detail.
+     */
+    const bool measured = !state->unmeasured;
+    if (frame->split) {
+        (void)inkcell_fb_set_measured(state, false);
+    }
     if (actions != NULL) {
         inkcell_fb_draw_action_bar(state, &frame->layout, actions);
     }
+    (void)inkcell_fb_set_measured(state, measured);
     (void)inkcell_fb_set_region(state, frame->saved_region);
 }
