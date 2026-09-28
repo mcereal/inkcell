@@ -612,18 +612,16 @@ static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
         if (width <= 0) {
             return;
         }
-        struct inkcell_fb_rect box = {
-            .x = g->text_right - width, .y = slot_top, .w = width, .h = g->slot_h};
         int text_y = baseline;
         if (chip_scale != scale) {
             /* A smaller capsule is centred on the headline's line, the way the app bar seats
-               its badge on the title: the box is the chip's own line, not the row's slot. */
+               its badge on the title. */
             text_y =
                 baseline +
                 (inkcell_fb_line_adv(state, scale) - inkcell_fb_line_adv(state, chip_scale)) / 2;
-            box.y = text_y - inkcell_step_px(chip_scale);
-            box.h = inkcell_fb_line_adv(state, chip_scale) - inkcell_step_px(chip_scale);
         }
+        const struct inkcell_fb_rect box = inkcell_fb_capsule_box(
+            state, g->text_right - width, text_y, trailing->text, chip_scale);
         inkcell_fb_draw_state_chip(state, &box, text_y, trailing->text, trailing->tone,
                                    lifted ? INKCELL_COLOR_SURFACE_SEL : rest_role, value_ink,
                                    chip_scale);
@@ -632,10 +630,11 @@ static void inkcell_fb_draw_trailing(struct inkcell_draw_state *state,
     case INKCELL_FB_TRAILING_BADGE: {
         /* The capsule is inkcell_fb_draw_badge()'s, not this slot's: the top app bar's trailing
            slot draws the same thing, and two places filling their own round rect is two capsules
-           that drift. What the row supplies is the box - a row knows where its own slot is. */
+           that drift. What the row supplies is where the words sit; the capsule is centred on
+           them by inkcell_fb_capsule_box(), the one place a capsule's box is worked out. */
         const int width = inkcell_fb_badge_width(state, trailing->text, scale);
-        const struct inkcell_fb_rect box = {
-            .x = g->text_right - width, .y = slot_top, .w = width, .h = g->slot_h};
+        const struct inkcell_fb_rect box =
+            inkcell_fb_capsule_box(state, g->text_right - width, baseline, trailing->text, scale);
         inkcell_fb_draw_badge(state, &box, baseline, trailing->text, trailing->family, scale);
         return;
     }
@@ -1059,7 +1058,8 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
             const int chip_w =
                 item->value_chip ? inkcell_fb_badge_width(state, item->value, scale) : 0;
             if (chip_w > 0 && chip_w <= (int)value_cols * inkcell_fb_char_adv(state, scale)) {
-                const struct inkcell_fb_rect box = {value_x, g.head_slot_top, chip_w, g.slot_h};
+                const struct inkcell_fb_rect box =
+                    inkcell_fb_capsule_box(state, value_x, g.head_y, item->value, scale);
                 inkcell_fb_draw_state_chip(state, &box, g.head_y, item->value, item->tone,
                                            lifted ? INKCELL_COLOR_SURFACE_SEL : rest_role, head_ink,
                                            scale);

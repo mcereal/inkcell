@@ -412,6 +412,26 @@ INKCELL_TEST_CASE(layout_transcript_follows_the_cursor_up, unit) {
     record_success(test_name);
 }
 
+/* The pixel form: the same rules over heights no byte could hold, with the slack in pixels. */
+INKCELL_TEST_CASE(layout_transcript_px_measures_in_pixels, unit) {
+    const uint16_t heights[3] = {300U, 80U, 74U};
+
+    struct inkcell_transcript window = inkcell_transcript_window_px(heights, 3U, 2U, 600U);
+    INKCELL_TEST_FAIL_IF(window.first != 0U || window.count != 3U || window.pad != 146U,
+                         "a transcript that fits should show all of it, the slack above in px");
+
+    window = inkcell_transcript_window_px(heights, 3U, 2U, 400U);
+    INKCELL_TEST_FAIL_IF(window.first != 1U || window.count != 2U || window.pad != 246U,
+                         "a message taller than the room left should scroll off whole");
+
+    window = inkcell_transcript_window_px(heights, 3U, 0U, 400U);
+    INKCELL_TEST_FAIL_IF(window.first != 0U || window.count != 2U,
+                         "a cursor above the pinned window should top it");
+    window = inkcell_transcript_window_px(NULL, 3U, 0U, 400U);
+    INKCELL_TEST_FAIL_IF(window.count != 0U, "no heights means nothing is drawn");
+    record_success(test_name);
+}
+
 INKCELL_TEST_CASE(ui_layout_scroll_reports_the_window, unit) {
     /* A list that fits draws no indicator at all. This is the case that matters most: every
        screen calls this unconditionally, so "nothing off screen" has to be answerable with

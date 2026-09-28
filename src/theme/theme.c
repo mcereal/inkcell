@@ -1223,9 +1223,9 @@ static const struct theme_pair k_required[] = {
     {INKCELL_COLOR_OUTLINE, INKCELL_COLOR_BG, 1.4},
     {INKCELL_COLOR_OUTLINE, INKCELL_COLOR_SURFACE, 1.4},
     {INKCELL_COLOR_OUTLINE, INKCELL_COLOR_SURFACE_HIGH, 1.4},
-    /* And the third thing with an edge: the neutral state chip, which is a ring round a row's
-       own ground rather than a fill - so on a row under the cursor it is a ring on the cursor's
-       fill. Found, not read, like the two above it. */
+    /* And the third thing with an edge: the neutral state chip, whose ring runs round its own
+       fill - the cursor surface - so that the capsule is found on a theme where that surface
+       sits close to a card. Found, not read, like the two above it. */
     {INKCELL_COLOR_OUTLINE, INKCELL_COLOR_SURFACE_SEL, 1.2},
     /* The rule that closes the tab strip off meets the strip's own bar rather than the ground,
        and the active tab's pill - the primary container, and the only container drawn up

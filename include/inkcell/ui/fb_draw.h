@@ -1163,6 +1163,19 @@ int inkcell_fb_text_width_weight(const struct inkcell_draw_state *state, const c
  */
 int inkcell_fb_text_width_styled(const struct inkcell_draw_state *state, const char *text,
                                  const struct inkcell_type_style *style);
+/*
+ * Cuts `text` in place so that it measures no wider than `width` pixels in `style`, ending it
+ * with an ellipsis when anything was cut. `size` is the buffer's, terminator included. Returns
+ * the bytes kept.
+ *
+ * Pixels, where inkcell_line_fit() counts cells - and on a proportional face that is the
+ * difference between a line that fits and one that does not. A heading of wide capitals is
+ * wider than its nominal cells say, so a quote or a name fitted by counting them ran past the
+ * right edge of the bubble it was elided for. The ellipsis is what says the line was cut; a
+ * word that simply stops reads as the whole of what somebody wrote.
+ */
+size_t inkcell_fb_text_fit(const struct inkcell_draw_state *state, char *text, size_t size,
+                           int width, const struct inkcell_type_style *style);
 /* What one cell steps in `style`'s run - the per-character form, for a caller walking a string
    itself (a cursor, a truncation point). Tracking and tabular figures included. */
 int inkcell_fb_cell_adv_styled(const struct inkcell_draw_state *state, uint32_t codepoint,

@@ -370,19 +370,41 @@ static struct inkcell_type_style inkcell_fb_capsule_style(int scale) {
     return inkcell_type_style_tabular(inkcell_type_style_plain(scale, INKCELL_WEIGHT_REGULAR));
 }
 
+/*
+ * How far a capsule's words sit in from its ends: a third of its height.
+ *
+ * Off the height because the height is what the curve is: a capsule's radius is half of it, and
+ * a letter reaching nearly to the top or bottom edge - a capital, a descender - meets that curve
+ * about a third of the height in from the end. Half a nominal cell, which is what this used to
+ * be, cleared it for the 5x7 face and not for the UI one, whose "y" at the end of "any relay"
+ * ran through the pill's rounded end. The same number at the body scale on both faces, so a
+ * strip of tabs measures as it did.
+ */
+static int inkcell_fb_capsule_inset(const struct inkcell_draw_state *state, int scale) {
+    return inkcell_fb_line_adv(state, scale) / 3;
+}
+
 int inkcell_fb_badge_width(const struct inkcell_draw_state *state, const char *text, int scale) {
     const struct inkcell_type_style style = inkcell_fb_capsule_style(scale);
     const int words = text != NULL ? inkcell_fb_text_width_styled(state, text, &style) : 0;
-    /* Half a cell either side of the words: enough to clear the capsule's own curve at every
-       glyph scale a theme may pick, and it is what the row's badge has always taken. The
-       padding is a nominal cell because it is space; the words are measured because they are
-       words, and a badge sized by counting them is a badge the text hangs out of. */
-    return words > 0 ? words + inkcell_fb_char_adv(state, scale) : 0;
+    /* The words are measured because they are words, and a badge sized by counting them is a
+       badge the text hangs out of; the inset either side is space, and is the curve's. */
+    return words > 0 ? words + 2 * inkcell_fb_capsule_inset(state, scale) : 0;
 }
 
-/* The capsule itself: a pill of `paint.fill` with the words on it in `paint.ink`. Both callers
-   below are this with a different pair, which is the whole of what tells a badge from a chip -
-   so the shape, the radius and the half-cell inset are stated once. */
+struct inkcell_fb_rect inkcell_fb_capsule_box(const struct inkcell_draw_state *state, int x,
+                                              int text_y, const char *text, int scale) {
+    const int line = inkcell_fb_line_adv(state, scale);
+    const int cell = inkcell_scale_px((int)inkcell_fb_font(state)->height, scale);
+    return (struct inkcell_fb_rect){.x = x,
+                                    .y = text_y - (line - cell) / 2,
+                                    .w = inkcell_fb_badge_width(state, text, scale),
+                                    .h = line};
+}
+
+/* The capsule itself: a pill of `paint.fill` with the words on it in `paint.ink`. Every caller
+   below is this with a different pair, which is the whole of what tells a badge from a chip -
+   so the shape, the radius and the inset are stated once. */
 static void inkcell_fb_fill_capsule_text(const struct inkcell_draw_state *state,
                                          const struct inkcell_fb_rect *box, int text_y,
                                          const char *text, struct inkcell_paint paint, int scale) {
@@ -392,8 +414,8 @@ static void inkcell_fb_fill_capsule_text(const struct inkcell_draw_state *state,
     inkcell_fb_fill_round_rect(state, box->x, box->y, box->w, box->h,
                                inkcell_fb_radius(state, INKCELL_SHAPE_FULL), paint.fill);
     const struct inkcell_type_style style = inkcell_fb_capsule_style(scale);
-    inkcell_fb_draw_text_styled(state, box->x + inkcell_fb_char_adv(state, scale) / 2, text_y, text,
-                                &style, paint.ink, paint.fill);
+    inkcell_fb_draw_text_styled(state, box->x + inkcell_fb_capsule_inset(state, scale), text_y,
+                                text, &style, paint.ink, paint.fill);
 }
 
 void inkcell_fb_draw_badge(const struct inkcell_draw_state *state,
@@ -431,28 +453,31 @@ void inkcell_fb_draw_state_chip(const struct inkcell_draw_state *state,
         return;
     }
     /*
-     * The neutral one, drawn as a ring rather than a fill, and that is the design rather than a
-     * workaround for a palette.
+     * The neutral one: the resting button's pair, with the theme's outline round it.
      *
      * "The state it is normally in" is not one of the six things a family means, so there is no
-     * container to fill it with; the nearest neutral fill is the cursor surface, and on the
-     * light theme that sits 1.18:1 from a card - a pill nobody can see. An edge can be found on
-     * every theme by contract (it is what says a card is there at all), and it says the right
-     * thing besides: a filled chip is a state worth reporting and an outlined one is a state
-     * worth *checking*, which is Material's own distinction between the two and the difference
-     * between "verified" and "not verified" being two pills of equal weight.
+     * container to fill it with. It was a ring and nothing else, on the argument that an
+     * outlined chip is a state worth checking - and in use it read as nothing at all: plain
+     * words with a border drawn round them, which is what a reader saw "not verified" as. A
+     * capsule is a tag because it is *filled*; the ring alone is the shape of a text field.
      *
-     * One ring, not the two fills this used to be: the second of those repainted the inside of
-     * the capsule with the row's ground, which is a patch of the wrong colour on any row whose
-     * ground the caller named wrongly. The words keep the row's ink, because the inside of the
-     * capsule is whatever they were already legible on - which is now literally true rather
-     * than true because the chip painted it so.
+     * The fill is the cursor surface under the text the theme draws on it, which is a pair
+     * inkcell_theme_validate() already holds on every theme, and on the row the cursor is on -
+     * where that surface is the ground - it is the pressed surface under the same text, the
+     * other half of that validated pair. The ring stays, over the fill: on the light theme the
+     * cursor surface sits close to a card, and the outline is what finds the capsule there.
      */
-    const int radius = inkcell_fb_radius(state, INKCELL_SHAPE_FULL);
-    const int edge = inkcell_fb_edge(state);
-    const struct inkcell_rgb fill = inkcell_fb_color(state, ground);
-    inkcell_fb_stroke_round_rect(state, box->x, box->y, box->w, box->h, radius, edge,
-                                 inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
-    inkcell_fb_draw_text(state, box->x + inkcell_fb_char_adv(state, scale) / 2, text_y, text, scale,
-                         ink, fill);
+    const bool on_cursor =
+        ground == INKCELL_COLOR_SURFACE_SEL || ground == INKCELL_COLOR_SURFACE_ACTIVE;
+    (void)ink;
+    const struct inkcell_rgb fill = inkcell_fb_color(state, on_cursor ? INKCELL_COLOR_SURFACE_ACTIVE
+                                                                      : INKCELL_COLOR_SURFACE_SEL);
+    inkcell_fb_fill_capsule_text(
+        state, box, text_y, text,
+        (struct inkcell_paint){.fill = fill,
+                               .ink = inkcell_fb_color(state, INKCELL_COLOR_TEXT_ON_SEL)},
+        scale);
+    inkcell_fb_stroke_round_rect(
+        state, box->x, box->y, box->w, box->h, inkcell_fb_radius(state, INKCELL_SHAPE_FULL),
+        inkcell_fb_edge(state), inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
 }

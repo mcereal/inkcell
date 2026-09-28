@@ -58,8 +58,7 @@ void gallery_scene_transcript(struct inkcell_draw_state *state) {
     for (size_t i = 0U; i < sizeof bubbles / sizeof bubbles[0]; ++i) {
         /* Measured first: a bubble drawn past the bottom of the body is a bubble painted over
            the keycap row, and the rows it wants are not a function of anything the loop knows. */
-        const uint32_t rows = inkcell_fb_bubble_rows(state, &layout, &bubbles[i]);
-        const int height = (int)rows * layout.line;
+        const int height = inkcell_fb_bubble_height(state, &layout, &bubbles[i]);
         if (y + height > floor_y) {
             break;
         }

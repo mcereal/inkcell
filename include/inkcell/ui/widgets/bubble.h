@@ -79,8 +79,8 @@ struct inkcell_fb_bubble_meta {
  * messages from one sender stacks with the name said once.
  *
  * The measure and the draw share one wrap walk (struct inkcell_wrap) and one pass over the
- * trailing run, so the rows a bubble reserves and the rows it paints cannot disagree - which
- * they must not, because the transcript places the next bubble from the count this one
+ * trailing run, so the height a bubble reserves and the lines it paints cannot disagree - which
+ * they must not, because the transcript places the next bubble from the height this one
  * reported.
  */
 struct inkcell_fb_bubble {
@@ -127,12 +127,23 @@ struct inkcell_fb_bubble {
     bool alert;
 };
 
-/* Body rows the bubble occupies, separator included. Ask before placing it. */
-uint32_t inkcell_fb_bubble_rows(const struct inkcell_draw_state *state,
-                                const struct inkcell_fb_layout *layout,
-                                const struct inkcell_fb_bubble *bubble);
+/*
+ * The pixels the bubble occupies, separator included: where the next one starts is `y` plus
+ * this. Ask before placing it.
+ *
+ * Pixels rather than body rows, because a bubble is not a whole number of them. Its text is -
+ * one line advance per line - but the box round the text needs padding under the last line's
+ * descenders and a gap after that, and on the UI face the line advance has no room left for
+ * either: its descenders reach the bottom of the glyph cell, a step short of the next line. A
+ * bubble counted in rows either clipped its own last line or cost a whole blank row per message;
+ * counted in pixels it costs the two steps it actually needs. inkcell_transcript_window_px() is
+ * the window that places items measured this way.
+ */
+int inkcell_fb_bubble_height(const struct inkcell_draw_state *state,
+                             const struct inkcell_fb_layout *layout,
+                             const struct inkcell_fb_bubble *bubble);
 
-/* Draws it with its top row at `y`. Occupies exactly inkcell_fb_bubble_rows() rows. */
+/* Draws it with its top at `y`. Occupies exactly inkcell_fb_bubble_height() pixels. */
 void inkcell_fb_draw_bubble(const struct inkcell_draw_state *state,
                             const struct inkcell_fb_layout *layout, int y,
                             const struct inkcell_fb_bubble *bubble);
