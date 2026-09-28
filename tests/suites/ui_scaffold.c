@@ -463,6 +463,119 @@ INKCELL_TEST_CASE(scaffold_medium_splits_when_the_detail_gets_a_measure, unit) {
     record_success(test_name);
 }
 
+/*
+ * A split frame's action bar runs under both panes: its first keycap leads at the list's column
+ * and its status trails at the detail's edge. Held to the measure it was a centred ribbon under
+ * two panes that together already ran edge to edge, and lined up with neither of them.
+ */
+INKCELL_TEST_CASE(scaffold_split_action_bar_spans_both_panes, unit) {
+    struct inkcell_draw_state *state = NULL;
+    struct inkcell_capture *capture = scaffold_open(1920U, 1080U, INKCELL_SCALE(4), &state);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+
+    struct inkcell_focus_item storage[16];
+    struct inkcell_focus_map map;
+    const struct inkcell_button_action items[] = {
+        {.button = INKCELL_BUTTON_A, .label = INKCELL_STR_NONE},
+    };
+    const struct inkcell_fb_action_bar bar = {.items = items, .count = 1U, .status = "linked"};
+    int lead[2] = {0, 0};
+    for (int split = 0; split < 2; ++split) {
+        inkcell_focus_begin(&map, storage, 16U);
+        inkcell_fb_set_focus_map(state, &map);
+        const struct inkcell_fb_scaffold scaffold = {.destinations = k_destinations,
+                                                     .count = SCAFFOLD_COUNT,
+                                                     .footer = true,
+                                                     .split = split != 0};
+        struct inkcell_fb_scaffold_frame frame;
+        inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+        INKCELL_TEST_FAIL_IF(frame.split != (split != 0), "1920x1080 splits when it is asked to");
+        const int list_x = frame.layout.body_x;
+        const int content_x = frame.content.x;
+        inkcell_fb_scaffold_end(state, &frame, &bar);
+        inkcell_fb_set_focus_map(state, NULL);
+
+        struct inkcell_focus_rect rect;
+        INKCELL_TEST_FAIL_IF(
+            !inkcell_focus_rect_of(&map, INKCELL_FOCUS_ACTION_KEY(INKCELL_KEY_A), &rect),
+            "the A hint should be drawn");
+        lead[split] = rect.x;
+        if (split != 0) {
+            /* The keycap's box starts at its cap's own padding, just ahead of the column. */
+            INKCELL_TEST_FAIL_IF(rect.x < content_x || rect.x > list_x,
+                                 "under a split the first keycap leads at the list's column");
+        }
+    }
+    INKCELL_TEST_FAIL_IF(lead[0] <= lead[1],
+                         "one pane keeps its bar under the measured column it is about");
+    INKCELL_TEST_FAIL_IF(!inkcell_fb_set_measured(state, true),
+                         "end puts the measure back as it found it");
+
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
+/*
+ * A placeholder stands in the middle of its pane; an empty list starts at its head. Read back off
+ * the pixels: the first row with anything but ground on it.
+ */
+static int first_inked_row(const struct inkcell_capture *capture, struct inkcell_box box) {
+    uint32_t w = 0U;
+    uint32_t h = 0U;
+    size_t stride = 0U;
+    const uint8_t *px = inkcell_capture_pixels(capture, &w, &h, &stride);
+    if (px == NULL) {
+        return -1;
+    }
+    /* The pane's top corner is ground: the pane starts under the frame's own chrome. */
+    const uint8_t *ground = px + (size_t)box.y * stride + (size_t)box.x * 4U;
+    for (int y = box.y; y < box.y + box.h && y < (int)h; ++y) {
+        for (int x = box.x; x < box.x + box.w && x < (int)w; ++x) {
+            if (memcmp(px + (size_t)y * stride + (size_t)x * 4U, ground, 3U) != 0) {
+                return y;
+            }
+        }
+    }
+    return -1;
+}
+
+INKCELL_TEST_CASE(scaffold_detail_placeholder_is_centred_in_its_pane, unit) {
+    struct inkcell_draw_state *state = NULL;
+    struct inkcell_capture *capture = scaffold_open(1920U, 1080U, INKCELL_SCALE(4), &state);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+
+    const struct inkcell_fb_scaffold scaffold = {
+        .destinations = k_destinations, .count = SCAFFOLD_COUNT, .footer = true, .split = true};
+    int top[2] = {-1, -1};
+    struct inkcell_box pane = {0};
+    struct inkcell_fb_layout detail = {0};
+    for (int centred = 0; centred < 2; ++centred) {
+        inkcell_fb_fill_rect(state, 0, 0, 1920, 1080, inkcell_fb_color(state, INKCELL_COLOR_BG));
+        struct inkcell_fb_scaffold_frame frame;
+        inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+        INKCELL_TEST_FAIL_IF(!frame.split, "1920x1080 splits");
+        detail = inkcell_fb_scaffold_detail(state, &frame, NULL);
+        pane = frame.detail;
+        if (centred != 0) {
+            inkcell_fb_draw_placeholder(state, &detail, INKCELL_ICON_NODES, "Nothing open");
+        } else {
+            inkcell_fb_draw_empty(state, &detail, INKCELL_ICON_NODES, "Nothing open");
+        }
+        inkcell_fb_scaffold_end(state, &frame, NULL);
+        top[centred] = first_inked_row(capture, pane);
+    }
+    INKCELL_TEST_FAIL_IF(top[0] < detail.body_y || top[0] >= detail.body_y + detail.line,
+                         "an empty list starts where its rows do");
+    const int band = (int)detail.rows * detail.line;
+    INKCELL_TEST_FAIL_IF(top[1] < detail.body_y + band / 4,
+                         "a placeholder stands clear of the pane's head");
+    INKCELL_TEST_FAIL_IF(top[1] > detail.body_y + band / 2,
+                         "a placeholder starts above the middle of its pane");
+
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
 INKCELL_TEST_CASE(scaffold_without_destinations_is_all_content, unit) {
     struct inkcell_draw_state *state = NULL;
     struct inkcell_capture *capture =

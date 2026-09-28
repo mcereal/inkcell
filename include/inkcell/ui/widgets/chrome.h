@@ -855,6 +855,20 @@ void inkcell_fb_draw_empty(const struct inkcell_draw_state *state,
                            const struct inkcell_fb_layout *layout, enum inkcell_icon icon,
                            const char *text);
 
+/*
+ * The same symbol and words, for a detail pane with nothing open in it: set in the middle of the
+ * rows `layout` has rather than at their head.
+ *
+ * An empty *list* starts where its first row would have, because that is where the reader looks
+ * for the list. An empty detail is a different thing: the pane beside a list on a split frame
+ * (inkcell/ui/widgets/scaffold.h), saying what will appear there. Hung from its top it sat level
+ * with the list's heading, a line of text at the head of a pane that is otherwise the height of
+ * the window, and read as a heading of its own rather than as the pane's content.
+ */
+void inkcell_fb_draw_placeholder(const struct inkcell_draw_state *state,
+                                 const struct inkcell_fb_layout *layout, enum inkcell_icon icon,
+                                 const char *text);
+
 /* How tall a hairline is at `scale` - what a caller stacking something under one has to clear.
    Beside the call that draws one because two expressions for one thickness is how a bar ends up
    overlapping the rule above it. */
