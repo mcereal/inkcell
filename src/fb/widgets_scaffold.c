@@ -14,7 +14,9 @@
 
 #include "inkcell/ui/widgets/scaffold.h"
 
-#include <stdio.h>
+#include "inkcell/ui/emoji.h"
+
+#include <string.h>
 
 /* ---- the destination cell ------------------------------------------------------------------- */
 
@@ -352,6 +354,22 @@ static void scaffold_draw_rail_badge(const struct inkcell_draw_state *state,
                           caption);
 }
 
+/* As much of `text` as `out` holds in whole cells, so a label longer than the buffer is cut
+   between two characters rather than through one - an emoji or an accented letter is several
+   bytes, and half of one draws as a replacement mark rather than as the start of a word. */
+static void scaffold_copy_cells(char *out, size_t size, const char *text) {
+    size_t used = 0U;
+    for (;;) {
+        const struct inkcell_text_cell cell = inkcell_text_cell_next(text + used);
+        if (cell.bytes == 0U || used + cell.bytes >= size) {
+            break;
+        }
+        used += cell.bytes;
+    }
+    memcpy(out, text, used);
+    out[used] = '\0';
+}
+
 /*
  * One destination as a row of an expanded rail: the pill across the row, the icon in the icon
  * column, the word after it and the badge at the row's trailing end. The whole row is the target
@@ -416,13 +434,18 @@ static void scaffold_draw_rail_row(const struct inkcell_draw_state *state,
             active ? inkcell_fb_type_weight(state, INKCELL_TYPE_LABEL) : INKCELL_WEIGHT_REGULAR;
         const int text_h = inkcell_scale_px((int)inkcell_fb_font(state)->height, small);
         /* A word that would run into the badge is cut rather than drawn under it; the width was
-           measured for the words alone, so this is only a count much wider than a count. */
+           measured for the words alone, so this is only a count much wider than a count. A word
+           that fits is drawn as it came, whatever its length in bytes: only the cut is copied. */
         const struct inkcell_type_style style = {.scale = small, .weight = weight};
-        char label[64];
-        (void)snprintf(label, sizeof label, "%s", chip->label);
-        (void)inkcell_fb_text_fit(state, label, sizeof label, end - text_x, &style);
+        const char *text = chip->label;
+        char label[128];
+        if (inkcell_fb_text_width_weight(state, chip->label, small, weight) > end - text_x) {
+            scaffold_copy_cells(label, sizeof label, chip->label);
+            (void)inkcell_fb_text_fit(state, label, sizeof label, end - text_x, &style);
+            text = label;
+        }
         inkcell_fb_draw_text_weight(
-            state, text_x, pill.y + (pill.h - text_h) / 2, label, small, weight,
+            state, text_x, pill.y + (pill.h - text_h) / 2, text, small, weight,
             active ? ink : inkcell_fb_tone_color(state, INKCELL_TONE_NORMAL), ground);
     }
 }
