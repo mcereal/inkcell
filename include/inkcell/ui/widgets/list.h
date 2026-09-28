@@ -501,6 +501,10 @@ void inkcell_fb_list_focus(struct inkcell_fb_list *list, uint32_t base);
  * a desktop's sidebar is always a click away - but a d-pad that could step into it would leave
  * the detail by a route the keys have no way back from. Its rows light under a hovering pointer
  * like any other, since that is the same id under the same box.
+ *
+ * Its cursor row is the *selection* - the item the detail is showing - and is drawn as one: the
+ * ACCENT cue whatever the list's own look, on every frame, keys or pointer. Never a ring or a
+ * fill, which is how the cursor proper says where it is, in the detail.
  */
 void inkcell_fb_list_targets(struct inkcell_fb_list *list, uint32_t base);
 

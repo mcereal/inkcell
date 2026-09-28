@@ -868,6 +868,11 @@ static void inkcell_sdl_handle_key(struct inkcell_sdl_panel *panel, const SDL_Ke
             break;
         }
         if (edit != INKCELL_KEY_NONE) {
+            /* Enter and Escape leave the field for a screen the keys are on; Backspace is only
+               typing, and says nothing about where the reader's hands are. */
+            if (edit != INKCELL_KEY_X) {
+                inkcell_sdl_show_cursor(panel, true);
+            }
             inkcell_sdl_deliver(panel, panel->on_key, edit, key->repeat == 0U);
             return;
         }

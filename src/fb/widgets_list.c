@@ -221,11 +221,20 @@ bool inkcell_fb_list_is_cursor(const struct inkcell_fb_list *list, uint32_t inde
     return !list->focus_card && inkcell_list_is_cursor(&list->model, index);
 }
 
-/* And whether it is drawn as the cursor this frame: not to a reader on the pointer - see
-   inkcell_fb_cursor_shown(). The row is still the cursor's, and is still marked as it. */
+/*
+ * And whether it is drawn as the cursor this frame: not to a reader on the pointer - see
+ * inkcell_fb_cursor_shown(). The row is still the cursor's, and is still marked as it.
+ *
+ * A list of targets is the exception, and it is not a cursor at all: its row is the selection -
+ * the item the detail beside it is showing - which a sidebar keeps lit whether the reader is on
+ * the keys or the mouse. It is drawn as ACCENT whatever the list's look (see
+ * inkcell_fb_list_cue()), because the cursor proper is in the detail, and a second ring or fill
+ * there would be two cursors on one frame.
+ */
 static bool inkcell_fb_list_cues_cursor(const struct inkcell_draw_state *state,
                                         const struct inkcell_fb_list *list, uint32_t index) {
-    return inkcell_fb_cursor_shown(state) && inkcell_fb_list_is_cursor(list, index);
+    return (list->focus_targets || inkcell_fb_cursor_shown(state)) &&
+           inkcell_fb_list_is_cursor(list, index);
 }
 
 /*
@@ -450,7 +459,7 @@ struct inkcell_fb_list_cue inkcell_fb_list_cue(const struct inkcell_draw_state *
         return cue;
     }
 
-    switch (list->style.focus) {
+    switch (list->focus_targets ? INKCELL_FB_LIST_FOCUS_ACCENT : list->style.focus) {
     case INKCELL_FB_LIST_FOCUS_ACCENT: {
         /*
          * The lightest layer there is, and a capsule down the leading edge. HOVERED rather than
@@ -478,8 +487,8 @@ struct inkcell_fb_list_cue inkcell_fb_list_cue(const struct inkcell_draw_state *
     case INKCELL_FB_LIST_FOCUS_RING: {
         /* Nothing under the words. The ring is the frame's when the list registered with a
            focus map - one cursor, one ring - and the row's own otherwise, inside its box so it
-           cannot land on a neighbour's. A list of targets marks nothing, so it is otherwise. */
-        if (list->focus_base == INKCELL_FOCUS_NONE || list->focus_targets) {
+           cannot land on a neighbour's. */
+        if (list->focus_base == INKCELL_FOCUS_NONE) {
             const int ring = 2 * inkcell_fb_edge(state);
             inkcell_fb_stroke_round_rect(
                 state, x, top, w, h,
@@ -516,7 +525,7 @@ struct inkcell_fb_list_cue inkcell_fb_list_cue(const struct inkcell_draw_state *
 struct inkcell_fb_list_cue inkcell_fb_list_row_cue(const struct inkcell_draw_state *state,
                                                    const struct inkcell_fb_list *list,
                                                    uint32_t index, uint32_t rows) {
-    if (!inkcell_fb_list_restyled(list)) {
+    if (!inkcell_fb_list_restyled(list) && !list->focus_targets) {
         /* The path every list took before it had a look, kept as the call it was: a plain row
            and a heading mark themselves through inkcell_fb_draw_row_fill_on(), and a list that
            asked for nothing new must come out of this the same pixels it always did. */
@@ -542,7 +551,8 @@ struct inkcell_fb_list_cue inkcell_fb_list_row_cue(const struct inkcell_draw_sta
 /* Whether a row is standing on a fill of its own this frame - the cursor's or the pointer's. */
 static bool inkcell_fb_list_row_filled(const struct inkcell_draw_state *state,
                                        const struct inkcell_fb_list *list, uint32_t index) {
-    return (inkcell_fb_cursor_shown(state) && inkcell_list_is_cursor(&list->model, index)) ||
+    return ((list->focus_targets || inkcell_fb_cursor_shown(state)) &&
+            inkcell_list_is_cursor(&list->model, index)) ||
            inkcell_fb_list_hovered(state, list, index);
 }
 
