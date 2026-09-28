@@ -136,7 +136,9 @@ struct inkcell_fb_card_row {
 };
 
 /*
- * A verb the card offers, drawn as a button against the far edge of its heading's line.
+ * A verb the card offers, drawn as a tonal pill against the far edge of its heading's line - a
+ * filled capsule at rest, so it reads as something to press rather than as a coloured word
+ * beside the heading, which is also a coloured word.
  *
  * "Radio actions" was a settings row that opened a screen because a card could not offer a
  * verb, and disconnecting meant walking to the Devices tab to press X on a card that was
@@ -278,8 +280,7 @@ void inkcell_fb_card_proportion(struct inkcell_fb_card *card, enum inkcell_tone 
  * A verb, as a button on the card's heading line. Declared left to right: the first call is the
  * leftmost button, which is also the first the screen cursor reaches.
  *
- * `focused` says the cursor is on it, which is also what makes the card itself read as
- * focused - see inkcell_fb_draw_card().
+ * `focused` says the cursor is on it. Only the verb shows it; see inkcell_fb_draw_card().
  *
  * A card carries the whole verb and nothing about the press: which button runs it is the action
  * bar's business, and a keycap drawn twice on one frame is a screen disagreeing with itself.
@@ -322,12 +323,11 @@ int inkcell_fb_card_height(const struct inkcell_draw_state *state,
  * case nothing is drawn and `*y` is untouched. That is also the answer for every card after it,
  * so a screen can stop.
  *
- * A card holding the focused action draws its edge in the primary instead of in
- * INKCELL_COLOR_OUTLINE, and draws it thicker: that is the focus ring, and it is the one cue
- * here that is not a state layer. A layer mixed into a fill this large is a change nobody
- * notices from across a table, and every tone written on the card would owe the result its own
- * contrast contract; the accent edge is the indicator Material uses for focus, it is read at a
- * glance, and PRIMARY already owes both grounds 3:1.
+ * A card holding the focused action looks exactly as it does without it: the verb carries the
+ * focus ring and nothing else on the card changes. The card used to ring itself as well, and a
+ * frame with two accent outlines nested one inside the other has two answers to "where is the
+ * cursor" - the reader has to work out that the inner one is the press and the outer one only
+ * says where it lives.
  */
 /*
  * The least a card can be drawn as and still be one: its heading, its first row and its padding.
