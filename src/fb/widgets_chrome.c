@@ -141,16 +141,27 @@ int inkcell_fb_nav_bar_height(const struct inkcell_draw_state *state, int small)
            inkcell_fb_line_adv(state, small);
 }
 
+int inkcell_fb_top_band(const struct inkcell_draw_state *state, int small) {
+    const int bar = inkcell_fb_nav_bar_height(state, small);
+    if (state->top_leading_inset <= 0 || state->top_leading_band <= bar) {
+        return bar;
+    }
+    return state->top_leading_band;
+}
+
 void inkcell_fb_draw_nav_bar(const struct inkcell_draw_state *state,
                              struct inkcell_fb_layout *layout, const struct inkcell_fb_chip *tabs,
                              size_t count, size_t active) {
     const int small = layout->small;
     /* A step's worth of air over the tabs, at the chrome scale. One *step*, not one scale: the
        two were the same number while a scale was a whole multiplier, and adding the scale itself
-       to a pixel gutter was the same arithmetic by accident. */
+       to a pixel gutter was the same arithmetic by accident. Where the window's buttons asked
+       for a taller band the bar is that tall, and the tabs stay centred on the buttons. */
     const struct inkcell_box region = inkcell_fb_region(state);
-    const int y = region.y + inkcell_fb_gutter(state) + inkcell_scale_px(1, small);
-    const int bar_h = region.y + inkcell_fb_nav_bar_height(state, small);
+    const int band = inkcell_fb_top_band(state, small);
+    const int y = region.y + inkcell_fb_gutter(state) + inkcell_scale_px(1, small) +
+                  (band - inkcell_fb_nav_bar_height(state, small)) / 2;
+    const int bar_h = region.y + band;
     const int width = region.w;
     /* Whatever of the host's inset the gutter does not already cover, taken off the strip's
        room as well as its start - so the strip fits its labels to what is actually left, and a
@@ -222,12 +233,19 @@ void inkcell_fb_draw_progress(struct inkcell_draw_state *state,
      * it is the navigation bar's rule saying something, so it runs the width of the rule it
      * hangs off. Inset, it would read as the first row of the body - which is exactly the
      * mistake the tab strip made before it was given a surface of its own.
+     *
+     * Bar the window's buttons: beside a collapsed rail the rule it hangs off is the top of the
+     * band they stand in (top_leading_inset), and the bleed starts past them rather than running
+     * under them.
      */
+    const struct inkcell_box region = inkcell_fb_region(state);
+    int x = region.x;
+    if (state->top_leading_inset > x && layout->nav_y < inkcell_fb_top_band(state, layout->small)) {
+        x = state->top_leading_inset < region.x + region.w ? state->top_leading_inset
+                                                           : region.x + region.w;
+    }
     struct inkcell_fb_meter meter = {
-        .rect = {.x = inkcell_fb_region(state).x,
-                 .y = layout->nav_y,
-                 .w = inkcell_fb_region(state).w,
-                 .h = height},
+        .rect = {.x = x, .y = layout->nav_y, .w = region.x + region.w - x, .h = height},
         .kind = INKCELL_FB_METER_INDETERMINATE,
         .tone = INKCELL_TONE_PRIMARY,
         .id = INKCELL_FB_ANIM_ID_PROGRESS,
@@ -1685,6 +1703,22 @@ static void inkcell_fb_app_bar_fit_title(const struct inkcell_draw_state *state,
 }
 
 /*
+ * Where a heading at `y` starts: the content column's edge, or clear of the window's buttons when
+ * the heading is up in the band the host put them in (top_leading_inset). Beside an expanded rail
+ * or a navigation bar that is the column's edge anyway; beside a collapsed rail, which is narrower
+ * than the buttons, the title and the back arrow step along past them - the toolbar of a Mac
+ * window whose sidebar is hidden.
+ */
+static int inkcell_fb_app_bar_margin(const struct inkcell_draw_state *state, int y) {
+    const int margin = inkcell_fb_content_x(state);
+    if (state->top_leading_inset <= margin ||
+        y >= inkcell_fb_top_band(state, inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL))) {
+        return margin;
+    }
+    return state->top_leading_inset;
+}
+
+/*
  * The large title: the collapsing app bar of include/inkcell/ui/widgets/scroll.h, which is now
  * this bar with `large` set rather than a component of its own - so a large heading has the
  * actions, the menu and the status mark a small one has, and the two cannot drift.
@@ -1702,7 +1736,7 @@ inkcell_fb_app_bar_draw_large(const struct inkcell_draw_state *state,
     const int height = large.height;
     const int large_line = large.line;
 
-    const int margin = inkcell_fb_content_x(state);
+    const int margin = inkcell_fb_app_bar_margin(state, layout->body_y);
     const int small = inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL);
     const int title_scale = inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE);
     /* The role the large heading is set in, which is what the whole shape is *for*: a heading
@@ -1724,7 +1758,7 @@ inkcell_fb_app_bar_draw_large(const struct inkcell_draw_state *state,
 
     /* The column's own trailing edge, absolute: `margin` is where the column *starts*, which is
        only the same distance from the far edge while the column is centred on the whole surface. */
-    const int column_right = margin + inkcell_fb_content_w(state);
+    const int column_right = inkcell_fb_content_x(state) + inkcell_fb_content_w(state);
     const int back_w = layout->back ? inkcell_fb_icon_box(state, title_scale) : 0;
     const int text_x = layout->back ? margin + back_w + inkcell_fb_char_adv(state, small) : margin;
 
@@ -1816,16 +1850,19 @@ inkcell_fb_app_bar_draw_large(const struct inkcell_draw_state *state,
                                         dim, ground);
             large_right -= w + inkcell_fb_space(state, INKCELL_SPACE_SM);
         }
+        /* Under the band the buttons sit in whenever it is on a row of its own, so it keeps the
+           column's edge the list below it starts at. */
+        const int large_x = inkcell_fb_app_bar_margin(state, y);
         char fitted[INKCELL_LINE_MAX];
         inkwell_str_copy(fitted, sizeof fitted, bar->title);
-        while (inkcell_fb_text_width_styled(state, fitted, &style) > large_right - margin) {
+        while (inkcell_fb_text_width_styled(state, fitted, &style) > large_right - large_x) {
             const size_t cells = inkcell_text_cells(fitted);
             if (cells <= 1U) {
                 break;
             }
             inkcell_text_cell_truncate(fitted, cells - 1U);
         }
-        inkcell_fb_draw_text_styled(state, margin, y, fitted, &style, ink, ground);
+        inkcell_fb_draw_text_styled(state, large_x, y, fitted, &style, ink, ground);
     }
 
     /*
@@ -1858,13 +1895,35 @@ inkcell_fb_app_bar_draw_large(const struct inkcell_draw_state *state,
     return fit;
 }
 
+static struct inkcell_fb_app_bar_fit inkcell_fb_app_bar_draw(const struct inkcell_draw_state *state,
+                                                             struct inkcell_fb_layout *layout,
+                                                             const struct inkcell_fb_app_bar *bar);
+
 struct inkcell_fb_app_bar_fit inkcell_fb_draw_app_bar(const struct inkcell_draw_state *state,
                                                       struct inkcell_fb_layout *layout,
                                                       const struct inkcell_fb_app_bar *bar) {
-    struct inkcell_fb_app_bar_fit fit = {0};
     if (state == NULL || layout == NULL || bar == NULL) {
-        return fit;
+        return (struct inkcell_fb_app_bar_fit){0};
     }
+    /* Up beside the window's buttons when the body was only held below them for their sake -
+       see `heading_from` - and the body below whichever of the heading and the band is lower. */
+    const int floor = layout->body_y;
+    const bool rise = layout->heading_from > 0 && layout->body_y == layout->heading_from;
+    if (rise) {
+        layout->body_y = layout->heading_to;
+    }
+    const struct inkcell_fb_app_bar_fit fit = inkcell_fb_app_bar_draw(state, layout, bar);
+    if (rise && layout->body_y < floor) {
+        layout->body_y = floor;
+        layout->rows = inkcell_fb_layout_rows(state, layout);
+    }
+    return fit;
+}
+
+static struct inkcell_fb_app_bar_fit inkcell_fb_app_bar_draw(const struct inkcell_draw_state *state,
+                                                             struct inkcell_fb_layout *layout,
+                                                             const struct inkcell_fb_app_bar *bar) {
+    struct inkcell_fb_app_bar_fit fit = {0};
     if (bar->large && bar->mode == INKCELL_FB_APP_BAR_NORMAL) {
         return inkcell_fb_app_bar_draw_large(state, layout, bar);
     }
@@ -1881,11 +1940,11 @@ struct inkcell_fb_app_bar_fit inkcell_fb_draw_app_bar(const struct inkcell_draw_
     const int scale = inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE);
     const int small = layout->small;
     const int adv = inkcell_fb_char_adv(state, scale);
-    const int margin = inkcell_fb_content_x(state);
+    const int margin = inkcell_fb_app_bar_margin(state, layout->body_y);
     /* Stated rather than inferred as `panel_width - margin`. A centred column makes those two
        equal, but only to within the pixel an odd leftover rounds away - and equal-by-symmetry
        is not a thing the next reader should have to work out. */
-    const int trailing = margin + inkcell_fb_content_w(state);
+    const int trailing = inkcell_fb_content_x(state) + inkcell_fb_content_w(state);
     struct inkcell_rgb ground = inkcell_fb_color(state, INKCELL_COLOR_BG);
     struct inkcell_rgb title_ink = inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY);
     struct inkcell_rgb plain_ink = inkcell_fb_tone_color(state, INKCELL_TONE_NORMAL);

@@ -35,14 +35,18 @@ static int scaffold_icon_scale(const struct inkcell_draw_state *state) {
 /* The pill behind a destination's icon: wide and short, the proportion Material draws its active
    indicator at, so a destination reads as a place rather than as a round button. Stated from the
    spacing scale so a roomier theme gets a roomier pill. */
-static struct inkcell_fb_rect scaffold_indicator_size(const struct inkcell_draw_state *state,
-                                                      int small) {
-    const int icon = scaffold_icon_scale(state);
+static struct inkcell_fb_rect scaffold_pill_size(const struct inkcell_draw_state *state, int icon,
+                                                 int small) {
     return (struct inkcell_fb_rect){
         .w = inkcell_fb_icon_box(state, icon) +
              2 * inkcell_fb_space_at(state, INKCELL_SPACE_LG, icon),
         .h = inkcell_fb_line_adv(state, icon) + inkcell_fb_space_at(state, INKCELL_SPACE_SM, small),
     };
+}
+
+static struct inkcell_fb_rect scaffold_indicator_size(const struct inkcell_draw_state *state,
+                                                      int small) {
+    return scaffold_pill_size(state, scaffold_icon_scale(state), small);
 }
 
 /* One cell's height: air, the pill, a hairline of air, the label, air. The same in a bar and in a
@@ -248,10 +252,25 @@ static void scaffold_draw_bar(const struct inkcell_draw_state *state, struct ink
  */
 #define INKCELL_FB_RAIL_MIN_COLS 14U
 
+/*
+ * The rail's icons, a step above the bar's. On a panel the bar's icon sits over its word and the
+ * pair make one mark; a rail's icon stands alone in a collapsed column, beside list rows whose
+ * avatars and titles are set larger than the body, and at the body scale it read as the smallest
+ * thing on the screen - a column of dots beside the thing it navigates.
+ */
+static int scaffold_rail_icon_scale(const struct inkcell_draw_state *state) {
+    return inkcell_fb_type_scale(state, INKCELL_TYPE_TITLE);
+}
+
+static struct inkcell_fb_rect scaffold_rail_indicator_size(const struct inkcell_draw_state *state,
+                                                           int small) {
+    return scaffold_pill_size(state, scaffold_rail_icon_scale(state), small);
+}
+
 /* A row's height, in either width: the pill and the air above and below it. The same whether
    the words are showing, so the toggle moves nothing vertically. */
 static int scaffold_rail_row_height(const struct inkcell_draw_state *state, int small) {
-    return scaffold_indicator_size(state, small).h +
+    return scaffold_rail_indicator_size(state, small).h +
            2 * inkcell_fb_space_at(state, INKCELL_SPACE_SM, small);
 }
 
@@ -279,13 +298,15 @@ static int scaffold_rail_gap(const struct inkcell_draw_state *state, int small) 
    inside the pill. Asked by both widths so the column is the same one. */
 static int scaffold_rail_icon_inset(const struct inkcell_draw_state *state) {
     return inkcell_fb_gutter(state) +
-           inkcell_fb_space_at(state, INKCELL_SPACE_LG, scaffold_icon_scale(state));
+           inkcell_fb_space_at(state, INKCELL_SPACE_LG, scaffold_rail_icon_scale(state));
 }
 
-/* Never narrower than the window's buttons, where the host put them on the frame: the rail's
-   top-leading corner is where they sit (see scaffold_draw_rail()), and a rail narrower than them
-   leaves the last one over its rule and against the pane's heading. A sidebar holds its window's
-   buttons, which is how every Mac app with one draws it. */
+/* An expanded rail is never narrower than the window's buttons, where the host put them on the
+   frame: its top-leading corner is where they sit (see scaffold_draw_rail()), and a sidebar holds
+   its window's buttons, which is how every Mac app with one draws it. A collapsed rail does not:
+   held to the buttons' width it is a column half again as wide as its icons with the icons
+   against one side of it. It keeps its own width and the pane's heading steps clear of the
+   buttons instead (see inkcell_fb_app_bar_margin()), as a Mac app with its sidebar hidden does. */
 static int scaffold_rail_hold_buttons(const struct inkcell_draw_state *state, int width) {
     return width > state->top_leading_inset ? width : state->top_leading_inset;
 }
@@ -296,9 +317,8 @@ int inkcell_fb_scaffold_rail_width(const struct inkcell_draw_state *state,
         return 0;
     }
     const int small = inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL);
-    const int pill = scaffold_indicator_size(state, small).w;
-    return scaffold_rail_hold_buttons(state, pill + 2 * inkcell_fb_gutter(state) +
-                                                 inkcell_fb_rule_height(state, small));
+    const int pill = scaffold_rail_indicator_size(state, small).w;
+    return pill + 2 * inkcell_fb_gutter(state) + inkcell_fb_rule_height(state, small);
 }
 
 int inkcell_fb_scaffold_rail_expanded_width(const struct inkcell_draw_state *state,
@@ -308,7 +328,7 @@ int inkcell_fb_scaffold_rail_expanded_width(const struct inkcell_draw_state *sta
         return 0;
     }
     const int small = inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL);
-    const int icon = scaffold_icon_scale(state);
+    const int icon = scaffold_rail_icon_scale(state);
     const int words = scaffold_rail_icon_inset(state) + inkcell_fb_icon_box(state, icon) +
                       scaffold_rail_gap(state, small) +
                       scaffold_rail_widest(state, destinations, count, small) +
@@ -336,7 +356,7 @@ static void scaffold_draw_rail_badge(const struct inkcell_draw_state *state,
     const int caption = inkcell_fb_type_scale(state, INKCELL_TYPE_CAPTION);
     const int height = inkcell_fb_line_adv(state, caption);
     const int width = inkcell_fb_badge_width(state, badge, caption);
-    const int icon_box = inkcell_fb_icon_box(state, scaffold_icon_scale(state));
+    const int icon_box = inkcell_fb_icon_box(state, scaffold_rail_icon_scale(state));
     const int icon_right = indicator->x + (indicator->w + icon_box) / 2;
     const int limit = indicator->x + indicator->w + inkcell_fb_gutter(state) / 2;
     int x = icon_right - icon_box / 4;
@@ -378,8 +398,8 @@ static void scaffold_copy_cells(char *out, size_t size, const char *text) {
 static void scaffold_draw_rail_row(const struct inkcell_draw_state *state,
                                    const struct inkcell_fb_rect *row,
                                    const struct inkcell_fb_chip *chip, bool active, int small) {
-    const int icon = scaffold_icon_scale(state);
-    const struct inkcell_fb_rect size = scaffold_indicator_size(state, small);
+    const int icon = scaffold_rail_icon_scale(state);
+    const struct inkcell_fb_rect size = scaffold_rail_indicator_size(state, small);
     const int gutter = inkcell_fb_gutter(state);
     const struct inkcell_fb_rect pill = {
         .x = row->x + gutter,
@@ -455,7 +475,7 @@ static void scaffold_draw_rail_row(const struct inkcell_draw_state *state,
 static void scaffold_draw_rail_icon(const struct inkcell_draw_state *state,
                                     const struct inkcell_fb_rect *row,
                                     const struct inkcell_fb_chip *chip, bool active, int small) {
-    const struct inkcell_fb_rect size = scaffold_indicator_size(state, small);
+    const struct inkcell_fb_rect size = scaffold_rail_indicator_size(state, small);
     const struct inkcell_fb_rect indicator = {
         .x = row->x + inkcell_fb_gutter(state),
         .y = row->y + (row->h - size.h) / 2,
@@ -470,7 +490,7 @@ static void scaffold_draw_rail_icon(const struct inkcell_draw_state *state,
         .shape = INKCELL_SHAPE_FULL,
         .idle_tone = INKCELL_TONE_DIM,
         .ground = INKCELL_COLOR_SURFACE_LOW,
-        .scale = scaffold_icon_scale(state),
+        .scale = scaffold_rail_icon_scale(state),
         .hover_id = chip->focus_id,
     };
     inkcell_fb_draw_button(state, &button);
@@ -489,7 +509,7 @@ static void scaffold_draw_rail_icon(const struct inkcell_draw_state *state,
  */
 static void scaffold_draw_rail_toggle(const struct inkcell_draw_state *state, int x, int y,
                                       uint32_t base, bool expanded, int small) {
-    const struct inkcell_fb_rect size = scaffold_indicator_size(state, small);
+    const struct inkcell_fb_rect size = scaffold_rail_indicator_size(state, small);
     const uint32_t id = base + (uint32_t)(expanded ? INKCELL_FB_RAIL_TOGGLE_COLLAPSE
                                                    : INKCELL_FB_RAIL_TOGGLE_EXPAND);
     const struct inkcell_fb_button button = {
@@ -499,7 +519,7 @@ static void scaffold_draw_rail_toggle(const struct inkcell_draw_state *state, in
         .shape = INKCELL_SHAPE_FULL,
         .idle_tone = INKCELL_TONE_DIM,
         .ground = INKCELL_COLOR_SURFACE_LOW,
-        .scale = scaffold_icon_scale(state),
+        .scale = scaffold_rail_icon_scale(state),
         .focus_id = id,
     };
     inkcell_fb_draw_button(state, &button);
@@ -508,11 +528,24 @@ static void scaffold_draw_rail_toggle(const struct inkcell_draw_state *state, in
 static void scaffold_draw_rail(const struct inkcell_draw_state *state, struct inkcell_box box,
                                const struct inkcell_fb_scaffold *scaffold, bool expanded,
                                int small) {
-    inkcell_fb_fill_rect(state, box.x, box.y, box.w, box.h,
+    /*
+     * A collapsed rail is narrower than the window's buttons (top_leading_inset), which sit across
+     * its edge and on into the body. Under them is the body's ground, not the rail's, and the rail
+     * starts below the band they stand in - so the band reads as one toolbar across the window and
+     * no rule runs through the buttons, as a Mac window's toolbar reads with its sidebar hidden.
+     */
+    const int rule = inkcell_fb_rule_height(state, small);
+    int top = box.y;
+    if (!expanded && state->top_leading_inset > box.w) {
+        const int band = inkcell_fb_top_band(state, small);
+        inkcell_fb_fill_rect(state, box.x, box.y, box.w, band,
+                             inkcell_fb_color(state, INKCELL_COLOR_BG));
+        top += band;
+    }
+    inkcell_fb_fill_rect(state, box.x, top, box.w, box.y + box.h - top,
                          inkcell_fb_color(state, INKCELL_COLOR_SURFACE_LOW));
     /* The strip's rule, turned on its side: the edge where the chrome stops and the body begins. */
-    const int rule = inkcell_fb_rule_height(state, small);
-    inkcell_fb_fill_rect(state, box.x + box.w - rule, box.y, rule, box.h,
+    inkcell_fb_fill_rect(state, box.x + box.w - rule, top, rule, box.y + box.h - top,
                          inkcell_fb_color(state, INKCELL_COLOR_RULE_STRONG));
 
     /*
@@ -524,14 +557,14 @@ static void scaffold_draw_rail(const struct inkcell_draw_state *state, struct in
      */
     int y = box.y + inkcell_fb_space_at(state, INKCELL_SPACE_LG, small);
     if (state->top_leading_inset > 0) {
-        y += inkcell_fb_nav_bar_height(state, small);
+        y += inkcell_fb_top_band(state, small);
     }
     const int row_h = scaffold_rail_row_height(state, small);
     const int gap = inkcell_fb_space_at(state, INKCELL_SPACE_XS, small);
     if (scaffold->rail_toggle_id != INKCELL_FOCUS_NONE) {
         /* Its own row, apart from the destinations by a row's air: it changes the rail, and a
            press on it goes nowhere. */
-        const int pill_h = scaffold_indicator_size(state, small).h;
+        const int pill_h = scaffold_rail_indicator_size(state, small).h;
         scaffold_draw_rail_toggle(state, box.x, y + (row_h - pill_h) / 2, scaffold->rail_toggle_id,
                                   expanded, small);
         y += row_h + inkcell_fb_space_at(state, INKCELL_SPACE_MD, small);
@@ -650,6 +683,10 @@ static struct inkcell_fb_layout scaffold_pane_layout(const struct inkcell_draw_s
     struct inkcell_fb_layout layout = inkcell_fb_layout_begin_footer(state, footer, back);
     layout.nav_y = frame->layout.nav_y;
     layout.body_y = frame->panes_y;
+    if (frame->layout.heading_from == frame->panes_y) {
+        layout.heading_from = frame->layout.heading_from;
+        layout.heading_to = frame->layout.heading_to;
+    }
     layout.rows = inkcell_fb_layout_rows(state, &layout);
     return layout;
 }
@@ -716,6 +753,16 @@ void inkcell_fb_scaffold_begin(struct inkcell_draw_state *state,
         frame->layout.body_y = frame->content.y +
                                inkcell_fb_space_at(state, INKCELL_SPACE_MD, small) +
                                inkcell_fb_gutter(state);
+        /* A collapsed rail is narrower than the window's buttons, which then stand over the
+           body's corner: the body starts below their band, and only a heading rises into it -
+           see `heading_from`. */
+        const int band = inkcell_fb_top_band(state, small);
+        if (!frame->rail_expanded && state->top_leading_inset > frame->content.x &&
+            frame->layout.body_y < band) {
+            frame->layout.heading_from = band;
+            frame->layout.heading_to = frame->layout.body_y;
+            frame->layout.body_y = band;
+        }
         frame->layout.rows = inkcell_fb_layout_rows(state, &frame->layout);
     }
     inkcell_fb_draw_progress(state, &frame->layout, scaffold->busy);

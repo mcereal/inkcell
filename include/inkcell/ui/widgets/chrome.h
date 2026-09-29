@@ -106,6 +106,14 @@ void inkcell_fb_draw_nav_bar(const struct inkcell_draw_state *state,
  */
 int inkcell_fb_nav_bar_height(const struct inkcell_draw_state *state, int small);
 
+/*
+ * How far down the frame's top band runs, at chrome scale `small`: the navigation bar's height,
+ * or the band the host's window buttons stand in (top_leading_band) when that is taller. What a
+ * frame puts under the buttons - the strip's tabs, a rail's first row, a heading beside a
+ * collapsed rail - is measured from here.
+ */
+int inkcell_fb_top_band(const struct inkcell_draw_state *state, int small);
+
 /* ---- the screen progress bar -----------------------------------------------------------------
  *
  * A hairline across the panel, under the navigation bar's rule: the client is waiting on

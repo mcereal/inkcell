@@ -61,7 +61,11 @@ void inkcell_sdl_cocoa_set_panel_size(int panel_w, int panel_h);
 struct inkcell_sdl_cocoa_controls {
     /* How far the first tab has to start from the frame's left edge, in panel pixels. */
     int inset_px;
-    /* How tall the draggable strip is, in window points - what SDL's hit test is asked in. */
+    /* How tall the band the buttons stand in is, in panel pixels: the strip, or taller where the
+       strip would have put them against the window's top edge. */
+    int band_px;
+    /* How tall the draggable strip is, in window points - what SDL's hit test is asked in. The
+       band, so the whole of what reads as the title bar drags the window. */
     int strip_points;
 };
 

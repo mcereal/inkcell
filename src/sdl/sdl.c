@@ -429,8 +429,10 @@ static bool inkcell_sdl_titlebar_sync(struct inkcell_sdl_panel *panel, bool forc
     const struct inkcell_sdl_cocoa_controls controls =
         inkcell_sdl_cocoa_place_controls(panel->window, strip_px);
     panel->strip_points = controls.strip_points;
-    const bool moved = controls.inset_px != state->top_leading_inset;
+    const bool moved = controls.inset_px != state->top_leading_inset ||
+                       controls.band_px != state->top_leading_band;
     state->top_leading_inset = controls.inset_px;
+    state->top_leading_band = controls.band_px;
     return moved;
 }
 

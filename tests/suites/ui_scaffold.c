@@ -13,6 +13,7 @@
 
 #include "inkcell/ui/fb_capture.h"
 #include "inkcell/ui/focus.h"
+#include "inkcell/ui/widgets/meter.h"
 #include "inkcell/ui/widgets/scaffold.h"
 #include "inkcell/ui/widgets/scroll.h"
 
@@ -210,30 +211,122 @@ INKCELL_TEST_CASE(scaffold_rail_width_does_not_follow_the_cursor, unit) {
     record_success(test_name);
 }
 
-/* A Mac window's buttons sit in the rail's top-leading corner (top_leading_inset), and a rail
-   narrower than them would leave the last one over the rule and against the pane's heading. */
-INKCELL_TEST_CASE(scaffold_rail_holds_the_window_buttons, unit) {
+/* A Mac window's buttons sit in the rail's top-leading corner (top_leading_inset). An expanded
+   rail widens to hold them, as a sidebar does. A collapsed one keeps its own width - held to the
+   buttons it was a column half again as wide as its icons, with the icons against one side - and
+   the pane's heading steps clear of the buttons instead. */
+INKCELL_TEST_CASE(scaffold_rail_holds_the_window_buttons_only_expanded, unit) {
     struct inkcell_draw_state *state = NULL;
     struct inkcell_capture *capture =
         scaffold_open(INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT, INKCELL_SCALE(3), &state);
     INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
 
     const int bare = inkcell_fb_scaffold_rail_width(state, k_destinations, SCAFFOLD_COUNT);
+    const int words =
+        inkcell_fb_scaffold_rail_expanded_width(state, k_destinations, SCAFFOLD_COUNT);
+    INKCELL_TEST_FAIL_IF_CLEANUP(words <= bare, inkcell_capture_close(capture),
+                                 "the expanded rail should be the wider one");
+
     state->top_leading_inset = bare + 40;
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        inkcell_fb_scaffold_rail_width(state, k_destinations, SCAFFOLD_COUNT) != bare,
+        inkcell_capture_close(capture), "a collapsed rail keeps its own width under the buttons");
+
+    struct inkcell_focus_item storage[16];
+    struct inkcell_focus_map map;
+    inkcell_focus_begin(&map, storage, 16U);
+    inkcell_fb_set_focus_map(state, &map);
+    state->pointer = true;
     const struct inkcell_fb_scaffold scaffold = {.destinations = k_destinations,
                                                  .count = SCAFFOLD_COUNT};
     struct inkcell_fb_scaffold_frame frame;
     inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+    INKCELL_TEST_FAIL_IF_CLEANUP(frame.nav != INKCELL_FB_NAV_RAIL || frame.rail_expanded,
+                                 inkcell_capture_close(capture), "medium gets a collapsed rail");
+    INKCELL_TEST_FAIL_IF_CLEANUP(frame.content.x != bare, inkcell_capture_close(capture),
+                                 "the content starts where the collapsed rail stops");
+    /* A screen with no heading - a column of cards - starts below the buttons' band. */
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        frame.layout.body_y <
+            inkcell_fb_top_band(state, inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL)),
+        inkcell_capture_close(capture), "the body should start below the window's buttons");
+    /* Buttons reaching past the content column's own margin, which is what the heading has to
+       move for. The heading's back arrow is the one mark on it with a box: it hangs a gutter
+       ahead of where the title's column starts. */
+    state->top_leading_inset = inkcell_fb_content_x(state) + 40;
+    frame.layout.back = true;
+    const struct inkcell_fb_app_bar heading = {.title = "Messages"};
+    (void)inkcell_fb_draw_app_bar(state, &frame.layout, &heading);
     inkcell_fb_scaffold_end(state, &frame, NULL);
-    INKCELL_TEST_FAIL_IF_CLEANUP(frame.nav != INKCELL_FB_NAV_RAIL, inkcell_capture_close(capture),
-                                 "medium gets a rail");
-    INKCELL_TEST_FAIL_IF_CLEANUP(frame.content.x != bare + 40, inkcell_capture_close(capture),
-                                 "the rail widens to hold the window's buttons");
+    inkcell_fb_set_focus_map(state, NULL);
+    struct inkcell_focus_rect arrow;
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        !inkcell_focus_rect_of(&map, INKCELL_FOCUS_KEY(INKCELL_KEY_B), &arrow),
+        inkcell_capture_close(capture), "the heading's back arrow should be registered");
+    INKCELL_TEST_FAIL_IF_CLEANUP(arrow.x + inkcell_fb_gutter(state) < state->top_leading_inset,
+                                 inkcell_capture_close(capture),
+                                 "the heading should start clear of the window's buttons");
 
+    state->top_leading_inset = words + 40;
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_scaffold_rail_expanded_width(
+                                     state, k_destinations, SCAFFOLD_COUNT) != words + 40,
+                                 inkcell_capture_close(capture),
+                                 "an expanded rail widens to hold the window's buttons");
     state->top_leading_inset = 1;
     INKCELL_TEST_FAIL_IF_CLEANUP(
-        inkcell_fb_scaffold_rail_width(state, k_destinations, SCAFFOLD_COUNT) != bare,
+        inkcell_fb_scaffold_rail_expanded_width(state, k_destinations, SCAFFOLD_COUNT) != words,
         inkcell_capture_close(capture), "and an inset it already clears changes nothing");
+
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
+/* The busy bar hangs off the top of the content, which beside a collapsed rail is the top of
+   the band the window's buttons stand in: it starts past them rather than running under them. */
+static bool scaffold_is_track(const struct inkcell_draw_state *state,
+                              struct inkcell_capture *capture, int x, int y) {
+    uint32_t width = 0U;
+    uint32_t height = 0U;
+    size_t stride = 0U;
+    const uint8_t *pixels = inkcell_capture_pixels(capture, &width, &height, &stride);
+    if (pixels == NULL || x < 0 || y < 0 || x >= (int)width || y >= (int)height) {
+        return false;
+    }
+    const uint8_t *p = pixels + (size_t)y * stride + (size_t)x * 4U;
+    const struct inkcell_rgb track = inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK);
+    return p[2] == track.r && p[1] == track.g && p[0] == track.b;
+}
+
+INKCELL_TEST_CASE(scaffold_busy_bar_clears_the_window_buttons, unit) {
+    struct inkcell_draw_state *state = NULL;
+    struct inkcell_capture *capture =
+        scaffold_open(INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT, INKCELL_SCALE(3), &state);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+
+    const int bare = inkcell_fb_scaffold_rail_width(state, k_destinations, SCAFFOLD_COUNT);
+    state->top_leading_inset = bare + 60;
+    inkcell_fb_clear(state, inkcell_fb_color(state, INKCELL_COLOR_BG));
+    const struct inkcell_fb_scaffold scaffold = {
+        .destinations = k_destinations, .count = SCAFFOLD_COUNT, .busy = true};
+    struct inkcell_fb_scaffold_frame frame;
+    inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+    inkcell_fb_scaffold_end(state, &frame, NULL);
+    INKCELL_TEST_FAIL_IF_CLEANUP(frame.rail_expanded || frame.content.x != bare,
+                                 inkcell_capture_close(capture), "medium gets a collapsed rail");
+
+    /* Across the middle of the bar: the moving fill covers some of the track, never all of it. */
+    const int y = frame.layout.nav_y + inkcell_fb_meter_thickness(state, state->scale) / 2;
+    bool under = false;
+    bool past = false;
+    for (int x = bare; x < (int)INKCELL_CAPTURE_WIDTH; ++x) {
+        const bool track = scaffold_is_track(state, capture, x, y);
+        under = under || (track && x < state->top_leading_inset);
+        past = past || (track && x >= state->top_leading_inset);
+    }
+    INKCELL_TEST_FAIL_IF_CLEANUP(under, inkcell_capture_close(capture),
+                                 "the busy bar should not run under the window's buttons");
+    INKCELL_TEST_FAIL_IF_CLEANUP(!past, inkcell_capture_close(capture),
+                                 "and should still be drawn past them");
 
     inkcell_capture_close(capture);
     record_success(test_name);
