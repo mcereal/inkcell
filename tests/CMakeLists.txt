@@ -23,6 +23,7 @@ set(INKCELL_TEST_SUITES
     suites/ui_emoji.c
     suites/ui_fab.c
     suites/ui_icon.c
+    suites/ui_input_profile.c
     suites/ui_input_repeat.c
     suites/ui_interaction.c
     suites/ui_keyboard.c

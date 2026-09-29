@@ -42,10 +42,12 @@
 #define KEY_F1 59
 #define KEY_F2 60
 #define KEY_F12 88
+#define KEY_HOME 102
 #define KEY_UP 103
 #define KEY_PAGEUP 104
 #define KEY_LEFT 105
 #define KEY_RIGHT 106
+#define KEY_END 107
 #define KEY_DOWN 108
 #define KEY_PAGEDOWN 109
 #define KEY_DELETE 111

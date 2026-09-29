@@ -93,6 +93,45 @@ static const struct inkcell_input_binding k_bindings_xbox[] = {
 };
 
 /*
+ * A keyboard: the desktop window, which has no pad (see inkcell_sdl_evdev_code()) and is driven
+ * from the keys the convention in src/input/input.c already routes - Enter, Backspace, X, Space,
+ * F1 and F2 for the six face and menu buttons, Page Up and Page Down for the shoulders, Home and
+ * End for the triggers.
+ *
+ * Not a guess, which is the bar this registry holds a row to: the codes are the kernel's own
+ * names for the keys, and the words are what is printed on them. The face bindings restate the
+ * convention on purpose - a profile is required to bind all four (inkcell_input_profile_validate())
+ * - so this row agrees with the convention rather than overriding it.
+ *
+ * What it changes is the caps, and a window that prefers it takes only those (see
+ * inkcell_input_profile_prefer()). A window draws the face buttons as verbs rather than keycaps,
+ * but the pairs keep theirs, and "L/R" and "L2/R2" were a legend for buttons a keyboard does not
+ * have. The words are the ones printed on a PC keyboard's keys, spelled short enough for a
+ * keycap; a Mac laptop reaches the same keys with fn and the arrows.
+ */
+static const struct inkcell_input_binding k_bindings_keyboard[] = {
+    {KEY_ENTER, INKCELL_KEY_A},
+    {KEY_BACKSPACE, INKCELL_KEY_B},
+    {KEY_X, INKCELL_KEY_X},
+    {KEY_SPACE, INKCELL_KEY_Y},
+};
+
+static const char *const k_caps_keyboard[INKCELL_BUTTON_COUNT] = {
+    [INKCELL_BUTTON_A] = "ENTER",
+    [INKCELL_BUTTON_B] = "BKSP",
+    [INKCELL_BUTTON_X] = "X",
+    [INKCELL_BUTTON_Y] = "SPACE",
+    [INKCELL_BUTTON_START] = "F1",
+    [INKCELL_BUTTON_SELECT] = "F2",
+    [INKCELL_BUTTON_SHOULDERS] = "PGUP/PGDN",
+    [INKCELL_BUTTON_TRIGGERS] = "HOME/END",
+    [INKCELL_BUTTON_UP_DOWN] = "\xE2\x86\x91\xE2\x86\x93",    /* up arrow, down arrow */
+    [INKCELL_BUTTON_LEFT_RIGHT] = "\xE2\x86\x90\xE2\x86\x92", /* left arrow, right arrow */
+    [INKCELL_BUTTON_DPAD] = "\xE2\x86\x91\xE2\x86\x93\xE2\x86\x90\xE2\x86\x92",
+    [INKCELL_BUTTON_QUIT] = NULL,
+};
+
+/*
  * The registry. The default is first, which is also the order a listing walks.
  *
  * Only devices whose mapping somebody has actually measured belong here. A profile guessed from
@@ -112,10 +151,21 @@ static const struct inkcell_input_profile k_profiles[] = {
         .binding_count = INKWELL_ARRAY_LEN(k_bindings_xbox),
         .caps = k_caps_abxy,
     },
+    {
+        .name = "keyboard",
+        .bindings = k_bindings_keyboard,
+        .binding_count = INKWELL_ARRAY_LEN(k_bindings_keyboard),
+        .caps = k_caps_keyboard,
+    },
 };
 
 static const struct inkcell_input_profile *s_profile;
 static bool s_profile_loaded;
+/* Whether <PREFIX>_INPUT_PROFILE named a profile the registry holds, as against the default
+   standing in for one - which is what a backend's preference yields to. */
+static bool s_profile_named;
+/* The backend's caps for when the environment names none - see inkcell_input_profile_prefer(). */
+static const struct inkcell_input_profile *s_preferred;
 
 size_t inkcell_input_profile_count(void) {
     return INKWELL_ARRAY_LEN(k_profiles);
@@ -149,6 +199,7 @@ const struct inkcell_input_profile *inkcell_input_profile_from_env(void) {
 
     const char *const name = inkwell_env_get("INPUT_PROFILE");
     const struct inkcell_input_profile *profile = inkcell_input_profile_by_name(name);
+    s_profile_named = profile != NULL;
     if (profile == NULL) {
         if (name != NULL && name[0] != '\0') {
             inkwell_log_warn("input", "Unknown <PREFIX>_INPUT_PROFILE='%s'; using %s", name,
@@ -161,6 +212,26 @@ const struct inkcell_input_profile *inkcell_input_profile_from_env(void) {
 
     s_profile = profile;
     return s_profile;
+}
+
+bool inkcell_input_profile_prefer(const char *name) {
+    const struct inkcell_input_profile *const profile = inkcell_input_profile_by_name(name);
+    if (name != NULL && name[0] != '\0' && profile == NULL) {
+        return false;
+    }
+    s_preferred = profile;
+    return true;
+}
+
+/*
+ * The profile whose caps are drawn: the one the environment named, else the backend's
+ * preference, else the device's. Only the words - the codes are always translated by
+ * inkcell_input_profile_from_env()'s profile, since a pad on evdev can report beside a window
+ * driven from a keyboard, and its face buttons are that profile's to bind.
+ */
+static const struct inkcell_input_profile *inkcell_input_caps_profile(void) {
+    const struct inkcell_input_profile *const device = inkcell_input_profile_from_env();
+    return !s_profile_named && s_preferred != NULL ? s_preferred : device;
 }
 
 void inkcell_input_profile_reload(void) {
@@ -211,7 +282,7 @@ const char *inkcell_button_cap(enum inkcell_button button) {
     if (button == INKCELL_BUTTON_QUIT) {
         return inkcell_input_quit_cap();
     }
-    return inkcell_input_profile_cap(inkcell_input_profile_from_env(), button);
+    return inkcell_input_profile_cap(inkcell_input_caps_profile(), button);
 }
 
 size_t inkcell_button_keys(enum inkcell_button button, enum inkcell_key keys[2]) {
