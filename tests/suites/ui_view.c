@@ -308,3 +308,46 @@ INKCELL_TEST_CASE(view_drops_what_it_cut_away, unit) {
     view_harness_close(&h);
     record_success(test_name);
 }
+
+/*
+ * A viewport that does not start at the panel's left edge places its content where the frame
+ * outside it would have.
+ *
+ * The view translates by the box's position, so a region left in panel coordinates inside it is
+ * translated twice: invisible on a panel whose region starts at 0, and a body shifted right by
+ * the width of a navigation rail on a window that has one. The region here starts where a rail
+ * would end it, and a mark at the column's leading edge has to land on the column outside.
+ */
+INKCELL_TEST_CASE(viewport_places_content_on_the_column_outside_it, unit) {
+    struct view_harness h;
+    INKCELL_TEST_FAIL_IF(!view_harness_open(&h), "capture should open");
+
+    const struct inkcell_box region = {60, 0, (int)VIEW_W - 60, (int)VIEW_H};
+    (void)inkcell_fb_set_region(h.state, region);
+    const struct inkcell_box outside = inkcell_fb_content_column(h.state);
+
+    struct inkcell_scroll scroll;
+    memset(&scroll, 0, sizeof scroll);
+    struct inkcell_fb_viewport view;
+    const struct inkcell_fb_rect box = {region.x, 20, region.w, 100};
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_viewport_begin(h.state, &view, box, &scroll, 50),
+                                 view_harness_close(&h), "the viewport should open");
+    const struct inkcell_box inside = inkcell_fb_content_column(h.state);
+    view_mark(&h, inside.x, 0, 4, 4);
+    inkcell_fb_viewport_end(h.state, &view);
+
+    INKCELL_TEST_FAIL_IF_CLEANUP(inside.x + box.x != outside.x || inside.w != outside.w,
+                                 view_harness_close(&h),
+                                 "the column inside should be the column outside, moved");
+    INKCELL_TEST_FAIL_IF_CLEANUP(!view_marked(&h, outside.x + 1, box.y + 1), view_harness_close(&h),
+                                 "a mark at the column's edge should land on the column outside");
+    INKCELL_TEST_FAIL_IF_CLEANUP(view_marked(&h, outside.x + box.x + 1, box.y + 1),
+                                 view_harness_close(&h),
+                                 "the mark should not be moved by the box a second time");
+    const struct inkcell_box after = inkcell_fb_region(h.state);
+    INKCELL_TEST_FAIL_IF_CLEANUP(after.x != region.x || after.w != region.w, view_harness_close(&h),
+                                 "end should put the region back");
+
+    view_harness_close(&h);
+    record_success(test_name);
+}
