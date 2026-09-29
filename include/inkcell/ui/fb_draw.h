@@ -418,6 +418,19 @@ struct inkcell_draw_state {
      */
     bool cursor_hidden;
     /*
+     * Whether what is being drawn right now is somewhere the keys are not - see
+     * inkcell_fb_set_cursor_elsewhere().
+     *
+     * A split frame can show a detail the reader has not opened yet: the thing under the list's
+     * cursor, previewed beside it. That pane has a cursor of its own in the model - the row A
+     * would land on - and drawing its cue would put a second cursor on a frame whose keys are
+     * still the list's. So the application raises this around that one pane and lowers it after,
+     * and every cue that asks inkcell_fb_cursor_shown() stays dark inside it. Unlike
+     * `cursor_hidden` it is not about the reader and not the backend's: it is set and cleared
+     * within a single frame, and on a panel as well as in a window.
+     */
+    bool cursor_elsewhere;
+    /*
      * The id under the pointer, or INKCELL_FOCUS_NONE - see inkcell_fb_hovered(). Set by the
      * backend from the last frame's map on every move; a component that registered the id
      * draws its hover layer while it matches.

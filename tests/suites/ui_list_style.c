@@ -712,3 +712,98 @@ INKCELL_TEST_CASE(list_style_a_ring_list_of_targets_draws_its_selection_as_an_ac
     style_harness_close(&h);
     record_success(test_name);
 }
+
+/*
+ * Draws one accent row, as a list of targets or as the cursor's own list, and reports the colour
+ * at the middle of the capsule down its leading edge.
+ */
+static bool style_accent_capsule(bool targets, struct inkcell_rgb *capsule, struct inkcell_rgb *dim,
+                                 struct inkcell_rgb *primary) {
+    struct style_harness h;
+    if (!style_harness_open(&h, true)) {
+        return false;
+    }
+    const struct inkcell_fb_list_style look = {.focus = INKCELL_FB_LIST_FOCUS_ACCENT};
+    struct inkcell_fb_list list =
+        inkcell_fb_list_begin_styled(h.state, &h.layout, 1U, 0U, NULL, NULL, &look);
+    if (targets) {
+        inkcell_fb_list_targets(&list, STYLE_ID_ROW);
+    } else {
+        inkcell_fb_list_focus(&list, STYLE_ID_ROW);
+    }
+    int x = 0;
+    int y = 0;
+    style_row_probe(&h, &list, &x, &y);
+    const struct inkcell_fb_row_box box = inkcell_fb_row_box(h.state);
+    uint32_t index = 0U;
+    while (inkcell_fb_list_next(&list, &index)) {
+        const struct inkcell_fb_list_item item = {.text = "r"};
+        inkcell_fb_list_item(h.state, &list, index, &item);
+    }
+    /* The capsule is centred in the gutter between the fill's edge and the words - the same
+       arithmetic inkcell_fb_list_cue() places it with. */
+    *capsule = style_pixel(&h, box.x + (box.text_x - box.x) / 2, y);
+    *dim = inkcell_fb_color(h.state, INKCELL_COLOR_TEXT_DIM);
+    *primary = inkcell_fb_tone_color(h.state, INKCELL_TONE_PRIMARY);
+    style_harness_close(&h);
+    return true;
+}
+
+/*
+ * A list of targets is the selection beside the pane that has the keys, so its capsule is the
+ * dim ink and the accent is left to the cursor in that pane: one accent, one cursor. The same
+ * row on the cursor's own list keeps the accent.
+ */
+INKCELL_TEST_CASE(list_style_a_list_of_targets_draws_its_capsule_in_the_dim_ink, unit) {
+    struct inkcell_rgb capsule;
+    struct inkcell_rgb dim;
+    struct inkcell_rgb primary;
+    INKCELL_TEST_FAIL_IF(!style_accent_capsule(true, &capsule, &dim, &primary),
+                         "the capture should open");
+    INKCELL_TEST_FAIL_IF(!style_same_rgb(capsule, dim),
+                         "a selection beside the cursor's pane should wear the dim ink");
+    INKCELL_TEST_FAIL_IF(!style_accent_capsule(false, &capsule, &dim, &primary),
+                         "the capture should open");
+    INKCELL_TEST_FAIL_IF(!style_same_rgb(capsule, primary),
+                         "the cursor's own row should keep the accent");
+    record_success(test_name);
+}
+
+/*
+ * A pane drawn under cursor_elsewhere draws no cue, on a panel as well as in a window, and the
+ * setter hands back what it found so a caller can put it back.
+ */
+INKCELL_TEST_CASE(list_style_a_pane_the_keys_are_not_in_draws_no_cursor, unit) {
+    struct style_harness h;
+    INKCELL_TEST_FAIL_IF(!style_harness_open(&h, true), "the capture should open");
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_cursor_shown(h.state), style_harness_close(&h),
+                                 "a panel should show its cursor");
+    const bool was = inkcell_fb_set_cursor_elsewhere(h.state, true);
+    INKCELL_TEST_FAIL_IF_CLEANUP(was, style_harness_close(&h),
+                                 "a frame should begin with the keys where it draws");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_cursor_shown(h.state), style_harness_close(&h),
+                                 "a pane the keys are not in should hide the cue");
+    const struct inkcell_fb_list_style look = {.focus = INKCELL_FB_LIST_FOCUS_FILL};
+    struct inkcell_fb_list list =
+        inkcell_fb_list_begin_styled(h.state, &h.layout, 1U, 0U, NULL, NULL, &look);
+    int x = 0;
+    int y = 0;
+    style_row_probe(&h, &list, &x, &y);
+    const struct inkcell_fb_row_box box = inkcell_fb_row_box(h.state);
+    uint32_t index = 0U;
+    while (inkcell_fb_list_next(&list, &index)) {
+        const struct inkcell_fb_list_item item = {.text = "r"};
+        inkcell_fb_list_item(h.state, &list, index, &item);
+    }
+    (void)x;
+    const struct inkcell_rgb bg = inkcell_fb_color(h.state, INKCELL_COLOR_BG);
+    INKCELL_TEST_FAIL_IF_CLEANUP(!style_same_rgb(style_pixel(&h, box.x + (box.w * 3) / 4, y), bg),
+                                 style_harness_close(&h),
+                                 "the cursor's row should draw no fill in that pane");
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_set_cursor_elsewhere(h.state, was) != true,
+                                 style_harness_close(&h), "the setter should answer what it found");
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_cursor_shown(h.state), style_harness_close(&h),
+                                 "and putting it back should show the cue again");
+    style_harness_close(&h);
+    record_success(test_name);
+}

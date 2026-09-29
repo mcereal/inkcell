@@ -134,8 +134,9 @@ bool inkcell_fb_focus_ring_rect(const struct inkcell_draw_state *state,
                                 struct inkcell_focus_rect *rect, int *radius);
 
 /*
- * Whether the cursor's cue is drawn this frame - false only on a pointer frame whose reader last
- * clicked or scrolled rather than pressed a key. See `cursor_hidden` on the draw state.
+ * Whether the cursor's cue is drawn this frame - false on a pointer frame whose reader last
+ * clicked or scrolled rather than pressed a key (`cursor_hidden` on the draw state), and inside a
+ * pane the keys are not in (`cursor_elsewhere`).
  *
  * What a component asks before it draws a row, a bubble or a ring *as focused*. It is not asked
  * before marking the map: the cursor is still the cursor, and the next key moves it from there.
@@ -148,6 +149,22 @@ bool inkcell_fb_cursor_shown(const struct inkcell_draw_state *state);
  * whether the backend owes a frame.
  */
 bool inkcell_fb_set_cursor_hidden(struct inkcell_draw_state *state, bool hidden);
+
+/*
+ * Marks what is drawn next as a pane the keys are not in, or not, and answers what it was - so a
+ * caller brackets the pane and puts back whatever it found:
+ *
+ *     const bool was = inkcell_fb_set_cursor_elsewhere(state, true);
+ *     ... draw the preview ...
+ *     (void)inkcell_fb_set_cursor_elsewhere(state, was);
+ *
+ * No damage is declared: this changes nothing between two frames, only which cues one frame
+ * draws, and a pane drawn under it is drawn whole or not at all. What it does not do is keep the
+ * pane's boxes out of the focus map or out of the hover - an application that registers the
+ * pane's rows against ids its keys would answer detaches the map itself
+ * (inkcell_fb_set_focus_map()).
+ */
+bool inkcell_fb_set_cursor_elsewhere(struct inkcell_draw_state *state, bool elsewhere);
 
 /*
  * Whether the pointer is over `id` - which a component that registered `id` answers with its

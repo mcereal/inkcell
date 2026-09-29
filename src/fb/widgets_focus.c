@@ -294,7 +294,17 @@ static void pointer_damage_add(struct inkcell_draw_state *state, int x, int y, i
 }
 
 bool inkcell_fb_cursor_shown(const struct inkcell_draw_state *state) {
-    return state == NULL || !state->pointer || !state->cursor_hidden;
+    return state == NULL ||
+           (!state->cursor_elsewhere && (!state->pointer || !state->cursor_hidden));
+}
+
+bool inkcell_fb_set_cursor_elsewhere(struct inkcell_draw_state *state, bool elsewhere) {
+    if (state == NULL) {
+        return false;
+    }
+    const bool was = state->cursor_elsewhere;
+    state->cursor_elsewhere = elsewhere;
+    return was;
 }
 
 bool inkcell_fb_set_cursor_hidden(struct inkcell_draw_state *state, bool hidden) {
