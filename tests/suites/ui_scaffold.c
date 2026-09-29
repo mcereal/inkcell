@@ -13,6 +13,7 @@
 
 #include "inkcell/ui/fb_capture.h"
 #include "inkcell/ui/focus.h"
+#include "inkcell/ui/widgets/meter.h"
 #include "inkcell/ui/widgets/scaffold.h"
 #include "inkcell/ui/widgets/scroll.h"
 
@@ -275,6 +276,57 @@ INKCELL_TEST_CASE(scaffold_rail_holds_the_window_buttons_only_expanded, unit) {
     INKCELL_TEST_FAIL_IF_CLEANUP(
         inkcell_fb_scaffold_rail_expanded_width(state, k_destinations, SCAFFOLD_COUNT) != words,
         inkcell_capture_close(capture), "and an inset it already clears changes nothing");
+
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
+/* The busy bar hangs off the top of the content, which beside a collapsed rail is the top of
+   the band the window's buttons stand in: it starts past them rather than running under them. */
+static bool scaffold_is_track(const struct inkcell_draw_state *state,
+                              struct inkcell_capture *capture, int x, int y) {
+    uint32_t width = 0U;
+    uint32_t height = 0U;
+    size_t stride = 0U;
+    const uint8_t *pixels = inkcell_capture_pixels(capture, &width, &height, &stride);
+    if (pixels == NULL || x < 0 || y < 0 || x >= (int)width || y >= (int)height) {
+        return false;
+    }
+    const uint8_t *p = pixels + (size_t)y * stride + (size_t)x * 4U;
+    const struct inkcell_rgb track = inkcell_fb_color(state, INKCELL_COLOR_METER_TRACK);
+    return p[2] == track.r && p[1] == track.g && p[0] == track.b;
+}
+
+INKCELL_TEST_CASE(scaffold_busy_bar_clears_the_window_buttons, unit) {
+    struct inkcell_draw_state *state = NULL;
+    struct inkcell_capture *capture =
+        scaffold_open(INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT, INKCELL_SCALE(3), &state);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+
+    const int bare = inkcell_fb_scaffold_rail_width(state, k_destinations, SCAFFOLD_COUNT);
+    state->top_leading_inset = bare + 60;
+    inkcell_fb_clear(state, inkcell_fb_color(state, INKCELL_COLOR_BG));
+    const struct inkcell_fb_scaffold scaffold = {
+        .destinations = k_destinations, .count = SCAFFOLD_COUNT, .busy = true};
+    struct inkcell_fb_scaffold_frame frame;
+    inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+    inkcell_fb_scaffold_end(state, &frame, NULL);
+    INKCELL_TEST_FAIL_IF_CLEANUP(frame.rail_expanded || frame.content.x != bare,
+                                 inkcell_capture_close(capture), "medium gets a collapsed rail");
+
+    /* Across the middle of the bar: the moving fill covers some of the track, never all of it. */
+    const int y = frame.layout.nav_y + inkcell_fb_meter_thickness(state, state->scale) / 2;
+    bool under = false;
+    bool past = false;
+    for (int x = bare; x < (int)INKCELL_CAPTURE_WIDTH; ++x) {
+        const bool track = scaffold_is_track(state, capture, x, y);
+        under = under || (track && x < state->top_leading_inset);
+        past = past || (track && x >= state->top_leading_inset);
+    }
+    INKCELL_TEST_FAIL_IF_CLEANUP(under, inkcell_capture_close(capture),
+                                 "the busy bar should not run under the window's buttons");
+    INKCELL_TEST_FAIL_IF_CLEANUP(!past, inkcell_capture_close(capture),
+                                 "and should still be drawn past them");
 
     inkcell_capture_close(capture);
     record_success(test_name);

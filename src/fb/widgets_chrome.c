@@ -233,12 +233,19 @@ void inkcell_fb_draw_progress(struct inkcell_draw_state *state,
      * it is the navigation bar's rule saying something, so it runs the width of the rule it
      * hangs off. Inset, it would read as the first row of the body - which is exactly the
      * mistake the tab strip made before it was given a surface of its own.
+     *
+     * Bar the window's buttons: beside a collapsed rail the rule it hangs off is the top of the
+     * band they stand in (top_leading_inset), and the bleed starts past them rather than running
+     * under them.
      */
+    const struct inkcell_box region = inkcell_fb_region(state);
+    int x = region.x;
+    if (state->top_leading_inset > x && layout->nav_y < inkcell_fb_top_band(state, layout->small)) {
+        x = state->top_leading_inset < region.x + region.w ? state->top_leading_inset
+                                                           : region.x + region.w;
+    }
     struct inkcell_fb_meter meter = {
-        .rect = {.x = inkcell_fb_region(state).x,
-                 .y = layout->nav_y,
-                 .w = inkcell_fb_region(state).w,
-                 .h = height},
+        .rect = {.x = x, .y = layout->nav_y, .w = region.x + region.w - x, .h = height},
         .kind = INKCELL_FB_METER_INDETERMINATE,
         .tone = INKCELL_TONE_PRIMARY,
         .id = INKCELL_FB_ANIM_ID_PROGRESS,
