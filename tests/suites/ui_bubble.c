@@ -258,3 +258,103 @@ INKCELL_TEST_CASE(capsule_value_chip_stays_inside_its_row, unit) {
     }
     record_success(test_name);
 }
+
+/* How many pixels in the band [top, bottom) are exactly `color`, and which non-ground colour
+   covers most of it - the bubble's fill, on a band a bubble spans edge to edge. */
+static size_t bubble_band_count(const struct bubble_page *page, int top, int bottom,
+                                struct inkcell_rgb color) {
+    size_t count = 0U;
+    for (int y = top; y < bottom; ++y) {
+        for (int x = 0; x < page->w; ++x) {
+            const uint8_t *px = page->pixels + (size_t)y * page->stride + (size_t)x * 4U;
+            count += (px[0] == color.b && px[1] == color.g && px[2] == color.r) ? 1U : 0U;
+        }
+    }
+    return count;
+}
+
+static struct inkcell_rgb bubble_band_fill(const struct bubble_page *page, int top, int bottom) {
+    struct inkcell_rgb seen[32];
+    size_t counts[32] = {0};
+    size_t distinct = 0U;
+    for (int y = top; y < bottom; ++y) {
+        for (int x = 0; x < page->w; ++x) {
+            if (bubble_untouched(page, x, y)) {
+                continue;
+            }
+            const uint8_t *px = page->pixels + (size_t)y * page->stride + (size_t)x * 4U;
+            const struct inkcell_rgb here = {px[2], px[1], px[0]};
+            size_t i = 0U;
+            while (i < distinct &&
+                   (seen[i].r != here.r || seen[i].g != here.g || seen[i].b != here.b)) {
+                ++i;
+            }
+            if (i == distinct) {
+                if (distinct == 32U) {
+                    continue;
+                }
+                seen[distinct++] = here;
+            }
+            counts[i] += 1U;
+        }
+    }
+    size_t best = 0U;
+    for (size_t i = 1U; i < distinct; ++i) {
+        best = counts[i] > counts[best] ? i : best;
+    }
+    return distinct > 0U ? seen[best] : k_sentinel;
+}
+
+/*
+ * A sender line asked to take its sender's avatar tint takes it only where it reads - body-text
+ * contrast against the bubble, or the primary's own where that is lower, at rest and under the
+ * cursor alike - and makes the same choice in
+ * both, so a name does not change colour as the cursor crosses it. And the tints do vary on the
+ * default theme, or the option would be a very roundabout way of drawing the primary.
+ */
+INKCELL_TEST_CASE(bubble_sender_tint_reads_and_holds_under_the_cursor, unit) {
+    for (size_t t = 0U; t < inkcell_theme_count(); ++t) {
+        const struct inkcell_theme *theme = inkcell_theme_at(t);
+        size_t tinted_seeds = 0U;
+        for (uint32_t seed = 0U; seed < 48U; ++seed) {
+            const struct inkcell_rgb tint = inkcell_theme_avatar(theme, seed);
+            /* A tint that *is* the primary is indistinguishable from the fallback, and the
+               focus ring is drawn in the primary too - there is no choice here to look at. */
+            const struct inkcell_rgb primary = theme->colors[INKCELL_COLOR_PRIMARY];
+            if (tint.r == primary.r && tint.g == primary.g && tint.b == primary.b) {
+                continue;
+            }
+            bool shown[2] = {false, false};
+            for (int focused = 0; focused < 2; ++focused) {
+                struct bubble_page page;
+                INKCELL_TEST_FAIL_IF(!bubble_open(&page, theme), "the capture should open");
+                const struct inkcell_fb_layout layout =
+                    inkcell_fb_layout_begin(page.state, true, true);
+                const int y = layout.body_y + layout.line;
+                const struct inkcell_fb_bubble bubble = {.name = "WMWMWM",
+                                                         .text = "x",
+                                                         .focused = focused != 0,
+                                                         .name_tinted = true,
+                                                         .name_seed = seed};
+                inkcell_fb_draw_bubble(page.state, &layout, y, &bubble);
+                const int bottom = y + layout.line - inkcell_step_px(page.state->scale);
+                const struct inkcell_rgb fill = bubble_band_fill(&page, y, bottom);
+                shown[focused] = bubble_band_count(&page, y, bottom, tint) > 0U;
+                inkcell_capture_close(page.capture);
+                const double primary_reads = inkcell_theme_contrast(primary, fill);
+                const double floor = primary_reads < 4.5 ? primary_reads : 4.5;
+                INKCELL_TEST_FAIL_IF(shown[focused] && inkcell_theme_contrast(tint, fill) < floor,
+                                     "a sender tint should never read worse than the primary");
+            }
+            INKCELL_TEST_FAIL_IF(shown[0] != shown[1],
+                                 "a sender line should keep its colour under the cursor");
+            tinted_seeds += shown[0] ? 1U : 0U;
+        }
+        /* The high-contrast theme's two tints are its primary and its ink; every other theme
+           offers a real spread, and a rule that let none of it through would be decoration. */
+        if (theme->avatar_count > 2U) {
+            INKCELL_TEST_FAIL_IF(tinted_seeds == 0U, "a theme should tint at least some senders");
+        }
+    }
+    record_success(test_name);
+}

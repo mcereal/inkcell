@@ -54,6 +54,11 @@ struct inkcell_fb_bubble_metrics {
    measure's width and the draw's text origin cannot disagree about the indent. */
 #define INKCELL_FB_BUBBLE_QUOTE_INDENT 2U
 
+/* Body-text contrast, which is what a sender's tint owes the bubble it names a sender on: the
+   line is read, not glanced at. WCAG AA, the same floor inkcell_theme_validate() holds text to -
+   lowered only to the primary's own figure where the primary it replaces already sits under it. */
+#define INKCELL_FB_BUBBLE_NAME_CONTRAST 4.5
+
 /* A bubble never spans the whole panel: the gutter down the other side is what says which end
    of the conversation it came from, so three quarters is a look rather than a limit. */
 /*
@@ -128,6 +133,39 @@ static struct inkcell_rgb inkcell_fb_bubble_quiet(const struct inkcell_draw_stat
         return paint.ink;
     }
     return inkcell_fb_tone_color(state, INKCELL_TONE_DIM);
+}
+
+/* Whether `tint` reads on `fill` at least as well as the sender line needed to: body-text
+   contrast, or the primary's own where the primary itself falls short of that on this fill. The
+   tint is never allowed to make the line harder to read than the colour it replaces. */
+static bool inkcell_fb_bubble_tint_reads(struct inkcell_rgb tint, struct inkcell_rgb primary,
+                                         struct inkcell_rgb fill) {
+    double floor = inkcell_theme_contrast(primary, fill);
+    if (floor > INKCELL_FB_BUBBLE_NAME_CONTRAST) {
+        floor = INKCELL_FB_BUBBLE_NAME_CONTRAST;
+    }
+    return inkcell_theme_contrast(tint, fill) >= floor;
+}
+
+/* The sender line on one of theirs: the sender's avatar tint where it reads on the bubble both
+   at rest and under the cursor, and the primary otherwise - see `name_tinted`. */
+static struct inkcell_rgb inkcell_fb_bubble_name_tint(const struct inkcell_draw_state *state,
+                                                      const struct inkcell_fb_bubble *bubble) {
+    const struct inkcell_rgb primary = inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY);
+    if (!bubble->name_tinted) {
+        return primary;
+    }
+    const struct inkcell_rgb tint = inkcell_theme_avatar(state->theme, bubble->name_seed);
+    struct inkcell_fb_bubble probe = *bubble;
+    probe.focused = false;
+    const struct inkcell_rgb rest = inkcell_fb_bubble_paint(state, &probe).fill;
+    probe.focused = true;
+    const struct inkcell_rgb focused = inkcell_fb_bubble_paint(state, &probe).fill;
+    if (!inkcell_fb_bubble_tint_reads(tint, primary, rest) ||
+        !inkcell_fb_bubble_tint_reads(tint, primary, focused)) {
+        return primary;
+    }
+    return tint;
 }
 
 static void inkcell_fb_bubble_part_text(const struct inkcell_draw_state *state,
@@ -482,7 +520,7 @@ void inkcell_fb_draw_bubble(const struct inkcell_draw_state *state,
             if (bubble->alert) {
                 name_color = inkcell_fb_tone_color(state, INKCELL_TONE_ERROR);
             } else if (!bubble->outbound) {
-                name_color = inkcell_fb_tone_color(state, INKCELL_TONE_PRIMARY);
+                name_color = inkcell_fb_bubble_name_tint(state, bubble);
             }
         }
         inkcell_fb_draw_text(state, text_x, y, line.text, scale, name_color, fill);
