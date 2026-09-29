@@ -28,6 +28,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ---- the viewport ----------------------------------------------------------------------------
  *
  * What a screen wraps its content in when there is more of it than room.
@@ -199,5 +203,9 @@ int inkcell_fb_large_title_travel(const struct inkcell_draw_state *state);
 void inkcell_fb_draw_large_title(const struct inkcell_draw_state *state,
                                  struct inkcell_fb_layout *layout,
                                  const struct inkcell_fb_large_title *bar, int32_t offset);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_SCROLL_H */
