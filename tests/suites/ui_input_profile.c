@@ -60,8 +60,9 @@ INKCELL_TEST_CASE(input_profile_home_and_end_are_the_triggers, unit) {
 }
 
 /*
- * A backend's preference is used when the environment names nothing, and the environment wins
- * when it does. The caps follow whichever was chosen: a pair a keyboard draws names its keys.
+ * A backend's preference picks the caps when the environment names nothing, and the environment
+ * wins when it does. Only the caps: a pad's face buttons still translate by the device's profile,
+ * since a pad on evdev can report beside a window driven from a keyboard.
  */
 INKCELL_TEST_CASE(input_profile_a_preference_yields_to_the_environment, unit) {
     profile_test_reset();
@@ -74,24 +75,33 @@ INKCELL_TEST_CASE(input_profile_a_preference_yields_to_the_environment, unit) {
         strcmp(inkcell_button_cap(INKCELL_BUTTON_SHOULDERS), "PGUP/PGDN") != 0 ||
             strcmp(inkcell_button_cap(INKCELL_BUTTON_TRIGGERS), "HOME/END") != 0,
         profile_test_reset(), "a keyboard's pairs should name the keys it has");
+    INKCELL_TEST_FAIL_IF_CLEANUP(strcmp(inkcell_input_profile_from_env()->name, "brick") != 0 ||
+                                     inkcell_input_map_key(BTN_EAST) != INKCELL_KEY_A,
+                                 profile_test_reset(),
+                                 "the device's pad should still translate by its own profile");
 
     profile_test_setenv("INKWELL_INPUT_PROFILE", "xbox");
     inkcell_input_profile_reload();
-    INKCELL_TEST_FAIL_IF_CLEANUP(strcmp(inkcell_input_profile_from_env()->name, "xbox") != 0,
+    INKCELL_TEST_FAIL_IF_CLEANUP(strcmp(inkcell_input_profile_from_env()->name, "xbox") != 0 ||
+                                     strcmp(inkcell_button_cap(INKCELL_BUTTON_SHOULDERS), "L/R") !=
+                                         0,
                                  profile_test_reset(), "the environment should win");
 
     profile_test_setenv("INKWELL_INPUT_PROFILE", "no-such-pad");
     inkcell_input_profile_reload();
-    INKCELL_TEST_FAIL_IF_CLEANUP(strcmp(inkcell_input_profile_from_env()->name, "keyboard") != 0,
-                                 profile_test_reset(),
-                                 "an unknown name should fall back to the preference");
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        strcmp(inkcell_input_profile_from_env()->name, "brick") != 0 ||
+            strcmp(inkcell_button_cap(INKCELL_BUTTON_SHOULDERS), "PGUP/PGDN") != 0,
+        profile_test_reset(),
+        "an unknown name should fall back to the Brick's codes and the preferred caps");
 
     INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_input_profile_prefer("no-such-pad"), profile_test_reset(),
                                  "an unknown preference should be refused");
     profile_test_setenv("INKWELL_INPUT_PROFILE", NULL);
+    inkcell_input_profile_reload();
     (void)inkcell_input_profile_prefer(NULL);
-    INKCELL_TEST_FAIL_IF_CLEANUP(strcmp(inkcell_input_profile_from_env()->name, "brick") != 0,
-                                 profile_test_reset(), "no preference should put the Brick back");
+    INKCELL_TEST_FAIL_IF_CLEANUP(strcmp(inkcell_button_cap(INKCELL_BUTTON_SHOULDERS), "L/R") != 0,
+                                 profile_test_reset(), "no preference should put the Brick's back");
     profile_test_reset();
     record_success(test_name);
 }
