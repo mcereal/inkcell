@@ -24,7 +24,8 @@
  * what keeps a future device with an odd pad a table row rather than a patch to the conventions.
  *
  * <PREFIX>_INPUT_PROFILE names one, the same way <PREFIX>_THEME names a look; with nothing
- * set the Brick's is used, because that is the device this pak ships for. There is deliberately
+ * set the Brick's is used, because that is the device this pak ships for, unless the backend
+ * prefers another (the window prefers the keyboard's). There is deliberately
  * no auto-detection: a pad's evdev name is not a promise about its silkscreen, and guessing
  * wrong swaps confirm and back - see the note on inkcell_input_profile_from_env().
  */
@@ -86,6 +87,18 @@ const struct inkcell_input_profile *inkcell_input_profile_default(void);
  * confusing - so refusing to start over a typo would be the worse failure.
  */
 const struct inkcell_input_profile *inkcell_input_profile_from_env(void);
+
+/*
+ * Names the profile to use when <PREFIX>_INPUT_PROFILE names none, in place of the Brick's.
+ * NULL or "" puts the Brick's back. False, and nothing changed, for a name no row has.
+ *
+ * For a backend that knows whose hands are on it, which is a different thing from guessing a
+ * pad: the SDL window has no pad at all and is driven from a keyboard, so it prefers "keyboard"
+ * and its caps name keys a keyboard has. The environment still wins - somebody who set the
+ * variable said which device this is - and a device backend states no preference, so the pak
+ * keeps the Brick's.
+ */
+bool inkcell_input_profile_prefer(const char *name);
 
 /* Exposed so tests can re-read <PREFIX>_INPUT_PROFILE after changing it. */
 void inkcell_input_profile_reload(void);

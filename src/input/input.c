@@ -419,6 +419,17 @@ static enum inkcell_key inkcell_input_map_convention(uint16_t code) {
     case KEY_PAGEDOWN:
     case KEY_TAB:
         return INKCELL_KEY_R1;
+    /*
+     * The triggers, which a keyboard had no route to: Home and End sit beside Page Up and Page
+     * Down on every keyboard that has either, so the second pair of shoulders is the second pair
+     * of paging keys. A pad's own trigger codes are not added beside them - a pad reports its
+     * triggers as axes (see inkcell_input_map_trigger()), and one that also reported them as keys
+     * would press L2 twice.
+     */
+    case KEY_HOME:
+        return INKCELL_KEY_L2;
+    case KEY_END:
+        return INKCELL_KEY_R2;
     case BTN_SELECT: /* 314 */
         return INKCELL_KEY_SELECT;
     case BTN_START: /* 315 */

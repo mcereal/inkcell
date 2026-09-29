@@ -492,6 +492,14 @@ INKCELL_TEST_CASE(sdl_keys_go_through_the_one_convention, unit) {
                              INKCELL_KEY_SELECT,
                          "...and SELECT");
 
+    /* And the triggers, which no key reached until Home and End. */
+    INKCELL_TEST_FAIL_IF(inkcell_input_map_key(inkcell_sdl_evdev_code(SDL_SCANCODE_HOME)) !=
+                             INKCELL_KEY_L2,
+                         "Home must be L2");
+    INKCELL_TEST_FAIL_IF(inkcell_input_map_key(inkcell_sdl_evdev_code(SDL_SCANCODE_END)) !=
+                             INKCELL_KEY_R2,
+                         "...and End R2");
+
     INKCELL_TEST_FAIL_IF(inkcell_sdl_evdev_code(SDL_SCANCODE_F12) != 0U,
                          "a key this client has no use for must map to nothing");
     record_success(test_name);

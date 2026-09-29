@@ -84,6 +84,7 @@ const struct inkcell_backend *inkcell_backend_sdl(void) {
 #include "inkwell/runtime/timer.h"
 
 #include "inkcell/ui/input_codes.h"
+#include "inkcell/ui/input_profile.h"
 #include "inkcell/ui/pointer.h"
 #include "inkcell/ui/widgets/focus.h"
 
@@ -781,6 +782,10 @@ uint16_t inkcell_sdl_evdev_code(int scancode) {
         return KEY_PAGEUP;
     case SDL_SCANCODE_PAGEDOWN:
         return KEY_PAGEDOWN;
+    case SDL_SCANCODE_HOME:
+        return KEY_HOME;
+    case SDL_SCANCODE_END:
+        return KEY_END;
     case SDL_SCANCODE_TAB:
         return KEY_TAB;
     case SDL_SCANCODE_ESCAPE:
@@ -1478,6 +1483,9 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
     (void)inkcell_sdl_fit_scale(panel);
     inkcell_fb_set_app(state, context->app);
     state->pointer = true;
+    /* And a keyboard rather than a pad, so the caps the bar still draws - the pairs - name keys
+       the reader has. <PREFIX>_INPUT_PROFILE still wins. See inkcell_input_profile_prefer(). */
+    (void)inkcell_input_profile_prefer("keyboard");
     /* Nothing has been pressed yet, and a window is opened with the mouse: no cue until a key. */
     state->cursor_hidden = true;
 
@@ -1570,6 +1578,8 @@ static void inkcell_backend_sdl_shutdown(void *state_ptr, void *userdata) {
         SDL_DestroyWindow(panel->window);
         panel->window = NULL;
     }
+    /* The keyboard was this window's to prefer, and it is gone. */
+    (void)inkcell_input_profile_prefer(NULL);
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }
 
