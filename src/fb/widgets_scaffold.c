@@ -600,6 +600,49 @@ static enum inkcell_fb_footer scaffold_footer(const struct inkcell_fb_scaffold *
     return scaffold->footer ? INKCELL_FB_FOOTER_FULL : INKCELL_FB_FOOTER_NONE;
 }
 
+/* How wide the rail is on this frame, and whether it came out expanded. */
+static int scaffold_rail_w(const struct inkcell_draw_state *state,
+                           const struct inkcell_fb_scaffold *scaffold,
+                           enum inkcell_width_class width, bool *expanded) {
+    *expanded = scaffold_rail_expanded(state, scaffold, width);
+    return *expanded
+               ? inkcell_fb_scaffold_rail_expanded_width(state, scaffold->destinations,
+                                                         scaffold->count)
+               : inkcell_fb_scaffold_rail_width(state, scaffold->destinations, scaffold->count);
+}
+
+/*
+ * The two panes `content` would split into, and whether the detail one holds a whole measure.
+ *
+ * Two to three rather than half and half, because the two panes are not the same kind of thing:
+ * the list is a column of short rows that is read by its leading edge, and the detail is where
+ * running text is. So the detail gets the larger share and the list gets enough - which is where
+ * Material's list-detail layout puts the line too, as a fixed list width beside a detail that
+ * takes the rest. A fixed width is the one thing this cannot have, since the panes are measured
+ * in columns of whatever scale the reader chose, and a ratio is a fixed width that scales with
+ * them.
+ *
+ * The line is the detail's rather than the list's because the two panes are not read the same
+ * way. The detail is running text and is held to a measure, since a pane narrower than that
+ * cannot be read; the list is short rows read by their leading edge, and reads the same at two
+ * fifths of the width. Asking for two whole measures - the expanded class - kept a 1920 window at
+ * the handheld's scale to one centred ribbon with most of the window empty either side of it.
+ *
+ * Leaves the region as it found it.
+ */
+static bool scaffold_panes(struct inkcell_draw_state *state, struct inkcell_box content, int rule,
+                           struct inkcell_box panes[2]) {
+    struct inkcell_stack row;
+    inkcell_stack_begin(&row, content, INKCELL_AXIS_X, rule);
+    (void)inkcell_stack_add_grow(&row, 0, 2U);
+    (void)inkcell_stack_add_grow(&row, 0, 3U);
+    (void)inkcell_stack_resolve(&row, panes, 2U);
+    const struct inkcell_box saved = inkcell_fb_set_region(state, panes[1]);
+    const bool holds = inkcell_fb_cols(state, state->scale) >= INKCELL_WIDTH_MEASURE_COLS;
+    (void)inkcell_fb_set_region(state, saved);
+    return holds;
+}
+
 /* The layout a pane gets: the frame's own, with its top at the panes and its rows recounted. */
 static struct inkcell_fb_layout scaffold_pane_layout(const struct inkcell_draw_state *state,
                                                      const struct inkcell_fb_scaffold_frame *frame,
@@ -639,12 +682,7 @@ void inkcell_fb_scaffold_begin(struct inkcell_draw_state *state,
         break;
     }
     case INKCELL_FB_NAV_RAIL: {
-        frame->rail_expanded = scaffold_rail_expanded(state, scaffold, frame->width);
-        const int rail_w =
-            frame->rail_expanded
-                ? inkcell_fb_scaffold_rail_expanded_width(state, scaffold->destinations,
-                                                          scaffold->count)
-                : inkcell_fb_scaffold_rail_width(state, scaffold->destinations, scaffold->count);
+        const int rail_w = scaffold_rail_w(state, scaffold, frame->width, &frame->rail_expanded);
         frame->nav_box = (struct inkcell_box){whole.x, whole.y, rail_w, whole.h};
         frame->content.x += rail_w;
         frame->content.w -= rail_w;
@@ -686,39 +724,11 @@ void inkcell_fb_scaffold_begin(struct inkcell_draw_state *state,
     }
     frame->panes_y = frame->layout.body_y;
 
-    /*
-     * The split, when the class and the screen both want one.
-     *
-     * Two to three rather than half and half, because the two panes are not the same kind of
-     * thing: the list is a column of short rows that is read by its leading edge, and the detail
-     * is where running text is. So the detail gets the larger share and the list gets enough -
-     * which is where Material's list-detail layout puts the line too, as a fixed list width
-     * beside a detail that takes the rest. A fixed width is the one thing this cannot have, since
-     * the panes are measured in columns of whatever scale the reader chose, and a ratio is a
-     * fixed width that scales with them.
-     */
-    /*
-     * And which frames get one: any wider than compact whose detail would hold a whole measure.
-     *
-     * The line is the detail's rather than the list's because the two panes are not read the
-     * same way. The detail is running text and is held to a measure, since a pane narrower than
-     * that cannot be read; the list is short rows read by their leading edge, and reads the same
-     * at two fifths of the width. Asking for two whole measures - the expanded class - kept a
-     * 1920 window at the handheld's scale to one centred ribbon with most of the window empty
-     * either side of it.
-     */
+    /* The split, when the class and the screen both want one - see scaffold_panes(). */
     const int rule = inkcell_fb_rule_height(state, small);
     struct inkcell_box panes[2] = {{0}};
-    if (scaffold->split && frame->width != INKCELL_WIDTH_COMPACT) {
-        struct inkcell_stack row;
-        inkcell_stack_begin(&row, frame->content, INKCELL_AXIS_X, rule);
-        (void)inkcell_stack_add_grow(&row, 0, 2U);
-        (void)inkcell_stack_add_grow(&row, 0, 3U);
-        (void)inkcell_stack_resolve(&row, panes, 2U);
-        (void)inkcell_fb_set_region(state, panes[1]);
-        frame->split = inkcell_fb_cols(state, state->scale) >= INKCELL_WIDTH_MEASURE_COLS;
-        (void)inkcell_fb_set_region(state, frame->content);
-    }
+    frame->split = scaffold->split && frame->width != INKCELL_WIDTH_COMPACT &&
+                   scaffold_panes(state, frame->content, rule, panes);
     if (frame->split) {
         frame->list = panes[0];
         frame->detail = panes[1];
@@ -806,4 +816,33 @@ void inkcell_fb_scaffold_end(struct inkcell_draw_state *state,
     }
     (void)inkcell_fb_set_measured(state, measured);
     (void)inkcell_fb_set_region(state, frame->saved_region);
+}
+
+bool inkcell_fb_scaffold_splittable(struct inkcell_draw_state *state,
+                                    const struct inkcell_fb_scaffold *scaffold) {
+    if (state == NULL || scaffold == NULL) {
+        return false;
+    }
+    /* What begin would measure against, and put back after: the measure the frame will be drawn
+       with, and the region less the destinations. */
+    const bool measured = inkcell_fb_set_measured(state, !scaffold->unmeasured);
+    const enum inkcell_width_class width = inkcell_fb_width_class(state);
+    bool holds = false;
+    if (width != INKCELL_WIDTH_COMPACT) {
+        struct inkcell_box content = inkcell_fb_region(state);
+        if (scaffold_placement(scaffold, width) == INKCELL_FB_NAV_RAIL) {
+            bool expanded = false;
+            const int rail_w = scaffold_rail_w(state, scaffold, width, &expanded);
+            content.x += rail_w;
+            content.w -= rail_w;
+        }
+        const struct inkcell_box saved = inkcell_fb_set_region(state, content);
+        struct inkcell_box panes[2] = {{0}};
+        holds = scaffold_panes(
+            state, content,
+            inkcell_fb_rule_height(state, inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL)), panes);
+        (void)inkcell_fb_set_region(state, saved);
+    }
+    (void)inkcell_fb_set_measured(state, measured);
+    return holds;
 }

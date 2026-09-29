@@ -27,6 +27,10 @@
 #include "inkcell/ui/icon.h"
 #include "inkcell/ui/keyboard.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * What to draw: the cursor, the layout behind it, and the one key whose face is the
  * application's.
@@ -69,5 +73,20 @@ struct inkcell_fb_keyboard {
 void inkcell_fb_draw_keyboard(const struct inkcell_draw_state *state,
                               const struct inkcell_fb_layout *layout, int *y,
                               const struct inkcell_fb_keyboard *keyboard);
+
+/*
+ * The least room the grid lays out in: every row at its floor, a line and a cell's padding.
+ *
+ * For a screen that docks the keyboard under something else rather than giving it the body. The
+ * grid grows into whatever it is handed, so a screen that wants to keep content above it hands it
+ * this much - starting inkcell_fb_draw_keyboard() at the footer less this height - and the keys
+ * come out at their floor, the size a row was before the grid learned to grow into the body.
+ */
+int inkcell_fb_keyboard_min_height(const struct inkcell_draw_state *state,
+                                   const struct inkcell_fb_layout *layout);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_KEYBOARD_H */

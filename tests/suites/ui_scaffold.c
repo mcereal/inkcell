@@ -160,6 +160,8 @@ INKCELL_TEST_CASE(scaffold_medium_puts_a_rail_beside_the_body, unit) {
     /* Medium, but the detail would be narrower than a measure beside the list: one pane. */
     INKCELL_TEST_FAIL_IF(frame.split,
                          "a medium frame too narrow for a measured detail is one pane");
+    INKCELL_TEST_FAIL_IF(inkcell_fb_scaffold_splittable(state, &scaffold),
+                         "and has no room for one either");
     INKCELL_TEST_FAIL_IF(frame.nav_box.x != 0 || frame.nav_box.w != rail ||
                              frame.nav_box.h != (int)INKCELL_CAPTURE_HEIGHT,
                          "the rail runs the leading edge, top to bottom");
@@ -459,6 +461,15 @@ INKCELL_TEST_CASE(scaffold_medium_splits_when_the_detail_gets_a_measure, unit) {
                          "the detail pane should hold a whole measure");
     inkcell_fb_scaffold_end(state, &frame, NULL);
 
+    /* The same window for a screen with no detail: one pane, but the room was there. */
+    const struct inkcell_fb_scaffold single = {
+        .destinations = k_destinations, .count = SCAFFOLD_COUNT, .footer = true};
+    inkcell_fb_scaffold_begin(state, &single, &frame);
+    INKCELL_TEST_FAIL_IF(frame.split, "a screen that did not ask is one pane");
+    inkcell_fb_scaffold_end(state, &frame, NULL);
+    INKCELL_TEST_FAIL_IF(!inkcell_fb_scaffold_splittable(state, &single),
+                         "but a split would have fit");
+
     inkcell_capture_close(capture);
     record_success(test_name);
 }
@@ -573,6 +584,54 @@ INKCELL_TEST_CASE(scaffold_detail_placeholder_is_centred_in_its_pane, unit) {
                          "a placeholder starts above the middle of its pane");
 
     inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
+/*
+ * The question asked before a frame gets the answer the frame gives: at every size, a scaffold
+ * that asks for a split gets one exactly where inkcell_fb_scaffold_splittable() said it would, and
+ * asking leaves the region and the measure as they were.
+ */
+INKCELL_TEST_CASE(scaffold_splittable_answers_before_the_frame, unit) {
+    static const struct {
+        uint32_t w;
+        uint32_t h;
+        int scale;
+    } sizes[] = {
+        {INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT, INKCELL_SCALE(4)},
+        {INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT, INKCELL_SCALE(3)},
+        {1600U, 900U, INKCELL_SCALE(4)},
+        {1920U, 1080U, INKCELL_SCALE(4)},
+        {1920U, 560U, INKCELL_SCALE(4)},
+        {SCAFFOLD_WIDE_W, SCAFFOLD_WIDE_H, INKCELL_SCALE(3)},
+    };
+    bool saw[2] = {false, false};
+    for (size_t i = 0U; i < sizeof sizes / sizeof sizes[0]; ++i) {
+        for (int rail = INKCELL_FB_RAIL_AUTO; rail <= INKCELL_FB_RAIL_EXPANDED; ++rail) {
+            struct inkcell_draw_state *state = NULL;
+            struct inkcell_capture *capture =
+                scaffold_open(sizes[i].w, sizes[i].h, sizes[i].scale, &state);
+            INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+            const struct inkcell_fb_scaffold scaffold = {.destinations = k_destinations,
+                                                         .count = SCAFFOLD_COUNT,
+                                                         .footer = true,
+                                                         .split = true,
+                                                         .rail = (enum inkcell_fb_rail)rail};
+            const struct inkcell_box region = state->region;
+            const bool predicted = inkcell_fb_scaffold_splittable(state, &scaffold);
+            INKCELL_TEST_FAIL_IF(state->region.x != region.x || state->region.w != region.w ||
+                                     state->unmeasured,
+                                 "asking should leave the region and the measure alone");
+            struct inkcell_fb_scaffold_frame frame;
+            inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+            inkcell_fb_scaffold_end(state, &frame, NULL);
+            INKCELL_TEST_FAIL_IF(frame.split != predicted,
+                                 "the frame should split exactly where it was said it would");
+            saw[predicted ? 1 : 0] = true;
+            inkcell_capture_close(capture);
+        }
+    }
+    INKCELL_TEST_FAIL_IF(!saw[0] || !saw[1], "the sizes should cover both answers");
     record_success(test_name);
 }
 

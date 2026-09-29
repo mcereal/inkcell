@@ -31,9 +31,14 @@
  * it always did rather than crushing it: a small panel, a large glyph scale, or a heading that
  * took two lines.
  */
+static int inkcell_fb_keyboard_floor_h(const struct inkcell_draw_state *state,
+                                       const struct inkcell_fb_layout *layout) {
+    return layout->line + inkcell_fb_space(state, INKCELL_SPACE_MD);
+}
+
 static int inkcell_fb_keyboard_cell_h(const struct inkcell_draw_state *state,
                                       const struct inkcell_fb_layout *layout, int y, int cell_w) {
-    const int floor_h = layout->line + inkcell_fb_space(state, INKCELL_SPACE_MD);
+    const int floor_h = inkcell_fb_keyboard_floor_h(state, layout);
     int cell_h = (layout->footer_y - y) / (int)INKCELL_KB_ROWS;
     if (cell_h > cell_w) {
         cell_h = cell_w;
@@ -196,4 +201,12 @@ void inkcell_fb_draw_keyboard(const struct inkcell_draw_state *state,
         inkcell_fb_draw_button(state, &button);
     }
     *y = top + cell_h;
+}
+
+int inkcell_fb_keyboard_min_height(const struct inkcell_draw_state *state,
+                                   const struct inkcell_fb_layout *layout) {
+    if (state == NULL || layout == NULL) {
+        return 0;
+    }
+    return (int)INKCELL_KB_ROWS * inkcell_fb_keyboard_floor_h(state, layout);
 }

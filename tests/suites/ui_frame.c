@@ -145,6 +145,17 @@ INKCELL_TEST_CASE(keyboard_grid_sits_on_the_footer, unit) {
     inkcell_fb_draw_keyboard(state, &layout, &untouched, &empty);
     INKCELL_TEST_FAIL_IF(untouched != layout.body_y, "a keyboard with no cursor should draw none");
 
+    /* Docked: started at the footer less the least room it lays out in, the grid fills exactly
+       that band - every row at its floor, ending on the footer - and nothing above it is taken. */
+    const int docked_h = inkcell_fb_keyboard_min_height(state, &layout);
+    INKCELL_TEST_FAIL_IF(docked_h != (int)INKCELL_KB_ROWS * floor_h,
+                         "the least room is every row at its floor");
+    int docked = layout.footer_y - docked_h;
+    const int docked_top = docked;
+    inkcell_fb_draw_keyboard(state, &layout, &docked, &grid);
+    INKCELL_TEST_FAIL_IF(docked != layout.footer_y || docked - docked_top != docked_h,
+                         "a docked grid should fill its band and end on the footer");
+
     inkcell_capture_close(capture);
     record_success(test_name);
 }
