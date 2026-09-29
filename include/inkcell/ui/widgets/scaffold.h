@@ -237,15 +237,6 @@ struct inkcell_fb_scaffold_frame {
     struct inkcell_box list;
     struct inkcell_box detail;
     bool split;
-    /*
-     * Whether the frame had room for a split, asked for or not.
-     *
-     * For an application that has to decide something about a screen that is *not* a list and a
-     * detail by whether one would stand beside the other here - a keyboard it could dock under a
-     * detail instead of giving it the body, say. `split` cannot answer that, being false on every
-     * frame that did not ask.
-     */
-    bool splittable;
     /* The layout for the list pane (or the only one): chrome already drawn, `body_y` below it. */
     struct inkcell_fb_layout layout;
     /* Where the panes start: below the banner, which spans both. */
@@ -264,6 +255,23 @@ struct inkcell_fb_scaffold_frame {
 void inkcell_fb_scaffold_begin(struct inkcell_draw_state *state,
                                const struct inkcell_fb_scaffold *scaffold,
                                struct inkcell_fb_scaffold_frame *frame);
+
+/*
+ * Whether a frame drawn now with `scaffold` would have room for a list and a detail side by side,
+ * whether or not it asks for the split - without drawing anything, and leaving the region and the
+ * measure as they were.
+ *
+ * For an application that has to decide something about a screen that is *not* a list and a
+ * detail by whether one would stand beside the other - a keyboard it could dock under a detail
+ * instead of giving it the body, say - and has to decide it before the frame, because the answer
+ * picks the route the frame draws. `frame.split` comes too late for that, and last frame's answer
+ * is wrong for exactly one frame: the first after the window changes size.
+ *
+ * Only the fields that decide the width are read - the destinations, the rail and the measure -
+ * so a caller may pass a scaffold with nothing but those set.
+ */
+bool inkcell_fb_scaffold_splittable(struct inkcell_draw_state *state,
+                                    const struct inkcell_fb_scaffold *scaffold);
 
 /*
  * Moves the region to the detail pane and hands back a layout for it, with `bar` (NULL for none)
