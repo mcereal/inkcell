@@ -129,6 +129,23 @@ struct inkcell_fb_bubble {
        which is the one line every bubble in a channel already has - so an alert is picked out
        without a bubble fill that would then mean two different things in one colour. */
     bool alert;
+    /*
+     * Whose tint the sender line takes: the same hash inkcell_theme_avatar() colours that
+     * sender's disc with in every list, so a name in a busy channel is found by colour the way
+     * its conversation is found in the inbox, and two speakers in a row are told apart before
+     * either name is read. Off (the zero value), the line keeps the primary it always had.
+     *
+     * Theirs only, and never over an alert or a failure, which already own that line's colour.
+     * A tint is a fill the theme promises reads *under* the ground colour, not a text colour on
+     * a bubble, so it is asked of every pairing it will meet - the bubble at rest and under the
+     * cursor. It owes each body-text contrast, or the primary's own contrast where the primary
+     * already falls short of that (the focused fill on a light palette does), so the line is
+     * never harder to read than it was; a tint that falls short on either takes the primary on
+     * both. Deciding once for both is what keeps a name from changing colour as the cursor
+     * crosses it.
+     */
+    bool name_tinted;
+    uint32_t name_seed;
 };
 
 /*

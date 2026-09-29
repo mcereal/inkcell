@@ -33,8 +33,11 @@ void gallery_scene_transcript(struct inkcell_draw_state *state) {
         {.text = gallery_text(GALLERY_STR_CHAT_OUTBOUND),
          .outbound = true,
          .meta = {.clock = "09:21", .state = INKCELL_ICON_DELIVERED}},
-        /* A reply, quoting what it answers. */
+        /* A reply, quoting what it answers - and its sender line in that sender's avatar tint,
+           where the theme's tint reads on the bubble. */
         {.name = gallery_text(GALLERY_STR_CHAT_NAME),
+         .name_tinted = true,
+         .name_seed = 3U,
          .quote = gallery_text(GALLERY_STR_CHAT_OUTBOUND),
          .text = gallery_text(GALLERY_STR_NOTE_WRAPPED),
          .meta = {.clock = "09:30", .relay = "2 hops", .reactions = "\xF0\x9F\x91\x8D 2"}},
