@@ -227,9 +227,9 @@ bool inkcell_fb_list_is_cursor(const struct inkcell_fb_list *list, uint32_t inde
  *
  * A list of targets is the exception, and it is not a cursor at all: its row is the selection -
  * the item the detail beside it is showing - which a sidebar keeps lit whether the reader is on
- * the keys or the mouse. It is drawn as ACCENT whatever the list's look (see
- * inkcell_fb_list_cue()), because the cursor proper is in the detail, and a second ring or fill
- * there would be two cursors on one frame.
+ * the keys or the mouse. It is drawn as ACCENT whatever the list's look, with its capsule in the
+ * dim ink (see inkcell_fb_list_cue()), because the cursor proper is in the detail, and a second
+ * ring, fill or accent there would be two cursors on one frame.
  */
 static bool inkcell_fb_list_cues_cursor(const struct inkcell_draw_state *state,
                                         const struct inkcell_fb_list *list, uint32_t index) {
@@ -478,9 +478,18 @@ struct inkcell_fb_list_cue inkcell_fb_list_cue(const struct inkcell_draw_state *
         const int bar_h = h - 2 * inset_y;
         const int gutter = box.text_x - x;
         const int bar_x = gutter > bar_w ? x + (gutter - bar_w) / 2 : x;
+        /*
+         * A list of targets draws the capsule in the dim ink rather than the row's accent. Its
+         * row is the selection - what the pane beside it is showing - and the cursor proper is
+         * in that pane, drawn in the accent. Two accents on one frame are two cursors to a reader
+         * deciding where Down will go; the dim one still says which row the detail came from,
+         * which is the sidebar's job, and says it the way a window that is not frontmost does.
+         */
         if (bar_w > 0 && bar_h > 0) {
             inkcell_fb_fill_round_rect(state, bar_x, top + inset_y, bar_w, bar_h, bar_w / 2,
-                                       inkcell_fb_list_mark_color(state, tone));
+                                       list->focus_targets
+                                           ? inkcell_fb_color(state, INKCELL_COLOR_TEXT_DIM)
+                                           : inkcell_fb_list_mark_color(state, tone));
         }
         return cue;
     }
