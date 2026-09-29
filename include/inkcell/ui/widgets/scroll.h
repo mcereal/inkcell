@@ -66,6 +66,9 @@ struct inkcell_fb_viewport {
      * gap where the half-row should be.
      */
     struct inkcell_fb_rect visible;
+    /* The region begin() found, which end() puts back - see inkcell_fb_viewport_begin() for
+       why the viewport moves it at all. A caller neither reads it nor writes it. */
+    struct inkcell_box saved_region;
     /* Whether inkcell_fb_viewport_end() has a view to pop. Set by begin(); a caller neither
        reads it nor writes it. */
     bool pushed;
@@ -79,8 +82,16 @@ struct inkcell_fb_viewport {
  * viewport is the one thing that knows both numbers at once, and a scroll measured against
  * last frame's content is a scroll that can be past an end that has moved.
  *
+ * The region (inkcell_fb_region()) moves with the content, across: between begin and end it is
+ * the box's own width starting at 0, so the content column and every row placed against it
+ * come out where they would outside the viewport. The view translates by the box's position,
+ * and a region left in panel coordinates would be translated a second time - which reads as
+ * nothing at all on a panel whose region starts at 0 and as a body shifted right by the width
+ * of a navigation rail on a window that has one. Down, the region is left alone: content is
+ * placed by the layout it is handed, from 0 to `content_h`, not by the region's top.
+ *
  * False is a window with nothing on the panel in it, and nothing has been pushed - so the pop
- * is conditional on the push, exactly as it reads.
+ * is conditional on the push, exactly as it reads, and the region is as it was.
  */
 bool inkcell_fb_viewport_begin(struct inkcell_draw_state *state, struct inkcell_fb_viewport *view,
                                struct inkcell_fb_rect box, struct inkcell_scroll *scroll,

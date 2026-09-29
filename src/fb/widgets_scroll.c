@@ -61,6 +61,13 @@ bool inkcell_fb_viewport_begin(struct inkcell_draw_state *state, struct inkcell_
      * however far down the panel the viewport happens to be.
      */
     view->pushed = inkcell_fb_view_push(state, box, box.x, box.y - offset);
+    if (view->pushed) {
+        /* Across, the region is the box in the content's coordinates - see the header. The
+           region's top and height stay as they were: nothing inside places itself by them. */
+        const struct inkcell_box region = inkcell_fb_region(state);
+        view->saved_region = inkcell_fb_set_region(
+            state, (struct inkcell_box){.x = 0, .y = region.y, .w = box.w, .h = region.h});
+    }
     return view->pushed;
 }
 
@@ -69,6 +76,7 @@ void inkcell_fb_viewport_end(struct inkcell_draw_state *state, struct inkcell_fb
         return;
     }
     if (view->pushed) {
+        (void)inkcell_fb_set_region(state, view->saved_region);
         inkcell_fb_view_pop(state);
         view->pushed = false;
     }
