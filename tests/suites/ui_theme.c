@@ -26,6 +26,18 @@
 #include <stdlib.h>
 #include <string.h>
 
+static void theme_test_setenv(const char *name, const char *value) {
+#ifdef _WIN32
+    (void)_putenv_s(name, value != NULL ? value : "");
+#else
+    if (value != NULL) {
+        (void)setenv(name, value, 1);
+    } else {
+        (void)unsetenv(name);
+    }
+#endif
+}
+
 INKCELL_TEST_CASE(ui_theme_registry_round_trips, unit) {
     INKCELL_TEST_FAIL_IF(inkcell_theme_count() == 0U, "no themes are registered");
     INKCELL_TEST_FAIL_IF(inkcell_theme_default() != inkcell_theme_at(0U),
@@ -727,25 +739,25 @@ INKCELL_TEST_CASE(ui_theme_resolves_ids_and_the_environment, unit) {
         snprintf(saved, sizeof saved, "%s", previous);
     }
 
-    (void)unsetenv("INKWELL_THEME");
+    theme_test_setenv("INKWELL_THEME", NULL);
     INKCELL_TEST_FAIL_IF(inkcell_theme_env() != NULL, "an unset <PREFIX>_THEME named a theme");
     INKCELL_TEST_FAIL_IF(inkcell_theme_from_env() != inkcell_theme_default(),
                          "an unset <PREFIX>_THEME did not fall back to the default");
 
-    (void)setenv("INKWELL_THEME", "light", 1);
+    theme_test_setenv("INKWELL_THEME", "light");
     INKCELL_TEST_FAIL_IF(inkcell_theme_env() != inkcell_theme_by_id("light"),
                          "<PREFIX>_THEME did not name its theme");
 
     /* A typo must not leave a handheld with no UI, and must not read as a deliberate pin. */
-    (void)setenv("INKWELL_THEME", "not-a-theme", 1);
+    theme_test_setenv("INKWELL_THEME", "not-a-theme");
     INKCELL_TEST_FAIL_IF(inkcell_theme_env() != NULL, "an unknown <PREFIX>_THEME named a theme");
     INKCELL_TEST_FAIL_IF(inkcell_theme_from_env() != inkcell_theme_default(),
                          "an unknown <PREFIX>_THEME did not fall back to the default");
 
     if (had_env) {
-        (void)setenv("INKWELL_THEME", saved, 1);
+        theme_test_setenv("INKWELL_THEME", saved);
     } else {
-        (void)unsetenv("INKWELL_THEME");
+        theme_test_setenv("INKWELL_THEME", NULL);
     }
     record_success(test_name);
 }
@@ -939,21 +951,21 @@ INKCELL_TEST_CASE(ui_env_prefix_is_applied_once, unit) {
     INKCELL_TEST_FAIL_IF_CLEANUP(strcmp(inkwell_env_prefix(), "TESTPREFIX") != 0,
                                  inkwell_env_set_prefix(saved), "the prefix did not take");
 
-    (void)setenv("TESTPREFIX_KNOB", "yes", 1);
+    theme_test_setenv("TESTPREFIX_KNOB", "yes");
     INKCELL_TEST_FAIL_IF_CLEANUP(!inkwell_env_bool("KNOB", NULL, false),
                                  inkwell_env_set_prefix(saved),
                                  "a suffix did not resolve under the prefix");
 
     /* The bug: a name that already carries the prefix must not resolve. */
-    (void)setenv("TESTPREFIX_TESTPREFIX_KNOB", "yes", 1);
+    theme_test_setenv("TESTPREFIX_TESTPREFIX_KNOB", "yes");
     INKCELL_TEST_FAIL_IF_CLEANUP(inkwell_env_get("KNOB") == NULL, inkwell_env_set_prefix(saved),
                                  "the knob went missing");
     INKCELL_TEST_FAIL_IF_CLEANUP(
         strcmp(inkwell_env_get("TESTPREFIX_KNOB"), "yes") != 0, inkwell_env_set_prefix(saved),
         "a prefixed name resolved to something other than the doubly-prefixed variable");
 
-    (void)unsetenv("TESTPREFIX_KNOB");
-    (void)unsetenv("TESTPREFIX_TESTPREFIX_KNOB");
+    theme_test_setenv("TESTPREFIX_KNOB", NULL);
+    theme_test_setenv("TESTPREFIX_TESTPREFIX_KNOB", NULL);
 
     /* An empty prefix restores the default rather than reading bare names. */
     inkwell_env_set_prefix("");

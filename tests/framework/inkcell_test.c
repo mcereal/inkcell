@@ -13,6 +13,19 @@ static size_t g_case_count = 0U;
 static int g_failures = 0;
 static size_t g_successes = 0U;
 
+const char *inkcell_test_temp_dir(void) {
+#ifdef _WIN32
+    const char *dir = getenv("TEMP");
+    if (dir == NULL || dir[0] == '\0') {
+        dir = getenv("TMP");
+    }
+    return (dir != NULL && dir[0] != '\0') ? dir : ".";
+#else
+    const char *dir = getenv("TMPDIR");
+    return (dir != NULL && dir[0] != '\0') ? dir : "/tmp";
+#endif
+}
+
 void inkcell_test_register(struct inkcell_test_case *node, const char *name, const char *category,
                            const char *file, int line, void (*fn)(void)) {
     node->name = name;

@@ -35,6 +35,9 @@ void inkcell_test_register(struct inkcell_test_case *node, const char *name, con
 void record_failure(const char *test_name, const char *message);
 void record_success(const char *test_name);
 
+/* A writable directory for cases that exercise file readers and writers. */
+const char *inkcell_test_temp_dir(void);
+
 /*
  * Defines a case and registers it. `case_name` is the bare name the runner filters on
  * (`--filter`, `--list`); `case_category` is the tag CTest labels select (`unit` today).

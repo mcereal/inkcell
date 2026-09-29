@@ -57,8 +57,7 @@ static uint8_t *headless_test_slurp(const char *path, size_t *len) {
 }
 
 static void headless_test_path(char *out, size_t len) {
-    const char *dir = getenv("TMPDIR");
-    snprintf(out, len, "%s/inkcell-headless-%ld.ppm", dir != NULL ? dir : "/tmp", (long)getpid());
+    snprintf(out, len, "%s/inkcell-headless-%ld.ppm", inkcell_test_temp_dir(), (long)getpid());
 }
 
 INKCELL_TEST_CASE(headless_backend_hands_back_the_frame_it_drew, unit) {

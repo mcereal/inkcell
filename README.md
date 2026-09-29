@@ -200,7 +200,7 @@ press comes from.
 | evdev input | yes | refuses | refuses |
 | SDL window, keyboard | yes, with SDL2 | yes, with SDL2 | yes, with SDL2 |
 | Off-screen capture | yes | yes | yes |
-| In CI | gcc, clang, ASan+UBSan, no SDL | clang | not yet |
+| In CI | gcc, clang, ASan+UBSan, no SDL | clang | gcc, no SDL |
 
 Where a backend refuses, it does so the way everything here does: `inkcell_backend_fb_is_available()`
 is false, `inkcell_input_init()` watches nothing, and nothing above needs an `#ifdef`. The key

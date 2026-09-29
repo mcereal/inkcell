@@ -274,7 +274,11 @@ INKCELL_TEST_CASE(emoji_pack_loads_from_a_file, unit) {
     static struct emoji_pack_bytes pack;
     emoji_build(&pack, 0, 0, 16, 16, 1U);
 
-    char path[] = "/tmp/inkcell-emoji-XXXXXX";
+    char path[512];
+    const int path_len =
+        snprintf(path, sizeof path, "%s/inkcell-emoji-XXXXXX", inkcell_test_temp_dir());
+    INKCELL_TEST_FAIL_IF(path_len < 0 || (size_t)path_len >= sizeof path,
+                         "the temporary path should fit");
     const int fd = mkstemp(path);
     INKCELL_TEST_FAIL_IF(fd < 0, "a temporary file should open");
     INKCELL_TEST_FAIL_IF(write(fd, pack.bytes, pack.size) != (ssize_t)pack.size,
