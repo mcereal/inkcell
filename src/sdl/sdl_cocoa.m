@@ -72,6 +72,9 @@ static bool inkcell_sdl_cocoa_fullscreen(NSWindow *nswindow) {
     return (nswindow.styleMask & NSWindowStyleMaskFullScreen) != 0;
 }
 
+/* The least air above and below the buttons, in points: what a plain title bar leaves. */
+#define INKCELL_SDL_COCOA_MARGIN_Y 7.0
+
 /*
  * The buttons, centred on the strip. Returns what they cost the frame.
  *
@@ -114,7 +117,12 @@ static struct inkcell_sdl_cocoa_controls inkcell_sdl_cocoa_apply(void) {
        not the same number on every release. Read before anything is moved, and never changed
        by moving them, since all three move together. */
     const CGFloat pitch = buttons[1].frame.origin.x - buttons[0].frame.origin.x;
-    const CGFloat height = strip > button.height ? strip : button.height;
+    /* Never closer to the window's top edge than a plain title bar sets them - its 28 points
+       around a 14-point button. The tab strip is shorter than that at a desktop scale, and
+       centred on it the buttons touched the edge; the band grows instead, and the frame is
+       told how tall it came out (`band_px`) so what it lays out under the buttons clears them. */
+    const CGFloat least = button.height + 2.0 * INKCELL_SDL_COCOA_MARGIN_Y;
+    const CGFloat height = strip > least ? strip : least;
     const CGFloat margin_y = (height - button.height) / 2.0;
     /* Square to the strip's air above and below, within what still reads as a title bar: at
        a small window the buttons would otherwise touch the edge, and at a large one drift off
@@ -133,7 +141,8 @@ static struct inkcell_sdl_cocoa_controls inkcell_sdl_cocoa_apply(void) {
        the buttons as the buttons sit from the window's edge. */
     const CGFloat clear = margin_x + 2.0 * pitch + button.width + margin_x;
     controls.inset_px = (int)ceil(clear / points_per_px);
-    controls.strip_points = (int)strip;
+    controls.band_px = (int)ceil(height / points_per_px);
+    controls.strip_points = (int)height;
     return controls;
 }
 

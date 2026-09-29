@@ -559,10 +559,18 @@ struct inkcell_draw_state {
      * 0 on a panel, and in a capture, which is every frame that has been measured. It is the
      * window backend's, on a Mac, where the frame runs up under a transparent title bar and the
      * window's close, minimise and zoom buttons land on the tab strip - see src/sdl/sdl_cocoa.h.
-     * Only the tab strip reads it: it is the one piece of chrome at the top edge, and the rest
-     * of the frame is below it.
+     * Read by what can stand at the top edge: the tab strip, an expanded rail (which widens to
+     * hold the buttons) and an app bar beside a collapsed one (which starts clear of them).
      */
     int top_leading_inset;
+    /*
+     * How tall the band those buttons stand in is, from the frame's top edge, in panel pixels -
+     * 0 wherever top_leading_inset is. Read through inkcell_fb_top_band(), which is never less
+     * than the navigation bar: the host makes the band taller than the strip rather than put
+     * its buttons against the window's edge, and the strip, a rail's first row and a heading
+     * beside the buttons all start from where the band ends.
+     */
+    int top_leading_band;
     /*
      * The part of the surface the frame is laid out in, or an empty box for all of it.
      *
@@ -945,6 +953,19 @@ struct inkcell_fb_layout {
      * by then anyway, because the app bar and the banner both advance it.
      */
     int nav_y;
+    /*
+     * Where a heading that opens the body may rise to, beside the window's buttons.
+     *
+     * Beside a collapsed rail the buttons (top_leading_inset) stand over the body's top-leading
+     * corner, so the scaffold starts the body below their band - whatever a screen draws first,
+     * a card or a list, clears them. A heading is the exception: it is what a Mac toolbar holds
+     * beside its buttons, so an app bar drawn while `body_y` is still `heading_from` is drawn at
+     * `heading_to` instead, stepped along past the buttons, and the body continues below whichever
+     * is lower. Both 0 - no rise - everywhere else, and anything that moves `body_y` first (a
+     * banner) keeps the heading where it is.
+     */
+    int heading_from;
+    int heading_to;
     /*
      * Whether there is a screen behind this one to go back to - the top app bar's leading slot.
      * Read off the action bar by the application; see inkcell/ui/actions.h for why the question
