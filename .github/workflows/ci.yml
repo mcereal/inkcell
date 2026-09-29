@@ -121,6 +121,47 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
+  windows:
+    name: debug (Windows UCRT64, no SDL)
+    runs-on: windows-2025
+    steps:
+      # Preserve the tracked text and let Git check out inkwell's nested submodules.
+      - name: Preserve Unix line endings and enable long Git paths
+        run: |
+          git config --global core.autocrlf input
+          git config --global core.longpaths true
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          release: false
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-python-jinja
+            mingw-w64-ucrt-x86_64-python-jsonschema
+
+      - name: Configure
+        shell: msys2 {0}
+        run: >-
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          -DINKCELL_WITH_SDL=OFF -DPython3_EXECUTABLE="$(command -v python)"
+
+      - name: Build unit suite
+        shell: msys2 {0}
+        run: cmake --build build --target inkcell_tests
+
+      - name: Test
+        shell: msys2 {0}
+        run: ctest --test-dir build -L unit --output-on-failure
+
   format:
     name: clang-format
     runs-on: ubuntu-latest
