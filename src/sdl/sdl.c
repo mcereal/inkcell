@@ -155,6 +155,7 @@ struct inkcell_sdl_panel {
     struct inkcell_input_host host;
     inkcell_key_handler on_key;
     inkcell_key_handler on_action_key;
+    bool (*on_wheel)(void *userdata, int steps, int x, int y, const struct inkcell_focus_map *map);
     void (*on_shortcut)(void *userdata, char letter);
     bool (*text_input_active)(void *userdata);
     void (*on_text_input)(void *userdata, const char *text);
@@ -614,6 +615,8 @@ static bool inkcell_sdl_resize(struct inkcell_sdl_panel *panel, int width, int h
      */
     panel->pointer_map.count = 0U;
     panel->pointer_map.dropped = 0U;
+    panel->pointer_map.focused = INKCELL_FOCUS_NONE;
+    panel->pointer_map.cued = false;
     return true;
 }
 
@@ -682,6 +685,8 @@ static void inkcell_sdl_keep_boxes(struct inkcell_sdl_panel *panel) {
     panel->pointer_map.capacity = INKCELL_SDL_POINTER_BOXES;
     panel->pointer_map.count = kept;
     panel->pointer_map.dropped = count - kept;
+    panel->pointer_map.focused = drawn != NULL ? drawn->focused : INKCELL_FOCUS_NONE;
+    panel->pointer_map.cued = drawn != NULL && drawn->cued;
 }
 
 static void inkcell_backend_sdl_present(void *state_ptr, const void *snapshot, void *userdata) {
@@ -951,6 +956,9 @@ static void inkcell_sdl_handle_key(struct inkcell_sdl_panel *panel, const SDL_Ke
  */
 static void inkcell_sdl_handle_button(struct inkcell_sdl_panel *panel,
                                       const SDL_MouseButtonEvent *button) {
+    panel->pointer_x = button->x;
+    panel->pointer_y = button->y;
+    panel->pointer_inside = true;
     if (button->type == SDL_MOUSEBUTTONDOWN) {
         inkcell_sdl_show_cursor(panel, false);
     }
@@ -1008,6 +1016,43 @@ static void inkcell_sdl_handle_button(struct inkcell_sdl_panel *panel,
     }
 }
 
+/* SDL_GetMouseState returns window points; the frame's focus boxes use renderer coordinates. */
+static bool inkcell_sdl_window_to_logical(struct inkcell_sdl_panel *panel, int *x, int *y) {
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+    float logical_x = 0.0f;
+    float logical_y = 0.0f;
+    SDL_RenderWindowToLogical(panel->renderer, *x, *y, &logical_x, &logical_y);
+    *x = (int)logical_x;
+    *y = (int)logical_y;
+#else
+    int window_w = 0;
+    int window_h = 0;
+    int output_w = 0;
+    int output_h = 0;
+    int logical_w = 0;
+    int logical_h = 0;
+    float scale_x = 0.0f;
+    float scale_y = 0.0f;
+    SDL_GetWindowSize(panel->window, &window_w, &window_h);
+    if (window_w <= 0 || window_h <= 0 ||
+        SDL_GetRendererOutputSize(panel->renderer, &output_w, &output_h) != 0 || output_w <= 0 ||
+        output_h <= 0) {
+        return false;
+    }
+    SDL_RenderGetLogicalSize(panel->renderer, &logical_w, &logical_h);
+    SDL_RenderGetScale(panel->renderer, &scale_x, &scale_y);
+    if (logical_w <= 0 || logical_h <= 0 || scale_x <= 0.0f || scale_y <= 0.0f) {
+        return false;
+    }
+    /* SDL centers the scaled logical frame in the renderer output. */
+    const int viewport_x = (output_w - (int)((float)logical_w * scale_x)) / 2;
+    const int viewport_y = (output_h - (int)((float)logical_h * scale_y)) / 2;
+    *x = (int)(((float)*x * (float)output_w / (float)window_w - (float)viewport_x) / scale_x);
+    *y = (int)(((float)*y * (float)output_h / (float)window_h - (float)viewport_y) / scale_y);
+#endif
+    return true;
+}
+
 /*
  * A scroll, as rows: up and down, one press per notch.
  *
@@ -1019,7 +1064,10 @@ static void inkcell_sdl_handle_button(struct inkcell_sdl_panel *panel,
 static void inkcell_sdl_handle_wheel(struct inkcell_sdl_panel *panel,
                                      const SDL_MouseWheelEvent *wheel) {
 #if SDL_VERSION_ATLEAST(2, 0, 18)
-    const float dy = wheel->preciseY;
+    /* Some SDL event producers fill the integer delta but leave preciseY at zero. A wheel
+       notch must still reach the cursor on those Windows setups. Keep the precise value when
+       present so trackpad fractions can accumulate across events. */
+    const float dy = wheel->preciseY != 0.0f ? wheel->preciseY : (float)wheel->y;
 #else
     const float dy = (float)wheel->y;
 #endif
@@ -1028,6 +1076,25 @@ static void inkcell_sdl_handle_wheel(struct inkcell_sdl_panel *panel,
        reader who chose natural scrolling expects this list to scroll the way their others do. */
     inkcell_sdl_show_cursor(panel, false);
     const int steps = inkcell_pointer_wheel(&panel->pointer, dy);
+    if (steps == 0) {
+        return;
+    }
+    if (!panel->pointer_inside) {
+        /* A window can open beneath an unmoving mouse, before SDL sends any motion. */
+        int x = 0;
+        int y = 0;
+        (void)SDL_GetMouseState(&x, &y);
+        if (inkcell_sdl_window_to_logical(panel, &x, &y)) {
+            panel->pointer_x = x;
+            panel->pointer_y = y;
+            panel->pointer_inside = true;
+        }
+    }
+    if (panel->pointer_inside && panel->on_wheel != NULL &&
+        panel->on_wheel(panel->key_userdata, steps, panel->pointer_x, panel->pointer_y,
+                        &panel->pointer_map)) {
+        return;
+    }
     const enum inkcell_key key = steps > 0 ? INKCELL_KEY_UP : INKCELL_KEY_DOWN;
     for (int i = 0; i < (steps > 0 ? steps : -steps); ++i) {
         inkcell_sdl_deliver(panel, panel->on_key, key, false);
@@ -1135,6 +1202,8 @@ static int inkcell_sdl_pump(int fd, uint32_t events, void *userdata) {
                     inkcell_fb_app_drop_caches(&panel->state);
                     panel->pointer_map.count = 0U;
                     panel->pointer_map.dropped = 0U;
+                    panel->pointer_map.focused = INKCELL_FOCUS_NONE;
+                    panel->pointer_map.cued = false;
                     owed = true;
                 }
 #if defined(__APPLE__)
@@ -1492,6 +1561,7 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
     panel->host = context->host;
     panel->on_key = context->on_key;
     panel->on_action_key = context->on_action_key;
+    panel->on_wheel = context->on_wheel;
     panel->on_shortcut = context->on_shortcut;
     panel->text_input_active = context->text_input_active;
     panel->on_text_input = context->on_text_input;
@@ -1501,6 +1571,7 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
     panel->click_userdata = context->click_userdata;
     inkcell_pointer_reset(&panel->pointer);
     inkcell_pointer_reset(&panel->context);
+    panel->pointer_map.focused = INKCELL_FOCUS_NONE;
     panel->arrow = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW);
     panel->hand = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND);
     panel->request_frame = context->request_frame;

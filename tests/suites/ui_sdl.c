@@ -96,6 +96,24 @@ INKCELL_TEST_CASE(sdl_without_the_library_refuses_rather_than_pretends, unit) {
 #include <SDL.h>
 #include <stdio.h>
 
+static void sdl_test_setenv(const char *name, const char *value, bool overwrite) {
+#if defined(_WIN32)
+    if (overwrite || getenv(name) == NULL) {
+        _putenv_s(name, value);
+    }
+#else
+    setenv(name, value, overwrite ? 1 : 0);
+#endif
+}
+
+static void sdl_test_unsetenv(const char *name) {
+#if defined(_WIN32)
+    _putenv_s(name, "");
+#else
+    unsetenv(name);
+#endif
+}
+
 #define SDL_TEST_WIDTH 64U
 #define SDL_TEST_HEIGHT 32U
 
@@ -187,7 +205,7 @@ INKCELL_TEST_CASE(sdl_hands_over_only_what_changed, unit) {
     /* Not an overwrite: a developer who wants to watch this case run says so with
        SDL_VIDEODRIVER=x11 and gets a window. Unset - a container, CI - is the dummy driver,
        which is the whole reason this is testable at all. */
-    setenv("SDL_VIDEODRIVER", "dummy", 0);
+    sdl_test_setenv("SDL_VIDEODRIVER", "dummy", false);
     if (!inkcell_backend_sdl_is_available()) {
         INKCELL_TEST_FAIL_IF(true, "SDL2 is built in but no video driver would start");
     }
@@ -325,7 +343,7 @@ static void sdl_push_resize(int width, int height) {
 }
 
 INKCELL_TEST_CASE(sdl_resize_remeasures_and_moves_the_width_class, unit) {
-    setenv("SDL_VIDEODRIVER", "dummy", 0);
+    sdl_test_setenv("SDL_VIDEODRIVER", "dummy", false);
     INKCELL_TEST_FAIL_IF(!inkcell_backend_sdl_is_available(), "the dummy driver must start");
 
     struct sdl_resize_app app = {0};
@@ -414,7 +432,7 @@ INKCELL_TEST_CASE(sdl_resize_remeasures_and_moves_the_width_class, unit) {
  * also what makes a 640-point window stop being the handheld's compact class.
  */
 INKCELL_TEST_CASE(sdl_display_scale_follows_the_display_unless_pinned, unit) {
-    setenv("SDL_VIDEODRIVER", "dummy", 0);
+    sdl_test_setenv("SDL_VIDEODRIVER", "dummy", false);
     INKCELL_TEST_FAIL_IF(!inkcell_backend_sdl_is_available(), "the dummy driver must start");
 
     struct sdl_resize_app app = {0};
@@ -447,10 +465,10 @@ INKCELL_TEST_CASE(sdl_display_scale_follows_the_display_unless_pinned, unit) {
     char knob[64];
     snprintf(knob, sizeof knob, "%s_FB_SCALE",
              inkwell_env_prefix() != NULL ? inkwell_env_prefix() : "INKCELL");
-    setenv(knob, "4", 1);
+    sdl_test_setenv(knob, "4", true);
     state = NULL;
     const int opened = backend->init(&state, &context);
-    unsetenv(knob);
+    sdl_test_unsetenv(knob);
     INKCELL_TEST_FAIL_IF(opened != 0, "the dummy driver must open");
     drawn = (const struct inkcell_draw_state *)state;
     INKCELL_TEST_FAIL_IF_CLEANUP(drawn->scale != INKCELL_SCALE(4),
@@ -520,6 +538,8 @@ INKCELL_TEST_CASE(sdl_keys_go_through_the_one_convention, unit) {
 struct sdl_pointer_app {
     struct inkcell_focus_item storage[16];
     struct inkcell_focus_map map;
+    bool mark_row;
+    bool cue_row;
     struct inkcell_fb_rect row;
     struct inkcell_focus_rect hint;
     struct inkcell_focus_rect back;
@@ -536,6 +556,13 @@ static void sdl_pointer_render(struct inkcell_draw_state *state, const void *sna
     inkcell_fb_draw_app_bar(state, &layout, &heading);
     app->row = (struct inkcell_fb_rect){.x = 0, .y = layout.body_y, .w = 200, .h = 40};
     inkcell_fb_focus_register(state, SDL_POINTER_ROW, &app->row);
+    if (app->mark_row) {
+        if (app->cue_row) {
+            inkcell_focus_mark_cued(&app->map, SDL_POINTER_ROW);
+        } else {
+            inkcell_focus_mark(&app->map, SDL_POINTER_ROW);
+        }
+    }
     const struct inkcell_button_action items[] = {
         {.button = INKCELL_BUTTON_A, .label = INKCELL_STR_KEY_CANCEL},
     };
@@ -556,6 +583,13 @@ struct sdl_pointer_heard {
     unsigned contexts;
     char shortcut;
     unsigned shortcuts;
+    int wheel_steps;
+    int wheel_x;
+    int wheel_y;
+    uint32_t wheel_targets;
+    uint32_t wheel_focused;
+    uint32_t wheel_marked;
+    bool wheel_cued;
     bool text_active;
     bool open_text_on_x;
     char text[3][SDL_TEXTINPUTEVENT_TEXT_SIZE];
@@ -578,6 +612,19 @@ static void sdl_pointer_on_shortcut(void *userdata, char letter) {
     struct sdl_pointer_heard *const heard = (struct sdl_pointer_heard *)userdata;
     heard->shortcut = letter;
     heard->shortcuts += 1U;
+}
+
+static bool sdl_pointer_on_wheel(void *userdata, int steps, int x, int y,
+                                 const struct inkcell_focus_map *map) {
+    struct sdl_pointer_heard *const heard = (struct sdl_pointer_heard *)userdata;
+    heard->wheel_steps = steps;
+    heard->wheel_x = x;
+    heard->wheel_y = y;
+    heard->wheel_targets = map != NULL ? map->count : 0U;
+    heard->wheel_focused = map != NULL ? map->focused : INKCELL_FOCUS_NONE;
+    heard->wheel_marked = inkcell_focus_marked(map);
+    heard->wheel_cued = map != NULL && map->cued;
+    return true;
 }
 
 static void sdl_pointer_on_key(void *userdata, enum inkcell_key key) {
@@ -657,7 +704,7 @@ static void sdl_push_text(const char *text) {
 #endif
 
 INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
-    setenv("SDL_VIDEODRIVER", "dummy", 0);
+    sdl_test_setenv("SDL_VIDEODRIVER", "dummy", false);
     INKCELL_TEST_FAIL_IF(!inkcell_backend_sdl_is_available(), "the dummy driver must start");
 
     struct sdl_pointer_app app;
@@ -858,16 +905,30 @@ INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
                                  backend->shutdown(state, &context),
                                  "text input should stop when the visible context closes");
 
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+    /* Windows can send an integer notch with no precise delta. The list still gets Up. */
+    memset(&wheel, 0, sizeof wheel);
+    wheel.type = SDL_MOUSEWHEEL;
+    wheel.wheel.type = SDL_MOUSEWHEEL;
+    wheel.wheel.y = 1;
+    SDL_PushEvent(&wheel);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.key_count != 10U || heard.keys[9] != INKCELL_KEY_UP,
+                                 backend->shutdown(state, &context),
+                                 "an integer wheel notch must work when preciseY is zero");
+#endif
+
     backend->shutdown(state, &context);
     record_success(test_name);
 }
 
 INKCELL_TEST_CASE(sdl_action_hint_falls_back_to_the_key_handler, unit) {
-    setenv("SDL_VIDEODRIVER", "dummy", 0);
+    sdl_test_setenv("SDL_VIDEODRIVER", "dummy", false);
     INKCELL_TEST_FAIL_IF(!inkcell_backend_sdl_is_available(), "the dummy driver must start");
 
     struct sdl_pointer_app app;
     memset(&app, 0, sizeof app);
+    app.mark_row = true;
     struct inkcell_fb_app vtable = {.ctx = &app, .render = sdl_pointer_render};
     struct sdl_test_host host = {.added_fd = -1, .removed_fd = -1};
     struct sdl_pointer_heard heard;
@@ -879,6 +940,7 @@ INKCELL_TEST_CASE(sdl_action_hint_falls_back_to_the_key_handler, unit) {
                  .remove_fd = sdl_test_remove_fd,
                  .request_stop = sdl_test_request_stop},
         .on_key = sdl_pointer_on_key,
+        .on_wheel = sdl_pointer_on_wheel,
         .key_userdata = &heard,
         .title = "inkcell tests",
         .width = SDL_POINTER_W,
@@ -892,11 +954,54 @@ INKCELL_TEST_CASE(sdl_action_hint_falls_back_to_the_key_handler, unit) {
     SDL_PumpEvents();
     SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
 
-    sdl_click(app.hint.x + app.hint.w / 2, app.hint.y + app.hint.h / 2);
+    int mouse_x = 0;
+    int mouse_y = 0;
+    (void)SDL_GetMouseState(&mouse_x, &mouse_y);
+    SDL_Event wheel;
+    memset(&wheel, 0, sizeof wheel);
+    wheel.type = SDL_MOUSEWHEEL;
+    wheel.wheel.type = SDL_MOUSEWHEEL;
+    wheel.wheel.y = -1;
+    SDL_PushEvent(&wheel);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        heard.wheel_steps != -1 || heard.wheel_x != mouse_x || heard.wheel_y != mouse_y ||
+            heard.wheel_focused != SDL_POINTER_ROW || heard.wheel_marked != SDL_POINTER_ROW ||
+            heard.wheel_cued,
+        backend->shutdown(state, &context),
+        "a wheel before pointer motion must use the current mouse position and frame focus");
+
+    const int hint_x = app.hint.x + app.hint.w / 2;
+    const int hint_y = app.hint.y + app.hint.h / 2;
+    sdl_click(hint_x, hint_y);
     sdl_pump(&host);
     INKCELL_TEST_FAIL_IF_CLEANUP(heard.key_count != 1U || heard.keys[0] != INKCELL_KEY_A,
                                  backend->shutdown(state, &context),
                                  "without an action handler, a hint should keep using on_key");
+
+    memset(&wheel, 0, sizeof wheel);
+    wheel.type = SDL_MOUSEWHEEL;
+    wheel.wheel.type = SDL_MOUSEWHEEL;
+    wheel.wheel.y = -1;
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+    wheel.wheel.preciseY = -1.0f;
+#endif
+    SDL_PushEvent(&wheel);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.wheel_steps != -1 || heard.wheel_x != hint_x ||
+                                     heard.wheel_y != hint_y || heard.wheel_targets == 0U ||
+                                     heard.key_count != 1U,
+                                 backend->shutdown(state, &context),
+                                 "a handled wheel event must not also press the keyboard cursor");
+
+    app.cue_row = true;
+    backend->present(state, &snapshot, &context);
+    SDL_PushEvent(&wheel);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.wheel_focused != SDL_POINTER_ROW ||
+                                     heard.wheel_marked != INKCELL_FOCUS_NONE || !heard.wheel_cued,
+                                 backend->shutdown(state, &context),
+                                 "a cued focus mark must reach the wheel callback unchanged");
 
     backend->shutdown(state, &context);
     record_success(test_name);
