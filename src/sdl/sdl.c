@@ -1029,22 +1029,26 @@ static bool inkcell_sdl_window_to_logical(struct inkcell_sdl_panel *panel, int *
     int window_h = 0;
     int output_w = 0;
     int output_h = 0;
+    int logical_w = 0;
+    int logical_h = 0;
     float scale_x = 0.0f;
     float scale_y = 0.0f;
-    SDL_Rect viewport;
     SDL_GetWindowSize(panel->window, &window_w, &window_h);
     if (window_w <= 0 || window_h <= 0 ||
         SDL_GetRendererOutputSize(panel->renderer, &output_w, &output_h) != 0 || output_w <= 0 ||
         output_h <= 0) {
         return false;
     }
+    SDL_RenderGetLogicalSize(panel->renderer, &logical_w, &logical_h);
     SDL_RenderGetScale(panel->renderer, &scale_x, &scale_y);
-    if (scale_x <= 0.0f || scale_y <= 0.0f) {
+    if (logical_w <= 0 || logical_h <= 0 || scale_x <= 0.0f || scale_y <= 0.0f) {
         return false;
     }
-    SDL_RenderGetViewport(panel->renderer, &viewport);
-    *x = (int)(((float)*x * (float)output_w / (float)window_w) / scale_x - (float)viewport.x);
-    *y = (int)(((float)*y * (float)output_h / (float)window_h) / scale_y - (float)viewport.y);
+    /* SDL centers the scaled logical frame in the renderer output. */
+    const int viewport_x = (output_w - (int)((float)logical_w * scale_x)) / 2;
+    const int viewport_y = (output_h - (int)((float)logical_h * scale_y)) / 2;
+    *x = (int)(((float)*x * (float)output_w / (float)window_w - (float)viewport_x) / scale_x);
+    *y = (int)(((float)*y * (float)output_h / (float)window_h - (float)viewport_y) / scale_y);
 #endif
     return true;
 }
