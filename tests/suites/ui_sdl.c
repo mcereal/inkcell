@@ -538,6 +538,8 @@ INKCELL_TEST_CASE(sdl_keys_go_through_the_one_convention, unit) {
 struct sdl_pointer_app {
     struct inkcell_focus_item storage[16];
     struct inkcell_focus_map map;
+    bool mark_row;
+    bool cue_row;
     struct inkcell_fb_rect row;
     struct inkcell_focus_rect hint;
     struct inkcell_focus_rect back;
@@ -554,6 +556,13 @@ static void sdl_pointer_render(struct inkcell_draw_state *state, const void *sna
     inkcell_fb_draw_app_bar(state, &layout, &heading);
     app->row = (struct inkcell_fb_rect){.x = 0, .y = layout.body_y, .w = 200, .h = 40};
     inkcell_fb_focus_register(state, SDL_POINTER_ROW, &app->row);
+    if (app->mark_row) {
+        if (app->cue_row) {
+            inkcell_focus_mark_cued(&app->map, SDL_POINTER_ROW);
+        } else {
+            inkcell_focus_mark(&app->map, SDL_POINTER_ROW);
+        }
+    }
     const struct inkcell_button_action items[] = {
         {.button = INKCELL_BUTTON_A, .label = INKCELL_STR_KEY_CANCEL},
     };
@@ -578,6 +587,9 @@ struct sdl_pointer_heard {
     int wheel_x;
     int wheel_y;
     uint32_t wheel_targets;
+    uint32_t wheel_focused;
+    uint32_t wheel_marked;
+    bool wheel_cued;
     bool text_active;
     bool open_text_on_x;
     char text[3][SDL_TEXTINPUTEVENT_TEXT_SIZE];
@@ -609,6 +621,9 @@ static bool sdl_pointer_on_wheel(void *userdata, int steps, int x, int y,
     heard->wheel_x = x;
     heard->wheel_y = y;
     heard->wheel_targets = map != NULL ? map->count : 0U;
+    heard->wheel_focused = map != NULL ? map->focused : INKCELL_FOCUS_NONE;
+    heard->wheel_marked = inkcell_focus_marked(map);
+    heard->wheel_cued = map != NULL && map->cued;
     return true;
 }
 
@@ -913,6 +928,7 @@ INKCELL_TEST_CASE(sdl_action_hint_falls_back_to_the_key_handler, unit) {
 
     struct sdl_pointer_app app;
     memset(&app, 0, sizeof app);
+    app.mark_row = true;
     struct inkcell_fb_app vtable = {.ctx = &app, .render = sdl_pointer_render};
     struct sdl_test_host host = {.added_fd = -1, .removed_fd = -1};
     struct sdl_pointer_heard heard;
@@ -949,9 +965,11 @@ INKCELL_TEST_CASE(sdl_action_hint_falls_back_to_the_key_handler, unit) {
     SDL_PushEvent(&wheel);
     sdl_pump(&host);
     INKCELL_TEST_FAIL_IF_CLEANUP(
-        heard.wheel_steps != -1 || heard.wheel_x != mouse_x || heard.wheel_y != mouse_y,
+        heard.wheel_steps != -1 || heard.wheel_x != mouse_x || heard.wheel_y != mouse_y ||
+            heard.wheel_focused != SDL_POINTER_ROW || heard.wheel_marked != SDL_POINTER_ROW ||
+            heard.wheel_cued,
         backend->shutdown(state, &context),
-        "a wheel before pointer motion must use the current mouse position");
+        "a wheel before pointer motion must use the current mouse position and frame focus");
 
     const int hint_x = app.hint.x + app.hint.w / 2;
     const int hint_y = app.hint.y + app.hint.h / 2;
@@ -975,6 +993,15 @@ INKCELL_TEST_CASE(sdl_action_hint_falls_back_to_the_key_handler, unit) {
                                      heard.key_count != 1U,
                                  backend->shutdown(state, &context),
                                  "a handled wheel event must not also press the keyboard cursor");
+
+    app.cue_row = true;
+    backend->present(state, &snapshot, &context);
+    SDL_PushEvent(&wheel);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.wheel_focused != SDL_POINTER_ROW ||
+                                     heard.wheel_marked != INKCELL_FOCUS_NONE || !heard.wheel_cued,
+                                 backend->shutdown(state, &context),
+                                 "a cued focus mark must reach the wheel callback unchanged");
 
     backend->shutdown(state, &context);
     record_success(test_name);
