@@ -952,6 +952,9 @@ static void inkcell_sdl_handle_key(struct inkcell_sdl_panel *panel, const SDL_Ke
  */
 static void inkcell_sdl_handle_button(struct inkcell_sdl_panel *panel,
                                       const SDL_MouseButtonEvent *button) {
+    panel->pointer_x = button->x;
+    panel->pointer_y = button->y;
+    panel->pointer_inside = true;
     if (button->type == SDL_MOUSEBUTTONDOWN) {
         inkcell_sdl_show_cursor(panel, false);
     }
@@ -1034,6 +1037,22 @@ static void inkcell_sdl_handle_wheel(struct inkcell_sdl_panel *panel,
     const int steps = inkcell_pointer_wheel(&panel->pointer, dy);
     if (steps == 0) {
         return;
+    }
+    if (!panel->pointer_inside) {
+        /* A window can open beneath an unmoving mouse, before SDL sends any motion. */
+        int x = 0;
+        int y = 0;
+        (void)SDL_GetMouseState(&x, &y);
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+        float logical_x = 0.0f;
+        float logical_y = 0.0f;
+        SDL_RenderWindowToLogical(panel->renderer, x, y, &logical_x, &logical_y);
+        x = (int)logical_x;
+        y = (int)logical_y;
+#endif
+        panel->pointer_x = x;
+        panel->pointer_y = y;
+        panel->pointer_inside = true;
     }
     if (panel->on_wheel != NULL && panel->on_wheel(panel->key_userdata, steps, panel->pointer_x,
                                                    panel->pointer_y, &panel->pointer_map)) {

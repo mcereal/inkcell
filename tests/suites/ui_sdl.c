@@ -575,6 +575,8 @@ struct sdl_pointer_heard {
     char shortcut;
     unsigned shortcuts;
     int wheel_steps;
+    int wheel_x;
+    int wheel_y;
     uint32_t wheel_targets;
     bool text_active;
     bool open_text_on_x;
@@ -603,9 +605,9 @@ static void sdl_pointer_on_shortcut(void *userdata, char letter) {
 static bool sdl_pointer_on_wheel(void *userdata, int steps, int x, int y,
                                  const struct inkcell_focus_map *map) {
     struct sdl_pointer_heard *const heard = (struct sdl_pointer_heard *)userdata;
-    (void)x;
-    (void)y;
     heard->wheel_steps = steps;
+    heard->wheel_x = x;
+    heard->wheel_y = y;
     heard->wheel_targets = map != NULL ? map->count : 0U;
     return true;
 }
@@ -936,13 +938,29 @@ INKCELL_TEST_CASE(sdl_action_hint_falls_back_to_the_key_handler, unit) {
     SDL_PumpEvents();
     SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
 
-    sdl_click(app.hint.x + app.hint.w / 2, app.hint.y + app.hint.h / 2);
+    int mouse_x = 0;
+    int mouse_y = 0;
+    (void)SDL_GetMouseState(&mouse_x, &mouse_y);
+    SDL_Event wheel;
+    memset(&wheel, 0, sizeof wheel);
+    wheel.type = SDL_MOUSEWHEEL;
+    wheel.wheel.type = SDL_MOUSEWHEEL;
+    wheel.wheel.y = -1;
+    SDL_PushEvent(&wheel);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.wheel_steps != -1 || heard.wheel_x != mouse_x ||
+                                     heard.wheel_y != mouse_y,
+                                 backend->shutdown(state, &context),
+                                 "a wheel before pointer motion must use the current mouse position");
+
+    const int hint_x = app.hint.x + app.hint.w / 2;
+    const int hint_y = app.hint.y + app.hint.h / 2;
+    sdl_click(hint_x, hint_y);
     sdl_pump(&host);
     INKCELL_TEST_FAIL_IF_CLEANUP(heard.key_count != 1U || heard.keys[0] != INKCELL_KEY_A,
                                  backend->shutdown(state, &context),
                                  "without an action handler, a hint should keep using on_key");
 
-    SDL_Event wheel;
     memset(&wheel, 0, sizeof wheel);
     wheel.type = SDL_MOUSEWHEEL;
     wheel.wheel.type = SDL_MOUSEWHEEL;
@@ -952,7 +970,8 @@ INKCELL_TEST_CASE(sdl_action_hint_falls_back_to_the_key_handler, unit) {
 #endif
     SDL_PushEvent(&wheel);
     sdl_pump(&host);
-    INKCELL_TEST_FAIL_IF_CLEANUP(heard.wheel_steps != -1 || heard.wheel_targets == 0U ||
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.wheel_steps != -1 || heard.wheel_x != hint_x ||
+                                     heard.wheel_y != hint_y || heard.wheel_targets == 0U ||
                                      heard.key_count != 1U,
                                  backend->shutdown(state, &context),
                                  "a handled wheel event must not also press the keyboard cursor");
