@@ -574,6 +574,8 @@ struct sdl_pointer_heard {
     unsigned contexts;
     char shortcut;
     unsigned shortcuts;
+    int wheel_steps;
+    uint32_t wheel_targets;
     bool text_active;
     bool open_text_on_x;
     char text[3][SDL_TEXTINPUTEVENT_TEXT_SIZE];
@@ -596,6 +598,16 @@ static void sdl_pointer_on_shortcut(void *userdata, char letter) {
     struct sdl_pointer_heard *const heard = (struct sdl_pointer_heard *)userdata;
     heard->shortcut = letter;
     heard->shortcuts += 1U;
+}
+
+static bool sdl_pointer_on_wheel(void *userdata, int steps, int x, int y,
+                                 const struct inkcell_focus_map *map) {
+    struct sdl_pointer_heard *const heard = (struct sdl_pointer_heard *)userdata;
+    (void)x;
+    (void)y;
+    heard->wheel_steps = steps;
+    heard->wheel_targets = map != NULL ? map->count : 0U;
+    return true;
 }
 
 static void sdl_pointer_on_key(void *userdata, enum inkcell_key key) {
@@ -910,6 +922,7 @@ INKCELL_TEST_CASE(sdl_action_hint_falls_back_to_the_key_handler, unit) {
                  .remove_fd = sdl_test_remove_fd,
                  .request_stop = sdl_test_request_stop},
         .on_key = sdl_pointer_on_key,
+        .on_wheel = sdl_pointer_on_wheel,
         .key_userdata = &heard,
         .title = "inkcell tests",
         .width = SDL_POINTER_W,
@@ -928,6 +941,21 @@ INKCELL_TEST_CASE(sdl_action_hint_falls_back_to_the_key_handler, unit) {
     INKCELL_TEST_FAIL_IF_CLEANUP(heard.key_count != 1U || heard.keys[0] != INKCELL_KEY_A,
                                  backend->shutdown(state, &context),
                                  "without an action handler, a hint should keep using on_key");
+
+    SDL_Event wheel;
+    memset(&wheel, 0, sizeof wheel);
+    wheel.type = SDL_MOUSEWHEEL;
+    wheel.wheel.type = SDL_MOUSEWHEEL;
+    wheel.wheel.y = -1;
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+    wheel.wheel.preciseY = -1.0f;
+#endif
+    SDL_PushEvent(&wheel);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.wheel_steps != -1 || heard.wheel_targets == 0U ||
+                                     heard.key_count != 1U,
+                                 backend->shutdown(state, &context),
+                                 "a handled wheel event must not also press the keyboard cursor");
 
     backend->shutdown(state, &context);
     record_success(test_name);

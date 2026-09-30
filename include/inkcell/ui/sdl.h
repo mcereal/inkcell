@@ -103,8 +103,9 @@ extern "C" {
  * The mouse needs nothing here to work. A click on a hint in the action bar is handed to
  * `on_action_key` when present, with `key_userdata`; this lets an application distinguish a
  * visible action from the same logical key on a keyboard or gamepad. NULL preserves the old
- * path through `on_key`. The wheel still arrives through `on_key` as up and down, and the thumb
- * button as B. `on_click` is for everything else the frame registered - a row, a tab - and hears
+ * path through `on_key`. The wheel is offered to `on_wheel` first, with its signed row count and
+ * the last frame's focus map; returning false keeps the usual Up/Down key behavior. The thumb
+ * button is B. `on_click` is for everything else the frame registered - a row, a tab - and hears
  * the id under the pointer; NULL drops those clicks. `on_context` is the secondary button on the
  * same terms - a right-click, or a control-click on a one-button Mac - and hears whatever is
  * under the pointer, a key's target included, with `click_userdata`: what a context menu is of
@@ -122,6 +123,7 @@ struct inkcell_backend_sdl_context {
     struct inkcell_input_host host;
     inkcell_key_handler on_key;
     inkcell_key_handler on_action_key;
+    bool (*on_wheel)(void *userdata, int steps, int x, int y, const struct inkcell_focus_map *map);
     /* Called for a primary-modifier letter chord (Command on macOS, Control elsewhere).
        The letter is lowercase ASCII. Such chords never fall through to on_key. */
     void (*on_shortcut)(void *userdata, char letter);

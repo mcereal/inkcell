@@ -155,6 +155,7 @@ struct inkcell_sdl_panel {
     struct inkcell_input_host host;
     inkcell_key_handler on_key;
     inkcell_key_handler on_action_key;
+    bool (*on_wheel)(void *userdata, int steps, int x, int y, const struct inkcell_focus_map *map);
     void (*on_shortcut)(void *userdata, char letter);
     bool (*text_input_active)(void *userdata);
     void (*on_text_input)(void *userdata, const char *text);
@@ -1031,6 +1032,13 @@ static void inkcell_sdl_handle_wheel(struct inkcell_sdl_panel *panel,
        reader who chose natural scrolling expects this list to scroll the way their others do. */
     inkcell_sdl_show_cursor(panel, false);
     const int steps = inkcell_pointer_wheel(&panel->pointer, dy);
+    if (steps == 0) {
+        return;
+    }
+    if (panel->on_wheel != NULL && panel->on_wheel(panel->key_userdata, steps, panel->pointer_x,
+                                                   panel->pointer_y, &panel->pointer_map)) {
+        return;
+    }
     const enum inkcell_key key = steps > 0 ? INKCELL_KEY_UP : INKCELL_KEY_DOWN;
     for (int i = 0; i < (steps > 0 ? steps : -steps); ++i) {
         inkcell_sdl_deliver(panel, panel->on_key, key, false);
@@ -1495,6 +1503,7 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
     panel->host = context->host;
     panel->on_key = context->on_key;
     panel->on_action_key = context->on_action_key;
+    panel->on_wheel = context->on_wheel;
     panel->on_shortcut = context->on_shortcut;
     panel->text_input_active = context->text_input_active;
     panel->on_text_input = context->on_text_input;
