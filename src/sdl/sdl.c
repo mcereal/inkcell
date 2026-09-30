@@ -1019,7 +1019,10 @@ static void inkcell_sdl_handle_button(struct inkcell_sdl_panel *panel,
 static void inkcell_sdl_handle_wheel(struct inkcell_sdl_panel *panel,
                                      const SDL_MouseWheelEvent *wheel) {
 #if SDL_VERSION_ATLEAST(2, 0, 18)
-    const float dy = wheel->preciseY;
+    /* Some SDL event producers fill the integer delta but leave preciseY at zero. A wheel
+       notch must still reach the cursor on those Windows setups. Keep the precise value when
+       present so trackpad fractions can accumulate across events. */
+    const float dy = wheel->preciseY != 0.0f ? wheel->preciseY : (float)wheel->y;
 #else
     const float dy = (float)wheel->y;
 #endif
