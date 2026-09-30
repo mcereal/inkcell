@@ -329,7 +329,7 @@ static bool raster_path(struct raster *r, const uint8_t *at, const uint8_t *end,
                     !map_coord(m, ux, 0, &x) || !map_coord(m, uy, m->dy, &y)) {
                     return false;
                 }
-                on = (flags[i / 8U] >> (i % 8U)) & 1U;
+                on = ((unsigned)flags[i / 8U] >> (i % 8U)) & 1U;
             } else {
                 x = first_x; /* close the contour */
                 y = first_y;
