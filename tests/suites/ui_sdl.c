@@ -948,10 +948,10 @@ INKCELL_TEST_CASE(sdl_action_hint_falls_back_to_the_key_handler, unit) {
     wheel.wheel.y = -1;
     SDL_PushEvent(&wheel);
     sdl_pump(&host);
-    INKCELL_TEST_FAIL_IF_CLEANUP(heard.wheel_steps != -1 || heard.wheel_x != mouse_x ||
-                                     heard.wheel_y != mouse_y,
-                                 backend->shutdown(state, &context),
-                                 "a wheel before pointer motion must use the current mouse position");
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        heard.wheel_steps != -1 || heard.wheel_x != mouse_x || heard.wheel_y != mouse_y,
+        backend->shutdown(state, &context),
+        "a wheel before pointer motion must use the current mouse position");
 
     const int hint_x = app.hint.x + app.hint.w / 2;
     const int hint_y = app.hint.y + app.hint.h / 2;
