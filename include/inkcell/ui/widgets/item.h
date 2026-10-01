@@ -444,9 +444,9 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
                           uint32_t index, const struct inkcell_fb_list_item *item);
 
 /*
- * Where `item`'s value column starts, in panel pixels, were it drawn as row `index` next: the
- * cell after its label column and marker gutter, where the marker and then the value go. 0 for
- * an item with no label column, whose value has no column of its own to start in.
+ * Where `item`'s value starts, in panel pixels, were it drawn as row `index` next: past its label
+ * column and the marker gutter after it, which is where inkcell_fb_list_item() puts the value's
+ * first letter. 0 for an item with no label column, whose value has no column of its own.
  *
  * Asked before inkcell_fb_list_item() draws the row, which is what moves the list past it. What
  * reads it is something hung from the value rather than the row - a pop-up menu of a field's

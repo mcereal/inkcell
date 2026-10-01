@@ -946,7 +946,8 @@ int inkcell_fb_list_item_value_x(const struct inkcell_draw_state *state,
     }
     const struct inkcell_fb_item_geom g =
         inkcell_fb_item_measure(state, list, item, index, inkcell_fb_list_row_height(list, index));
-    return g.text_x + (int)(item->label_cols + 1U) * inkcell_fb_char_adv(state, state->scale);
+    return g.text_x + (int)(item->label_cols + INKCELL_FB_ITEM_MARKER_CELLS) *
+                          inkcell_fb_char_adv(state, state->scale);
 }
 
 void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_list *list,

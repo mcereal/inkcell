@@ -302,16 +302,17 @@ INKCELL_TEST_CASE(list_style_a_wide_value_stays_inside_its_row, unit) {
 }
 
 /*
- * Where a row's value column starts is the item's answer, asked before the row is drawn - and it
- * is where the row then draws the first ink past its label: the marker, then the value. A pop-up
- * hung from a field lines up with that, so an answer a cell off is a menu standing on the label.
+ * Where a row's value starts is the item's answer, asked before the row is drawn - and it is
+ * where the row then draws the value's first letter, past the label column and the marker gutter.
+ * A pop-up hung from a field lines up with that, so an answer a cell off is a menu standing on
+ * the gutter or the label.
  */
 INKCELL_TEST_CASE(list_style_the_value_column_is_where_the_value_is_drawn, unit) {
     struct style_harness h;
     INKCELL_TEST_FAIL_IF(!style_harness_open(&h, false), "the capture should open");
     const int adv = inkcell_fb_char_adv(h.state, h.state->scale);
-    const struct inkcell_fb_list_item item = {
-        .label = "Region", .label_cols = 10U, .marker_icon = INKCELL_ICON_STEPPER, .value = "US"};
+    /* No marker, so the first ink past the label is the value's own. */
+    const struct inkcell_fb_list_item item = {.label = "Region", .label_cols = 10U, .value = "US"};
     /* The cursor on a second row that is never drawn, so the first stands on the bare panel. */
     struct inkcell_fb_list list = inkcell_fb_list_begin(&h.layout, 2U, 1U);
     const int value_x = inkcell_fb_list_item_value_x(h.state, &list, 0U, &item);
@@ -343,7 +344,7 @@ INKCELL_TEST_CASE(list_style_the_value_column_is_where_the_value_is_drawn, unit)
         }
     }
     INKCELL_TEST_FAIL_IF_CLEANUP(first < value_x || first >= value_x + adv, style_harness_close(&h),
-                                 "the marker should be drawn in the value column's first cell");
+                                 "the value should be drawn starting in the cell answered");
     style_harness_close(&h);
     record_success(test_name);
 }
