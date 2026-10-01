@@ -1262,7 +1262,7 @@ static void inkcell_sdl_pump_stop(struct inkcell_sdl_panel *panel) {
     if (panel->host.remove_fd != NULL) {
         panel->host.remove_fd(panel->host.ctx, panel->timer_fd);
     }
-    close(panel->timer_fd);
+    inkwell_timer_close(panel->timer_fd);
     panel->timer_fd = -1;
 }
 
@@ -1285,7 +1285,7 @@ static void inkcell_sdl_pump_start(struct inkcell_sdl_panel *panel) {
     if (added < 0) {
         inkwell_log_warn("ui", "the SDL event pump could not be put on the loop: %s",
                          strerror(-added));
-        close(fd);
+        inkwell_timer_close(fd);
         return;
     }
     panel->timer_fd = fd;
