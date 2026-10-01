@@ -46,12 +46,14 @@
  * refuses with -ENOTSUP. Nothing that offers this backend needs an #ifdef of its own.
  */
 
+#include "inkcell/i18n/strings.h"
 #include "inkcell/ui/backend.h"
 #include "inkcell/ui/input.h"
 #include "inkcell/ui/key.h"
 #include "inkcell/ui/pointer.h"
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 struct inkcell_fb_app;
@@ -68,6 +70,47 @@ extern "C" {
  */
 #define INKCELL_SDL_DEFAULT_WIDTH 1024U
 #define INKCELL_SDL_DEFAULT_HEIGHT 768U
+
+/*
+ * The menu bar, and the chords that go with it.
+ *
+ * An application hands over a table of items, each a label, the menu it goes in, a chord and a
+ * number of its own. On a Mac the table becomes the menu bar - the application's menu, File,
+ * Edit, View, Go and Help, between AppKit's Apple menu and the Window menu SDL already puts up -
+ * and an item greys out whenever `menu_enabled` says it is not on offer. Elsewhere there is no
+ * menu bar to put it in, and the same table is still the chords: the primary modifier and an
+ * item's key reach `on_menu` exactly as choosing the item would. One table, so a chord cannot mean
+ * one thing in a menu and another on a keyboard.
+ *
+ * The primary modifier is Command on a Mac and Control elsewhere. A chord that matches no item
+ * still reaches `on_shortcut`, so an application that names no menu is unchanged.
+ */
+enum inkcell_sdl_menu {
+    /* The application's own menu, beside the Apple one: where Settings goes on a Mac. */
+    INKCELL_SDL_MENU_APP = 0,
+    INKCELL_SDL_MENU_FILE,
+    INKCELL_SDL_MENU_EDIT,
+    INKCELL_SDL_MENU_VIEW,
+    INKCELL_SDL_MENU_GO,
+    INKCELL_SDL_MENU_HELP,
+    INKCELL_SDL_MENU_COUNT,
+};
+
+/* The one command inkcell answers itself: the clipboard into the text field the application has
+   open (`text_input_active`), greyed out while there is none. Never reaches `on_menu`. */
+#define INKCELL_SDL_MENU_PASTE UINT32_MAX
+
+struct inkcell_sdl_menu_item {
+    enum inkcell_sdl_menu menu;
+    inkcell_str_id label;
+    /* With the primary modifier and nothing else: a lowercase letter, a digit or punctuation as
+       it is printed unshifted ('[', ',', '='). '\0' is an item with no chord. */
+    char key;
+    /* A separator above this item, in its menu. */
+    bool separated;
+    /* What `on_menu` is handed; the application's number, never read here. */
+    uint32_t command;
+};
 
 /*
  * What the SDL backend is opened with.
@@ -132,6 +175,15 @@ struct inkcell_backend_sdl_context {
        Both use key_userdata. When active, Backspace deletes, Enter submits, and Escape leaves. */
     bool (*text_input_active)(void *userdata);
     void (*on_text_input)(void *userdata, const char *text);
+    /* The menu bar - see `struct inkcell_sdl_menu_item` above. `menu_titles` names each menu
+       but the application's own, which is the process's name. `menu_enabled` may be NULL, and
+       then every item is on offer; both callbacks take key_userdata. The table and the titles
+       are read for as long as the window is open, so they are the application's statics. */
+    const struct inkcell_sdl_menu_item *menu;
+    size_t menu_count;
+    const inkcell_str_id *menu_titles;
+    bool (*menu_enabled)(void *userdata, uint32_t command);
+    void (*on_menu)(void *userdata, uint32_t command);
     void *key_userdata;
     inkcell_click_handler on_click;
     inkcell_click_handler on_context;

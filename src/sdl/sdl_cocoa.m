@@ -1,5 +1,6 @@
 /*
- * The title bar, blended into the frame or folded into its tab strip. See sdl_cocoa.h.
+ * The title bar, blended into the frame or folded into its tab strip, and the menu bar. See
+ * sdl_cocoa.h.
  *
  * Compiled on a Mac with SDL2 and nowhere else, so there is no stub: sdl.c calls this behind
  * the same __APPLE__ that decides whether the file is built.
@@ -8,6 +9,8 @@
 #include "sdl_cocoa.h"
 
 #include <SDL_syswm.h>
+
+#include <string.h>
 
 #import <Cocoa/Cocoa.h>
 
@@ -210,4 +213,218 @@ struct inkcell_sdl_cocoa_controls inkcell_sdl_cocoa_place_controls(SDL_Window *w
     }
     g_unified.strip_px = strip_px;
     return inkcell_sdl_cocoa_apply();
+}
+
+/*
+ * The menus. One bar per process, as one window per backend, so file scope again: AppKit asks
+ * the target to validate an item without saying which window it was for.
+ */
+static struct {
+    struct inkcell_sdl_cocoa_menu spec;
+    id target;
+    /* What was put in the bar, to take out again: the top-level items, and what went into the
+       application's menu, which stays. */
+    NSMutableArray *tops;
+    NSMutableArray *app_items;
+    /* SDL's Preferences item, which the application's took the place of. */
+    NSMenuItem *preferences;
+    NSInteger preferences_at;
+    /* The Help menu AppKit knew before this one, if the host had registered one. */
+    NSMenu *help_before;
+    bool help_installed;
+} g_menu;
+
+static NSString *inkcell_sdl_cocoa_text(inkcell_str_id id) {
+    const char *const text = inkcell_str(id);
+    NSString *const string = text != NULL ? [NSString stringWithUTF8String:text] : nil;
+    return string != nil ? string : @"";
+}
+
+@interface InkcellMenuTarget : NSObject
+- (void)choose:(NSMenuItem *)item;
+@end
+
+@implementation InkcellMenuTarget
+
+/* An event and not a call: this is inside AppKit's menu tracking, and the application's loop
+   turn is where anything it does belongs. */
+- (void)choose:(NSMenuItem *)item {
+    SDL_Event event;
+    SDL_zero(event);
+    event.type = g_menu.spec.event_type;
+    event.user.type = g_menu.spec.event_type;
+    event.user.code = (Sint32)item.tag;
+    (void)SDL_PushEvent(&event);
+}
+
+- (BOOL)validateMenuItem:(NSMenuItem *)item {
+    const NSInteger index = item.tag;
+    if (index < 0 || (size_t)index >= g_menu.spec.count) {
+        return NO;
+    }
+    return g_menu.spec.enabled == NULL || g_menu.spec.enabled(g_menu.spec.ctx, (size_t)index);
+}
+
+@end
+
+static NSMenuItem *inkcell_sdl_cocoa_item(size_t index) {
+    const struct inkcell_sdl_menu_item *const spec = &g_menu.spec.items[index];
+    const char key[2] = {spec->key, '\0'};
+    NSMenuItem *const item =
+        [[NSMenuItem alloc] initWithTitle:inkcell_sdl_cocoa_text(spec->label)
+                                   action:@selector(choose:)
+                            keyEquivalent:[NSString stringWithUTF8String:key]];
+    item.keyEquivalentModifierMask = NSEventModifierFlagCommand;
+    item.target = g_menu.target;
+    item.tag = (NSInteger)index;
+    return [item autorelease];
+}
+
+bool inkcell_sdl_cocoa_install_menu(SDL_Window *window, const struct inkcell_sdl_cocoa_menu *menu) {
+    NSMenu *const bar = NSApp.mainMenu;
+    if (inkcell_sdl_cocoa_window(window) == nil || bar == nil || menu == NULL ||
+        menu->items == NULL || menu->count == 0U || menu->titles == NULL) {
+        return false;
+    }
+    inkcell_sdl_cocoa_remove_menu();
+    g_menu.spec = *menu;
+    g_menu.target = [[InkcellMenuTarget alloc] init];
+    g_menu.tops = [[NSMutableArray alloc] init];
+    g_menu.app_items = [[NSMutableArray alloc] init];
+    g_menu.preferences_at = -1;
+
+    /* The application's menu: in the dead Preferences item's place, which is after About and
+       its separator - or there, when SDL has stopped putting one up. */
+    NSMenu *const app_menu = bar.numberOfItems > 0 ? [bar itemAtIndex:0].submenu : nil;
+    NSInteger app_at = app_menu != nil && app_menu.numberOfItems >= 2 ? 2 : 0;
+    if (app_menu != nil) {
+        for (NSInteger i = 0; i < app_menu.numberOfItems; ++i) {
+            NSMenuItem *const candidate = [app_menu itemAtIndex:i];
+            if ([candidate.keyEquivalent isEqualToString:@","]) {
+                g_menu.preferences = [candidate retain];
+                g_menu.preferences_at = i;
+                [app_menu removeItemAtIndex:i];
+                app_at = i;
+                break;
+            }
+        }
+    }
+
+    /* The rest before Window, which SDL put up and AppKit keeps the window list in; Help after
+       it, because that is where a Mac reader looks for it. */
+    NSInteger bar_at = bar.numberOfItems;
+    if (NSApp.windowsMenu != nil) {
+        const NSInteger window_at = [bar indexOfItemWithSubmenu:NSApp.windowsMenu];
+        if (window_at >= 0) {
+            bar_at = window_at;
+        }
+    }
+
+    for (int which = INKCELL_SDL_MENU_APP; which < INKCELL_SDL_MENU_COUNT; ++which) {
+        NSMenu *submenu = nil;
+        if (which == INKCELL_SDL_MENU_APP) {
+            submenu = app_menu;
+        }
+        bool any = false;
+        for (size_t i = 0U; i < menu->count; ++i) {
+            if ((int)menu->items[i].menu != which) {
+                continue;
+            }
+            if (submenu == nil) {
+                NSString *const title = inkcell_sdl_cocoa_text(menu->titles[which]);
+                submenu = [[[NSMenu alloc] initWithTitle:title] autorelease];
+                NSMenuItem *const top = [[[NSMenuItem alloc] initWithTitle:title
+                                                                    action:nil
+                                                             keyEquivalent:@""] autorelease];
+                top.submenu = submenu;
+                top.tag = which;
+                if (which == INKCELL_SDL_MENU_HELP) {
+                    [bar addItem:top];
+                    g_menu.help_before = [NSApp.helpMenu retain];
+                    g_menu.help_installed = true;
+                    NSApp.helpMenu = submenu;
+                } else {
+                    [bar insertItem:top atIndex:bar_at++];
+                }
+                [g_menu.tops addObject:top];
+            }
+            NSMenuItem *const item = inkcell_sdl_cocoa_item(i);
+            if (which == INKCELL_SDL_MENU_APP) {
+                if (menu->items[i].separated && any) {
+                    NSMenuItem *const separator = [NSMenuItem separatorItem];
+                    [submenu insertItem:separator atIndex:app_at++];
+                    [g_menu.app_items addObject:separator];
+                }
+                [submenu insertItem:item atIndex:app_at++];
+                [g_menu.app_items addObject:item];
+            } else {
+                if (menu->items[i].separated && any) {
+                    [submenu addItem:[NSMenuItem separatorItem]];
+                }
+                [submenu addItem:item];
+            }
+            any = true;
+        }
+    }
+    return true;
+}
+
+void inkcell_sdl_cocoa_retitle_menu(void) {
+    if (g_menu.target == nil) {
+        return;
+    }
+    for (NSMenuItem *top in g_menu.tops) {
+        NSString *const title = inkcell_sdl_cocoa_text(g_menu.spec.titles[top.tag]);
+        top.title = title;
+        top.submenu.title = title;
+        for (NSMenuItem *item in top.submenu.itemArray) {
+            if (!item.isSeparatorItem) {
+                item.title = inkcell_sdl_cocoa_text(g_menu.spec.items[item.tag].label);
+            }
+        }
+    }
+    for (NSMenuItem *item in g_menu.app_items) {
+        if (!item.isSeparatorItem) {
+            item.title = inkcell_sdl_cocoa_text(g_menu.spec.items[item.tag].label);
+        }
+    }
+}
+
+void inkcell_sdl_cocoa_remove_menu(void) {
+    if (g_menu.target == nil) {
+        return;
+    }
+    NSMenu *const bar = NSApp.mainMenu;
+    /* The host's Help menu back, where it had one, and only while ours is still the one AppKit
+       has - a host that registered another since is left with its own. */
+    if (g_menu.help_installed) {
+        for (NSMenuItem *top in g_menu.tops) {
+            if (top.submenu == NSApp.helpMenu) {
+                NSApp.helpMenu = g_menu.help_before;
+            }
+        }
+        [g_menu.help_before release];
+    }
+    for (NSMenuItem *top in g_menu.tops) {
+        if (top.menu != nil) {
+            [top.menu removeItem:top];
+        }
+    }
+    for (NSMenuItem *item in g_menu.app_items) {
+        if (item.menu != nil) {
+            [item.menu removeItem:item];
+        }
+    }
+    if (g_menu.preferences != nil) {
+        NSMenu *const app_menu = bar != nil && bar.numberOfItems > 0 ? [bar itemAtIndex:0].submenu
+                                                                     : nil;
+        if (app_menu != nil && g_menu.preferences_at <= app_menu.numberOfItems) {
+            [app_menu insertItem:g_menu.preferences atIndex:g_menu.preferences_at];
+        }
+        [g_menu.preferences release];
+    }
+    [g_menu.tops release];
+    [g_menu.app_items release];
+    [g_menu.target release];
+    memset(&g_menu, 0, sizeof g_menu);
 }
