@@ -28,6 +28,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ---- the list item ------------------------------------------------------------------------
  *
  * One component for every row this UI draws that is more than a line of text.
@@ -533,5 +537,9 @@ size_t inkcell_fb_field_label_cols(const struct inkcell_draw_state *state,
 size_t inkcell_fb_field_label_cols_fit(const struct inkcell_draw_state *state,
                                        const struct inkcell_fb_layout *layout,
                                        const char *const *labels, size_t count);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_ITEM_H */
