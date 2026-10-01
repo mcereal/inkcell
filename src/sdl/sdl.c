@@ -1379,11 +1379,12 @@ static void inkcell_sdl_pump_stop(struct inkcell_sdl_panel *panel) {
     panel->timer_fd = -1;
 }
 
-/* The table, and the event a chosen item arrives as. SDL hands out event types for the life of
-   the process, so one is taken once and every window after the first reuses it. */
+/* The table, and the event a chosen item arrives as. Taken afresh for every window rather than
+   once a process: an event type is SDL's for as long as its event subsystem runs, and a type
+   kept across a restart could be handed to the host again - whose events would then be read
+   here as menu items. */
 static void inkcell_sdl_menu_open(struct inkcell_sdl_panel *panel,
                                   const struct inkcell_backend_sdl_context *context) {
-    static uint32_t event_type;
     panel->menu = context->menu;
     panel->menu_count = context->menu != NULL ? context->menu_count : 0U;
     panel->menu_titles = context->menu_titles;
@@ -1394,11 +1395,8 @@ static void inkcell_sdl_menu_open(struct inkcell_sdl_panel *panel,
     if (panel->menu_count == 0U) {
         return;
     }
-    if (event_type == 0U) {
-        const Uint32 registered = SDL_RegisterEvents(1);
-        event_type = registered != (Uint32)-1 ? registered : 0U;
-    }
-    panel->menu_event = event_type;
+    const Uint32 registered = SDL_RegisterEvents(1);
+    panel->menu_event = registered != (Uint32)-1 ? registered : 0U;
 }
 
 /* Never fatal: a window that cannot be driven is still a window, and an application that got

@@ -229,6 +229,9 @@ static struct {
     /* SDL's Preferences item, which the application's took the place of. */
     NSMenuItem *preferences;
     NSInteger preferences_at;
+    /* The Help menu AppKit knew before this one, if the host had registered one. */
+    NSMenu *help_before;
+    bool help_installed;
 } g_menu;
 
 static NSString *inkcell_sdl_cocoa_text(inkcell_str_id id) {
@@ -337,6 +340,8 @@ bool inkcell_sdl_cocoa_install_menu(SDL_Window *window, const struct inkcell_sdl
                 top.tag = which;
                 if (which == INKCELL_SDL_MENU_HELP) {
                     [bar addItem:top];
+                    g_menu.help_before = [NSApp.helpMenu retain];
+                    g_menu.help_installed = true;
                     NSApp.helpMenu = submenu;
                 } else {
                     [bar insertItem:top atIndex:bar_at++];
@@ -390,10 +395,17 @@ void inkcell_sdl_cocoa_remove_menu(void) {
         return;
     }
     NSMenu *const bar = NSApp.mainMenu;
-    for (NSMenuItem *top in g_menu.tops) {
-        if (top.submenu == NSApp.helpMenu) {
-            NSApp.helpMenu = nil;
+    /* The host's Help menu back, where it had one, and only while ours is still the one AppKit
+       has - a host that registered another since is left with its own. */
+    if (g_menu.help_installed) {
+        for (NSMenuItem *top in g_menu.tops) {
+            if (top.submenu == NSApp.helpMenu) {
+                NSApp.helpMenu = g_menu.help_before;
+            }
         }
+        [g_menu.help_before release];
+    }
+    for (NSMenuItem *top in g_menu.tops) {
         if (top.menu != nil) {
             [top.menu removeItem:top];
         }
