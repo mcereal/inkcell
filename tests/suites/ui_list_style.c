@@ -301,6 +301,53 @@ INKCELL_TEST_CASE(list_style_a_wide_value_stays_inside_its_row, unit) {
     record_success(test_name);
 }
 
+/*
+ * Where a row's value column starts is the item's answer, asked before the row is drawn - and it
+ * is where the row then draws the first ink past its label: the marker, then the value. A pop-up
+ * hung from a field lines up with that, so an answer a cell off is a menu standing on the label.
+ */
+INKCELL_TEST_CASE(list_style_the_value_column_is_where_the_value_is_drawn, unit) {
+    struct style_harness h;
+    INKCELL_TEST_FAIL_IF(!style_harness_open(&h, false), "the capture should open");
+    const int adv = inkcell_fb_char_adv(h.state, h.state->scale);
+    const struct inkcell_fb_list_item item = {
+        .label = "Region", .label_cols = 10U, .marker_icon = INKCELL_ICON_STEPPER, .value = "US"};
+    /* The cursor on a second row that is never drawn, so the first stands on the bare panel. */
+    struct inkcell_fb_list list = inkcell_fb_list_begin(&h.layout, 2U, 1U);
+    const int value_x = inkcell_fb_list_item_value_x(h.state, &list, 0U, &item);
+    const int narrower = inkcell_fb_list_item_value_x(
+        h.state, &list, 0U,
+        &(const struct inkcell_fb_list_item){.label = "Region", .label_cols = 8U, .value = "US"});
+    INKCELL_TEST_FAIL_IF_CLEANUP(value_x - narrower != 2 * adv, style_harness_close(&h),
+                                 "two more label cells should move the value two cells on");
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        inkcell_fb_list_item_value_x(h.state, &list, 0U,
+                                     &(const struct inkcell_fb_list_item){.text = "plain"}) != 0,
+        style_harness_close(&h), "a row with no label column has no value column");
+    /* The row's own band: the list's chrome draws an edge along its top. */
+    const int top = list.y + 1;
+    uint32_t index = 0U;
+    if (inkcell_fb_list_next(&list, &index)) {
+        inkcell_fb_list_item(h.state, &list, index, &item);
+    }
+    const int bottom = list.y;
+
+    /* The first ink past the label's own words: "Region" is six letters in ten cells. */
+    const struct inkcell_rgb bg = inkcell_fb_color(h.state, INKCELL_COLOR_BG);
+    int first = INT32_MAX;
+    for (int y = top > 0 ? top : 0; y < bottom; ++y) {
+        for (int x = value_x - 3 * adv; x < first && x < (int)INKCELL_CAPTURE_WIDTH; ++x) {
+            if (!style_same_rgb(style_pixel(&h, x, y), bg)) {
+                first = x;
+            }
+        }
+    }
+    INKCELL_TEST_FAIL_IF_CLEANUP(first < value_x || first >= value_x + adv, style_harness_close(&h),
+                                 "the marker should be drawn in the value column's first cell");
+    style_harness_close(&h);
+    record_success(test_name);
+}
+
 INKCELL_TEST_CASE(list_style_a_fitted_label_column_holds_its_widest_label, unit) {
     struct style_harness h;
     INKCELL_TEST_FAIL_IF(!style_harness_open(&h, false), "the capture should open");

@@ -938,6 +938,17 @@ static void inkcell_fb_item_piece_styled(struct inkcell_draw_state *state, int x
     inkcell_fb_draw_text_styled(state, x, y + lift, fitted, style, ink, ground);
 }
 
+int inkcell_fb_list_item_value_x(const struct inkcell_draw_state *state,
+                                 const struct inkcell_fb_list *list, uint32_t index,
+                                 const struct inkcell_fb_list_item *item) {
+    if (state == NULL || list == NULL || item == NULL || item->label_cols == 0U) {
+        return 0;
+    }
+    const struct inkcell_fb_item_geom g =
+        inkcell_fb_item_measure(state, list, item, index, inkcell_fb_list_row_height(list, index));
+    return g.text_x + (int)(item->label_cols + 1U) * inkcell_fb_char_adv(state, state->scale);
+}
+
 void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_list *list,
                           uint32_t index, const struct inkcell_fb_list_item *item) {
     inkcell_fb_list_chrome(state, list);

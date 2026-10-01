@@ -440,6 +440,20 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
                           uint32_t index, const struct inkcell_fb_list_item *item);
 
 /*
+ * Where `item`'s value column starts, in panel pixels, were it drawn as row `index` next: the
+ * cell after its label column and marker gutter, where the marker and then the value go. 0 for
+ * an item with no label column, whose value has no column of its own to start in.
+ *
+ * Asked before inkcell_fb_list_item() draws the row, which is what moves the list past it. What
+ * reads it is something hung from the value rather than the row - a pop-up menu of a field's
+ * choices lines up with the answer it replaces, not with the question - and the column is the
+ * item's own measure, which a caller adding up cells would be second-guessing.
+ */
+int inkcell_fb_list_item_value_x(const struct inkcell_draw_state *state,
+                                 const struct inkcell_fb_list *list, uint32_t index,
+                                 const struct inkcell_fb_list_item *item);
+
+/*
  * A conversation cell: the component the Messages list is made of.
  *
  * Two body rows, laid out the way every messenger lays this out - a tinted disc with the
