@@ -786,7 +786,9 @@ struct inkcell_box inkcell_fb_content_column(const struct inkcell_draw_state *st
         inkcell_fb_width_class(state) == INKCELL_WIDTH_COMPACT) {
         return column;
     }
-    return inkcell_box_measure(column, inkcell_fb_measure_width(state, INKCELL_WIDTH_MEASURE_COLS));
+    const size_t cols = (state != NULL && state->measure_cols != 0U) ? state->measure_cols
+                                                                     : INKCELL_WIDTH_MEASURE_COLS;
+    return inkcell_box_measure(column, inkcell_fb_measure_width(state, cols));
 }
 
 int inkcell_fb_content_x(const struct inkcell_draw_state *state) {

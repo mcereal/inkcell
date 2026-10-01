@@ -29,9 +29,10 @@ int inkcell_sdl_display_scale(int theme_scale, float density) {
     if (!(density > 0.0f)) {
         return theme_scale;
     }
-    /* Half steps, rounded to the nearest: the panel's two pixels to the desktop's point. */
+    /* The panel's two pixels to the desktop's point, and a desk's body seven eighths of the
+       panel's; half steps, rounded to the nearest. */
     const int half = INKCELL_SCALE_UNIT / 2;
-    const float wanted = (float)theme_scale * density / 2.0f;
+    const float wanted = (float)theme_scale * density * 7.0f / 16.0f;
     int scale = (int)(wanted / (float)half + 0.5f) * half;
     if (scale < INKCELL_SCALE_MIN) {
         scale = INKCELL_SCALE_MIN;

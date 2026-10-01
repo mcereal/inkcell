@@ -568,6 +568,48 @@ INKCELL_TEST_CASE(scaffold_medium_splits_when_the_detail_gets_a_measure, unit) {
 }
 
 /*
+ * A desktop-sized window holds its list to a list column and fills its detail.
+ *
+ * At two fifths of a 2880 window the list put each row's time a hand's width from its name, and
+ * the detail's column was a centred measure with dead ground either side of it - the two things
+ * on a desktop split that read as a handheld scaled up. So the list stops at
+ * INKCELL_WIDTH_LIST_PANE_COLS and the detail's column runs margin to margin, and the measure
+ * the detail widened is back to the frame's once the frame ends.
+ */
+INKCELL_TEST_CASE(scaffold_wide_split_caps_the_list_and_fills_the_detail, unit) {
+    struct inkcell_draw_state *state = NULL;
+    struct inkcell_capture *capture =
+        scaffold_open(2880U, 1800U, INKCELL_SCALE(3) + INKCELL_SCALE(1) / 2, &state);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+
+    const struct inkcell_fb_scaffold scaffold = {
+        .destinations = k_destinations, .count = SCAFFOLD_COUNT, .footer = true, .split = true};
+    struct inkcell_fb_scaffold_frame frame;
+    inkcell_fb_scaffold_begin(state, &scaffold, &frame);
+    INKCELL_TEST_FAIL_IF_CLEANUP(!frame.split, inkcell_capture_close(capture),
+                                 "a desktop window splits");
+    const int list_cap = inkcell_fb_measure_width(state, INKCELL_WIDTH_LIST_PANE_COLS) +
+                         2 * inkcell_fb_margin(state);
+    INKCELL_TEST_FAIL_IF_CLEANUP(frame.list.w > list_cap, inkcell_capture_close(capture),
+                                 "the list is no wider than a list column");
+    INKCELL_TEST_FAIL_IF_CLEANUP(frame.layout.body_x != frame.list.x + inkcell_fb_margin(state),
+                                 inkcell_capture_close(capture),
+                                 "the list's rows start at its pane's margin, not centred in it");
+
+    const struct inkcell_fb_layout detail = inkcell_fb_scaffold_detail(state, &frame, NULL);
+    INKCELL_TEST_FAIL_IF_CLEANUP(detail.body_x != frame.detail.x + inkcell_fb_margin(state) ||
+                                     detail.body_w != frame.detail.w - 2 * inkcell_fb_margin(state),
+                                 inkcell_capture_close(capture),
+                                 "the detail's column fills its pane");
+    inkcell_fb_scaffold_end(state, &frame, NULL);
+    INKCELL_TEST_FAIL_IF_CLEANUP(state->measure_cols != 0U, inkcell_capture_close(capture),
+                                 "the frame's end puts the measure back");
+
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
+/*
  * A split frame's action bar runs under both panes: its first keycap leads at the list's column
  * and its status trails at the detail's edge. Held to the measure it was a centred ribbon under
  * two panes that together already ran edge to edge, and lined up with neither of them.
