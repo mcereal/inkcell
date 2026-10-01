@@ -761,6 +761,9 @@ static int inkcell_fb_card_paint(struct inkcell_draw_state *state,
     if (fit.tail_lines > 0U) {
         (void)inkcell_fb_draw_card_row(state, m, layout, row_y, &card->rows[fit.rows],
                                        fit.tail_lines);
+        /* Past the lines kept, so the room a boxed card hands back starts under them rather than
+           over the note it would then be drawn on. */
+        row_y += (int)fit.tail_lines * layout->line;
     }
 
     return row_y;
@@ -870,6 +873,13 @@ struct inkcell_box inkcell_fb_draw_card_in(struct inkcell_draw_state *state,
     }
     const struct inkcell_fb_card_metrics m =
         inkcell_fb_card_measure_at(state, layout, card, box.x, box.w);
+    /* A box too short for the frame itself - the insets and the heading's line, where the verbs
+       are - draws nothing: a heading painted past the box's bottom is a heading painted over the
+       next row of the board, and its verbs would be registered where nothing can be seen. */
+    const struct inkcell_fb_card_fit frame = {.rows = 0U, .tail_lines = 0U};
+    if (inkcell_fb_card_box_height(&m, layout, card, frame) > box.h) {
+        return none;
+    }
     const struct inkcell_fb_card_fit fit =
         inkcell_fb_card_clip(&m, layout, card, box.y, box.y + box.h);
     const int below = inkcell_fb_card_paint(state, layout, &m, card, fit, box.y, box.h);

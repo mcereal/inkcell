@@ -415,6 +415,12 @@ void inkcell_dash_begin(struct inkcell_dash *dash, struct inkcell_box box, uint3
     if (box.w < 0) {
         box.w = 0;
     }
+    /* Gaps wider than the board are narrowed until they fit, so the tracks still add up to the
+       box exactly - every track then has no width, which is a board with no room rather than one
+       whose cells run past its edge. */
+    if (columns > 1U && (long)(columns - 1U) * gap > box.w) {
+        gap = box.w / (int)(columns - 1U);
+    }
     dash->box = box;
     dash->columns = columns;
     dash->gap = gap;

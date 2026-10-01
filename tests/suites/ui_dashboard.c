@@ -111,3 +111,60 @@ INKCELL_TEST_CASE(stat_figure_steps_down_rather_than_overrunning, unit) {
     inkcell_capture_close(capture);
     record_success(test_name);
 }
+
+INKCELL_TEST_CASE(card_in_hands_back_room_under_a_clipped_note, unit) {
+    struct inkcell_draw_state *state = NULL;
+    struct inkcell_capture *capture = dash_open(&state);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+    const struct inkcell_fb_layout layout = inkcell_fb_layout_begin(state, true, false);
+
+    struct inkcell_fb_card card;
+    inkcell_fb_card_begin(&card, INKCELL_FB_CARD_FILLED, INKCELL_ICON_NONE,
+                          INKCELL_STR_COMMON_UNKNOWN_SHORT, INKCELL_TONE_NORMAL);
+    const struct inkcell_box tall = {.x = 0, .y = 0, .w = 300, .h = 600};
+    const struct inkcell_box bare = inkcell_fb_draw_card_in(state, &layout, tall, &card);
+    const int frame = tall.h - bare.h; /* the insets and the heading */
+
+    inkcell_fb_card_note(&card, INKCELL_TONE_NORMAL,
+                         "a sentence long enough to wrap onto at least three lines in a card "
+                         "this narrow, which is what makes the third line the one clipped");
+    const struct inkcell_box box = {.x = 0, .y = 0, .w = 300, .h = frame + 2 * layout.line};
+    const struct inkcell_box rest = inkcell_fb_draw_card_in(state, &layout, box, &card);
+    INKCELL_TEST_FAIL_IF(rest.y != bare.y + 2 * layout.line,
+                         "the room starts under the two lines of the note that were kept");
+
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(card_in_draws_nothing_in_a_box_shorter_than_its_heading, unit) {
+    struct inkcell_draw_state *state = NULL;
+    struct inkcell_capture *capture = dash_open(&state);
+    INKCELL_TEST_FAIL_IF(capture == NULL, "the capture should open");
+    const struct inkcell_fb_layout layout = inkcell_fb_layout_begin(state, true, false);
+
+    struct inkcell_fb_card card;
+    inkcell_fb_card_begin(&card, INKCELL_FB_CARD_FILLED, INKCELL_ICON_NONE,
+                          INKCELL_STR_COMMON_UNKNOWN_SHORT, INKCELL_TONE_NORMAL);
+    inkcell_fb_card_action(&card, INKCELL_STR_COMMON_UNKNOWN_SHORT, false);
+    card.action_focus_id = 77U;
+    struct inkcell_focus_item storage[8];
+    struct inkcell_focus_map map;
+    inkcell_focus_begin(&map, storage, 8U);
+    inkcell_fb_set_focus_map(state, &map);
+    const struct inkcell_box roomy = {.x = 0, .y = 0, .w = 400, .h = 400};
+    (void)inkcell_fb_draw_card_in(state, &layout, roomy, &card);
+    struct inkcell_focus_rect verb;
+    INKCELL_TEST_FAIL_IF(!inkcell_focus_rect_of(&map, 77U, &verb),
+                         "a card with room registers its verb");
+    inkcell_focus_begin(&map, storage, 8U);
+    const struct inkcell_box box = {.x = 0, .y = 0, .w = 400, .h = 4};
+    INKCELL_TEST_FAIL_IF(!inkcell_box_is_empty(inkcell_fb_draw_card_in(state, &layout, box, &card)),
+                         "a box shorter than the frame hands back no room");
+    INKCELL_TEST_FAIL_IF(inkcell_focus_rect_of(&map, 77U, &verb),
+                         "and registers no verb outside it");
+    inkcell_fb_set_focus_map(state, NULL);
+
+    inkcell_capture_close(capture);
+    record_success(test_name);
+}

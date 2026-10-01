@@ -638,3 +638,14 @@ INKCELL_TEST_CASE(dash_columns_fit_the_tile_width, unit) {
                          "and never more than asked");
     record_success(test_name);
 }
+
+INKCELL_TEST_CASE(dash_narrows_gaps_wider_than_the_board, unit) {
+    struct inkcell_dash dash;
+    const struct inkcell_box box = {.x = 5, .y = 0, .w = 10, .h = 100};
+    inkcell_dash_begin(&dash, box, 3U, 20);
+    INKCELL_TEST_FAIL_IF(!inkcell_dash_row(&dash, 50), "a row fits");
+    const struct inkcell_box whole = inkcell_dash_cell(&dash, 3U);
+    INKCELL_TEST_FAIL_IF(whole.x != box.x || whole.w != box.w,
+                         "a full span is the board, however wide the gaps asked for were");
+    record_success(test_name);
+}
