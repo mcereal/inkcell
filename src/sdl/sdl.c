@@ -874,13 +874,25 @@ static void inkcell_sdl_sync_text_input(struct inkcell_sdl_panel *panel) {
     }
 }
 
-static void inkcell_sdl_deliver_text(struct inkcell_sdl_panel *panel, const char *text) {
-    if (!panel->text_active || panel->on_text_input == NULL || text == NULL || text[0] == '\0') {
+static bool inkcell_sdl_takes_text(const struct inkcell_sdl_panel *panel) {
+    return panel->text_active && panel->on_text_input != NULL;
+}
+
+/* `stamp` is false where the caller stamped the press already, earlier than this: a paste,
+   whose clock starts before the clipboard is read and not after. */
+static void inkcell_sdl_hand_text(struct inkcell_sdl_panel *panel, const char *text, bool stamp) {
+    if (!inkcell_sdl_takes_text(panel) || text == NULL || text[0] == '\0') {
         return;
     }
-    inkcell_latency_event(inkcell_latency_now_us());
-    inkcell_latency_press();
+    if (stamp) {
+        inkcell_latency_event(inkcell_latency_now_us());
+        inkcell_latency_press();
+    }
     panel->on_text_input(panel->key_userdata, text);
+}
+
+static void inkcell_sdl_deliver_text(struct inkcell_sdl_panel *panel, const char *text) {
+    inkcell_sdl_hand_text(panel, text, true);
 }
 
 /* ---- the menu bar --------------------------------------------------------------------- */
@@ -915,13 +927,13 @@ static void inkcell_sdl_menu_run(struct inkcell_sdl_panel *panel, size_t index) 
     if (!inkcell_sdl_menu_offered(panel, index)) {
         return;
     }
-    inkcell_latency_event(inkcell_latency_now_us());
-    inkcell_latency_press();
     const uint32_t command = panel->menu[index].command;
     if (command == INKCELL_SDL_MENU_PASTE) {
         inkcell_sdl_paste(panel);
         return;
     }
+    inkcell_latency_event(inkcell_latency_now_us());
+    inkcell_latency_press();
     panel->on_menu(panel->key_userdata, command);
 }
 
@@ -931,9 +943,16 @@ static bool inkcell_sdl_menu_validate(void *ctx, size_t index) {
 }
 #endif
 
+/* Stamped once, before the clipboard is read: that read can block on another application, and
+   the press is from when the event left the queue - which is what the delivery clock measures. */
 static void inkcell_sdl_paste(struct inkcell_sdl_panel *panel) {
+    if (!inkcell_sdl_takes_text(panel)) {
+        return;
+    }
+    inkcell_latency_event(inkcell_latency_now_us());
+    inkcell_latency_press();
     char *const clipboard = SDL_GetClipboardText();
-    inkcell_sdl_deliver_text(panel, clipboard);
+    inkcell_sdl_hand_text(panel, clipboard, false);
     SDL_free(clipboard);
 }
 
