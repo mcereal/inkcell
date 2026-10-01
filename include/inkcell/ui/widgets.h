@@ -71,5 +71,6 @@
 #include "inkcell/ui/widgets/overlay.h"
 #include "inkcell/ui/widgets/scaffold.h"
 #include "inkcell/ui/widgets/scroll.h"
+#include "inkcell/ui/widgets/stat.h"
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_H */

@@ -376,3 +376,103 @@ uint32_t inkcell_stack_resolve(const struct inkcell_stack *stack, struct inkcell
 
     return placed;
 }
+
+/* ---- a board ----------------------------------------------------------------------------- */
+
+uint32_t inkcell_dash_columns(int width, int min_w, int gap, uint32_t max) {
+    if (max == 0U || max > INKCELL_DASH_COLUMNS_MAX) {
+        max = INKCELL_DASH_COLUMNS_MAX;
+    }
+    if (gap < 0) {
+        gap = 0;
+    }
+    if (min_w <= 0) {
+        return max;
+    }
+    /* n tracks need n * min_w + (n - 1) * gap, which is (width + gap) / (min_w + gap) of them. */
+    const long fit = ((long)width + gap) / ((long)min_w + gap);
+    if (fit < 1) {
+        return 1U;
+    }
+    return fit > (long)max ? max : (uint32_t)fit;
+}
+
+void inkcell_dash_begin(struct inkcell_dash *dash, struct inkcell_box box, uint32_t columns,
+                        int gap) {
+    if (dash == NULL) {
+        return;
+    }
+    memset(dash, 0, sizeof *dash);
+    if (columns < 1U) {
+        columns = 1U;
+    }
+    if (columns > INKCELL_DASH_COLUMNS_MAX) {
+        columns = INKCELL_DASH_COLUMNS_MAX;
+    }
+    if (gap < 0) {
+        gap = 0;
+    }
+    if (box.w < 0) {
+        box.w = 0;
+    }
+    dash->box = box;
+    dash->columns = columns;
+    dash->gap = gap;
+    dash->next_y = box.y;
+    dash->row = (struct inkcell_box){box.x, box.y, 0, 0};
+    dash->col = columns; /* no row open: every track of it is taken */
+
+    int room = box.w - (int)(columns - 1U) * gap;
+    if (room < 0) {
+        room = 0;
+    }
+    const int each = room / (int)columns;
+    const int extra = room % (int)columns;
+    int x = box.x;
+    for (uint32_t i = 0U; i < columns; ++i) {
+        dash->edges[i] = x;
+        x += each + ((int)i < extra ? 1 : 0) + gap;
+    }
+    /* The last edge is where the last track ends, without the gap a track after it would need. */
+    dash->edges[columns] = x - gap;
+}
+
+int inkcell_dash_left(const struct inkcell_dash *dash) {
+    if (dash == NULL) {
+        return 0;
+    }
+    const int top = dash->row.h > 0 ? dash->next_y + dash->gap : dash->next_y;
+    const int left = dash->box.y + dash->box.h - top;
+    return left > 0 ? left : 0;
+}
+
+bool inkcell_dash_row(struct inkcell_dash *dash, int height) {
+    if (dash == NULL || height <= 0 || height > inkcell_dash_left(dash)) {
+        return false;
+    }
+    const int top = dash->row.h > 0 ? dash->next_y + dash->gap : dash->next_y;
+    dash->row = (struct inkcell_box){dash->box.x, top, dash->box.w, height};
+    dash->next_y = top + height;
+    dash->col = 0U;
+    return true;
+}
+
+struct inkcell_box inkcell_dash_cell(struct inkcell_dash *dash, uint32_t span) {
+    if (dash == NULL) {
+        return (struct inkcell_box){0, 0, 0, 0};
+    }
+    if (dash->row.h <= 0 || dash->col >= dash->columns || span == 0U) {
+        return (struct inkcell_box){dash->box.x, dash->next_y, 0, 0};
+    }
+    if (span > dash->columns - dash->col) {
+        span = dash->columns - dash->col;
+    }
+    const uint32_t first = dash->col;
+    const uint32_t last = first + span; /* the edge after the cell's last track */
+    dash->col = last;
+    /* The start of the track after the cell less the gap in front of it - or, for a cell that
+       reaches the end of the row, the board's own last edge, which carries no gap. */
+    const int right = last == dash->columns ? dash->edges[last] : dash->edges[last] - dash->gap;
+    return (struct inkcell_box){dash->edges[first], dash->row.y, right - dash->edges[first],
+                                dash->row.h};
+}

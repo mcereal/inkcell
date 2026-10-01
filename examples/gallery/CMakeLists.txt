@@ -14,6 +14,7 @@ add_executable(inkcell_gallery
     scenes_list_styles.c
     scenes_grid.c
     scenes_cards.c
+    scenes_dashboard.c
     scenes_meters.c
     scenes_transcript.c
     scenes_overlays.c

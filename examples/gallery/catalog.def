@@ -258,3 +258,10 @@ INKCELL_STR_ENTRY(SEARCH_QUERY,       "ridge antenna")
 INKCELL_STR_ENTRY(SELECTED_COUNT,     "3 selected")
 INKCELL_STR_ENTRY(STATUS_LINKED,      "Linked")
 INKCELL_STR_ENTRY(TIP_MORE,           "The rest of the actions are under START")
+
+/* ---- the dashboard --------------------------------------------------------------------------- */
+
+INKCELL_STR_ENTRY(HEAD_DASHBOARD,     "Dashboard")
+INKCELL_STR_ENTRY(READ_UPTIME,        "Uptime")
+INKCELL_STR_ENTRY(READ_PEERS,         "Peers")
+INKCELL_STR_ENTRY(READ_TRAFFIC,       "Traffic")

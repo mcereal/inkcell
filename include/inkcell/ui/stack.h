@@ -279,6 +279,76 @@ bool inkcell_stack_add_grow(struct inkcell_stack *stack, int basis, uint8_t grow
 uint32_t inkcell_stack_resolve(const struct inkcell_stack *stack, struct inkcell_box *out,
                                uint32_t max);
 
+/* ---- a board -------------------------------------------------------------------------------
+ *
+ * Tiles in rows, on columns that line up from one row to the next: a dashboard.
+ *
+ * A stack cannot say this, and the reason is the gap. A row of one tile two columns wide over a
+ * row of two tiles one column wide each is three stacks whose widths are all *grow* shares of
+ * the same extent - and the wide one is (W - gap) * 2/3 while its two neighbours below are
+ * (W - 2 * gap) / 3 each, so its right edge lands a third of a gap away from the boundary under
+ * it. A third of a gap is a few pixels, and a few pixels is exactly the misalignment the eye
+ * finds first on a page of panels. The fix is the one a CSS grid makes: decide the column tracks
+ * once, for the whole board, and let a tile that spans k of them cover k tracks and the k - 1
+ * gaps between them.
+ *
+ * Rows are the caller's. Each row is opened at a height the caller chose - usually the natural
+ * height of the tallest thing in it - and its cells are taken left to right, so a board is built
+ * in reading order and drawn as it is built. A row that would run past the box's bottom is refused
+ * rather than clipped, which is the card's rule (inkcell_fb_draw_card()) arriving one level up: a
+ * screen asks for a row, and either gets the whole of it or knows to stop.
+ */
+
+/* The most tracks a board divides into. Six is what a desktop dashboard uses at its widest and
+   what a twelve-column design system collapses to once its gutters are worth having. */
+#define INKCELL_DASH_COLUMNS_MAX 6U
+
+struct inkcell_dash {
+    struct inkcell_box box;
+    uint32_t columns;
+    int gap; /* between tracks across, and between rows down */
+    /* Where each track starts, and edges[columns] where the last one ends - so a cell from track
+       a spanning k is edges[a] to edges[a + k] less the gap after it, and every boundary is one
+       number that every row agrees on. */
+    int edges[INKCELL_DASH_COLUMNS_MAX + 1U];
+    int next_y;             /* the top of the next row */
+    struct inkcell_box row; /* the open row; empty before the first */
+    uint32_t col;           /* the open row's next free track */
+};
+
+/*
+ * How many tracks a board `width` across affords, given that no tile should be narrower than
+ * `min_w`: the most that fit with their gaps, at least one and at most `max` (itself capped at
+ * INKCELL_DASH_COLUMNS_MAX). A board narrower than one tile still has one track - a tile squeezed
+ * is a tile, and no tile at all is a blank screen.
+ */
+uint32_t inkcell_dash_columns(int width, int min_w, int gap, uint32_t max);
+
+/*
+ * Opens a board over `box` with `columns` tracks (clamped to 1..INKCELL_DASH_COLUMNS_MAX) and
+ * `gap` between everything (negative is clamped to 0).
+ *
+ * The tracks add up to the box exactly: the pixels that do not divide evenly go one each to the
+ * leading tracks, so the board's right edge is the box's right edge on every width.
+ */
+void inkcell_dash_begin(struct inkcell_dash *dash, struct inkcell_box box, uint32_t columns,
+                        int gap);
+
+/* Opens the next row, `height` tall, one gap under the last. False - and no row opened - when it
+   would pass the bottom of the box, or `height` is not positive. */
+bool inkcell_dash_row(struct inkcell_dash *dash, int height);
+
+/* What a row opened now could be at most: the room left under the last row and its gap. 0 when
+   there is none. For the row that takes the rest of the board. */
+int inkcell_dash_left(const struct inkcell_dash *dash);
+
+/*
+ * The next `span` tracks of the open row, left to right. A span wider than what is left of the
+ * row is cut to what is left; an empty box comes back when no row is open or the row is full -
+ * which a caller tests with inkcell_box_is_empty() before drawing, as it does a stack's.
+ */
+struct inkcell_box inkcell_dash_cell(struct inkcell_dash *dash, uint32_t span);
+
 /* ---- width classes -------------------------------------------------------------------------
  *
  * How much room there is, as a *class* rather than a number.

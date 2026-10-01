@@ -272,3 +272,11 @@ progress contrast 12 1024x768 f9b72e674b43d012
 progress contrast 16 1024x768 51ee882724b8baee
 progress colorblind 12 1024x768 041483e69eac5b96
 progress colorblind 16 1024x768 921372a641395b0c
+dashboard dark 12 1600x1000 7cfbc226a8fbd36c
+dashboard dark 16 1600x1000 3d64e9047cc7800f
+dashboard light 12 1600x1000 caad22e539ed1289
+dashboard light 16 1600x1000 98548f5ad4b4d7a6
+dashboard contrast 12 1600x1000 c21126a000c60d4e
+dashboard contrast 16 1600x1000 598e6ce4a6013b16
+dashboard colorblind 12 1600x1000 2e183b6aeed92448
+dashboard colorblind 16 1600x1000 690c131432c50cc4

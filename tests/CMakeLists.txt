@@ -10,6 +10,7 @@ set(INKCELL_TEST_SUITES
     suites/ui_app_bar.c
     suites/ui_bubble.c
     suites/ui_damage.c
+    suites/ui_dashboard.c
     suites/ui_focus.c
     suites/ui_pointer.c
     suites/ui_focus_ring.c

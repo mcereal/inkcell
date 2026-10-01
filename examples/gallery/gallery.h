@@ -139,6 +139,7 @@ void gallery_scene_list(struct inkcell_draw_state *state);
 void gallery_scene_grid(struct inkcell_draw_state *state);
 void gallery_scene_grid_covers(struct inkcell_draw_state *state);
 void gallery_scene_cards(struct inkcell_draw_state *state);
+void gallery_scene_dashboard(struct inkcell_draw_state *state);
 void gallery_scene_meters(struct inkcell_draw_state *state);
 void gallery_scene_transcript(struct inkcell_draw_state *state);
 void gallery_scene_overlays(struct inkcell_draw_state *state);
