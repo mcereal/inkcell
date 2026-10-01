@@ -925,6 +925,134 @@ INKCELL_TEST_CASE(sdl_mouse_clicks_hints_and_hands_on_the_rest, unit) {
     record_success(test_name);
 }
 
+/* What a menu chord reached: the commands in order, and whether an item is on offer. */
+struct sdl_menu_heard {
+    uint32_t commands[8];
+    unsigned count;
+    bool refuse_two;
+    bool text_active;
+    char text[32];
+    unsigned shortcuts;
+};
+
+static bool sdl_menu_enabled(void *userdata, uint32_t command) {
+    return !(((struct sdl_menu_heard *)userdata)->refuse_two && command == 2U);
+}
+
+static void sdl_menu_on_menu(void *userdata, uint32_t command) {
+    struct sdl_menu_heard *const heard = (struct sdl_menu_heard *)userdata;
+    if (heard->count < 8U) {
+        heard->commands[heard->count++] = command;
+    }
+}
+
+static bool sdl_menu_text_active(void *userdata) {
+    return ((struct sdl_menu_heard *)userdata)->text_active;
+}
+
+static void sdl_menu_on_text(void *userdata, const char *text) {
+    struct sdl_menu_heard *const heard = (struct sdl_menu_heard *)userdata;
+    snprintf(heard->text, sizeof heard->text, "%s", text);
+}
+
+static void sdl_menu_on_shortcut(void *userdata, char letter) {
+    (void)letter;
+    ((struct sdl_menu_heard *)userdata)->shortcuts += 1U;
+}
+
+/*
+ * Where there is no menu bar - which is every driver a test runs under, the dummy one included
+ * on a Mac - the table is still the chords: an item's key with the primary modifier runs it,
+ * once, and only while it is offered. A chord the table does not name is the old shortcut, and
+ * Paste is inkcell's own.
+ */
+INKCELL_TEST_CASE(sdl_menu_chords_run_the_item_once_and_only_when_offered, unit) {
+    sdl_test_setenv("SDL_VIDEODRIVER", "dummy", false);
+    INKCELL_TEST_FAIL_IF(!inkcell_backend_sdl_is_available(), "the dummy driver must start");
+
+    static const struct inkcell_sdl_menu_item items[] = {
+        {.menu = INKCELL_SDL_MENU_FILE, .label = INKCELL_STR_TIME_NOW, .key = 'n', .command = 1U},
+        {.menu = INKCELL_SDL_MENU_VIEW, .label = INKCELL_STR_TIME_NOW, .key = '1', .command = 2U},
+        {.menu = INKCELL_SDL_MENU_GO, .label = INKCELL_STR_TIME_NOW, .key = '[', .command = 3U},
+        {.menu = INKCELL_SDL_MENU_EDIT,
+         .label = INKCELL_STR_TIME_NOW,
+         .key = 'v',
+         .command = INKCELL_SDL_MENU_PASTE},
+        {.menu = INKCELL_SDL_MENU_HELP, .label = INKCELL_STR_TIME_NOW, .command = 4U},
+    };
+    static const inkcell_str_id titles[INKCELL_SDL_MENU_COUNT] = {0};
+    struct sdl_test_host host = {.added_fd = -1, .removed_fd = -1};
+    struct sdl_menu_heard heard;
+    memset(&heard, 0, sizeof heard);
+    struct inkcell_backend_sdl_context context = {
+        .host = {.ctx = &host,
+                 .add_fd = sdl_test_add_fd,
+                 .remove_fd = sdl_test_remove_fd,
+                 .request_stop = sdl_test_request_stop},
+        .on_shortcut = sdl_menu_on_shortcut,
+        .text_input_active = sdl_menu_text_active,
+        .on_text_input = sdl_menu_on_text,
+        .menu = items,
+        .menu_count = sizeof items / sizeof items[0],
+        .menu_titles = titles,
+        .menu_enabled = sdl_menu_enabled,
+        .on_menu = sdl_menu_on_menu,
+        .key_userdata = &heard,
+        .title = "inkcell tests",
+        .width = SDL_TEST_WIDTH,
+        .height = SDL_TEST_HEIGHT,
+    };
+    const struct inkcell_backend *const backend = inkcell_backend_sdl();
+    void *state = NULL;
+    INKCELL_TEST_FAIL_IF(backend->init(&state, &context) != 0, "the dummy driver must open");
+    INKCELL_TEST_FAIL_IF_CLEANUP(host.callback == NULL, backend->shutdown(state, &context),
+                                 "the pump must be on the host's loop");
+    SDL_PumpEvents();
+    SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+
+#if defined(__APPLE__)
+    const SDL_Keymod primary = KMOD_GUI;
+#else
+    const SDL_Keymod primary = KMOD_CTRL;
+#endif
+    sdl_push_key(SDL_SCANCODE_N, SDLK_n, primary, 0U);
+    sdl_push_key(SDL_SCANCODE_N, SDLK_n, primary, 1U);
+    sdl_push_key(SDL_SCANCODE_1, SDLK_1, primary, 0U);
+    sdl_push_key(SDL_SCANCODE_LEFTBRACKET, SDLK_LEFTBRACKET, primary, 0U);
+    sdl_push_key(SDL_SCANCODE_N, SDLK_n, (SDL_Keymod)(primary | KMOD_SHIFT), 0U);
+    sdl_push_key(SDL_SCANCODE_N, SDLK_n, KMOD_NONE, 0U);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.count != 3U || heard.commands[0] != 1U ||
+                                     heard.commands[1] != 2U || heard.commands[2] != 3U,
+                                 backend->shutdown(state, &context),
+                                 "each chord should run its item once, and a repeat none");
+
+    heard.refuse_two = true;
+    sdl_push_key(SDL_SCANCODE_1, SDLK_1, primary, 0U);
+    sdl_push_key(SDL_SCANCODE_Q, SDLK_q, primary, 0U);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.count != 3U || heard.shortcuts != 1U,
+                                 backend->shutdown(state, &context),
+                                 "an item not on offer runs nothing, and an unnamed chord is a "
+                                 "shortcut");
+
+    SDL_SetClipboardText("pasted");
+    sdl_push_key(SDL_SCANCODE_V, SDLK_v, primary, 0U);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(heard.text[0] != '\0' || heard.count != 3U,
+                                 backend->shutdown(state, &context),
+                                 "Paste with no text field open should do nothing");
+    heard.text_active = true;
+    sdl_push_key(SDL_SCANCODE_V, SDLK_v, primary, 0U);
+    sdl_pump(&host);
+    INKCELL_TEST_FAIL_IF_CLEANUP(strcmp(heard.text, "pasted") != 0 || heard.count != 3U,
+                                 backend->shutdown(state, &context),
+                                 "Paste should be inkcell's own and never reach on_menu");
+
+    backend->shutdown(state, &context);
+    record_success(test_name);
+}
+
 INKCELL_TEST_CASE(sdl_action_hint_falls_back_to_the_key_handler, unit) {
     sdl_test_setenv("SDL_VIDEODRIVER", "dummy", false);
     INKCELL_TEST_FAIL_IF(!inkcell_backend_sdl_is_available(), "the dummy driver must start");

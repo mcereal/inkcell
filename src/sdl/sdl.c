@@ -161,6 +161,20 @@ struct inkcell_sdl_panel {
     bool (*text_input_active)(void *userdata);
     void (*on_text_input)(void *userdata, const char *text);
     bool text_active;
+    /*
+     * The menu bar and its chords - see `struct inkcell_sdl_menu_item`. `menu_event` is the SDL
+     * event a chosen item arrives as (0 with no menu), and `native_menu` says AppKit has the
+     * table: its chords are then the menu bar's to answer, and a key event for one is dropped
+     * here rather than answered twice. `menu_locale` is what the titles were last read in.
+     */
+    const struct inkcell_sdl_menu_item *menu;
+    size_t menu_count;
+    const inkcell_str_id *menu_titles;
+    bool (*menu_enabled)(void *userdata, uint32_t command);
+    void (*on_menu)(void *userdata, uint32_t command);
+    uint32_t menu_event;
+    bool native_menu;
+    const struct inkcell_i18n_locale *menu_locale;
     void *key_userdata;
     /* The mouse: what it pressed, where a scroll has got to, and which cursor it is showing.
        See include/inkcell/ui/pointer.h. The cursors are NULL where the video driver has none -
@@ -708,6 +722,12 @@ static void inkcell_backend_sdl_present(void *state_ptr, const void *snapshot, v
 #if defined(__APPLE__)
     /* Before the render, so the tabs are drawn clear of the buttons where they are now... */
     (void)inkcell_sdl_titlebar_sync(panel, false);
+    /* A frame is where the application changes language, too, and the menu bar is not drawn
+       by it. A pointer comparison, so a frame in the same locale asks AppKit nothing. */
+    if (panel->native_menu && inkcell_i18n_locale() != panel->menu_locale) {
+        panel->menu_locale = inkcell_i18n_locale();
+        inkcell_sdl_cocoa_retitle_menu();
+    }
 #endif
     inkcell_fb_render(state, snapshot);
     panel->presented = true;
@@ -863,6 +883,60 @@ static void inkcell_sdl_deliver_text(struct inkcell_sdl_panel *panel, const char
     panel->on_text_input(panel->key_userdata, text);
 }
 
+/* ---- the menu bar --------------------------------------------------------------------- */
+
+/* The item whose chord `symbol` is, or -1. SDL's symbol rather than its scancode, so the chord
+   follows the keyboard's layout as the menu bar's does. */
+static long inkcell_sdl_menu_find(const struct inkcell_sdl_panel *panel, SDL_Keycode symbol) {
+    for (size_t i = 0U; i < panel->menu_count; ++i) {
+        const char key = panel->menu[i].key;
+        if (key != '\0' && (SDL_Keycode)(unsigned char)key == symbol) {
+            return (long)i;
+        }
+    }
+    return -1;
+}
+
+static bool inkcell_sdl_menu_offered(struct inkcell_sdl_panel *panel, size_t index) {
+    if (index >= panel->menu_count) {
+        return false;
+    }
+    const uint32_t command = panel->menu[index].command;
+    if (command == INKCELL_SDL_MENU_PASTE) {
+        return panel->text_active && SDL_HasClipboardText() == SDL_TRUE;
+    }
+    return panel->on_menu != NULL &&
+           (panel->menu_enabled == NULL || panel->menu_enabled(panel->key_userdata, command));
+}
+
+static void inkcell_sdl_paste(struct inkcell_sdl_panel *panel);
+
+static void inkcell_sdl_menu_run(struct inkcell_sdl_panel *panel, size_t index) {
+    if (!inkcell_sdl_menu_offered(panel, index)) {
+        return;
+    }
+    inkcell_latency_event(inkcell_latency_now_us());
+    inkcell_latency_press();
+    const uint32_t command = panel->menu[index].command;
+    if (command == INKCELL_SDL_MENU_PASTE) {
+        inkcell_sdl_paste(panel);
+        return;
+    }
+    panel->on_menu(panel->key_userdata, command);
+}
+
+#if defined(__APPLE__)
+static bool inkcell_sdl_menu_validate(void *ctx, size_t index) {
+    return inkcell_sdl_menu_offered((struct inkcell_sdl_panel *)ctx, index);
+}
+#endif
+
+static void inkcell_sdl_paste(struct inkcell_sdl_panel *panel) {
+    char *const clipboard = SDL_GetClipboardText();
+    inkcell_sdl_deliver_text(panel, clipboard);
+    SDL_free(clipboard);
+}
+
 static void inkcell_sdl_handle_key(struct inkcell_sdl_panel *panel, const SDL_KeyboardEvent *key) {
     /* A desktop shortcut must not also become a controller button (notably Ctrl+X).
        Use SDL's key symbol so the letter follows the active keyboard layout. */
@@ -875,12 +949,25 @@ static void inkcell_sdl_handle_key(struct inkcell_sdl_panel *panel, const SDL_Ke
 #endif
     if ((key->keysym.mod & (KMOD_CTRL | KMOD_GUI)) != 0) {
         const SDL_Keycode symbol = key->keysym.sym;
+        /*
+         * A menu item's chord. Where AppKit has the menu bar it has already seen this key and
+         * answered it - SDL hands the event on as well - so it is dropped; elsewhere this is the
+         * menu bar, and runs the item. Either way it goes no further: one chord, one meaning.
+         */
+        const long item = (key->keysym.mod & primary) != 0 &&
+                                  (key->keysym.mod & (other_command | KMOD_ALT | KMOD_SHIFT)) == 0
+                              ? inkcell_sdl_menu_find(panel, symbol)
+                              : -1;
+        if (item >= 0) {
+            if (!panel->native_menu && key->repeat == 0U) {
+                inkcell_sdl_menu_run(panel, (size_t)item);
+            }
+            return;
+        }
         if (panel->text_active && (key->keysym.mod & primary) != 0 &&
             (key->keysym.mod & (other_command | KMOD_ALT | KMOD_SHIFT)) == 0 && symbol == SDLK_v &&
             key->repeat == 0U) {
-            char *const clipboard = SDL_GetClipboardText();
-            inkcell_sdl_deliver_text(panel, clipboard);
-            SDL_free(clipboard);
+            inkcell_sdl_paste(panel);
             return;
         }
         if (panel->on_shortcut != NULL && (key->keysym.mod & primary) != 0 &&
@@ -1126,6 +1213,12 @@ static int inkcell_sdl_pump(int fd, uint32_t events, void *userdata) {
 
     SDL_Event event;
     while (SDL_PollEvent(&event) != 0) {
+        if (panel->menu_event != 0U && event.type == panel->menu_event) {
+            if (event.user.code >= 0) {
+                inkcell_sdl_menu_run(panel, (size_t)event.user.code);
+            }
+            continue;
+        }
         switch (event.type) {
         case SDL_QUIT:
             inkcell_sdl_request_stop(panel);
@@ -1265,6 +1358,28 @@ static void inkcell_sdl_pump_stop(struct inkcell_sdl_panel *panel) {
     }
     inkwell_timer_close(panel->timer_fd);
     panel->timer_fd = -1;
+}
+
+/* The table, and the event a chosen item arrives as. SDL hands out event types for the life of
+   the process, so one is taken once and every window after the first reuses it. */
+static void inkcell_sdl_menu_open(struct inkcell_sdl_panel *panel,
+                                  const struct inkcell_backend_sdl_context *context) {
+    static uint32_t event_type;
+    panel->menu = context->menu;
+    panel->menu_count = context->menu != NULL ? context->menu_count : 0U;
+    panel->menu_titles = context->menu_titles;
+    panel->menu_enabled = context->menu_enabled;
+    panel->on_menu = context->on_menu;
+    panel->native_menu = false;
+    panel->menu_event = 0U;
+    if (panel->menu_count == 0U) {
+        return;
+    }
+    if (event_type == 0U) {
+        const Uint32 registered = SDL_RegisterEvents(1);
+        event_type = registered != (Uint32)-1 ? registered : 0U;
+    }
+    panel->menu_event = event_type;
 }
 
 /* Never fatal: a window that cannot be driven is still a window, and an application that got
@@ -1567,6 +1682,7 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
     panel->text_input_active = context->text_input_active;
     panel->on_text_input = context->on_text_input;
     panel->key_userdata = context->key_userdata;
+    inkcell_sdl_menu_open(panel, context);
     panel->on_click = context->on_click;
     panel->on_context = context->on_context;
     panel->click_userdata = context->click_userdata;
@@ -1594,6 +1710,18 @@ static int inkcell_backend_sdl_init(void **state_out, void *userdata) {
         }
     }
     (void)inkcell_sdl_titlebar_sync(panel, true);
+    if (panel->menu_event != 0U && panel->menu_titles != NULL) {
+        const struct inkcell_sdl_cocoa_menu menu = {
+            .items = panel->menu,
+            .count = panel->menu_count,
+            .titles = panel->menu_titles,
+            .enabled = inkcell_sdl_menu_validate,
+            .ctx = panel,
+            .event_type = panel->menu_event,
+        };
+        panel->native_menu = inkcell_sdl_cocoa_install_menu(panel->window, &menu);
+        panel->menu_locale = inkcell_i18n_locale();
+    }
 #endif
     inkcell_sdl_pump_start(panel);
 
@@ -1620,6 +1748,12 @@ static void inkcell_backend_sdl_shutdown(void *state_ptr, void *userdata) {
     }
     struct inkcell_draw_state *const state = &panel->state;
     inkcell_sdl_pump_stop(panel);
+#if defined(__APPLE__)
+    if (panel->native_menu) {
+        inkcell_sdl_cocoa_remove_menu();
+        panel->native_menu = false;
+    }
+#endif
     if (panel->text_active) {
         SDL_StopTextInput();
         panel->text_active = false;

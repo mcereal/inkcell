@@ -17,10 +17,13 @@
  *     something: `top_leading_inset`, which is 0 everywhere but here.
  */
 
+#include "inkcell/ui/sdl.h"
 #include "inkcell/ui/theme.h"
 
 #include <SDL.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 /*
  * Paints `window`'s title bar in `bar`, hides its title and drops the separator, and picks the
@@ -78,5 +81,36 @@ struct inkcell_sdl_cocoa_controls {
  */
 struct inkcell_sdl_cocoa_controls inkcell_sdl_cocoa_place_controls(SDL_Window *window,
                                                                    int strip_px);
+
+/*
+ * The application's menus, in the menu bar SDL put up.
+ *
+ * SDL builds a bar of its own when it starts AppKit - the application menu (About, a
+ * Preferences item that does nothing, Hide, Quit) and Window - and this adds to it rather than
+ * replacing it: File, Edit, View and Go go in front of Window, Help after it, and the
+ * application's own items take the dead Preferences item's place. Choosing one pushes an SDL
+ * event of `event_type` whose `user.code` is the item's index in `items`, so the application
+ * hears it from its own loop turn and not from inside AppKit's menu tracking. `enabled` is
+ * asked, with that index, whenever AppKit validates the item - as a menu opens, and before a
+ * chord is let through.
+ */
+struct inkcell_sdl_cocoa_menu {
+    const struct inkcell_sdl_menu_item *items;
+    size_t count;
+    const inkcell_str_id *titles;
+    bool (*enabled)(void *ctx, size_t index);
+    void *ctx;
+    uint32_t event_type;
+};
+
+/* False when `window` is not a Cocoa one or SDL put up no bar, and then nothing was changed.
+   `menu` is copied; what it points at is read until inkcell_sdl_cocoa_remove_menu(). */
+bool inkcell_sdl_cocoa_install_menu(SDL_Window *window, const struct inkcell_sdl_cocoa_menu *menu);
+
+/* Every title read again from the catalog: the locale has changed. */
+void inkcell_sdl_cocoa_retitle_menu(void);
+
+/* The bar back as SDL left it. A no-op when nothing was installed. */
+void inkcell_sdl_cocoa_remove_menu(void);
 
 #endif /* INKCELL_SDL_COCOA_H */
