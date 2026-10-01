@@ -124,6 +124,9 @@ struct inkcell_fb_panel {
     bool pan_failed_logged;
     /* Whether page 0 holds a frame yet, for frame() on a panel drawn directly. */
     bool presented;
+    /* <PREFIX>_FB_ROTATE=180: the panel is mounted upside down (the Miyoo Mini's), so the
+       frame is drawn upright and turned over on its way to the mapping. */
+    bool rotate180;
 };
 
 static struct inkcell_fb_panel *inkcell_fb_panel_of(void *state_ptr) {
@@ -217,15 +220,21 @@ static int inkcell_backend_fb_init(void **state_out, void *userdata) {
             inkwell_log_warn("ui", "Frame buffers unavailable; drawing directly");
         }
     }
+    panel->rotate180 = inkwell_env_int("FB_ROTATE", 0, 270, 0) == 180;
+    if (panel->rotate180 && panel->draw_buffer == NULL) {
+        inkwell_log_warn("ui", "FB_ROTATE=180 needs a draw buffer; drawing unrotated");
+        panel->rotate180 = false;
+    }
     inkcell_fb_state_apply_theme_from_env(state);
     inkcell_fb_set_app(state, context->app);
 
     inkwell_log_info("ui",
                      "Framebuffer UI backend active (%ux%u %u bpp, virtual %ux%u, offset %u,%u, "
-                     "theme %s at scale %d)",
+                     "theme %s at scale %d%s)",
                      panel->var.xres, panel->var.yres, panel->var.bits_per_pixel,
                      panel->var.xres_virtual, panel->var.yres_virtual, panel->var.xoffset,
-                     panel->var.yoffset, state->theme->id, state->scale);
+                     panel->var.yoffset, state->theme->id, state->scale,
+                     panel->rotate180 ? ", rotated 180" : "");
 
     if (state_out != NULL) {
         *state_out = panel;
@@ -295,9 +304,13 @@ static void inkcell_backend_fb_present(void *state_ptr, const void *snapshot, vo
         inkcell_fb_render(state, snapshot);
         state->surface.pixels = mapping;
         state->surface.size = mapping_size;
-        written = inkcell_fb_copy_damage(state, panel->draw_buffer, panel->previous_frame,
-                                         !panel->frame_valid,
-                                         panel->var.yres_virtual >= 2U * state->surface.height);
+        const bool mirror = panel->var.yres_virtual >= 2U * state->surface.height;
+        written = panel->rotate180
+                      ? inkcell_fb_copy_damage_rotated180(state, panel->draw_buffer,
+                                                          panel->previous_frame,
+                                                          !panel->frame_valid, mirror)
+                      : inkcell_fb_copy_damage(state, panel->draw_buffer, panel->previous_frame,
+                                               !panel->frame_valid, mirror);
         panel->frame_valid = true;
     } else {
         state->partial_disabled = true;

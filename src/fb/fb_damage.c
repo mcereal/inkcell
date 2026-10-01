@@ -119,6 +119,54 @@ size_t inkcell_fb_copy_damage(struct inkcell_draw_state *state, const uint8_t *f
 }
 
 /*
+ * The same copy onto a panel mounted upside down.
+ *
+ * Row y of the frame lands on row height-1-y, and its pixels in reverse order, so a damaged span
+ * [first, end) becomes [row_bytes-end, row_bytes-first) on the panel. The comparison against
+ * `previous` stays in frame order: only where the pixels land moves.
+ */
+size_t inkcell_fb_copy_damage_rotated180(struct inkcell_draw_state *state, const uint8_t *frame,
+                                         uint8_t *previous, bool force, bool mirror) {
+    if (state == NULL || frame == NULL || previous == NULL) {
+        return 0U;
+    }
+    const size_t stride = state->surface.stride;
+    const size_t bpp = state->surface.bytes_per_pixel;
+    const size_t height = state->surface.height;
+    const size_t row_bytes = (size_t)state->surface.width * bpp;
+    const size_t page_bytes = stride * height;
+    if (bpp == 0U || row_bytes > stride || page_bytes > state->surface.size) {
+        return 0U;
+    }
+    mirror = mirror && page_bytes <= state->surface.size / 2U;
+    size_t written = 0U;
+    for (uint32_t y = 0U; y < height; ++y) {
+        size_t first;
+        size_t end;
+        if (!inkcell_fb_damage_row(state, frame, previous, y, force, &first, &end)) {
+            continue;
+        }
+        const size_t offset = (size_t)y * stride;
+        uint8_t *const panel_row = state->surface.pixels + (height - 1U - y) * stride;
+        const uint8_t *const src = frame + offset;
+        memcpy(previous + offset + first, src + first, end - first);
+        /* A span may run into the stride's padding, which has no place on a turned-over row. */
+        const size_t pixels_end = end < row_bytes ? end : row_bytes;
+        for (size_t at = first; at < pixels_end; at += bpp) {
+            uint8_t *const dst = panel_row + (row_bytes - bpp - at);
+            memcpy(dst, src + at, bpp);
+            if (mirror) {
+                memcpy(dst + page_bytes, src + at, bpp);
+            }
+        }
+        if (pixels_end > first) {
+            written += (pixels_end - first) * (mirror ? 2U : 1U);
+        }
+    }
+    return written;
+}
+
+/*
  * The same rows, as rectangles.
  *
  * What a texture upload needs where the copy above needs spans: SDL_UpdateTexture() and every

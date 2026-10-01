@@ -132,6 +132,28 @@ static const char *const k_caps_keyboard[INKCELL_BUTTON_COUNT] = {
 };
 
 /*
+ * The Miyoo Mini and Mini Plus: a gpio-keys node that reports every button as a keyboard key.
+ *
+ * Codes from Onion's keymap (HW_BTN_* in its keymap_hw.h), read back off a Mini Plus's log for
+ * all but X, Y and L2. The pad is not a keyboard, so most of the convention in
+ * src/input/input.c is wrong for it: START reports KEY_ENTER (which the convention reads as A),
+ * A reports KEY_SPACE (Y), R2 reports KEY_BACKSPACE (B) and L2 reports KEY_TAB (R1). Every one of
+ * those is bound here so the profile wins. MENU is KEY_ESC, which is already a quit key.
+ */
+static const struct inkcell_input_binding k_bindings_miyoo[] = {
+    {KEY_SPACE, INKCELL_KEY_A},          /* 57 */
+    {KEY_LEFTCTRL, INKCELL_KEY_B},       /* 29 */
+    {KEY_LEFTSHIFT, INKCELL_KEY_X},      /* 42 */
+    {KEY_LEFTALT, INKCELL_KEY_Y},        /* 56 */
+    {KEY_E, INKCELL_KEY_L1},             /* 18 */
+    {KEY_T, INKCELL_KEY_R1},             /* 20 */
+    {KEY_TAB, INKCELL_KEY_L2},           /* 15 */
+    {KEY_BACKSPACE, INKCELL_KEY_R2},     /* 14 */
+    {KEY_RIGHTCTRL, INKCELL_KEY_SELECT}, /* 97 */
+    {KEY_ENTER, INKCELL_KEY_START},      /* 28 */
+};
+
+/*
  * The registry. The default is first, which is also the order a listing walks.
  *
  * Only devices whose mapping somebody has actually measured belong here. A profile guessed from
@@ -156,6 +178,12 @@ static const struct inkcell_input_profile k_profiles[] = {
         .bindings = k_bindings_keyboard,
         .binding_count = INKWELL_ARRAY_LEN(k_bindings_keyboard),
         .caps = k_caps_keyboard,
+    },
+    {
+        .name = "miyoo",
+        .bindings = k_bindings_miyoo,
+        .binding_count = INKWELL_ARRAY_LEN(k_bindings_miyoo),
+        .caps = k_caps_abxy,
     },
 };
 

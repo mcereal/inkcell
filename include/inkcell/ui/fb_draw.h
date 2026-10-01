@@ -1196,6 +1196,14 @@ size_t inkcell_fb_copy_damage(struct inkcell_draw_state *state, const uint8_t *f
                               uint8_t *previous, bool force, bool mirror);
 
 /*
+ * inkcell_fb_copy_damage() onto a panel mounted upside down (the Miyoo Mini's): the same spans,
+ * written rotated by 180 degrees. `previous` is kept in frame order, so the damage comparison is
+ * the unrotated one.
+ */
+size_t inkcell_fb_copy_damage_rotated180(struct inkcell_draw_state *state, const uint8_t *frame,
+                                         uint8_t *previous, bool force, bool mirror);
+
+/*
  * The same rows, as rectangles: what a texture upload takes where the copy above takes spans.
  *
  * A run of consecutive damaged rows comes back as one rectangle, as wide as the widest row in
