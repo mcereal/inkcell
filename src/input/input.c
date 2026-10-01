@@ -689,8 +689,8 @@ static int inkcell_input_event_callback(int fd, uint32_t events, void *userdata)
                It is handed over before the mapping runs, so a probe that is measuring gets the
                moment the button moved rather than the moment this loop got round to it - which
                on a busy loop are the two ends of the interesting part. */
-            inkcell_latency_event((uint64_t)batch[i].time.tv_sec * 1000000U +
-                                  (uint64_t)batch[i].time.tv_usec);
+            inkcell_latency_event((uint64_t)batch[i].input_event_sec * 1000000U +
+                                  (uint64_t)batch[i].input_event_usec);
             inkcell_input_handle_device_event(input, fd, batch[i].type, batch[i].code,
                                               batch[i].value);
             if (input->stopping) {

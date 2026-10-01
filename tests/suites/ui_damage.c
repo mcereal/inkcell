@@ -84,6 +84,43 @@ INKCELL_TEST_CASE(damage_preserves_mirror_and_padding, unit) {
  * two over a surface sized for one used to be a write `page_bytes` past the end. The guard is
  * inside, so the answer to "may I mirror" is the surface's rather than the caller's.
  */
+/* An upside-down panel: pixel (x, y) of the frame lands on (width-1-x, height-1-y), and the
+   stride padding is still never written. */
+INKCELL_TEST_CASE(damage_rotated180_turns_the_frame_over, unit) {
+    uint8_t mapping[80];
+    uint8_t previous[DAMAGE_PAGE] = {0};
+    uint8_t frame[DAMAGE_PAGE] = {0};
+    memset(mapping, 0xA5, sizeof mapping);
+    for (size_t y = 0U; y < DAMAGE_ROWS; ++y) {
+        for (size_t x = 0U; x < 3U; ++x) {
+            memset(frame + y * DAMAGE_STRIDE + x * 4U, (int)(1U + y * 3U + x), 4U);
+        }
+    }
+    struct inkcell_draw_state state = damage_state(mapping, sizeof mapping);
+
+    INKCELL_TEST_FAIL_IF(inkcell_fb_copy_damage_rotated180(&state, frame, previous, true, true) !=
+                             48U,
+                         "first frame must write both pages");
+    for (size_t page = 0U; page < 2U; ++page) {
+        for (size_t y = 0U; y < DAMAGE_ROWS; ++y) {
+            const uint8_t *row = mapping + page * DAMAGE_PAGE + y * DAMAGE_STRIDE;
+            for (size_t x = 0U; x < 3U; ++x) {
+                const uint8_t want = (uint8_t)(1U + (DAMAGE_ROWS - 1U - y) * 3U + (2U - x));
+                INKCELL_TEST_FAIL_IF(row[x * 4U] != want, "pixel must land rotated 180");
+            }
+            INKCELL_TEST_FAIL_IF(row[12] != 0xA5, "stride padding must not be written");
+        }
+    }
+
+    frame[4] ^= 0x80U; /* pixel (1, 0) */
+    INKCELL_TEST_FAIL_IF(inkcell_fb_copy_damage_rotated180(&state, frame, previous, false, false) !=
+                             4U,
+                         "one changed pixel must write one pixel");
+    INKCELL_TEST_FAIL_IF(mapping[DAMAGE_STRIDE + 4U] != frame[4],
+                         "the change must land at (1, height-1)");
+    record_success(test_name);
+}
+
 INKCELL_TEST_CASE(damage_refuses_a_mirror_that_does_not_fit, unit) {
     uint8_t mapping[DAMAGE_PAGE];
     uint8_t previous[DAMAGE_PAGE] = {0};
