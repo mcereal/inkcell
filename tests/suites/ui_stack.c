@@ -551,3 +551,101 @@ INKCELL_TEST_CASE(body_box_measure_narrows_a_wide_window, unit) {
     INKCELL_TEST_FAIL_IF(!row_inside, "a list row follows the column rather than the surface");
     record_success(test_name);
 }
+
+/* ---- the board -------------------------------------------------------------------------------
+ *
+ * What a board is for is that a tile spanning two tracks ends exactly where the second of two
+ * tiles under it ends - so that is the case that sweeps widths, the same way the stack's own
+ * exactness case does.
+ */
+
+INKCELL_TEST_CASE(dash_spans_line_up_with_the_tracks_under_them, unit) {
+    for (int width = 300; width <= 1400; width += 7) {
+        for (uint32_t columns = 1U; columns <= INKCELL_DASH_COLUMNS_MAX; ++columns) {
+            struct inkcell_dash dash;
+            const struct inkcell_box box = {.x = 13, .y = 40, .w = width, .h = 600};
+            inkcell_dash_begin(&dash, box, columns, 9);
+
+            /* One row of every track on its own, then one row of a single span across them. */
+            INKCELL_TEST_FAIL_IF(!inkcell_dash_row(&dash, 50), "the first row fits");
+            struct inkcell_box last = {0, 0, 0, 0};
+            for (uint32_t i = 0U; i < columns; ++i) {
+                const struct inkcell_box cell = inkcell_dash_cell(&dash, 1U);
+                INKCELL_TEST_FAIL_IF(inkcell_box_is_empty(cell), "every track has a cell");
+                if (i > 0U) {
+                    INKCELL_TEST_FAIL_IF(cell.x != last.x + last.w + 9,
+                                         "neighbours are one gap apart, never overlapping");
+                }
+                last = cell;
+            }
+            INKCELL_TEST_FAIL_IF(last.x + last.w != box.x + box.w,
+                                 "the last track ends at the box's edge at every width");
+            INKCELL_TEST_FAIL_IF(!inkcell_box_is_empty(inkcell_dash_cell(&dash, 1U)),
+                                 "a full row has nothing left to hand out");
+
+            INKCELL_TEST_FAIL_IF(!inkcell_dash_row(&dash, 50), "the second row fits");
+            const struct inkcell_box whole = inkcell_dash_cell(&dash, columns);
+            INKCELL_TEST_FAIL_IF(whole.x != box.x || whole.w != box.w,
+                                 "a span of every track is the whole board");
+            INKCELL_TEST_FAIL_IF(whole.y != 40 + 50 + 9, "a row starts one gap under the last");
+        }
+    }
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(dash_wide_tile_ends_where_the_narrow_ones_under_it_do, unit) {
+    struct inkcell_dash dash;
+    inkcell_dash_begin(&dash, (struct inkcell_box){.x = 0, .y = 0, .w = 1001, .h = 400}, 3U, 10);
+    INKCELL_TEST_FAIL_IF(!inkcell_dash_row(&dash, 100), "the first row fits");
+    const struct inkcell_box wide = inkcell_dash_cell(&dash, 2U);
+    const struct inkcell_box side = inkcell_dash_cell(&dash, 1U);
+    INKCELL_TEST_FAIL_IF(!inkcell_dash_row(&dash, 100), "the second row fits");
+    const struct inkcell_box a = inkcell_dash_cell(&dash, 1U);
+    const struct inkcell_box b = inkcell_dash_cell(&dash, 1U);
+    const struct inkcell_box c = inkcell_dash_cell(&dash, 1U);
+    INKCELL_TEST_FAIL_IF(wide.x != a.x, "both rows start at the board's edge");
+    INKCELL_TEST_FAIL_IF(wide.x + wide.w != b.x + b.w,
+                         "a two-track tile ends where the second tile under it does");
+    INKCELL_TEST_FAIL_IF(side.x != c.x || side.w != c.w, "and the third track is one track");
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(dash_refuses_a_row_it_has_no_room_for, unit) {
+    struct inkcell_dash dash;
+    inkcell_dash_begin(&dash, (struct inkcell_box){.x = 0, .y = 100, .w = 600, .h = 300}, 2U, 20);
+    INKCELL_TEST_FAIL_IF(!inkcell_box_is_empty(inkcell_dash_cell(&dash, 1U)),
+                         "no cell before a row is opened");
+    INKCELL_TEST_FAIL_IF(inkcell_dash_left(&dash) != 300, "an empty board has all its height");
+    INKCELL_TEST_FAIL_IF(!inkcell_dash_row(&dash, 200), "a row that fits is opened");
+    INKCELL_TEST_FAIL_IF(inkcell_dash_left(&dash) != 80, "what is left is less the row and a gap");
+    INKCELL_TEST_FAIL_IF(inkcell_dash_row(&dash, 81), "a row one pixel too tall is refused");
+    INKCELL_TEST_FAIL_IF(!inkcell_dash_row(&dash, inkcell_dash_left(&dash)),
+                         "and the rest of the board is a row");
+    INKCELL_TEST_FAIL_IF(inkcell_dash_left(&dash) != 0, "after which nothing is left");
+    const struct inkcell_box wide = inkcell_dash_cell(&dash, 5U);
+    INKCELL_TEST_FAIL_IF(wide.w != 600, "a span past the row's end is cut to the row");
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(dash_columns_fit_the_tile_width, unit) {
+    INKCELL_TEST_FAIL_IF(inkcell_dash_columns(1000, 300, 20, 6U) != 3U,
+                         "three 300s and two gaps fit in 1000, four do not");
+    INKCELL_TEST_FAIL_IF(inkcell_dash_columns(940, 300, 20, 6U) != 3U, "exactly three fit");
+    INKCELL_TEST_FAIL_IF(inkcell_dash_columns(939, 300, 20, 6U) != 2U, "a pixel less is two");
+    INKCELL_TEST_FAIL_IF(inkcell_dash_columns(100, 300, 20, 6U) != 1U,
+                         "a board narrower than a tile still has one track");
+    INKCELL_TEST_FAIL_IF(inkcell_dash_columns(5000, 300, 20, 4U) != 4U,
+                         "and never more than asked");
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(dash_narrows_gaps_wider_than_the_board, unit) {
+    struct inkcell_dash dash;
+    const struct inkcell_box box = {.x = 5, .y = 0, .w = 10, .h = 100};
+    inkcell_dash_begin(&dash, box, 3U, 20);
+    INKCELL_TEST_FAIL_IF(!inkcell_dash_row(&dash, 50), "a row fits");
+    const struct inkcell_box whole = inkcell_dash_cell(&dash, 3U);
+    INKCELL_TEST_FAIL_IF(whole.x != box.x || whole.w != box.w,
+                         "a full span is the board, however wide the gaps asked for were");
+    record_success(test_name);
+}

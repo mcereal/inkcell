@@ -53,17 +53,23 @@ struct inkcell_fb_card_metrics {
     struct inkcell_rgb edge_ink; /* the hairline, where the variant paints one */
 };
 
+/*
+ * The card's metrics at an explicit panel position, which is the whole of the difference between a
+ * card in a column and a card in a box: a column's card is as wide as the content column and a
+ * box's is as wide as the box. Everything inside - the inset, the label column, where the verbs
+ * go - is the same arithmetic either way, so it is one function with the panel handed in.
+ */
 static struct inkcell_fb_card_metrics
-inkcell_fb_card_measure(const struct inkcell_draw_state *state,
-                        const struct inkcell_fb_layout *layout,
-                        const struct inkcell_fb_card *card) {
+inkcell_fb_card_measure_at(const struct inkcell_draw_state *state,
+                           const struct inkcell_fb_layout *layout,
+                           const struct inkcell_fb_card *card, int x, int width) {
     const struct inkcell_metrics *metrics = inkcell_fb_metrics(state);
     const int scale = state->scale;
     struct inkcell_fb_card_metrics m;
     memset(&m, 0, sizeof m);
 
-    m.x = inkcell_fb_content_x(state);
-    m.width = inkcell_fb_content_w(state);
+    m.x = x;
+    m.width = width;
     m.pad = inkcell_scale_px((int)metrics->card_pad, scale);
     /* Half as much above and below as at the sides, which is not a fudge: a row is a line
        *advance* tall, and the advance already carries the leading that accents hang in, so the
@@ -210,6 +216,14 @@ inkcell_fb_card_measure(const struct inkcell_draw_state *state,
        tighter leading does. */
     m.gap = m.pad;
     return m;
+}
+
+static struct inkcell_fb_card_metrics
+inkcell_fb_card_measure(const struct inkcell_draw_state *state,
+                        const struct inkcell_fb_layout *layout,
+                        const struct inkcell_fb_card *card) {
+    return inkcell_fb_card_measure_at(state, layout, card, inkcell_fb_content_x(state),
+                                      inkcell_fb_content_w(state));
 }
 
 /*
@@ -576,6 +590,185 @@ static uint32_t inkcell_fb_draw_card_row(struct inkcell_draw_state *state,
     return 1U;
 }
 
+/*
+ * Paints a card whose panel is `height` tall with its top edge at `top`: the shadow, the fill, the
+ * verbs, the heading and `fit` of its rows. Returns the y just under the last row drawn, which is
+ * where a card drawn into a box hands the rest of its room to whatever the caller puts there.
+ *
+ * Shared by the column and the box, which differ only in where the panel is and how tall it is
+ * allowed to be; a card that looked one way in a column and another in a box would be two
+ * components with one name.
+ */
+static int inkcell_fb_card_paint(struct inkcell_draw_state *state,
+                                 const struct inkcell_fb_layout *layout,
+                                 const struct inkcell_fb_card_metrics *m,
+                                 const struct inkcell_fb_card *card, struct inkcell_fb_card_fit fit,
+                                 int top, int height) {
+    /*
+     * The panel, then the ring around its edge.
+     *
+     * Not the hollowing the other outlines were: a card's inside is a real fill - the tier it
+     * stands on - so this is one fill and one ring rather than a ring with the ground put back
+     * inside it. The two used to be a larger fill with a smaller one laid over it, which drew
+     * the whole edge colour and then covered all but a hairline of it; the panel is painted
+     * once now, and the ring follows the radius exactly instead of being the difference between
+     * two shapes that had to be kept in step by hand.
+     *
+     * The edge is not decoration. On a theme whose surface is a step off the ground - which is
+     * every one that ships, because a surface far from the ground is a surface body text is no
+     * longer validated against - the fill alone is nearly invisible in daylight, and the
+     * hairline is the whole of what says a card is there. It is drawn in OUTLINE rather than
+     * RULE for that reason: a separator may fade politely into what it divides, an edge may
+     * not. inkcell_theme_validate() holds OUTLINE against the ground and both surfaces, which
+     * is every fill a variant can put behind it - and the outlined variant, whose fill *is* the
+     * ground, is why it has to hold against all three rather than against the panel's own.
+     *
+     * Neither changes when a verb on the card is focused: the verb carries the focus ring, and
+     * only the verb. See inkcell_fb_card_measure().
+     */
+    /*
+     * The elevated card's shadow, under everything else it draws. Only that variant: a filled
+     * card is *on* the page and an outlined one is the page itself, held by its edge - a shadow
+     * under either would be claiming a distance the fill says it does not have.
+     *
+     * On a dark palette this is a few levels of the ground and the tier is still what does the
+     * work; on a light one the tiers are a few percent apart and the shadow is what the eye
+     * finds first. Which is the division of labour enum inkcell_elevation describes.
+     */
+    if (card->variant == INKCELL_FB_CARD_ELEVATED) {
+        inkcell_fb_draw_shadow(
+            state, (struct inkcell_fb_rect){.x = m->x, .y = top, .w = m->width, .h = height},
+            m->radius + m->edge, INKCELL_ELEVATION_RAISED, INKCELL_ANIM_ONE);
+    }
+    if (m->ring > 0) {
+        inkcell_fb_fill_round_rect(state, m->x, top, m->width, height, m->radius + m->edge,
+                                   inkcell_fb_color(state, m->fill));
+        inkcell_fb_stroke_round_rect(state, m->x, top, m->width, height, m->radius + m->edge,
+                                     m->ring, m->edge_ink);
+    } else {
+        /* No edge to lay down first, so the fill is the whole panel - and it takes the outer
+           radius, because with nothing around it the fill's own corner is the card's corner. */
+        inkcell_fb_fill_round_rect(state, m->x, top, m->width, height, m->radius + m->edge,
+                                   inkcell_fb_color(state, m->fill));
+    }
+
+    int row_y = top + m->pad_y + m->edge;
+    /*
+     * The verbs, against the far edge of the heading's line.
+     *
+     * Laid out from the right so the first one declared ends up leftmost, which is the order
+     * the screen cursor walks them in - a strip that packed from the left would have reversed
+     * that on any card with two.
+     *
+     * They are tonal pills: the accent's container at rest, its full strength under the cursor.
+     * They were text buttons - a word in the accent and a fill only under the cursor - and a
+     * word in the accent is exactly what the card's heading is, so a verb at rest read as a
+     * second label rather than as something to press. A pill is what every other pressable
+     * thing on the frame looks like (a tab, a chip, a keycap), and the container is held back
+     * far enough that three cards' worth of them still sit behind the numbers they are about.
+     */
+    const int content_right =
+        m->content_x + (int)m->cols * inkcell_fb_char_adv(state, state->scale);
+    /* Wider than the gap between two words: two filled pills close together read as one
+       lozenge with a seam in it. */
+    const int gap = inkcell_fb_space(state, INKCELL_SPACE_MD);
+    int actions_x = content_right - m->verb_right;
+    const int header_y = row_y + m->verb_top;
+    if (m->button_h > 0) {
+        /*
+         * How many of them there is room for, dropped from the *end* rather than from wherever
+         * the layout ran out. Laying out from the right and stopping when the next one no
+         * longer fits would drop the leftmost, which is the first the cursor reaches - so a
+         * card too narrow for its verbs would lose the one A runs first.
+         */
+        uint32_t drawn = card->action_count;
+        while (drawn > 0U) {
+            int total = 0;
+            for (uint32_t i = 0U; i < drawn; ++i) {
+                total += inkcell_fb_button_width(state, INKCELL_ICON_NONE, card->actions[i].label,
+                                                 layout->small);
+                if (i > 0U) {
+                    total += gap;
+                }
+            }
+            if (m->content_x + total <= content_right) {
+                break;
+            }
+            drawn -= 1U;
+        }
+        for (uint32_t i = drawn; i-- > 0U;) {
+            const int width = inkcell_fb_button_width(state, INKCELL_ICON_NONE,
+                                                      card->actions[i].label, layout->small);
+            actions_x -= width;
+            const struct inkcell_fb_button button = {
+                .rect = {.x = actions_x, .y = header_y, .w = width, .h = m->button_h},
+                .icon = INKCELL_ICON_NONE,
+                .label = card->actions[i].label,
+                .focused = card->actions[i].focused,
+                .variant = INKCELL_FB_BUTTON_TONAL,
+                .shape = INKCELL_SHAPE_FULL,
+                .ground = m->fill,
+                .scale = layout->small,
+                /* Only the ones this loop reaches, which is `drawn` of them and not
+                   `action_count`: the verbs that did not fit were dropped above, and a verb that
+                   was dropped is not a place the cursor may stand. */
+                .focus_id = card->action_focus_id != INKCELL_FOCUS_NONE ? card->action_focus_id + i
+                                                                        : INKCELL_FOCUS_NONE,
+            };
+            inkcell_fb_draw_button(state, &button);
+            /* One group per card, so the ring slides along this card's verbs and jumps to the
+               next card's rather than crossing the rows between them-> */
+            (void)inkcell_focus_set_group(state->focus, button.focus_id, card->action_focus_id);
+            actions_x -= gap;
+        }
+    }
+    if (m->heading_h > 0 && card->heading[0] != '\0') {
+        /* The heading takes the card's tone, which is how a card reports on what it holds
+           without a second cue: the Link card goes bad when the radio has gone. Every tone a
+           card can take is validated against the surface, so none of them can go quiet here. */
+        struct inkcell_line line;
+        inkcell_line_reset(&line);
+        inkcell_line_printf(&line, "%s", card->heading);
+        const struct inkcell_rgb ink = inkcell_fb_tone_color(state, card->tone);
+        int heading_x = m->content_x;
+        if (inkcell_icon_is_valid(card->icon)) {
+            /* On the card's own surface, which is what it was just filled with - the icon is
+               inside the panel, not on the ground the panel sits on. */
+            inkcell_fb_draw_icon(state, heading_x, header_y, card->icon, layout->small, ink,
+                                 inkcell_fb_color(state, m->fill));
+            /* The same half-cell a button leaves between its symbol and its word. */
+            heading_x += inkcell_fb_icon_box(state, layout->small) +
+                         inkcell_fb_char_adv(state, layout->small) / 2;
+        }
+        /* Fitted to what the verbs left rather than to the card, so a long heading is cut on a
+           cell boundary instead of running under the first button. */
+        const int heading_adv = inkcell_fb_char_adv(state, layout->small);
+        const int heading_w = actions_x - heading_x;
+        inkcell_line_fit(&line, heading_w >= heading_adv ? (size_t)(heading_w / heading_adv) : 1U);
+        inkcell_fb_draw_text_weight(state, heading_x, header_y, inkcell_line_text(&line),
+                                    layout->small,
+                                    inkcell_fb_type_weight(state, INKCELL_TYPE_LABEL), ink,
+                                    inkcell_fb_color(state, m->fill));
+    }
+    if (m->heading_h > 0) {
+        row_y += m->heading_h;
+    }
+
+    for (uint32_t i = 0U; i < fit.rows; ++i) {
+        row_y += (int)inkcell_fb_draw_card_row(state, m, layout, row_y, &card->rows[i], 0U) *
+                 layout->line;
+    }
+    if (fit.tail_lines > 0U) {
+        (void)inkcell_fb_draw_card_row(state, m, layout, row_y, &card->rows[fit.rows],
+                                       fit.tail_lines);
+        /* Past the lines kept, so the room a boxed card hands back starts under them rather than
+           over the note it would then be drawn on. */
+        row_y += (int)fit.tail_lines * layout->line;
+    }
+
+    return row_y;
+}
+
 int inkcell_fb_card_min_height(const struct inkcell_draw_state *state,
                                const struct inkcell_fb_layout *layout,
                                const struct inkcell_fb_card *card) {
@@ -658,165 +851,8 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_draw_state *state,
     }
 
     const int height = inkcell_fb_card_box_height(&m, layout, card, fit);
-    /*
-     * The panel, then the ring around its edge.
-     *
-     * Not the hollowing the other outlines were: a card's inside is a real fill - the tier it
-     * stands on - so this is one fill and one ring rather than a ring with the ground put back
-     * inside it. The two used to be a larger fill with a smaller one laid over it, which drew
-     * the whole edge colour and then covered all but a hairline of it; the panel is painted
-     * once now, and the ring follows the radius exactly instead of being the difference between
-     * two shapes that had to be kept in step by hand.
-     *
-     * The edge is not decoration. On a theme whose surface is a step off the ground - which is
-     * every one that ships, because a surface far from the ground is a surface body text is no
-     * longer validated against - the fill alone is nearly invisible in daylight, and the
-     * hairline is the whole of what says a card is there. It is drawn in OUTLINE rather than
-     * RULE for that reason: a separator may fade politely into what it divides, an edge may
-     * not. inkcell_theme_validate() holds OUTLINE against the ground and both surfaces, which
-     * is every fill a variant can put behind it - and the outlined variant, whose fill *is* the
-     * ground, is why it has to hold against all three rather than against the panel's own.
-     *
-     * Neither changes when a verb on the card is focused: the verb carries the focus ring, and
-     * only the verb. See inkcell_fb_card_measure().
-     */
     const int top = *y;
-    /*
-     * The elevated card's shadow, under everything else it draws. Only that variant: a filled
-     * card is *on* the page and an outlined one is the page itself, held by its edge - a shadow
-     * under either would be claiming a distance the fill says it does not have.
-     *
-     * On a dark palette this is a few levels of the ground and the tier is still what does the
-     * work; on a light one the tiers are a few percent apart and the shadow is what the eye
-     * finds first. Which is the division of labour enum inkcell_elevation describes.
-     */
-    if (card->variant == INKCELL_FB_CARD_ELEVATED) {
-        inkcell_fb_draw_shadow(
-            state, (struct inkcell_fb_rect){.x = m.x, .y = top, .w = m.width, .h = height},
-            m.radius + m.edge, INKCELL_ELEVATION_RAISED, INKCELL_ANIM_ONE);
-    }
-    if (m.ring > 0) {
-        inkcell_fb_fill_round_rect(state, m.x, top, m.width, height, m.radius + m.edge,
-                                   inkcell_fb_color(state, m.fill));
-        inkcell_fb_stroke_round_rect(state, m.x, top, m.width, height, m.radius + m.edge, m.ring,
-                                     m.edge_ink);
-    } else {
-        /* No edge to lay down first, so the fill is the whole panel - and it takes the outer
-           radius, because with nothing around it the fill's own corner is the card's corner. */
-        inkcell_fb_fill_round_rect(state, m.x, top, m.width, height, m.radius + m.edge,
-                                   inkcell_fb_color(state, m.fill));
-    }
-
-    int row_y = top + m.pad_y + m.edge;
-    /*
-     * The verbs, against the far edge of the heading's line.
-     *
-     * Laid out from the right so the first one declared ends up leftmost, which is the order
-     * the screen cursor walks them in - a strip that packed from the left would have reversed
-     * that on any card with two.
-     *
-     * They are tonal pills: the accent's container at rest, its full strength under the cursor.
-     * They were text buttons - a word in the accent and a fill only under the cursor - and a
-     * word in the accent is exactly what the card's heading is, so a verb at rest read as a
-     * second label rather than as something to press. A pill is what every other pressable
-     * thing on the frame looks like (a tab, a chip, a keycap), and the container is held back
-     * far enough that three cards' worth of them still sit behind the numbers they are about.
-     */
-    const int content_right = m.content_x + (int)m.cols * inkcell_fb_char_adv(state, state->scale);
-    /* Wider than the gap between two words: two filled pills close together read as one
-       lozenge with a seam in it. */
-    const int gap = inkcell_fb_space(state, INKCELL_SPACE_MD);
-    int actions_x = content_right - m.verb_right;
-    const int header_y = row_y + m.verb_top;
-    if (m.button_h > 0) {
-        /*
-         * How many of them there is room for, dropped from the *end* rather than from wherever
-         * the layout ran out. Laying out from the right and stopping when the next one no
-         * longer fits would drop the leftmost, which is the first the cursor reaches - so a
-         * card too narrow for its verbs would lose the one A runs first.
-         */
-        uint32_t drawn = card->action_count;
-        while (drawn > 0U) {
-            int total = 0;
-            for (uint32_t i = 0U; i < drawn; ++i) {
-                total += inkcell_fb_button_width(state, INKCELL_ICON_NONE, card->actions[i].label,
-                                                 layout->small);
-                if (i > 0U) {
-                    total += gap;
-                }
-            }
-            if (m.content_x + total <= content_right) {
-                break;
-            }
-            drawn -= 1U;
-        }
-        for (uint32_t i = drawn; i-- > 0U;) {
-            const int width = inkcell_fb_button_width(state, INKCELL_ICON_NONE,
-                                                      card->actions[i].label, layout->small);
-            actions_x -= width;
-            const struct inkcell_fb_button button = {
-                .rect = {.x = actions_x, .y = header_y, .w = width, .h = m.button_h},
-                .icon = INKCELL_ICON_NONE,
-                .label = card->actions[i].label,
-                .focused = card->actions[i].focused,
-                .variant = INKCELL_FB_BUTTON_TONAL,
-                .shape = INKCELL_SHAPE_FULL,
-                .ground = m.fill,
-                .scale = layout->small,
-                /* Only the ones this loop reaches, which is `drawn` of them and not
-                   `action_count`: the verbs that did not fit were dropped above, and a verb that
-                   was dropped is not a place the cursor may stand. */
-                .focus_id = card->action_focus_id != INKCELL_FOCUS_NONE ? card->action_focus_id + i
-                                                                        : INKCELL_FOCUS_NONE,
-            };
-            inkcell_fb_draw_button(state, &button);
-            /* One group per card, so the ring slides along this card's verbs and jumps to the
-               next card's rather than crossing the rows between them. */
-            (void)inkcell_focus_set_group(state->focus, button.focus_id, card->action_focus_id);
-            actions_x -= gap;
-        }
-    }
-    if (m.heading_h > 0 && card->heading[0] != '\0') {
-        /* The heading takes the card's tone, which is how a card reports on what it holds
-           without a second cue: the Link card goes bad when the radio has gone. Every tone a
-           card can take is validated against the surface, so none of them can go quiet here. */
-        struct inkcell_line line;
-        inkcell_line_reset(&line);
-        inkcell_line_printf(&line, "%s", card->heading);
-        const struct inkcell_rgb ink = inkcell_fb_tone_color(state, card->tone);
-        int heading_x = m.content_x;
-        if (inkcell_icon_is_valid(card->icon)) {
-            /* On the card's own surface, which is what it was just filled with - the icon is
-               inside the panel, not on the ground the panel sits on. */
-            inkcell_fb_draw_icon(state, heading_x, header_y, card->icon, layout->small, ink,
-                                 inkcell_fb_color(state, m.fill));
-            /* The same half-cell a button leaves between its symbol and its word. */
-            heading_x += inkcell_fb_icon_box(state, layout->small) +
-                         inkcell_fb_char_adv(state, layout->small) / 2;
-        }
-        /* Fitted to what the verbs left rather than to the card, so a long heading is cut on a
-           cell boundary instead of running under the first button. */
-        const int heading_adv = inkcell_fb_char_adv(state, layout->small);
-        const int heading_w = actions_x - heading_x;
-        inkcell_line_fit(&line, heading_w >= heading_adv ? (size_t)(heading_w / heading_adv) : 1U);
-        inkcell_fb_draw_text_weight(state, heading_x, header_y, inkcell_line_text(&line),
-                                    layout->small,
-                                    inkcell_fb_type_weight(state, INKCELL_TYPE_LABEL), ink,
-                                    inkcell_fb_color(state, m.fill));
-    }
-    if (m.heading_h > 0) {
-        row_y += m.heading_h;
-    }
-
-    for (uint32_t i = 0U; i < fit.rows; ++i) {
-        row_y += (int)inkcell_fb_draw_card_row(state, &m, layout, row_y, &card->rows[i], 0U) *
-                 layout->line;
-    }
-    if (fit.tail_lines > 0U) {
-        (void)inkcell_fb_draw_card_row(state, &m, layout, row_y, &card->rows[fit.rows],
-                                       fit.tail_lines);
-    }
-
+    (void)inkcell_fb_card_paint(state, layout, &m, card, fit, top, height);
     *y = top + height + m.gap;
     return true;
 }
@@ -824,4 +860,40 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_draw_state *state,
 bool inkcell_fb_draw_card(struct inkcell_draw_state *state, const struct inkcell_fb_layout *layout,
                           int *y, const struct inkcell_fb_card *card) {
     return inkcell_fb_draw_card_reserving(state, layout, y, card, 0);
+}
+
+struct inkcell_box inkcell_fb_draw_card_in(struct inkcell_draw_state *state,
+                                           const struct inkcell_fb_layout *layout,
+                                           struct inkcell_box box,
+                                           const struct inkcell_fb_card *card) {
+    const struct inkcell_box none = {box.x, box.y, 0, 0};
+    if (state == NULL || layout == NULL || card == NULL || inkcell_box_is_empty(box) ||
+        (card->count == 0U && card->heading[0] == '\0')) {
+        return none;
+    }
+    const struct inkcell_fb_card_metrics m =
+        inkcell_fb_card_measure_at(state, layout, card, box.x, box.w);
+    /* A box too short for the frame itself - the insets and the heading's line, where the verbs
+       are - draws nothing: a heading painted past the box's bottom is a heading painted over the
+       next row of the board, and its verbs would be registered where nothing can be seen. */
+    const struct inkcell_fb_card_fit frame = {.rows = 0U, .tail_lines = 0U};
+    if (inkcell_fb_card_box_height(&m, layout, card, frame) > box.h) {
+        return none;
+    }
+    const struct inkcell_fb_card_fit fit =
+        inkcell_fb_card_clip(&m, layout, card, box.y, box.y + box.h);
+    const int below = inkcell_fb_card_paint(state, layout, &m, card, fit, box.y, box.h);
+
+    /* What the rows left, inside the same inset they were drawn in - so a picture under them
+       starts at the column their labels start at and stops where their values do. */
+    const int inset = m.pad + m.edge;
+    const int bottom = box.y + box.h - (m.pad_y + m.edge);
+    struct inkcell_box rest = {m.content_x, below, m.width - 2 * inset, bottom - below};
+    if (rest.w < 0) {
+        rest.w = 0;
+    }
+    if (rest.h < 0) {
+        rest.h = 0;
+    }
+    return rest;
 }

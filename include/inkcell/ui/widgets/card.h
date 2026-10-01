@@ -18,6 +18,7 @@
 #include "inkcell/i18n/strings.h"
 #include "inkcell/ui/icon.h"
 #include "inkcell/ui/layout.h"
+#include "inkcell/ui/stack.h"
 #include "inkcell/ui/theme.h"
 #include "inkcell/ui/trend.h"
 
@@ -373,6 +374,33 @@ bool inkcell_fb_draw_card_reserving(struct inkcell_draw_state *state,
 
 bool inkcell_fb_draw_card(struct inkcell_draw_state *state, const struct inkcell_fb_layout *layout,
                           int *y, const struct inkcell_fb_card *card);
+
+/*
+ * The card as a tile: drawn to fill `box` exactly, rather than as tall as its rows.
+ *
+ * A column of cards is read top to bottom and each card is as tall as what it says, so the
+ * column's shape is the content's. A dashboard is the other way round - the board is laid out
+ * first (struct inkcell_dash, inkcell/ui/stack.h) and the tiles in one row share a height, because
+ * a row of panels whose bottoms do not line up reads as a row of panels that did not fit. So the
+ * box is the allocation and the card fills it: rows that do not fit are dropped from the end on
+ * the column's terms, and room the rows do not use is left at the bottom of the panel.
+ *
+ * That leftover is the point of the return value. It is the content box under the last row -
+ * inside the card's inset, as wide as its rows - and it is where a caller draws a picture the card
+ * cannot hold as a row: a chart, a histogram, a list of a few figures. A card is a frame for those
+ * in the way a section heading is a frame for a list, and a caller that placed the picture by
+ * re-deriving the card's padding would be a screen computing a component's geometry.
+ *
+ * Unlike a column's card, a card with a heading and no rows is drawn: in a box it is a titled
+ * frame, and the picture going into the room it returns is its content. A card with neither is
+ * nothing, and comes back with an empty box.
+ *
+ * Verbs are drawn and registered exactly as a column's card draws them.
+ */
+struct inkcell_box inkcell_fb_draw_card_in(struct inkcell_draw_state *state,
+                                           const struct inkcell_fb_layout *layout,
+                                           struct inkcell_box box,
+                                           const struct inkcell_fb_card *card);
 
 #ifdef __cplusplus
 }

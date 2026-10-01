@@ -113,6 +113,7 @@ add_library(inkcell STATIC
     src/fb/widgets_bubble.c
     src/fb/widgets_button.c
     src/fb/widgets_card.c
+    src/fb/widgets_stat.c
     src/fb/widgets_chrome.c
     src/fb/widgets_control.c
     src/fb/widgets_focus.c

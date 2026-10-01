@@ -121,6 +121,9 @@ static const struct gallery_scene k_scenes[] = {
     {"app_bar_narrow", gallery_scene_app_bar, 0U, 440U, 0U},
     /* A long job's own screen: the dial as its subject, and the steps under it. */
     {"progress", gallery_scene_progress, 0U, 0U, 0U},
+    /* A board of tiles and boxed cards, on a desktop-sized page: the shape a wide surface takes
+       when its content is readings rather than a list. Appended last, for the manifest. */
+    {"dashboard", gallery_scene_dashboard, 0U, 1600U, 1000U},
 };
 
 const struct gallery_scene *gallery_scenes(size_t *count) {
