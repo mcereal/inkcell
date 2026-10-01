@@ -195,11 +195,12 @@ uint16_t inkcell_sdl_evdev_code(int scancode);
  * window point.
  *
  * A theme's scale is stated for the panel, and the panel is a dense one: a desktop point at the
- * size a laptop is read from is two of its pixels. So a Retina display (density 2) keeps the
- * theme's scale and draws it at the same size in points as every other application does, and a
- * display of one pixel per point halves it. Rounded to half a step, which is the finest a type
- * role is ever offset by, and clamped to what a theme may ask for. A density that is not a
- * positive number is the theme's scale unchanged.
+ * size a laptop is read from is two of its pixels. The panel's body, drawn at that, is about
+ * 15.5pt, and a desktop's is 13 (macOS's system body; Windows' and GNOME's are within a point),
+ * so the scale is seven eighths of it as well: a Retina display (density 2) draws the theme's
+ * scale less one half step, and a display of one pixel per point sits on the floor. Rounded to
+ * half a step, which is the finest a type role is ever offset by, and clamped to what a theme
+ * may ask for. A density that is not a positive number is the theme's scale unchanged.
  *
  * Pure, and public so the arithmetic is testable without a display to measure.
  */

@@ -216,13 +216,13 @@ scaffold_top contrast 12 1024x768 86cb8b7de5018e67
 scaffold_top contrast 16 1024x768 2701623bf346015a
 scaffold_top colorblind 12 1024x768 887d597c14c0346f
 scaffold_top colorblind 16 1024x768 7ab6458aa488945d
-scaffold_wide dark 12 2240x1260 ae927bc2cbe87b60
+scaffold_wide dark 12 2240x1260 7a20b4790ee98664
 scaffold_wide dark 16 2240x1260 5890bf313bb7f1ed
-scaffold_wide light 12 2240x1260 98d7082fd21bb9bf
+scaffold_wide light 12 2240x1260 d8f67a71122e57a7
 scaffold_wide light 16 2240x1260 4ced18388f4b8a2f
-scaffold_wide contrast 12 2240x1260 ea20af4824366fa0
+scaffold_wide contrast 12 2240x1260 f492bf21a749f0bc
 scaffold_wide contrast 16 2240x1260 b33699d40a3ba615
-scaffold_wide colorblind 12 2240x1260 b66293a37f0d5116
+scaffold_wide colorblind 12 2240x1260 e71c50b6c034354e
 scaffold_wide colorblind 16 2240x1260 e34e93e0d878b989
 list_grouped dark 12 1024x768 5ac56ffd2b115ba3
 list_grouped dark 16 1024x768 e1766557617c96fc

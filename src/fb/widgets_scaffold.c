@@ -651,9 +651,10 @@ static int scaffold_rail_w(const struct inkcell_draw_state *state,
  * the list is a column of short rows that is read by its leading edge, and the detail is where
  * running text is. So the detail gets the larger share and the list gets enough - which is where
  * Material's list-detail layout puts the line too, as a fixed list width beside a detail that
- * takes the rest. A fixed width is the one thing this cannot have, since the panes are measured
- * in columns of whatever scale the reader chose, and a ratio is a fixed width that scales with
- * them.
+ * takes the rest. A fixed width in pixels is the one thing this cannot have, since the panes are
+ * measured in columns of whatever scale the reader chose; so the ratio is the start, and the list
+ * stops at a list column's width in those columns (INKCELL_WIDTH_LIST_PANE_COLS) and gives the
+ * rest to the detail.
  *
  * The line is the detail's rather than the list's because the two panes are not read the same
  * way. The detail is running text and is held to a measure, since a pane narrower than that
@@ -670,6 +671,16 @@ static bool scaffold_panes(struct inkcell_draw_state *state, struct inkcell_box 
     (void)inkcell_stack_add_grow(&row, 0, 2U);
     (void)inkcell_stack_add_grow(&row, 0, 3U);
     (void)inkcell_stack_resolve(&row, panes, 2U);
+    /* The list no wider than a list column (INKCELL_WIDTH_LIST_PANE_COLS); the detail takes
+       the rest. */
+    const int list_cap = inkcell_fb_measure_width(state, INKCELL_WIDTH_LIST_PANE_COLS) +
+                         2 * inkcell_fb_margin(state);
+    if (panes[0].w > list_cap) {
+        const int give = panes[0].w - list_cap;
+        panes[0].w -= give;
+        panes[1].x -= give;
+        panes[1].w += give;
+    }
     const struct inkcell_box saved = inkcell_fb_set_region(state, panes[1]);
     const bool holds = inkcell_fb_cols(state, state->scale) >= INKCELL_WIDTH_MEASURE_COLS;
     (void)inkcell_fb_set_region(state, saved);
@@ -703,6 +714,7 @@ void inkcell_fb_scaffold_begin(struct inkcell_draw_state *state,
        and the layout's widths included: a screen that turned the measure off answers for its own
        frame and not for whichever screen is drawn next. */
     (void)inkcell_fb_set_measured(state, !scaffold->unmeasured);
+    state->measure_cols = 0U;
 
     const struct inkcell_box whole = inkcell_fb_region(state);
     const int small = inkcell_fb_type_scale(state, INKCELL_TYPE_LABEL);
@@ -813,6 +825,7 @@ struct inkcell_fb_layout inkcell_fb_scaffold_detail(struct inkcell_draw_state *s
     }
     (void)inkcell_fb_set_region(state, (struct inkcell_box){frame->detail.x, frame->content.y,
                                                             frame->detail.w, frame->content.h});
+    state->measure_cols = INKCELL_WIDTH_DETAIL_PANE_COLS;
     /* `back` is false whatever the list pane says: with the list standing beside it, the detail
        is not somewhere B leaves - the thing it would go back to is already on the panel. */
     struct inkcell_fb_layout layout =
@@ -847,6 +860,7 @@ void inkcell_fb_scaffold_end(struct inkcell_draw_state *state,
         return;
     }
     (void)inkcell_fb_set_region(state, frame->content);
+    state->measure_cols = 0U;
     /*
      * Under a split the bar is not held to the measure. The measure is for one column of text,
      * and a split frame has two panes that between them already run edge to edge: a bar capped

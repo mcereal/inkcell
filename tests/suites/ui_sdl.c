@@ -40,24 +40,27 @@ INKCELL_TEST_CASE(sdl_backend_is_always_offered, unit) {
 }
 
 /*
- * A theme's scale is the panel's, and the panel is two pixels to a desktop point.
+ * A theme's scale is the panel's, the panel is two pixels to a desktop point, and a desk reads
+ * its body at seven eighths of the panel's.
  *
- * So a Retina display keeps the theme's scale - drawn in points, that is the size every other
- * window's text is - and a display of one pixel per point halves it. The cases between are the
- * Windows scaling steps, and the ends are the clamp: nothing may ask below the legibility floor
- * or above the buffers.
+ * So a Retina display draws the theme's scale less a half step - 13pt or so, the size every
+ * other window's text is - and a display of one pixel per point is on the floor. The cases
+ * between are the Windows scaling steps, and the ends are the clamp: nothing may ask below the
+ * legibility floor or above the buffers.
  */
 INKCELL_TEST_CASE(sdl_display_scale_sizes_the_panel_for_the_desk, unit) {
     const int theme = INKCELL_SCALE(4);
-    INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 2.0f) != theme,
-                         "a Retina display keeps the theme's scale");
+    INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 2.0f) !=
+                             INKCELL_SCALE(3) + INKCELL_SCALE(1) / 2,
+                         "a Retina display draws the theme's scale less half a step");
     INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 1.0f) != INKCELL_SCALE(2),
-                         "one pixel per point halves it");
-    INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 1.5f) != INKCELL_SCALE(3),
-                         "Windows at 150% is three steps");
-    INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 1.25f) !=
+                         "one pixel per point is the floor");
+    INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 1.5f) !=
                              INKCELL_SCALE(2) + INKCELL_SCALE(1) / 2,
-                         "and at 125%, two and a half: half steps are what a type role uses");
+                         "Windows at 150% is two and a half steps: half steps are what a type "
+                         "role uses");
+    INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 1.25f) != INKCELL_SCALE(2),
+                         "and at 125%, the floor");
     INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 0.5f) != INKCELL_SCALE_MIN,
                          "nothing goes below the legibility floor");
     INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 4.0f) != INKCELL_SCALE_MAX,

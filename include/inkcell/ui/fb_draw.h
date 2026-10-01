@@ -599,6 +599,12 @@ struct inkcell_draw_state {
      * inkcell_fb_set_measured(), never here.
      */
     bool unmeasured;
+    /*
+     * The measure the content column is capped at, in columns, when it is capped at all. 0 is
+     * INKCELL_WIDTH_MEASURE_COLS. The scaffold widens it for a split's detail pane while that
+     * pane draws (inkcell_fb_scaffold_detail()), and puts it back at the frame's end.
+     */
+    uint16_t measure_cols;
 };
 
 /*

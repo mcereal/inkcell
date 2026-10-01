@@ -458,6 +458,24 @@ enum inkcell_width_class {
 #define INKCELL_WIDTH_MEDIUM_COLS 76U
 #define INKCELL_WIDTH_EXPANDED_COLS 120U
 
+/*
+ * The two widths a split frame's panes are held to, in the same columns.
+ *
+ * The list pane is short rows read by their leading edge, and a desktop's list column - a
+ * mailbox, a conversation list, a sidebar of sections - is about 46 columns at a desktop's body
+ * size and does not grow with the window; a list that took two fifths of a maximised window put
+ * each row's time a hand's width from its name. So the list stops at this and the detail takes
+ * what it gives up.
+ *
+ * The detail pane is where the screen is, and capping it at one reading measure centred a
+ * ribbon in it with the same dead ground either side that the split exists to spend. So a
+ * detail pane is filled, margin to margin, on any window a laptop can show - running text inside
+ * it keeps its own bound (a bubble is a share of the pane) - and only past this, on a display
+ * wider than that, is it capped and centred.
+ */
+#define INKCELL_WIDTH_LIST_PANE_COLS 46U
+#define INKCELL_WIDTH_DETAIL_PANE_COLS 160U
+
 /* The class `cols` columns of body text fall in. A backend answers this from its own geometry -
    inkcell_fb_width_class() in inkcell/ui/fb_draw.h - and the arithmetic is here so that every
    one of them answers it the same way. */
