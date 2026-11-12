@@ -164,7 +164,10 @@ jobs:
 
   format:
     name: clang-format
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: the formatter's output is the check, and it moves with the
+    # point release - 26.04's clang-format-18 (18.1.8) lays out tables that 24.04's (18.1.3)
+    # accepts differently, so an image bump fails files nobody touched.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 

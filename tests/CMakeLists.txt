@@ -18,6 +18,7 @@ set(INKCELL_TEST_SUITES
     suites/ui_frame.c
     suites/ui_grid.c
     suites/ui_headless.c
+    suites/ui_kms.c
     suites/ui_dial.c
     suites/ui_steps.c
     suites/ui_elevation.c
