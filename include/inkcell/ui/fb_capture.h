@@ -33,6 +33,18 @@ struct inkcell_surface;
  * range that backend accepts - pass 0 for the theme's own. Returns 0, or a negative errno.
  */
 int inkcell_capture_open(struct inkcell_capture **out, uint32_t width, uint32_t height, int scale);
+
+/*
+ * The same page drawn into memory the caller owns: `pixels`, `stride` bytes a row and `size`
+ * bytes in all, at 4 bytes a pixel. For a frame that has to land somewhere particular - memory
+ * another process maps, so the picture reaches it without a copy - rather than in a buffer of
+ * the capture's own. The memory must outlive the capture, which never frees it, and the page is
+ * not cleared: what was there stays until the first frame paints over it.
+ *
+ * -EINVAL when the geometry does not fit `size` or `stride` is shorter than a row.
+ */
+int inkcell_capture_open_into(struct inkcell_capture **out, uint8_t *pixels, size_t size,
+                              uint32_t width, uint32_t height, uint32_t stride, int scale);
 void inkcell_capture_close(struct inkcell_capture *capture);
 /* Reference rendering for pixel comparisons and CPU measurements. */
 void inkcell_capture_set_reference(struct inkcell_capture *capture, bool reference);

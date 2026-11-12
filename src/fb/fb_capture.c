@@ -32,41 +32,27 @@ struct inkcell_capture {
     struct inkcell_draw_state state;
     uint32_t width;
     uint32_t height;
+    bool borrowed; /* the pixels are the caller's: open_into() */
 };
 
-int inkcell_capture_open(struct inkcell_capture **out, uint32_t width, uint32_t height, int scale) {
-    if (out == NULL || width == 0U || height == 0U) {
-        return -EINVAL;
-    }
-    /* 4 bytes a pixel, and the guard is against width * height overflowing size_t on a 32-bit
-       host rather than against anything a caller is likely to ask for. */
-    if (width > UINT32_MAX / 4U || height > UINT32_MAX / (width * 4U)) {
-        return -EINVAL;
-    }
-
+/* The page around pixels already in hand - the capture's own, or the caller's. */
+static int capture_open(struct inkcell_capture **out, uint8_t *pixels, size_t size, uint32_t width,
+                        uint32_t height, uint32_t stride, int scale, bool borrowed) {
     struct inkcell_capture *capture = calloc(1U, sizeof *capture);
     if (capture == NULL) {
         return -ENOMEM;
     }
-
-    const size_t stride = (size_t)width * 4U;
-    const size_t page_bytes = stride * (size_t)height;
-    uint8_t *pixels = calloc(1U, page_bytes);
-    if (pixels == NULL) {
-        free(capture);
-        return -ENOMEM;
-    }
-
     capture->width = width;
     capture->height = height;
+    capture->borrowed = borrowed;
 
     struct inkcell_draw_state *state = &capture->state;
     state->surface = (struct inkcell_surface){
         .pixels = pixels,
-        .size = page_bytes,
+        .size = size,
         .width = width,
         .height = height,
-        .stride = (uint32_t)stride,
+        .stride = stride,
         .bytes_per_pixel = 4U,
         .format = {.bits_per_pixel = 32U},
     };
@@ -80,6 +66,41 @@ int inkcell_capture_open(struct inkcell_capture **out, uint32_t width, uint32_t 
     return 0;
 }
 
+/* 4 bytes a pixel, and the guard is against width * height overflowing size_t on a 32-bit host
+   rather than against anything a caller is likely to ask for. */
+static bool geometry_fits(uint32_t width, uint32_t height) {
+    return width != 0U && height != 0U && width <= UINT32_MAX / 4U &&
+           height <= UINT32_MAX / (width * 4U);
+}
+
+int inkcell_capture_open(struct inkcell_capture **out, uint32_t width, uint32_t height, int scale) {
+    if (out == NULL || !geometry_fits(width, height)) {
+        return -EINVAL;
+    }
+    const size_t stride = (size_t)width * 4U;
+    const size_t page_bytes = stride * (size_t)height;
+    uint8_t *pixels = calloc(1U, page_bytes);
+    if (pixels == NULL) {
+        return -ENOMEM;
+    }
+    const int opened =
+        capture_open(out, pixels, page_bytes, width, height, (uint32_t)stride, scale, false);
+    if (opened < 0) {
+        free(pixels);
+    }
+    return opened;
+}
+
+int inkcell_capture_open_into(struct inkcell_capture **out, uint8_t *pixels, size_t size,
+                              uint32_t width, uint32_t height, uint32_t stride, int scale) {
+    if (out == NULL || pixels == NULL || !geometry_fits(width, height) ||
+        (uint64_t)stride < (uint64_t)width * 4U ||
+        (uint64_t)stride * (height - 1U) + (uint64_t)width * 4U > (uint64_t)size) {
+        return -EINVAL;
+    }
+    return capture_open(out, pixels, size, width, height, stride, scale, true);
+}
+
 struct inkcell_draw_state *inkcell_capture_state(struct inkcell_capture *capture) {
     return capture == NULL ? NULL : &capture->state;
 }
@@ -90,7 +111,9 @@ void inkcell_capture_close(struct inkcell_capture *capture) {
     }
     inkcell_fb_set_app(&capture->state, NULL);
     inkcell_fb_glyph_cache_free(&capture->state);
-    free(capture->state.surface.pixels);
+    if (!capture->borrowed) {
+        free(capture->state.surface.pixels);
+    }
     free(capture);
 }
 

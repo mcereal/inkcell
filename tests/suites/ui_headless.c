@@ -222,3 +222,48 @@ INKCELL_TEST_CASE(key_names_round_trip, unit) {
     INKCELL_TEST_FAIL_IF(inkcell_key_name(INKCELL_KEY_NONE) != NULL, "NONE has no name");
     record_success(test_name);
 }
+
+INKCELL_TEST_CASE(headless_backend_draws_into_the_callers_memory, unit) {
+    const struct inkcell_backend *const backend = inkcell_backend_headless();
+    /* Rows padded by two pixels, which the frame must leave alone. */
+    enum { stride = (HEADLESS_TEST_WIDTH + 2U) * 4U };
+    static uint8_t memory[stride * HEADLESS_TEST_HEIGHT];
+    memset(memory, 0xAB, sizeof memory);
+
+    struct headless_test_app app = {.fill = 0xFF405060U};
+    const struct inkcell_fb_app vtable = {.ctx = &app, .render = headless_test_render};
+    struct inkcell_backend_headless_context context = {
+        .app = &vtable, .pixels = memory, .size = sizeof memory, .stride = stride};
+    void *state = NULL;
+    INKCELL_TEST_FAIL_IF(backend->init(&state, &context) != -EINVAL,
+                         "the caller's memory without its geometry is refused");
+    context.width = HEADLESS_TEST_WIDTH;
+    context.height = HEADLESS_TEST_HEIGHT;
+    /* The last row needs no padding after it, so short means short of its last pixel. */
+    context.size = (size_t)stride * (HEADLESS_TEST_HEIGHT - 1U) + HEADLESS_TEST_WIDTH * 4U - 1U;
+    INKCELL_TEST_FAIL_IF(backend->init(&state, &context) != -EINVAL,
+                         "so is memory a byte short of the page");
+    context.size = sizeof memory;
+    INKCELL_TEST_FAIL_IF(backend->init(&state, &context) < 0, "the caller's memory is taken");
+
+    backend->present(state, &app, NULL);
+    uint32_t first = 0U;
+    uint32_t last = 0U;
+    memcpy(&first, memory, sizeof first);
+    memcpy(&last,
+           memory + (size_t)stride * (HEADLESS_TEST_HEIGHT - 1U) + (HEADLESS_TEST_WIDTH - 1U) * 4U,
+           sizeof last);
+    INKCELL_TEST_FAIL_IF_CLEANUP(first != app.fill || last != app.fill,
+                                 backend->shutdown(state, NULL),
+                                 "the frame lands in the caller's memory, corner to corner");
+    INKCELL_TEST_FAIL_IF_CLEANUP(memory[HEADLESS_TEST_WIDTH * 4U] != 0xABU,
+                                 backend->shutdown(state, NULL),
+                                 "and the padding past each row is left alone");
+    struct inkcell_surface frame;
+    INKCELL_TEST_FAIL_IF_CLEANUP(!backend->frame(state, NULL, &frame) || frame.pixels != memory,
+                                 backend->shutdown(state, NULL),
+                                 "the frame hook points at that memory");
+    backend->shutdown(state, NULL);
+    INKCELL_TEST_FAIL_IF(memory[0] != 0x60U, "shutdown leaves the caller's memory to the caller");
+    record_success(test_name);
+}
