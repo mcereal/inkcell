@@ -1,6 +1,7 @@
 #pragma once
 
 #include "inkcell/ui/key.h"
+#include "inkcell/ui/touch.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -32,6 +33,43 @@ struct inkcell_input_host {
 };
 
 typedef void (*inkcell_key_handler)(void *userdata, enum inkcell_key key);
+
+/*
+ * A touchscreen's one contact that counts, as a fraction of each digitizer axis (0 to
+ * INKCELL_TOUCH_UNIT): inkcell_touch_feed() turns it into the frame's pixels and a tap or a
+ * scroll. See inkcell_input_set_touch_handler().
+ */
+typedef void (*inkcell_touch_handler)(void *userdata, enum inkcell_touch_phase phase, uint32_t nx,
+                                      uint32_t ny);
+
+/* How many fingers a multitouch screen is followed for. Ten, because that is how many a hand
+   pair has; the one that counts is whichever went down first, and the rest are only kept so
+   their lifting is not mistaken for its. */
+#define INKCELL_INPUT_TOUCH_SLOTS 10U
+
+enum inkcell_input_touch_kind {
+    INKCELL_INPUT_TOUCH_NO = 0,
+    /* ABS_X/ABS_Y and BTN_TOUCH: one contact, the way a resistive panel or an old driver says. */
+    INKCELL_INPUT_TOUCH_SINGLE,
+    /* The multitouch slots, protocol B: ABS_MT_SLOT and a tracking id per contact. */
+    INKCELL_INPUT_TOUCH_MULTI,
+};
+
+/* The digitizer's range on each axis, inclusive, as EVIOCGABS reports it, and which protocol it
+   speaks. */
+struct inkcell_input_touch_axes {
+    enum inkcell_input_touch_kind kind;
+    int32_t min_x, max_x;
+    int32_t min_y, max_y;
+};
+
+/* One multitouch slot: a contact the kernel is tracking, and where it last said it was. */
+struct inkcell_input_touch_slot {
+    bool live;
+    /* Went down in the report being read, so it may become the contact that counts. */
+    bool fresh;
+    int32_t x, y;
+};
 /* Whether a held `key` should repeat; see inkcell_input_set_repeat_policy(). */
 typedef bool (*inkcell_key_repeats_fn)(void *userdata, enum inkcell_key key);
 
@@ -83,6 +121,35 @@ struct inkcell_input {
        pad reporting the way up as a run of rising values would otherwise be one press per
        value. A zeroed struct starts with both up, which is what they are. */
     uint8_t triggers_down;
+
+    /*
+     * The touchscreen, when there is one: the first node that reports a direct-touch digitizer
+     * (inkcell_input_touch_kind()). Its events are a contact's, not a pad's, and go only to the
+     * decoder below - BTN_TOUCH is not a button, and ABS_X on a screen is not a stick.
+     *
+     * The kernel speaks in reports that end with SYN_REPORT, and a contact's position, its going
+     * down and its lifting can each arrive in any order inside one, so they are kept per slot
+     * and acted on at the report's end. `touch_primary` is the slot of the contact that counts,
+     * plus one, so a zeroed struct has none.
+     */
+    bool touch_attached;
+    int touch_fd;
+    struct inkcell_input_touch_axes touch_axes;
+    struct inkcell_input_touch_slot touch_slots[INKCELL_INPUT_TOUCH_SLOTS];
+    /* The slot the next ABS_MT_ events are about, or -1 for one past the slots kept. */
+    int touch_slot;
+    unsigned touch_primary;
+    /* Where the contact that counts was last reported to the handler, in the digitizer's units. */
+    int32_t touch_sent_x, touch_sent_y;
+    /* A single-touch screen's one contact, and whether the handler last heard it down. */
+    bool touch_single_down;
+    bool touch_sent_down;
+    int32_t touch_single_x, touch_single_y;
+    /* SYN_DROPPED: the kernel's buffer overflowed and the report under way is incomplete, so the
+       rest of it is ignored and the contact cancelled. */
+    bool touch_dropped;
+    inkcell_touch_handler on_touch;
+    void *touch_userdata;
 };
 
 /* Never fails the caller: a host with no readable /dev/input (the dev container, CI) simply
@@ -92,6 +159,32 @@ void inkcell_input_shutdown(struct inkcell_input *input);
 
 void inkcell_input_set_handler(struct inkcell_input *input, inkcell_key_handler handler,
                                void *userdata);
+
+/*
+ * Where a touchscreen's contact goes. NULL - and an application that never asks - drops them,
+ * and the screen is then watched for nothing.
+ */
+void inkcell_input_set_touch_handler(struct inkcell_input *input, inkcell_touch_handler handler,
+                                     void *userdata);
+
+/*
+ * Whether a node reporting these capability bitmaps is a touchscreen, and which protocol it
+ * speaks. EVIOCGBIT bitmaps for EV_KEY and EV_ABS and EVIOCGPROP's, NULL where the node could
+ * not say. A touchpad - INPUT_PROP_POINTER, a surface that moves a cursor rather than being
+ * the screen - is not one. Pure, like inkcell_input_device_wanted().
+ */
+enum inkcell_input_touch_kind
+inkcell_input_touch_kind(const unsigned long *key_bits, size_t key_words,
+                         const unsigned long *abs_bits, size_t abs_words,
+                         const unsigned long *prop_bits, size_t prop_words);
+
+/*
+ * Treat `fd` as the touchscreen, with these axes: what inkcell_input_init() does for the first
+ * node inkcell_input_touch_kind() accepts, and public so a test can play a recorded screen
+ * through inkcell_input_handle_device_event() without one. False for an empty axis.
+ */
+bool inkcell_input_attach_touch(struct inkcell_input *input, int fd,
+                                const struct inkcell_input_touch_axes *axes);
 
 /*
  * Which other keys this layer repeats while held.

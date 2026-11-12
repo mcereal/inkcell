@@ -15,6 +15,12 @@ modeset, the copy into the dumb buffer, the damage the buffer was owed, and the 
     cmake --build build/arm64 --target inkcell_gallery
     scripts/kms-vm.py build/arm64/examples/gallery/inkcell_gallery            # atomic
     scripts/kms-vm.py build/arm64/examples/gallery/inkcell_gallery --legacy   # SETCRTC + PAGE_FLIP
+    scripts/kms-vm.py build/arm64/examples/gallery/inkcell_gallery --touch    # a finger, too
+
+--touch adds a virtio-multitouch screen and, instead of comparing frames, puts one scene up and
+touches it through QMP: a tap, which has to come back as a tap at the pixel it was aimed at, and a
+drag down the panel, which has to come back as rows scrolled Up and no tap. That is the evdev
+reader, the multitouch slots and the digitizer-to-frame mapping, against a real kernel driver.
 
 Needs qemu-system-aarch64, and tar and cpio on the PATH. The kernel and busybox are fetched from
 Alpine's mirror into build/kms-vm/ once. Exits 0 when every frame matched.
@@ -42,10 +48,16 @@ INIT = """#!/bin/busybox sh
 /bin/busybox --install -s /bin
 mount -t proc proc /proc; mount -t sysfs sys /sys; mount -t devtmpfs dev /dev
 modprobe virtio-gpu || echo "modprobe failed"
+grep -q kms_touch /proc/cmdline && { modprobe evdev; modprobe virtio_input; }
 for i in 1 2 3 4 5 6 7 8 9 10; do [ -e /dev/dri/card0 ] && break; sleep 0.2; done
 grep -q kms_legacy /proc/cmdline && export INKCELL_GALLERY_KMS_LEGACY=1
+ARGS="--hold %d"
+if grep -q kms_touch /proc/cmdline; then
+    ARGS="--touch --scene buttons --hold 8000"
+    for i in 1 2 3 4 5 6 7 8 9 10; do [ -e /dev/input/event0 ] && break; sleep 0.2; done
+fi
 echo "GALLERY START"
-/gallery --show kms --hold %d 2>&1
+/gallery --show kms $ARGS 2>&1
 echo "GALLERY EXIT $?"
 poweroff -f
 """
@@ -75,7 +87,12 @@ def fetch_package(name, work):
     return dest
 
 
-def build_initramfs(gallery, kernel_tree, busybox_tree, work):
+GPU = "kernel/drivers/gpu/drm/virtio/virtio-gpu.ko.gz"
+# The touchscreen's driver, and the node evdev makes of it - both modules in this kernel.
+TOUCH = ["kernel/drivers/virtio/virtio_input.ko.gz", "kernel/drivers/input/evdev.ko.gz"]
+
+
+def build_initramfs(gallery, kernel_tree, busybox_tree, work, touch=False):
     root = os.path.join(work, "root")
     shutil.rmtree(root, ignore_errors=True)
     for d in ("bin", "proc", "sys", "dev"):
@@ -94,7 +111,7 @@ def build_initramfs(gallery, kernel_tree, busybox_tree, work):
         for line in f:
             module, _, needs = line.partition(":")
             deps[module] = needs.split()
-    wanted, queue = set(), ["kernel/drivers/gpu/drm/virtio/virtio-gpu.ko.gz"]
+    wanted, queue = set(), [GPU] + (TOUCH if touch else [])
     while queue:
         module = queue.pop()
         if module not in wanted:
@@ -151,6 +168,66 @@ def screendump(qmp, path):
             return reply
 
 
+def send(qmp, events):
+    """One input-send-event: the events, and the SYN_REPORT QEMU ends every command with."""
+    qmp.write(json.dumps({"execute": "input-send-event", "arguments": {"events": events}}) + "\n")
+    qmp.flush()
+    while True:
+        reply = json.loads(qmp.readline())
+        if "return" in reply or "error" in reply:
+            return reply
+
+
+def mtt(kind, axis=None, value=0, tracking=1):
+    data = {"type": kind, "slot": 0, "tracking-id": tracking, "axis": axis or "x", "value": value}
+    return {"type": "mtt", "data": data}
+
+
+def finger(qmp, path):
+    """A contact down at the first point, through the rest, and lifted at the last - in QEMU's
+    absolute units, 0 to 0x7fff on each axis."""
+    (x, y), rest = path[0], path[1:]
+    send(qmp, [mtt("begin", "x", x), mtt("data", "x", x), mtt("data", "y", y),
+               {"type": "btn", "data": {"down": True, "button": "touch"}}])
+    for x, y in rest:
+        time.sleep(0.03)
+        send(qmp, [mtt("update", "x", x), mtt("data", "x", x), mtt("data", "y", y)])
+    time.sleep(0.03)
+    send(qmp, [mtt("end", tracking=-1), {"type": "btn", "data": {"down": False, "button": "touch"}}])
+
+
+def touch_check(qmp, lines, size):
+    """Tap a quarter of the way across and down, then drag from a third of the way down to two
+    thirds. Reads the gallery's `touch` lines from `lines` and returns the failures."""
+    w, h = (int(n) for n in size.split("x"))
+    finger(qmp, [(0x2000, 0x2000)])
+    got = []
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline and not any(l.startswith("touch tap") for l in got):
+        got.append(next(lines))
+    failures = []
+    taps = [l.split() for l in got if l.startswith("touch tap")]
+    want = (w // 4, h // 4)
+    if not taps:
+        failures.append("the tap never came back as one")
+    elif abs(int(taps[0][2]) - want[0]) > 2 or abs(int(taps[0][3]) - want[1]) > 2:
+        failures.append(f"the tap landed at {taps[0][2]},{taps[0][3]}, not {want[0]},{want[1]}")
+
+    finger(qmp, [(0x4000, 0x2aaa + i * 0x2aa) for i in range(17)])
+    got = []
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline and not any(l.startswith("touch up") for l in got):
+        got.append(next(lines))
+    steps = sum(int(l.split()[2]) for l in got if l.startswith("touch scroll"))
+    if any(l.startswith("touch tap") for l in got):
+        failures.append("the drag ended in a tap")
+    if steps <= 0:
+        failures.append(f"the drag down scrolled {steps} row(s); it should be Up, so positive")
+    print(f"  tap at {taps[0][2] if taps else '-'},{taps[0][3] if taps else '-'}; "
+          f"drag scrolled {steps} row(s)", flush=True)
+    return failures
+
+
 def ppm_digest(path):
     """Size and FNV-1a over the RGB bytes of a binary PPM - what the gallery prints."""
     data = open(path, "rb").read()
@@ -175,39 +252,58 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("gallery", help="inkcell_gallery, static, for aarch64 Linux")
     parser.add_argument("--legacy", action="store_true", help="SETCRTC and PAGE_FLIP, not atomic")
+    parser.add_argument("--touch", action="store_true", help="a touchscreen, tapped and dragged")
     parser.add_argument("--work", default=os.path.join(ROOT, "build", "kms-vm"))
     args = parser.parse_args()
 
     os.makedirs(args.work, exist_ok=True)
     kernel = fetch_package("linux-virt", args.work)
     busybox = fetch_package("busybox-static", args.work)
-    initramfs = build_initramfs(args.gallery, kernel, busybox, args.work)
+    initramfs = build_initramfs(args.gallery, kernel, busybox, args.work, args.touch)
 
     # Relative, because a Unix socket's path is short and a build tree's often is not.
     os.chdir(args.work)
     if os.path.exists("qmp.sock"):
         os.unlink("qmp.sock")
     append = "console=ttyAMA0 rdinit=/init loglevel=4" + (" kms_legacy" if args.legacy else "")
+    append += " kms_touch" if args.touch else ""
+    touch_device = ["-device", "virtio-multitouch-pci"] if args.touch else []
     qemu = subprocess.Popen(
         ["qemu-system-aarch64", "-M", "virt", *accel(), "-m", "1024", "-smp", "2",
          "-kernel", os.path.join(kernel, "boot/vmlinuz-virt"), "-initrd", initramfs,
-         "-append", append, "-device", "virtio-gpu-pci", "-display", "none",
+         "-append", append, "-device", "virtio-gpu-pci", *touch_device, "-display", "none",
          "-serial", "stdio", "-monitor", "none", "-qmp", "unix:qmp.sock,server,nowait",
          "-no-reboot"],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
     qmp = qmp_connect("qmp.sock")
 
     matched, differed, status = 0, 0, None
-    for raw in qemu.stdout:
-        line = raw.decode(errors="replace").rstrip()
+    failures = []
+    touch_found = False
+    lines = (raw.decode(errors="replace").rstrip() for raw in qemu.stdout)
+    for line in lines:
         if not line.startswith("["):  # the kernel's own lines
             print(line, flush=True)
+        touch_found = touch_found or line == "touch screen found"
         if line.startswith("GALLERY EXIT "):
             status = line.split()[-1]
             continue
         if not line.startswith("shown "):
             continue
         _, name, size, digest = line.split()
+        if args.touch and not touch_found:
+            failures = ["the gallery found no touchscreen"]
+            differed += 1
+            continue
+        if args.touch:
+            def echoed():
+                for l in lines:
+                    print(l, flush=True)
+                    yield l
+            failures = touch_check(qmp, echoed(), size)
+            matched += not failures
+            differed += bool(failures)
+            continue
         shot = os.path.join(args.work, f"{name}.ppm")
         # The line is printed when the flip is asked for, not when it lands, and under TCG the
         # scanout can trail it by a long way. So the panel is looked at again until it shows the
@@ -230,7 +326,13 @@ def main():
         differed += not same
         print(f"  panel {panel_size} {panel_digest} {'matches' if same else 'DIFFERS'}", flush=True)
     qemu.wait()
-    mode = "legacy" if args.legacy else "atomic"
+    mode = "touch" if args.touch else "legacy" if args.legacy else "atomic"
+    for failure in failures:
+        print(f"kms-vm: {failure}")
+    if args.touch:
+        print(f"kms-vm: touch: {'pass' if matched and not differed else 'FAIL'}; "
+              f"the gallery exited {status if status is not None else 'without saying'}")
+        return 0 if matched and not differed and status == "0" else 1
     print(f"kms-vm: {mode}: {matched} frame(s) matched the panel, {differed} did not; "
           f"the gallery exited {status if status is not None else 'without saying'}")
     # A run that matched what it showed but stopped early - a crash, a refused init - is a

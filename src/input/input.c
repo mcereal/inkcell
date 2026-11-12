@@ -72,6 +72,8 @@ static char s_quit_hint[64];
 static char s_quit_cap[8];
 static bool s_quit_hint_is_key_code;
 
+static void inkcell_input_touch_cancel(struct inkcell_input *input);
+
 static void inkcell_input_load_quit_keys(void) {
     if (s_quit_keys_loaded) {
         return;
@@ -295,6 +297,9 @@ static void inkcell_input_repeat_start(struct inkcell_input *input, enum inkcell
    keyboard unplugged mid-hold hangs up its fd instead of sending the key up, and without this
    the timer would happily scroll the list until some other button was pressed. */
 void inkcell_input_device_lost(struct inkcell_input *input, int source_fd) {
+    if (input != NULL && input->touch_attached && source_fd == input->touch_fd) {
+        inkcell_input_touch_cancel(input);
+    }
     if (input == NULL || source_fd < 0 || input->repeat_source_fd != source_fd) {
         return;
     }
@@ -539,6 +544,186 @@ void inkcell_input_set_repeat_policy(struct inkcell_input *input, inkcell_key_re
     input->repeats_userdata = userdata;
 }
 
+/* ---- the touchscreen --------------------------------------------------------------------- */
+
+void inkcell_input_set_touch_handler(struct inkcell_input *input, inkcell_touch_handler handler,
+                                     void *userdata) {
+    if (input == NULL) {
+        return;
+    }
+    input->on_touch = handler;
+    input->touch_userdata = userdata;
+}
+
+/* One axis value as a fraction of the digitizer's range, clamped: a panel reports a contact on
+   its bezel as just past the edge, which is the edge. */
+static uint32_t inkcell_input_touch_unit(int32_t value, int32_t min, int32_t max) {
+    if (value <= min) {
+        return 0U;
+    }
+    if (value >= max) {
+        return INKCELL_TOUCH_UNIT - 1U;
+    }
+    const uint64_t span = (uint64_t)((int64_t)max - (int64_t)min) + 1U;
+    return (uint32_t)(((uint64_t)((int64_t)value - (int64_t)min) * INKCELL_TOUCH_UNIT) / span);
+}
+
+static void inkcell_input_touch_send(struct inkcell_input *input, enum inkcell_touch_phase phase,
+                                     int32_t x, int32_t y) {
+    input->touch_sent_x = x;
+    input->touch_sent_y = y;
+    if (input->on_touch == NULL) {
+        return;
+    }
+    const struct inkcell_input_touch_axes *axes = &input->touch_axes;
+    input->on_touch(input->touch_userdata, phase,
+                    inkcell_input_touch_unit(x, axes->min_x, axes->max_x),
+                    inkcell_input_touch_unit(y, axes->min_y, axes->max_y));
+}
+
+/* The contact that counts is gone without lifting: its device went away, or the kernel dropped
+   events and nothing about it can be trusted. Not a tap. */
+static void inkcell_input_touch_cancel(struct inkcell_input *input) {
+    const bool held = input->touch_primary != 0U || input->touch_single_down;
+    for (size_t i = 0; i < INKCELL_INPUT_TOUCH_SLOTS; ++i) {
+        input->touch_slots[i].live = false;
+        input->touch_slots[i].fresh = false;
+    }
+    input->touch_primary = 0U;
+    input->touch_single_down = false;
+    if (held) {
+        inkcell_input_touch_send(input, INKCELL_TOUCH_CANCEL, input->touch_sent_x,
+                                 input->touch_sent_y);
+    }
+}
+
+/* The end of a multitouch report: the contact that counts went down, moved or lifted. */
+static void inkcell_input_touch_report_multi(struct inkcell_input *input) {
+    if (input->touch_primary != 0U) {
+        const struct inkcell_input_touch_slot *slot =
+            &input->touch_slots[input->touch_primary - 1U];
+        if (!slot->live) {
+            input->touch_primary = 0U;
+            inkcell_input_touch_send(input, INKCELL_TOUCH_UP, slot->x, slot->y);
+        } else if (slot->x != input->touch_sent_x || slot->y != input->touch_sent_y) {
+            inkcell_input_touch_send(input, INKCELL_TOUCH_MOVE, slot->x, slot->y);
+        }
+    }
+    /*
+     * A new contact counts only when none does and it went down in this report. A finger left
+     * on the glass after the one that counted has lifted is not promoted: it went down as a
+     * second finger, and turning it into a first one halfway through would be a tap nobody made.
+     */
+    if (input->touch_primary == 0U) {
+        for (size_t i = 0; i < INKCELL_INPUT_TOUCH_SLOTS; ++i) {
+            const struct inkcell_input_touch_slot *slot = &input->touch_slots[i];
+            if (slot->live && slot->fresh) {
+                input->touch_primary = (unsigned)i + 1U;
+                inkcell_input_touch_send(input, INKCELL_TOUCH_DOWN, slot->x, slot->y);
+                break;
+            }
+        }
+    }
+    for (size_t i = 0; i < INKCELL_INPUT_TOUCH_SLOTS; ++i) {
+        input->touch_slots[i].fresh = false;
+    }
+}
+
+static void inkcell_input_touch_report_single(struct inkcell_input *input, bool was_down) {
+    const int32_t x = input->touch_single_x;
+    const int32_t y = input->touch_single_y;
+    if (input->touch_single_down && !was_down) {
+        inkcell_input_touch_send(input, INKCELL_TOUCH_DOWN, x, y);
+    } else if (!input->touch_single_down && was_down) {
+        inkcell_input_touch_send(input, INKCELL_TOUCH_UP, x, y);
+    } else if (input->touch_single_down && (x != input->touch_sent_x || y != input->touch_sent_y)) {
+        inkcell_input_touch_send(input, INKCELL_TOUCH_MOVE, x, y);
+    }
+}
+
+static void inkcell_input_touch_event(struct inkcell_input *input, uint16_t type, uint16_t code,
+                                      int32_t value) {
+    const bool multi = input->touch_axes.kind == INKCELL_INPUT_TOUCH_MULTI;
+    if (type == EV_SYN) {
+        if (code == SYN_DROPPED) {
+            input->touch_dropped = true;
+            inkcell_input_touch_cancel(input);
+            return;
+        }
+        if (code != SYN_REPORT) {
+            return;
+        }
+        if (input->touch_dropped) {
+            /* The report that was overrun ends here; the next one is whole. */
+            input->touch_dropped = false;
+            return;
+        }
+        if (multi) {
+            inkcell_input_touch_report_multi(input);
+        } else {
+            /* The edge is between what was last sent and now, so a down and an up inside one
+               report - a tap faster than the scan - still goes out as the down. */
+            inkcell_input_touch_report_single(input, input->touch_sent_down);
+            input->touch_sent_down = input->touch_single_down;
+        }
+        return;
+    }
+    if (input->touch_dropped) {
+        return;
+    }
+    if (multi) {
+        if (type != EV_ABS) {
+            return; /* BTN_TOUCH and the legacy ABS_X/Y repeat what the slots say */
+        }
+        if (code == ABS_MT_SLOT) {
+            input->touch_slot =
+                value >= 0 && (uint32_t)value < INKCELL_INPUT_TOUCH_SLOTS ? (int)value : -1;
+            return;
+        }
+        if (input->touch_slot < 0) {
+            return;
+        }
+        struct inkcell_input_touch_slot *slot = &input->touch_slots[input->touch_slot];
+        if (code == ABS_MT_TRACKING_ID) {
+            const bool live = value >= 0;
+            slot->fresh = live && !slot->live;
+            slot->live = live;
+        } else if (code == ABS_MT_POSITION_X) {
+            slot->x = value;
+        } else if (code == ABS_MT_POSITION_Y) {
+            slot->y = value;
+        }
+        return;
+    }
+    if (type == EV_KEY && code == BTN_TOUCH) {
+        input->touch_single_down = value != 0;
+    } else if (type == EV_ABS && code == ABS_X) {
+        input->touch_single_x = value;
+    } else if (type == EV_ABS && code == ABS_Y) {
+        input->touch_single_y = value;
+    }
+}
+
+bool inkcell_input_attach_touch(struct inkcell_input *input, int fd,
+                                const struct inkcell_input_touch_axes *axes) {
+    if (input == NULL || axes == NULL || axes->kind == INKCELL_INPUT_TOUCH_NO ||
+        axes->max_x <= axes->min_x || axes->max_y <= axes->min_y) {
+        return false;
+    }
+    input->touch_attached = true;
+    input->touch_fd = fd;
+    input->touch_axes = *axes;
+    memset(input->touch_slots, 0, sizeof input->touch_slots);
+    input->touch_slot = 0; /* the kernel's current slot until it names another */
+    input->touch_primary = 0U;
+    input->touch_sent_x = 0;
+    input->touch_sent_y = 0;
+    input->touch_sent_down = false;
+    input->touch_single_down = false;
+    input->touch_dropped = false;
+    return true;
+}
+
 void inkcell_input_handle_event(struct inkcell_input *input, uint16_t type, uint16_t code,
                                 int32_t value) {
     inkcell_input_handle_device_event(input, -1, type, code, value);
@@ -547,6 +732,10 @@ void inkcell_input_handle_event(struct inkcell_input *input, uint16_t type, uint
 void inkcell_input_handle_device_event(struct inkcell_input *input, int source_fd, uint16_t type,
                                        uint16_t code, int32_t value) {
     if (input == NULL) {
+        return;
+    }
+    if (input->touch_attached && source_fd == input->touch_fd) {
+        inkcell_input_touch_event(input, type, code, value);
         return;
     }
 
@@ -806,6 +995,80 @@ bool inkcell_input_device_wanted(const unsigned long *key_bits, size_t key_words
     return !keys_known && !axes_known;
 }
 
+/*
+ * A touchscreen, rather than a touchpad, a tablet or a stick.
+ *
+ * The slots and their tracking ids are what protocol B is, and a driver that has them is read
+ * through them; one without - protocol A, or a single-contact panel - is read through the
+ * ABS_X/ABS_Y and BTN_TOUCH that the kernel's pointer emulation, or the driver itself, reports
+ * alongside. A stick has ABS_X too, but never BTN_TOUCH.
+ *
+ * INPUT_PROP_POINTER is the property that rules a node out: it marks a surface that moves a
+ * cursor - a laptop's touchpad - rather than one that is the screen, and a tap on a touchpad
+ * has no point on the frame to land on. A node that cannot report its properties is taken at
+ * its axes, as the filter above takes a node at its word.
+ */
+enum inkcell_input_touch_kind
+inkcell_input_touch_kind(const unsigned long *key_bits, size_t key_words,
+                         const unsigned long *abs_bits, size_t abs_words,
+                         const unsigned long *prop_bits, size_t prop_words) {
+    if (abs_bits == NULL || inkcell_input_bit_set(prop_bits, prop_words, INPUT_PROP_POINTER)) {
+        return INKCELL_INPUT_TOUCH_NO;
+    }
+    if (inkcell_input_bit_set(abs_bits, abs_words, ABS_MT_SLOT) &&
+        inkcell_input_bit_set(abs_bits, abs_words, ABS_MT_TRACKING_ID) &&
+        inkcell_input_bit_set(abs_bits, abs_words, ABS_MT_POSITION_X) &&
+        inkcell_input_bit_set(abs_bits, abs_words, ABS_MT_POSITION_Y)) {
+        return INKCELL_INPUT_TOUCH_MULTI;
+    }
+    if (inkcell_input_bit_set(abs_bits, abs_words, ABS_X) &&
+        inkcell_input_bit_set(abs_bits, abs_words, ABS_Y) &&
+        inkcell_input_bit_set(key_bits, key_words, BTN_TOUCH)) {
+        return INKCELL_INPUT_TOUCH_SINGLE;
+    }
+    return INKCELL_INPUT_TOUCH_NO;
+}
+
+#if defined(__linux__)
+/* A touchscreen's kind and range, read off the node; false when it is not one or will not say
+   how big it is. */
+static bool inkcell_input_probe_touch(int fd, struct inkcell_input_touch_axes *axes) {
+    unsigned long keys[INKCELL_INPUT_BIT_WORDS(KEY_MAX + 1U)];
+    unsigned long abs_bits[INKCELL_INPUT_BIT_WORDS(ABS_MAX + 1U)];
+    unsigned long props[INKCELL_INPUT_BIT_WORDS(INPUT_PROP_MAX + 1U)];
+    memset(keys, 0, sizeof keys);
+    memset(abs_bits, 0, sizeof abs_bits);
+    memset(props, 0, sizeof props);
+    const bool keys_known =
+        ioctl(fd, inkwell_ioctl_request_of(EVIOCGBIT(EV_KEY, sizeof keys)), keys) >= 0;
+    const bool abs_known =
+        ioctl(fd, inkwell_ioctl_request_of(EVIOCGBIT(EV_ABS, sizeof abs_bits)), abs_bits) >= 0;
+    const bool props_known =
+        ioctl(fd, inkwell_ioctl_request_of(EVIOCGPROP(sizeof props)), props) >= 0;
+    const enum inkcell_input_touch_kind kind = inkcell_input_touch_kind(
+        keys_known ? keys : NULL, INKWELL_ARRAY_LEN(keys), abs_known ? abs_bits : NULL,
+        INKWELL_ARRAY_LEN(abs_bits), props_known ? props : NULL, INKWELL_ARRAY_LEN(props));
+    if (kind == INKCELL_INPUT_TOUCH_NO) {
+        return false;
+    }
+    const bool multi = kind == INKCELL_INPUT_TOUCH_MULTI;
+    struct input_absinfo x;
+    struct input_absinfo y;
+    const unsigned axis_x = multi ? (unsigned)ABS_MT_POSITION_X : (unsigned)ABS_X;
+    const unsigned axis_y = multi ? (unsigned)ABS_MT_POSITION_Y : (unsigned)ABS_Y;
+    if (ioctl(fd, inkwell_ioctl_request_of(EVIOCGABS(axis_x)), &x) < 0 ||
+        ioctl(fd, inkwell_ioctl_request_of(EVIOCGABS(axis_y)), &y) < 0) {
+        return false;
+    }
+    *axes = (struct inkcell_input_touch_axes){.kind = kind,
+                                              .min_x = x.minimum,
+                                              .max_x = x.maximum,
+                                              .min_y = y.minimum,
+                                              .max_y = y.maximum};
+    return true;
+}
+#endif
+
 #if defined(__linux__)
 static bool inkcell_input_device_is_useful(int fd, const char *path) {
     unsigned long keys[INKCELL_INPUT_BIT_WORDS(KEY_MAX + 1U)];
@@ -901,7 +1164,9 @@ int inkcell_input_init(struct inkcell_input *input, const struct inkcell_input_h
 
         char name[64];
         inkcell_input_device_name(fd, name, sizeof name);
-        if (!inkcell_input_device_is_useful(fd, path)) {
+        struct inkcell_input_touch_axes axes;
+        const bool touch = !input->touch_attached && inkcell_input_probe_touch(fd, &axes);
+        if (!touch && !inkcell_input_device_is_useful(fd, path)) {
             inkwell_log_debug("input", "Skipping %s (%s): nothing this client reads", path, name);
             close(fd);
             ++skipped;
@@ -916,6 +1181,12 @@ int inkcell_input_init(struct inkcell_input *input, const struct inkcell_input_h
         }
 
         inkcell_input_use_monotonic_stamps(fd, path);
+        if (touch) {
+            (void)inkcell_input_attach_touch(input, fd, &axes);
+            inkwell_log_info("input", "Touchscreen %s (%s): %s, %d..%d x %d..%d", path, name,
+                             axes.kind == INKCELL_INPUT_TOUCH_MULTI ? "multitouch" : "single",
+                             (int)axes.min_x, (int)axes.max_x, (int)axes.min_y, (int)axes.max_y);
+        }
         inkwell_log_debug("input", "Watching %s (%s)", path, name);
         input->fds[input->count++] = fd;
     }
@@ -964,6 +1235,12 @@ void inkcell_input_shutdown(struct inkcell_input *input) {
     input->repeat_source_fd = -1;
     input->repeat_key = INKCELL_KEY_NONE;
     input->repeat_count = 0U;
+
+    input->touch_attached = false;
+    input->touch_fd = -1;
+    input->touch_primary = 0U;
+    input->on_touch = NULL;
+    input->touch_userdata = NULL;
 
     input->count = 0U;
     input->host = (struct inkcell_input_host){0};

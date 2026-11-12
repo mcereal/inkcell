@@ -11,6 +11,8 @@
  *   --show B    puts the scenes up on a real backend (kms, fb or headless), one after another,
  *               and prints a digest of each frame's colour - which is what a screenshot of the
  *               panel is compared against to prove the frame reached it unchanged.
+ *   --touch     with --show, reads the touchscreen too and prints what each contact became -
+ *               where it landed on the frame, and whether it was a tap or a scroll.
  *
  * The digest is what makes a widget testable. "The button looks right" is not a unit test
  * anybody can write; "the button looks like it did yesterday, and here is the picture of what
@@ -26,7 +28,9 @@
 #include "inkcell/ui/fb.h"
 #include "inkcell/ui/fb_capture.h"
 #include "inkcell/ui/headless.h"
+#include "inkcell/ui/input.h"
 #include "inkcell/ui/kms.h"
+#include "inkcell/ui/touch.h"
 #include "inkwell/base/env.h"
 #include "inkwell/runtime/loop.h"
 
@@ -260,9 +264,46 @@ static void gallery_host_request_stop(void *ctx) {
     inkwell_loop_request_stop((struct inkwell_loop *)ctx);
 }
 
+/* --touch: the backend on screen, and the contact's memory between events. */
+struct gallery_touch {
+    const struct inkcell_backend *backend;
+    void *state;
+    struct inkcell_touch touch;
+};
+
+static const char *gallery_touch_phase(enum inkcell_touch_phase phase) {
+    switch (phase) {
+    case INKCELL_TOUCH_DOWN:
+        return "down";
+    case INKCELL_TOUCH_MOVE:
+        return "move";
+    case INKCELL_TOUCH_UP:
+        return "up";
+    default:
+        return "cancel";
+    }
+}
+
+/* One line per event, and one more for what the contact became. The gallery's scenes keep their
+   boxes on their own stack, so a tap here lands on nothing; which box a tap presses is the unit
+   suite's to say (tests/suites/ui_touch.c), and this is the device and the kernel under it. */
+static void gallery_on_touch(void *userdata, enum inkcell_touch_phase phase, uint32_t nx,
+                             uint32_t ny) {
+    struct gallery_touch *g = userdata;
+    const struct inkcell_touch_result r =
+        inkcell_touch_feed(&g->touch, g->backend, g->state, NULL, phase, nx, ny);
+    printf("touch %s %d %d\n", gallery_touch_phase(phase), r.x, r.y);
+    if (r.kind == INKCELL_TOUCH_TAP) {
+        printf("touch tap %d %d\n", r.x, r.y);
+    } else if (r.kind == INKCELL_TOUCH_SCROLL) {
+        printf("touch scroll %d\n", r.steps);
+    }
+    fflush(stdout);
+}
+
 /* --show: every selected scene on a real backend, `hold_ms` apiece. Returns an exit status. */
 static int gallery_show(const char *backend_name, const struct gallery_scene *scenes,
-                        size_t scene_count, const char *only_scene, unsigned hold_ms) {
+                        size_t scene_count, const char *only_scene, unsigned hold_ms, bool touch) {
     const struct inkcell_fb_app app = {.render = gallery_render};
     struct inkwell_loop loop;
     int rc = inkwell_loop_init(&loop);
@@ -303,6 +344,17 @@ static int gallery_show(const char *backend_name, const struct gallery_scene *sc
         inkwell_loop_shutdown(&loop);
         return 1;
     }
+    static struct inkcell_input input;
+    static struct gallery_touch g;
+    if (touch) {
+        g.backend = backend;
+        g.state = state;
+        inkcell_touch_init(&g.touch);
+        (void)inkcell_input_init(&input, &host);
+        inkcell_input_set_touch_handler(&input, gallery_on_touch, &g);
+        printf("touch screen %s\n", input.touch_attached ? "found" : "missing");
+        fflush(stdout);
+    }
     for (size_t s = 0U; s < scene_count; ++s) {
         if (only_scene != NULL && strcmp(only_scene, scenes[s].name) != 0) {
             continue;
@@ -317,6 +369,9 @@ static int gallery_show(const char *backend_name, const struct gallery_scene *sc
         /* Zero still drains what is ready, so a frame owed a completed flip goes up. */
         (void)inkwell_loop_run(&loop, hold_ms > (unsigned)INT_MAX ? INT_MAX : (int)hold_ms);
     }
+    if (touch) {
+        inkcell_input_shutdown(&input);
+    }
     if (backend->shutdown != NULL) {
         backend->shutdown(state, context);
     }
@@ -327,7 +382,7 @@ static int gallery_show(const char *backend_name, const struct gallery_scene *sc
 static void gallery_usage(FILE *out) {
     fputs("usage: inkcell_gallery [--out DIR] [--check FILE] [--scene NAME] [--theme ID]\n"
           "                       [--scale N] [--list]\n"
-          "       inkcell_gallery --show kms|fb|headless [--scene NAME] [--hold MS]\n",
+          "       inkcell_gallery --show kms|fb|headless [--scene NAME] [--hold MS] [--touch]\n",
           out);
 }
 
@@ -340,6 +395,7 @@ int main(int argc, char **argv) {
     bool list = false;
     const char *show = NULL;
     unsigned hold_ms = 1000U;
+    bool touch = false;
 
     for (int i = 1; i < argc; ++i) {
         const char *arg = argv[i];
@@ -352,6 +408,8 @@ int main(int argc, char **argv) {
             check = argv[++i];
         } else if (strcmp(arg, "--show") == 0 && has_value) {
             show = argv[++i];
+        } else if (strcmp(arg, "--touch") == 0) {
+            touch = true;
         } else if (strcmp(arg, "--hold") == 0 && has_value) {
             hold_ms = (unsigned)strtoul(argv[++i], NULL, 10);
         } else if (strcmp(arg, "--scene") == 0 && has_value) {
@@ -393,7 +451,7 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (show != NULL) {
-        return gallery_show(show, scenes, scene_count, only_scene, hold_ms);
+        return gallery_show(show, scenes, scene_count, only_scene, hold_ms, touch);
     }
 
     const size_t theme_count = inkcell_theme_count();

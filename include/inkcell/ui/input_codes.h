@@ -97,4 +97,25 @@
 #define ABS_MAX 0x3f
 #endif
 
+/* A touchscreen: the multitouch slots (protocol B), the single-touch fallback, and the two
+   properties that tell a screen from a touchpad. */
+#ifndef ABS_MT_SLOT
+#define ABS_MT_SLOT 0x2f
+#define ABS_MT_POSITION_X 0x35
+#define ABS_MT_POSITION_Y 0x36
+#define ABS_MT_TRACKING_ID 0x39
+#endif
+#ifndef BTN_TOUCH
+#define BTN_TOUCH 0x14a
+#endif
+#ifndef SYN_REPORT
+#define SYN_REPORT 0
+#define SYN_DROPPED 3
+#endif
+#ifndef INPUT_PROP_POINTER
+#define INPUT_PROP_POINTER 0x00
+#define INPUT_PROP_DIRECT 0x01
+#define INPUT_PROP_MAX 0x1f
+#endif
+
 #endif
