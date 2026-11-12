@@ -96,6 +96,8 @@ add_library(inkcell STATIC
     # resolving a press wants the same answer.
     src/focus.c
     src/pointer.c
+    # a finger: a tap or a drag, over the pointer rules
+    src/touch.c
     # evdev to a key, and the button profile of the device under it
     src/input/input.c
     src/input/key.c

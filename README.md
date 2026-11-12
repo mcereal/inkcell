@@ -41,7 +41,7 @@ codecs.
 | **Framebuffer** | `/dev/fb0`, the page flip, damage tracking, a glyph cache, and an off-screen renderer for screenshots. |
 | **KMS** | The same frame through DRM: a connector, its preferred mode, two dumb buffers and an atomic page flip, with no libdrm. For a kernel that has no `/dev/fb0` to offer. |
 | **Window** | The same frame in an SDL window: damage as texture uploads, a keyboard, and a desktop application rather than a picture of a device. Optional - no SDL2, no window, everything else unchanged. |
-| **Input** | evdev to a logical key, hat axes, analogue triggers, key repeat, per-device button profiles. |
+| **Input** | evdev to a logical key, hat axes, analogue triggers, key repeat, per-device button profiles. A touchscreen too: the multitouch slots read down to the one finger that counts, and that finger as a tap on whatever box the frame drew under it, or a drag that scrolls (`inkcell/ui/touch.h`, turned by `<PREFIX>_TOUCH_ROTATE`). |
 | **i18n** | A catalog mechanism with plural rules and format-string validation. |
 | **Gallery** | Every component, in every theme, rendered with no device attached - and the golden sheet that keeps them that way. |
 
@@ -235,7 +235,7 @@ A backend is six function pointers (`inkcell/ui/backend.h`) and the frame it pre
 | | |
 |---|---|
 | `inkcell_backend_fb()` | `/dev/fb0`. The device UI: changed spans copied into the mapping, `FBIOPAN_DISPLAY`, and the Brick's two-page mirror. |
-| `inkcell_backend_kms()` | `/dev/dri/cardN`. The changed rows copied into whichever of two dumb buffers is off screen, then an atomic commit (or `SETCRTC` and `PAGE_FLIP`, where a driver has no atomic) swaps them on the vertical blank. `scripts/kms-vm.py` runs it against QEMU's virtio-gpu and compares every frame with what the panel scanned out. |
+| `inkcell_backend_kms()` | `/dev/dri/cardN`. The changed rows copied into whichever of two dumb buffers is off screen, then an atomic commit (or `SETCRTC` and `PAGE_FLIP`, where a driver has no atomic) swaps them on the vertical blank. `scripts/kms-vm.py` runs it against QEMU's virtio-gpu and compares every frame with what the panel scanned out; with `--touch` it adds a virtio-multitouch screen and checks a tap and a drag through the kernel's evdev. |
 | `inkcell_backend_headless()` | No panel, the real clock: what an application runs where there is no display, with the frame there to be read back. |
 | `inkcell_backend_sdl()` | An SDL window. The same rows, gathered into rectangles and uploaded to a streaming texture. |
 | `inkcell_capture_*()` | No panel at all - a malloc'd page, which is what the gallery and the golden sheet render into. |

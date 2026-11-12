@@ -21,7 +21,8 @@ include/inkcell/ui/           the public surface: fb_draw.h, widgets.h and widge
 include/inkcell/i18n/         the string catalog mechanism; catalog.def is inkcell's own words
 src/fb/                       the framebuffer backend, the capture backend and the widgets
 src/kms/                      the DRM/KMS backend, over the kernel's uapi headers (no libdrm)
-src/sdl/, src/input/          the window backend; evdev and the per-device button profiles
+src/sdl/, src/input/          the window backend; evdev, the touchscreen and the button profiles
+src/pointer.c, src/touch.c    a click and a tap, answered against the frame's focus map
 src/theme/                    palettes by role, fonts, icons
 src/generated/                glyph tables written by scripts/gen-*.py - never edit, never format
 examples/gallery/             every component in every theme; also the golden-sheet test
@@ -30,7 +31,8 @@ tests/suites/ui_*.c           one file per subject
 tests/golden/manifest.txt     one digest per gallery page
 scripts/check-strings.py      fails on prose in a renderer
 scripts/check-platform.py     fails on a platform header in include/
-scripts/kms-vm.py             the KMS backend on QEMU's virtio-gpu, every frame checked on the panel
+scripts/kms-vm.py             the KMS backend on QEMU's virtio-gpu, every frame checked on the panel; --touch taps and drags a
+                              virtio-multitouch screen through evdev
 ```
 
 ## Style
