@@ -28,13 +28,13 @@
 #include "inkcell/ui/headless.h"
 #include "inkcell/ui/kms.h"
 #include "inkwell/base/env.h"
+#include "inkwell/runtime/loop.h"
 
 #include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 /*
  * The scales the sheet is taken at.
@@ -242,18 +242,41 @@ static uint64_t gallery_rgb_digest(const struct inkcell_surface *s) {
     return hash;
 }
 
-static void gallery_sleep_ms(unsigned ms) {
-    struct timespec t = {(time_t)(ms / 1000U), (long)(ms % 1000U) * 1000000L};
-    while (nanosleep(&t, &t) != 0) {
-    }
+/* The input host over an inkwell loop: what a backend that waits on a descriptor - the KMS
+   backend's page flips - is given, so a scene's hold is spent on a loop as an application's
+   time would be, rather than asleep. */
+static int gallery_host_add_fd(void *ctx, int fd,
+                               int (*callback)(int fd, uint32_t events, void *userdata),
+                               void *userdata) {
+    return inkwell_loop_add_fd((struct inkwell_loop *)ctx, fd, INKWELL_LOOP_IN, callback, userdata);
+}
+
+static void gallery_host_remove_fd(void *ctx, int fd) {
+    (void)inkwell_loop_remove_fd((struct inkwell_loop *)ctx, fd);
+}
+
+static void gallery_host_request_stop(void *ctx) {
+    inkwell_loop_request_stop((struct inkwell_loop *)ctx);
 }
 
 /* --show: every selected scene on a real backend, `hold_ms` apiece. Returns an exit status. */
 static int gallery_show(const char *backend_name, const struct gallery_scene *scenes,
                         size_t scene_count, const char *only_scene, unsigned hold_ms) {
     const struct inkcell_fb_app app = {.render = gallery_render};
+    struct inkwell_loop loop;
+    int rc = inkwell_loop_init(&loop);
+    if (rc < 0) {
+        fprintf(stderr, "gallery: no event loop: %s\n", strerror(-rc));
+        return 1;
+    }
+    const struct inkcell_input_host host = {
+        .ctx = &loop,
+        .add_fd = gallery_host_add_fd,
+        .remove_fd = gallery_host_remove_fd,
+        .request_stop = gallery_host_request_stop,
+    };
     const struct inkcell_backend *backend = NULL;
-    struct inkcell_backend_kms_context kms = {.app = &app};
+    struct inkcell_backend_kms_context kms = {.app = &app, .host = host};
     struct inkcell_backend_fb_context fb = {.app = &app};
     struct inkcell_backend_headless_context headless = {.app = &app};
     void *context = NULL;
@@ -268,13 +291,15 @@ static int gallery_show(const char *backend_name, const struct gallery_scene *sc
         context = &headless;
     } else {
         fprintf(stderr, "gallery: no backend called %s (kms, fb, headless)\n", backend_name);
+        inkwell_loop_shutdown(&loop);
         return 2;
     }
 
     void *state = NULL;
-    const int rc = backend->init(&state, context);
+    rc = backend->init(&state, context);
     if (rc < 0) {
         fprintf(stderr, "gallery: the %s backend did not start: %s\n", backend_name, strerror(-rc));
+        inkwell_loop_shutdown(&loop);
         return 1;
     }
     for (size_t s = 0U; s < scene_count; ++s) {
@@ -288,11 +313,14 @@ static int gallery_show(const char *backend_name, const struct gallery_scene *sc
                    (unsigned long long)gallery_rgb_digest(&frame));
             fflush(stdout);
         }
-        gallery_sleep_ms(hold_ms);
+        if (hold_ms > 0U) {
+            (void)inkwell_loop_run(&loop, (int)hold_ms);
+        }
     }
     if (backend->shutdown != NULL) {
         backend->shutdown(state, context);
     }
+    inkwell_loop_shutdown(&loop);
     return 0;
 }
 
