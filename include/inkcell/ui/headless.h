@@ -23,6 +23,7 @@
 #include "inkcell/ui/backend.h"
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 struct inkcell_fb_app;
