@@ -108,6 +108,9 @@
 #ifndef BTN_TOUCH
 #define BTN_TOUCH 0x14a
 #endif
+#ifndef BTN_LEFT
+#define BTN_LEFT 0x110
+#endif
 #ifndef SYN_REPORT
 #define SYN_REPORT 0
 #define SYN_DROPPED 3
