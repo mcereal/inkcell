@@ -47,11 +47,20 @@ typedef void (*inkcell_touch_handler)(void *userdata, enum inkcell_touch_phase p
    their lifting is not mistaken for its. */
 #define INKCELL_INPUT_TOUCH_SLOTS 10U
 
+/*
+ * What a touch node is, ordered by how much of a screen it is: a later kind outranks an earlier
+ * one. inkcell_input_init() reads one touch node, and a host can have several - a VM with a
+ * tablet beside its multitouch screen, a device with a remote-desktop pointer beside its panel -
+ * so the scan keeps the highest-ranked node rather than whichever has the lowest event number.
+ */
 enum inkcell_input_touch_kind {
     INKCELL_INPUT_TOUCH_NO = 0,
+    /* An absolute pointer with BTN_LEFT that is neither a touchpad nor a pad - a VM's tablet,
+       where the host's mouse stands in for a finger. BTN_LEFT is the contact. Last resort: it
+       may be a mouse in absolute mode rather than anything on the panel. */
+    INKCELL_INPUT_TOUCH_POINTER,
     /* ABS_X/ABS_Y and BTN_TOUCH: one contact, the way a resistive panel or an old driver says.
-       Also an absolute pointer with BTN_LEFT that is not a touchpad - a virtual machine's tablet,
-       where the host's mouse stands in for a finger. */
+       BTN_TOUCH is the contact; a BTN_LEFT beside it is the driver's echo and is not read. */
     INKCELL_INPUT_TOUCH_SINGLE,
     /* The multitouch slots, protocol B: ABS_MT_SLOT and a tracking id per contact. */
     INKCELL_INPUT_TOUCH_MULTI,
@@ -128,9 +137,9 @@ struct inkcell_input {
     uint8_t triggers_down;
 
     /*
-     * The touchscreen, when there is one: the first node that reports a direct-touch digitizer
-     * (inkcell_input_touch_kind()). Its events are a contact's, not a pad's, and go only to the
-     * decoder below - BTN_TOUCH is not a button, and ABS_X on a screen is not a stick.
+     * The touchscreen, when there is one: the node whose inkcell_input_touch_kind() ranks
+     * highest, the first of them on a tie. Its events are a contact's, not a pad's, and go only to
+     * the decoder below - BTN_TOUCH is not a button, and ABS_X on a screen is not a stick.
      *
      * The kernel speaks in reports that end with SYN_REPORT, and a contact's position, its going
      * down and its lifting can each arrive in any order inside one, so they are kept per slot

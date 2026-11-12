@@ -726,7 +726,10 @@ static void inkcell_input_touch_event(struct inkcell_input *input, uint16_t type
         }
         return;
     }
-    if (type == EV_KEY && (code == BTN_TOUCH || code == BTN_LEFT)) {
+    /* One code is the contact, so a node that reports both cannot end it with the other. */
+    const uint16_t contact =
+        input->touch_axes.kind == INKCELL_INPUT_TOUCH_POINTER ? BTN_LEFT : BTN_TOUCH;
+    if (type == EV_KEY && code == contact) {
         input->touch_single_down = value != 0;
         if (value != 0) {
             input->touch_single_pressed = true;
@@ -1044,8 +1047,13 @@ bool inkcell_input_device_wanted(const unsigned long *key_bits, size_t key_words
  * An absolute pointer with BTN_LEFT is read the same way, BTN_LEFT standing for the contact: the
  * tablet a virtual machine gives its guest (QEMU's virtio and USB tablets), where the host's mouse
  * is the only finger an emulated phone has. Its coordinates are the screen's, which is what makes
- * it a screen and not a mouse - a mouse is relative, and has no ABS_X. A stick's buttons are the
- * joystick and gamepad ranges, never BTN_LEFT.
+ * it a screen and not a mouse - a mouse is relative, and has no ABS_X. It is a kind of its own,
+ * INKCELL_INPUT_TOUCH_POINTER, ranked below a real screen: an absolute mouse may have nothing to
+ * do with the panel, and a host with both should read the panel. BTN_LEFT alone does not
+ * rule out a pad, though: hid-input numbers the buttons of a device that is neither a joystick
+ * nor a gamepad up from BTN_MISC, and the seventeenth lands on BTN_LEFT. So the pointer reading
+ * is refused to any node that also carries something the pad profile reads
+ * (inkcell_input_device_wanted()) - taken as a screen, a pad's buttons would never reach it.
  *
  * INPUT_PROP_POINTER is the property that rules a node out: it marks a surface that moves a
  * cursor - a laptop's touchpad - rather than one that is the screen, and a tap on a touchpad
@@ -1065,11 +1073,16 @@ inkcell_input_touch_kind(const unsigned long *key_bits, size_t key_words,
         inkcell_input_bit_set(abs_bits, abs_words, ABS_MT_POSITION_Y)) {
         return INKCELL_INPUT_TOUCH_MULTI;
     }
-    if (inkcell_input_bit_set(abs_bits, abs_words, ABS_X) &&
-        inkcell_input_bit_set(abs_bits, abs_words, ABS_Y) &&
-        (inkcell_input_bit_set(key_bits, key_words, BTN_TOUCH) ||
-         inkcell_input_bit_set(key_bits, key_words, BTN_LEFT))) {
+    if (!inkcell_input_bit_set(abs_bits, abs_words, ABS_X) ||
+        !inkcell_input_bit_set(abs_bits, abs_words, ABS_Y)) {
+        return INKCELL_INPUT_TOUCH_NO;
+    }
+    if (inkcell_input_bit_set(key_bits, key_words, BTN_TOUCH)) {
         return INKCELL_INPUT_TOUCH_SINGLE;
+    }
+    if (inkcell_input_bit_set(key_bits, key_words, BTN_LEFT) &&
+        !inkcell_input_device_wanted(key_bits, key_words, abs_bits, abs_words)) {
+        return INKCELL_INPUT_TOUCH_POINTER;
     }
     return INKCELL_INPUT_TOUCH_NO;
 }
@@ -1150,6 +1163,51 @@ static void inkcell_input_device_name(int fd, char *out, size_t out_len) {
     }
     out[out_len - 1U] = '\0';
 }
+
+/* For the log: the code a touch node's contact is read from, so a VM tablet is not mistaken
+   for a panel. Protocol words, not prose: scripts/check-strings.py reads this file. */
+static const char *inkcell_input_touch_kind_log(enum inkcell_input_touch_kind kind) {
+    switch (kind) {
+    case INKCELL_INPUT_TOUCH_MULTI:
+        return "ABS_MT_SLOT";
+    case INKCELL_INPUT_TOUCH_SINGLE:
+        return "BTN_TOUCH";
+    case INKCELL_INPUT_TOUCH_POINTER:
+        return "BTN_LEFT";
+    case INKCELL_INPUT_TOUCH_NO:
+        break;
+    }
+    return "";
+}
+
+/*
+ * A higher-ranked touch node turned up after one was attached: the old one stops being the
+ * screen. It stays watched only if it reports something the pad profile reads; otherwise it was
+ * opened for touch alone and is closed. Only called from the scan, before any event is read, so
+ * there is no contact under way to cancel.
+ */
+static void inkcell_input_replace_touch(struct inkcell_input *input, const char *by) {
+    const int old = input->touch_fd;
+    input->touch_attached = false;
+    input->touch_fd = -1;
+    char label[32];
+    snprintf(label, sizeof label, "fd %d", old);
+    inkwell_log_info("input", "Touchscreen %s outranks the %s node before it", by,
+                     inkcell_input_touch_kind_log(input->touch_axes.kind));
+    if (inkcell_input_device_is_useful(old, label)) {
+        return;
+    }
+    for (size_t i = 0; i < input->count; ++i) {
+        if (input->fds[i] == old) {
+            if (input->host.remove_fd != NULL) {
+                input->host.remove_fd(input->host.ctx, old);
+            }
+            (void)inkwell_fd_close(old);
+            input->fds[i] = input->fds[--input->count];
+            return;
+        }
+    }
+}
 #endif
 
 /* Repeat is a convenience, so a host without a spare fd loses hold-to-scroll and keeps every
@@ -1210,7 +1268,8 @@ int inkcell_input_init(struct inkcell_input *input, const struct inkcell_input_h
         char name[64];
         inkcell_input_device_name(fd, name, sizeof name);
         struct inkcell_input_touch_axes axes;
-        const bool touch = !input->touch_attached && inkcell_input_probe_touch(fd, &axes);
+        const bool touch = inkcell_input_probe_touch(fd, &axes) &&
+                           (!input->touch_attached || axes.kind > input->touch_axes.kind);
         if (!touch && !inkcell_input_device_is_useful(fd, path)) {
             inkwell_log_debug("input", "Skipping %s (%s): nothing this client reads", path, name);
             close(fd);
@@ -1227,6 +1286,9 @@ int inkcell_input_init(struct inkcell_input *input, const struct inkcell_input_h
 
         inkcell_input_use_monotonic_stamps(fd, path);
         if (touch) {
+            if (input->touch_attached) {
+                inkcell_input_replace_touch(input, path);
+            }
             (void)inkcell_input_attach_touch(input, fd, &axes);
             /* The kernel names a slot only when it changes, so the first events after opening
                are about whichever slot it last spoke of - not necessarily 0. */
@@ -1239,8 +1301,8 @@ int inkcell_input_init(struct inkcell_input *input, const struct inkcell_input_h
                         : -1;
             }
             inkwell_log_info("input", "Touchscreen %s (%s): %s, %d..%d x %d..%d", path, name,
-                             axes.kind == INKCELL_INPUT_TOUCH_MULTI ? "multitouch" : "single",
-                             (int)axes.min_x, (int)axes.max_x, (int)axes.min_y, (int)axes.max_y);
+                             inkcell_input_touch_kind_log(axes.kind), (int)axes.min_x,
+                             (int)axes.max_x, (int)axes.min_y, (int)axes.max_y);
         }
         inkwell_log_debug("input", "Watching %s (%s)", path, name);
         input->fds[input->count++] = fd;

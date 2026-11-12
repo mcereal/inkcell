@@ -125,18 +125,35 @@ INKCELL_TEST_CASE(touch_kind_tells_a_screen_from_a_pad_and_a_touchpad, unit) {
                          "a stick has ABS_X and ABS_Y and is not a screen");
     set_bit(keys, BTN_LEFT);
     INKCELL_TEST_FAIL_IF(inkcell_input_touch_kind(keys, kw, axes, aw, props, pw) !=
-                             INKCELL_INPUT_TOUCH_SINGLE,
-                         "an absolute pointer with a left button is a VM's tablet: a screen");
+                             INKCELL_INPUT_TOUCH_POINTER,
+                         "an absolute pointer with a left button is a VM's tablet: a pointer");
     set_bit(props, INPUT_PROP_POINTER);
     INKCELL_TEST_FAIL_IF(inkcell_input_touch_kind(keys, kw, axes, aw, props, pw) !=
                              INKCELL_INPUT_TOUCH_NO,
                          "unless it says it moves a cursor");
+    memset(props, 0, sizeof props);
+    set_bit(axes, ABS_HAT0X);
+    set_bit(axes, ABS_HAT0Y);
+    INKCELL_TEST_FAIL_IF(inkcell_input_touch_kind(keys, kw, axes, aw, props, pw) !=
+                             INKCELL_INPUT_TOUCH_NO,
+                         "a pad whose button numbering reached BTN_LEFT is still a pad");
+    memset(axes, 0, sizeof axes);
+    set_bit(axes, ABS_X);
+    set_bit(axes, ABS_Y);
     memset(keys, 0, sizeof keys);
     memset(props, 0, sizeof props);
     set_bit(keys, BTN_TOUCH);
     INKCELL_TEST_FAIL_IF(inkcell_input_touch_kind(keys, kw, axes, aw, props, pw) !=
                              INKCELL_INPUT_TOUCH_SINGLE,
                          "with BTN_TOUCH it is a single-contact screen");
+    set_bit(keys, BTN_LEFT);
+    INKCELL_TEST_FAIL_IF(inkcell_input_touch_kind(keys, kw, axes, aw, props, pw) !=
+                             INKCELL_INPUT_TOUCH_SINGLE,
+                         "BTN_TOUCH beside BTN_LEFT is still a screen, not a pointer");
+    INKCELL_TEST_FAIL_IF(!(INKCELL_INPUT_TOUCH_MULTI > INKCELL_INPUT_TOUCH_SINGLE &&
+                           INKCELL_INPUT_TOUCH_SINGLE > INKCELL_INPUT_TOUCH_POINTER &&
+                           INKCELL_INPUT_TOUCH_POINTER > INKCELL_INPUT_TOUCH_NO),
+                         "a real screen outranks a pointer, and slots outrank one contact");
     set_bit(axes, ABS_MT_SLOT);
     set_bit(axes, ABS_MT_TRACKING_ID);
     set_bit(axes, ABS_MT_POSITION_X);
@@ -278,10 +295,10 @@ INKCELL_TEST_CASE(touch_single_reads_btn_touch, unit) {
     record_success(test_name);
 }
 
-INKCELL_TEST_CASE(touch_single_reads_a_tablets_btn_left, unit) {
+INKCELL_TEST_CASE(touch_pointer_reads_a_tablets_btn_left, unit) {
     static struct inkcell_input input;
     static struct touch_log log;
-    touch_attach(&input, &log, INKCELL_INPUT_TOUCH_SINGLE);
+    touch_attach(&input, &log, INKCELL_INPUT_TOUCH_POINTER);
     ev(&input, EV_ABS, ABS_X, 500);
     ev(&input, EV_ABS, ABS_Y, 500);
     syn(&input);
@@ -295,6 +312,26 @@ INKCELL_TEST_CASE(touch_single_reads_a_tablets_btn_left, unit) {
     INKCELL_TEST_FAIL_IF(log.count != 3U || log.phase[0] != INKCELL_TOUCH_DOWN ||
                              log.phase[1] != INKCELL_TOUCH_MOVE || log.phase[2] != INKCELL_TOUCH_UP,
                          "the button is the finger: down, drag, up");
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(touch_single_ignores_btn_left_beside_btn_touch, unit) {
+    static struct inkcell_input input;
+    static struct touch_log log;
+    touch_attach(&input, &log, INKCELL_INPUT_TOUCH_SINGLE);
+    ev(&input, EV_ABS, ABS_X, 100);
+    ev(&input, EV_KEY, BTN_TOUCH, 1);
+    ev(&input, EV_KEY, BTN_LEFT, 1);
+    syn(&input);
+    ev(&input, EV_KEY, BTN_LEFT, 0);
+    syn(&input);
+    ev(&input, EV_ABS, ABS_X, 200);
+    syn(&input);
+    ev(&input, EV_KEY, BTN_TOUCH, 0);
+    syn(&input);
+    INKCELL_TEST_FAIL_IF(log.count != 3U || log.phase[0] != INKCELL_TOUCH_DOWN ||
+                             log.phase[1] != INKCELL_TOUCH_MOVE || log.phase[2] != INKCELL_TOUCH_UP,
+                         "BTN_LEFT lifting under a held BTN_TOUCH does not split the drag");
     record_success(test_name);
 }
 
