@@ -31,6 +31,7 @@
 #include "inkwell/runtime/loop.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -313,9 +314,8 @@ static int gallery_show(const char *backend_name, const struct gallery_scene *sc
                    (unsigned long long)gallery_rgb_digest(&frame));
             fflush(stdout);
         }
-        if (hold_ms > 0U) {
-            (void)inkwell_loop_run(&loop, (int)hold_ms);
-        }
+        /* Zero still drains what is ready, so a frame owed a completed flip goes up. */
+        (void)inkwell_loop_run(&loop, hold_ms > (unsigned)INT_MAX ? INT_MAX : (int)hold_ms);
     }
     if (backend->shutdown != NULL) {
         backend->shutdown(state, context);

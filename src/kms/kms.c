@@ -13,6 +13,7 @@
 #include "inkwell/base/env.h"
 #include "inkwell/base/log.h"
 #include "inkwell/base/time.h"
+#include "inkwell/runtime/loop.h"
 
 #include <errno.h>
 
@@ -118,6 +119,10 @@ struct inkcell_kms_panel {
     bool mode_set;
     bool modeset_failed_logged;
     bool flip_pending;
+    /* When the pending flip was asked for: a hosted present() gives up on it after
+       KMS_FLIP_WAIT_MS, as an unhosted one does, so a panel that stopped answering stutters
+       rather than freezing for good. */
+    uint64_t flip_at;
     bool flip_failed_logged;
     bool flip_wait_logged;
     /* The application's loop, when it gave one: the card's descriptor is on it, and a completed
@@ -1020,6 +1025,7 @@ static size_t inkcell_kms_push(struct inkcell_kms_panel *panel) {
         panel->frame_valid = false;
     } else {
         panel->flip_pending = true;
+        panel->flip_at = inkwell_time_monotonic_ms();
         panel->front = back_index;
     }
     return written;
@@ -1027,9 +1033,16 @@ static size_t inkcell_kms_push(struct inkcell_kms_panel *panel) {
 
 /* The card is readable: a flip has completed, and a frame drawn while it was pending goes up. */
 static int inkcell_kms_on_readable(int fd, uint32_t events, void *userdata) {
-    (void)fd;
-    (void)events;
     struct inkcell_kms_panel *panel = (struct inkcell_kms_panel *)userdata;
+    if ((events & (INKWELL_LOOP_HUP | INKWELL_LOOP_ERR)) != 0U) {
+        /* A card in error stays readable-with-error on a level-triggered loop, and would call
+           back for ever. Off the loop it goes, and present() waits for flips itself. */
+        if (panel->host.remove_fd != NULL) {
+            panel->host.remove_fd(panel->host.ctx, fd);
+        }
+        panel->hosted = false;
+        inkwell_log_warn("ui", "KMS: the card reported an error on the loop; waiting for flips");
+    }
     inkcell_kms_drain_events(panel);
     if (!panel->flip_pending && panel->frame_owed) {
         (void)inkcell_kms_push(panel);
@@ -1076,6 +1089,15 @@ static void inkcell_backend_kms_present(void *state_ptr, const void *snapshot, v
     if (panel->flip_pending) {
         /* It may have completed already, with the loop not yet round to saying so. */
         inkcell_kms_drain_events(panel);
+    }
+    if (panel->flip_pending && panel->hosted &&
+        inkwell_time_monotonic_ms() - panel->flip_at >= (uint64_t)KMS_FLIP_WAIT_MS) {
+        if (!panel->flip_wait_logged) {
+            inkwell_log_warn("ui", "KMS: a page flip took over %d ms; not waiting for it",
+                             KMS_FLIP_WAIT_MS);
+            panel->flip_wait_logged = true;
+        }
+        panel->flip_pending = false;
     }
     if (panel->flip_pending) {
         if (panel->hosted) {

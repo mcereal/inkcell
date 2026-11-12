@@ -27,7 +27,10 @@
  * its loop, and a present() that arrives while a flip is pending does not wait: the frame is
  * drawn, both buffers are owed its rows, and the flip-complete event puts it up. Several frames
  * drawn inside one refresh cost one copy, of the last, which is what holds an animation to the
- * panel's rate rather than to however fast the loop can draw.
+ * panel's rate rather than to however fast the loop can draw. A flip that has not completed a
+ * tenth of a second later is given up on at the next present(), so a panel that has stopped
+ * answering stutters rather than freezing, and a card that reports an error on the loop is taken
+ * off it and waited for as below.
  *
  * Without a host there is nothing to hear that event on, so present() waits for the flip
  * itself, for at most a tenth of a second - a stutter, rather than a hang, from a panel that
