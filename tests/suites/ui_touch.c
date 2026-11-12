@@ -315,6 +315,25 @@ INKCELL_TEST_CASE(touch_pointer_reads_a_tablets_btn_left, unit) {
     record_success(test_name);
 }
 
+INKCELL_TEST_CASE(touch_single_reads_btn_left_alone_on_a_vm_tablet, unit) {
+    /* QEMU's virtio tablet advertises BTN_TOUCH and BTN_LEFT, so it is a single-touch screen -
+       and the host's mouse presses only BTN_LEFT on it. */
+    static struct inkcell_input input;
+    static struct touch_log log;
+    touch_attach(&input, &log, INKCELL_INPUT_TOUCH_SINGLE);
+    ev(&input, EV_ABS, ABS_X, 100);
+    ev(&input, EV_KEY, BTN_LEFT, 1);
+    syn(&input);
+    ev(&input, EV_ABS, ABS_X, 200);
+    syn(&input);
+    ev(&input, EV_KEY, BTN_LEFT, 0);
+    syn(&input);
+    INKCELL_TEST_FAIL_IF(log.count != 3U || log.phase[0] != INKCELL_TOUCH_DOWN ||
+                             log.phase[1] != INKCELL_TOUCH_MOVE || log.phase[2] != INKCELL_TOUCH_UP,
+                         "BTN_LEFT alone is the contact on a screen that has both");
+    record_success(test_name);
+}
+
 INKCELL_TEST_CASE(touch_single_ignores_btn_left_beside_btn_touch, unit) {
     static struct inkcell_input input;
     static struct touch_log log;
@@ -332,6 +351,17 @@ INKCELL_TEST_CASE(touch_single_ignores_btn_left_beside_btn_touch, unit) {
     INKCELL_TEST_FAIL_IF(log.count != 3U || log.phase[0] != INKCELL_TOUCH_DOWN ||
                              log.phase[1] != INKCELL_TOUCH_MOVE || log.phase[2] != INKCELL_TOUCH_UP,
                          "BTN_LEFT lifting under a held BTN_TOUCH does not split the drag");
+
+    ev(&input, EV_KEY, BTN_TOUCH, 1);
+    ev(&input, EV_KEY, BTN_LEFT, 1);
+    syn(&input);
+    ev(&input, EV_KEY, BTN_TOUCH, 0);
+    syn(&input);
+    ev(&input, EV_KEY, BTN_LEFT, 0);
+    syn(&input);
+    INKCELL_TEST_FAIL_IF(log.count != 5U || log.phase[3] != INKCELL_TOUCH_DOWN ||
+                             log.phase[4] != INKCELL_TOUCH_UP,
+                         "nor does BTN_TOUCH lifting first: up only when neither is held");
     record_success(test_name);
 }
 

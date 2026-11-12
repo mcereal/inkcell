@@ -157,6 +157,10 @@ struct inkcell_input {
     int32_t touch_sent_x, touch_sent_y;
     /* A single-touch screen's one contact, and whether the handler last heard it down. */
     bool touch_single_down;
+    /* Which of the contact's codes are held: BTN_TOUCH (1) and BTN_LEFT (2). The contact is down
+       while either is, so a driver that echoes one beside the other cannot split a drag, and a
+       VM tablet that advertises both and presses only BTN_LEFT still reaches the screen. */
+    uint8_t touch_single_held;
     bool touch_sent_down;
     /* BTN_TOUCH went down, or up, in the report being read: a tap faster than the scan says
        both inside one report, and the level alone would show neither. */
