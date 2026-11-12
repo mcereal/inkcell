@@ -123,6 +123,16 @@ INKCELL_TEST_CASE(touch_kind_tells_a_screen_from_a_pad_and_a_touchpad, unit) {
     INKCELL_TEST_FAIL_IF(inkcell_input_touch_kind(keys, kw, axes, aw, props, pw) !=
                              INKCELL_INPUT_TOUCH_NO,
                          "a stick has ABS_X and ABS_Y and is not a screen");
+    set_bit(keys, BTN_LEFT);
+    INKCELL_TEST_FAIL_IF(inkcell_input_touch_kind(keys, kw, axes, aw, props, pw) !=
+                             INKCELL_INPUT_TOUCH_SINGLE,
+                         "an absolute pointer with a left button is a VM's tablet: a screen");
+    set_bit(props, INPUT_PROP_POINTER);
+    INKCELL_TEST_FAIL_IF(inkcell_input_touch_kind(keys, kw, axes, aw, props, pw) !=
+                             INKCELL_INPUT_TOUCH_NO,
+                         "unless it says it moves a cursor");
+    memset(keys, 0, sizeof keys);
+    memset(props, 0, sizeof props);
     set_bit(keys, BTN_TOUCH);
     INKCELL_TEST_FAIL_IF(inkcell_input_touch_kind(keys, kw, axes, aw, props, pw) !=
                              INKCELL_INPUT_TOUCH_SINGLE,
@@ -265,6 +275,26 @@ INKCELL_TEST_CASE(touch_single_reads_btn_touch, unit) {
                          "down, move, up");
     INKCELL_TEST_FAIL_IF(log.x[0] != INKCELL_TOUCH_UNIT - 1U || log.y[0] != 0U,
                          "the far edge of an axis is the last unit");
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(touch_single_reads_a_tablets_btn_left, unit) {
+    static struct inkcell_input input;
+    static struct touch_log log;
+    touch_attach(&input, &log, INKCELL_INPUT_TOUCH_SINGLE);
+    ev(&input, EV_ABS, ABS_X, 500);
+    ev(&input, EV_ABS, ABS_Y, 500);
+    syn(&input);
+    INKCELL_TEST_FAIL_IF(log.count != 0U, "a pointer moving with no button down is no contact");
+    ev(&input, EV_KEY, BTN_LEFT, 1);
+    syn(&input);
+    ev(&input, EV_ABS, ABS_Y, 900);
+    syn(&input);
+    ev(&input, EV_KEY, BTN_LEFT, 0);
+    syn(&input);
+    INKCELL_TEST_FAIL_IF(log.count != 3U || log.phase[0] != INKCELL_TOUCH_DOWN ||
+                             log.phase[1] != INKCELL_TOUCH_MOVE || log.phase[2] != INKCELL_TOUCH_UP,
+                         "the button is the finger: down, drag, up");
     record_success(test_name);
 }
 

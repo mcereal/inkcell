@@ -726,7 +726,7 @@ static void inkcell_input_touch_event(struct inkcell_input *input, uint16_t type
         }
         return;
     }
-    if (type == EV_KEY && code == BTN_TOUCH) {
+    if (type == EV_KEY && (code == BTN_TOUCH || code == BTN_LEFT)) {
         input->touch_single_down = value != 0;
         if (value != 0) {
             input->touch_single_pressed = true;
@@ -1041,6 +1041,12 @@ bool inkcell_input_device_wanted(const unsigned long *key_bits, size_t key_words
  * ABS_X/ABS_Y and BTN_TOUCH that the kernel's pointer emulation, or the driver itself, reports
  * alongside. A stick has ABS_X too, but never BTN_TOUCH.
  *
+ * An absolute pointer with BTN_LEFT is read the same way, BTN_LEFT standing for the contact: the
+ * tablet a virtual machine gives its guest (QEMU's virtio and USB tablets), where the host's mouse
+ * is the only finger an emulated phone has. Its coordinates are the screen's, which is what makes
+ * it a screen and not a mouse - a mouse is relative, and has no ABS_X. A stick's buttons are the
+ * joystick and gamepad ranges, never BTN_LEFT.
+ *
  * INPUT_PROP_POINTER is the property that rules a node out: it marks a surface that moves a
  * cursor - a laptop's touchpad - rather than one that is the screen, and a tap on a touchpad
  * has no point on the frame to land on. A node that cannot report its properties is taken at
@@ -1061,7 +1067,8 @@ inkcell_input_touch_kind(const unsigned long *key_bits, size_t key_words,
     }
     if (inkcell_input_bit_set(abs_bits, abs_words, ABS_X) &&
         inkcell_input_bit_set(abs_bits, abs_words, ABS_Y) &&
-        inkcell_input_bit_set(key_bits, key_words, BTN_TOUCH)) {
+        (inkcell_input_bit_set(key_bits, key_words, BTN_TOUCH) ||
+         inkcell_input_bit_set(key_bits, key_words, BTN_LEFT))) {
         return INKCELL_INPUT_TOUCH_SINGLE;
     }
     return INKCELL_INPUT_TOUCH_NO;

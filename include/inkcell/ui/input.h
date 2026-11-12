@@ -49,7 +49,9 @@ typedef void (*inkcell_touch_handler)(void *userdata, enum inkcell_touch_phase p
 
 enum inkcell_input_touch_kind {
     INKCELL_INPUT_TOUCH_NO = 0,
-    /* ABS_X/ABS_Y and BTN_TOUCH: one contact, the way a resistive panel or an old driver says. */
+    /* ABS_X/ABS_Y and BTN_TOUCH: one contact, the way a resistive panel or an old driver says.
+       Also an absolute pointer with BTN_LEFT that is not a touchpad - a virtual machine's tablet,
+       where the host's mouse stands in for a finger. */
     INKCELL_INPUT_TOUCH_SINGLE,
     /* The multitouch slots, protocol B: ABS_MT_SLOT and a tracking id per contact. */
     INKCELL_INPUT_TOUCH_MULTI,
