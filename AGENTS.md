@@ -7,8 +7,8 @@ is built on; this says how to work in it.
 
 inkcell is a C17 UI toolkit for d-pad-first, small-screen interfaces, standing on
 [inkwell](https://github.com/mcereal/inkwell) (the runtime). It draws one frame through one of
-three backends - `/dev/fb0`, an SDL window, or an off-screen capture - and the rasteriser, the
-widgets and every screen an application writes are the same code on all three. No threads, no
+backend - `/dev/fb0`, DRM/KMS, an SDL window, or an off-screen page - and the rasteriser, the
+widgets and every screen an application writes are the same code on all of them. No threads, no
 event loop of its own: the application's inkwell loop drives it. `make test` before every push.
 
 SDL2 is the one optional dependency, optional by presence: without it `inkcell/ui/sdl.h` still
@@ -20,6 +20,7 @@ exists and reports itself unavailable.
 include/inkcell/ui/           the public surface: fb_draw.h, widgets.h and widgets/, theme, input, ...
 include/inkcell/i18n/         the string catalog mechanism; catalog.def is inkcell's own words
 src/fb/                       the framebuffer backend, the capture backend and the widgets
+src/kms/                      the DRM/KMS backend, over the kernel's uapi headers (no libdrm)
 src/sdl/, src/input/          the window backend; evdev and the per-device button profiles
 src/theme/                    palettes by role, fonts, icons
 src/generated/                glyph tables written by scripts/gen-*.py - never edit, never format
@@ -29,6 +30,7 @@ tests/suites/ui_*.c           one file per subject
 tests/golden/manifest.txt     one digest per gallery page
 scripts/check-strings.py      fails on prose in a renderer
 scripts/check-platform.py     fails on a platform header in include/
+scripts/kms-vm.py             the KMS backend on QEMU's virtio-gpu, every frame checked on the panel
 ```
 
 ## Style

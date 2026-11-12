@@ -39,6 +39,7 @@ codecs.
 | **Shapes** | Anti-aliased rounded rectangles, rings and arcs, in integers - so a curve is the same curve on every host that draws it. |
 | **Depth** | Opacity and elevation as *tokens*. One opacity table carries the state layers, the disabled fade and the scrim; four elevation levels (flat, raised, floating, modal) each name a shadow's offset, softness and depth. A shadow is drawn by reading back the frame already on the panel and darkening it - the scrim's trick with a shape - so it works on a display with no alpha to composite. A theme can be flat all the way up, and the high-contrast one is. |
 | **Framebuffer** | `/dev/fb0`, the page flip, damage tracking, a glyph cache, and an off-screen renderer for screenshots. |
+| **KMS** | The same frame through DRM: a connector, its preferred mode, two dumb buffers and an atomic page flip, with no libdrm. For a kernel that has no `/dev/fb0` to offer. |
 | **Window** | The same frame in an SDL window: damage as texture uploads, a keyboard, and a desktop application rather than a picture of a device. Optional - no SDL2, no window, everything else unchanged. |
 | **Input** | evdev to a logical key, hat axes, analogue triggers, key repeat, per-device button profiles. |
 | **i18n** | A catalog mechanism with plural rules and format-string validation. |
@@ -198,6 +199,7 @@ press comes from.
 |---|---|---|---|
 | Loop underneath | inkwell's epoll | inkwell's kqueue | inkwell's waitable handles |
 | `/dev/fb0` backend | yes | refuses | refuses |
+| KMS backend | yes, with the kernel's DRM headers | refuses | refuses |
 | evdev input | yes | refuses | refuses |
 | SDL window, keyboard | yes, with SDL2 | yes, with SDL2 | yes, with SDL2 |
 | Off-screen capture | yes | yes | yes |
@@ -228,16 +230,18 @@ As a subdirectory of another project, the tests are off by default and inkcell i
 ## Backends
 
 A backend is six function pointers (`inkcell/ui/backend.h`) and the frame it presents is a
-`struct inkcell_surface` - a pointer, a stride and a channel layout. Three of them ship:
+`struct inkcell_surface` - a pointer, a stride and a channel layout. These ship:
 
 | | |
 |---|---|
 | `inkcell_backend_fb()` | `/dev/fb0`. The device UI: changed spans copied into the mapping, `FBIOPAN_DISPLAY`, and the Brick's two-page mirror. |
+| `inkcell_backend_kms()` | `/dev/dri/cardN`. The changed rows copied into whichever of two dumb buffers is off screen, then an atomic commit (or `SETCRTC` and `PAGE_FLIP`, where a driver has no atomic) swaps them on the vertical blank. `scripts/kms-vm.py` runs it against QEMU's virtio-gpu and compares every frame with what the panel scanned out. |
+| `inkcell_backend_headless()` | No panel, the real clock: what an application runs where there is no display, with the frame there to be read back. |
 | `inkcell_backend_sdl()` | An SDL window. The same rows, gathered into rectangles and uploaded to a streaming texture. |
 | `inkcell_capture_*()` | No panel at all - a malloc'd page, which is what the gallery and the golden sheet render into. |
 
 They share everything above the surface, which is the point: the rasteriser, the widgets and
-every screen an application writes are the same code in all three, and the golden sheet holds
+every screen an application writes are the same code in all of them, and the golden sheet holds
 them to it. What differs is the last step, and `inkcell_fb_damage_rects()` and
 `inkcell_fb_copy_damage()` are the two shapes that step comes in.
 

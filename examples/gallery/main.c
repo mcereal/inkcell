@@ -8,6 +8,9 @@
  *   --out DIR   writes the pages as PPM, for scripts/frames.py to turn into pictures.
  *   (default)   prints a manifest line per page - scene, theme, scale, size, digest.
  *   --check F   reads a manifest and reports the lines that no longer match.
+ *   --show B    puts the scenes up on a real backend (kms, fb or headless), one after another,
+ *               and prints a digest of each frame's colour - which is what a screenshot of the
+ *               panel is compared against to prove the frame reached it unchanged.
  *
  * The digest is what makes a widget testable. "The button looks right" is not a unit test
  * anybody can write; "the button looks like it did yesterday, and here is the picture of what
@@ -20,7 +23,10 @@
 
 #include "gallery.h"
 
+#include "inkcell/ui/fb.h"
 #include "inkcell/ui/fb_capture.h"
+#include "inkcell/ui/headless.h"
+#include "inkcell/ui/kms.h"
 #include "inkwell/base/env.h"
 
 #include <errno.h>
@@ -28,6 +34,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 /*
  * The scales the sheet is taken at.
@@ -211,9 +218,88 @@ static int gallery_check(const char *path, const struct gallery_page *pages, siz
     return 0;
 }
 
+/*
+ * FNV-1a over the red, green and blue of every visible pixel, in that order - the bytes a PPM
+ * screenshot holds. Read through the surface's format rather than its byte order, so a panel
+ * that stores blue first and a screenshot that stores red first still agree.
+ */
+static uint64_t gallery_rgb_digest(const struct inkcell_surface *s) {
+    uint64_t hash = 1469598103934665603ULL;
+    for (uint32_t row = 0U; row < s->height; ++row) {
+        const uint8_t *p = s->pixels + (size_t)row * s->stride;
+        for (uint32_t x = 0U; x < s->width; ++x, p += s->bytes_per_pixel) {
+            uint32_t v = 0U;
+            memcpy(&v, p, s->bytes_per_pixel < 4U ? s->bytes_per_pixel : 4U);
+            const struct inkcell_channel *ch[3] = {&s->format.r, &s->format.g, &s->format.b};
+            for (size_t c = 0U; c < 3U; ++c) {
+                const uint32_t max = (1U << ch[c]->length) - 1U;
+                const uint32_t value = (v >> ch[c]->offset) & max;
+                hash ^= (uint8_t)(max == 255U ? value : (value * 255U + max / 2U) / max);
+                hash *= 1099511628211ULL;
+            }
+        }
+    }
+    return hash;
+}
+
+static void gallery_sleep_ms(unsigned ms) {
+    struct timespec t = {(time_t)(ms / 1000U), (long)(ms % 1000U) * 1000000L};
+    while (nanosleep(&t, &t) != 0) {
+    }
+}
+
+/* --show: every selected scene on a real backend, `hold_ms` apiece. Returns an exit status. */
+static int gallery_show(const char *backend_name, const struct gallery_scene *scenes,
+                        size_t scene_count, const char *only_scene, unsigned hold_ms) {
+    const struct inkcell_fb_app app = {.render = gallery_render};
+    const struct inkcell_backend *backend = NULL;
+    struct inkcell_backend_kms_context kms = {.app = &app};
+    struct inkcell_backend_fb_context fb = {.app = &app};
+    struct inkcell_backend_headless_context headless = {.app = &app};
+    void *context = NULL;
+    if (strcmp(backend_name, "kms") == 0) {
+        backend = inkcell_backend_kms();
+        context = &kms;
+    } else if (strcmp(backend_name, "fb") == 0) {
+        backend = inkcell_backend_fb();
+        context = &fb;
+    } else if (strcmp(backend_name, "headless") == 0) {
+        backend = inkcell_backend_headless();
+        context = &headless;
+    } else {
+        fprintf(stderr, "gallery: no backend called %s (kms, fb, headless)\n", backend_name);
+        return 2;
+    }
+
+    void *state = NULL;
+    const int rc = backend->init(&state, context);
+    if (rc < 0) {
+        fprintf(stderr, "gallery: the %s backend did not start: %s\n", backend_name, strerror(-rc));
+        return 1;
+    }
+    for (size_t s = 0U; s < scene_count; ++s) {
+        if (only_scene != NULL && strcmp(only_scene, scenes[s].name) != 0) {
+            continue;
+        }
+        backend->present(state, &scenes[s], NULL);
+        struct inkcell_surface frame;
+        if (backend->frame != NULL && backend->frame(state, NULL, &frame)) {
+            printf("shown %s %ux%u %016llx\n", scenes[s].name, frame.width, frame.height,
+                   (unsigned long long)gallery_rgb_digest(&frame));
+            fflush(stdout);
+        }
+        gallery_sleep_ms(hold_ms);
+    }
+    if (backend->shutdown != NULL) {
+        backend->shutdown(state, context);
+    }
+    return 0;
+}
+
 static void gallery_usage(FILE *out) {
     fputs("usage: inkcell_gallery [--out DIR] [--check FILE] [--scene NAME] [--theme ID]\n"
-          "                       [--scale N] [--list]\n",
+          "                       [--scale N] [--list]\n"
+          "       inkcell_gallery --show kms|fb|headless [--scene NAME] [--hold MS]\n",
           out);
 }
 
@@ -224,6 +310,8 @@ int main(int argc, char **argv) {
     const char *only_theme = NULL;
     int only_scale = 0;
     bool list = false;
+    const char *show = NULL;
+    unsigned hold_ms = 1000U;
 
     for (int i = 1; i < argc; ++i) {
         const char *arg = argv[i];
@@ -234,6 +322,10 @@ int main(int argc, char **argv) {
             out_dir = argv[++i];
         } else if (strcmp(arg, "--check") == 0 && has_value) {
             check = argv[++i];
+        } else if (strcmp(arg, "--show") == 0 && has_value) {
+            show = argv[++i];
+        } else if (strcmp(arg, "--hold") == 0 && has_value) {
+            hold_ms = (unsigned)strtoul(argv[++i], NULL, 10);
         } else if (strcmp(arg, "--scene") == 0 && has_value) {
             only_scene = argv[++i];
         } else if (strcmp(arg, "--theme") == 0 && has_value) {
@@ -271,6 +363,9 @@ int main(int argc, char **argv) {
             printf("%s\n", scenes[i].name);
         }
         return 0;
+    }
+    if (show != NULL) {
+        return gallery_show(show, scenes, scene_count, only_scene, hold_ms);
     }
 
     const size_t theme_count = inkcell_theme_count();

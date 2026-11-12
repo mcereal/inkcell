@@ -105,6 +105,9 @@ add_library(inkcell STATIC
     src/fb/fb_draw.c
     src/fb/fb_capture.c
     src/fb/headless.c
+    # the panel through DRM/KMS: the same frame, copied into a dumb buffer and flipped. Always
+    # compiled; without the kernel's DRM headers it is the refusing stub at the top of the file.
+    src/kms/kms.c
     # what changed since the last frame. Not fb.c's, because a texture upload asks the same
     # question and must not have to link the file that includes <linux/fb.h> to ask it.
     src/fb/fb_damage.c
@@ -198,6 +201,21 @@ if(INKCELL_WITH_SDL AND SDL2_FOUND)
 else()
     message(STATUS
         "inkcell: no SDL2, so inkcell/ui/sdl.h reports the window backend unavailable")
+endif()
+
+# DRM/KMS, for the kms backend - Linux's, and spoken through the kernel's own uapi headers
+# rather than libdrm, so there is nothing to link. `INKCELL_HAVE_KMS` is what src/kms/kms.c
+# switches on; without the headers it refuses, as the SDL backend does without SDL2. PUBLIC for
+# the same reason INKCELL_HAVE_SDL is: inkcell's tests ask whether there is a backend to try.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    include(CheckIncludeFile)
+    check_include_file("drm/drm_mode.h" INKCELL_HAVE_DRM_HEADERS)
+endif()
+if(INKCELL_HAVE_DRM_HEADERS)
+    target_compile_definitions(inkcell PUBLIC INKCELL_HAVE_KMS)
+    message(STATUS "inkcell: KMS backend enabled")
+else()
+    message(STATUS "inkcell: no DRM headers, so inkcell/ui/kms.h reports the KMS backend unavailable")
 endif()
 
 add_library(inkcell::inkcell ALIAS inkcell)
