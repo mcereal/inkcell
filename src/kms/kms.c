@@ -13,6 +13,7 @@
 #include "inkwell/base/env.h"
 #include "inkwell/base/log.h"
 #include "inkwell/base/time.h"
+#include "inkwell/runtime/loop.h"
 
 #include <errno.h>
 
@@ -60,9 +61,9 @@ const struct inkcell_backend *inkcell_backend_kms(void) {
 #define KMS_CONNECTED 1U
 #define KMS_PLANE_TYPE_PRIMARY 1U
 #define KMS_CARDS_MAX 16
-/* How long a present() waits for the last flip. A vertical blank is 16 ms at 60 Hz; this is
-   six of them, which no working panel takes, and short enough that one that has stopped
-   answering costs a stutter rather than a hang. */
+/* How long a present() without a host, or shutdown(), waits for the last flip. A vertical
+   blank is 16 ms at 60 Hz; this is six of them, which no working panel takes, and short enough
+   that one that has stopped answering costs a stutter rather than a hang. */
 #define KMS_FLIP_WAIT_MS 100
 
 /*
@@ -118,8 +119,21 @@ struct inkcell_kms_panel {
     bool mode_set;
     bool modeset_failed_logged;
     bool flip_pending;
+    /* When the pending flip was asked for: a hosted present() gives up on it after
+       KMS_FLIP_WAIT_MS, as an unhosted one does, so a panel that stopped answering stutters
+       rather than freezing for good. */
+    uint64_t flip_at;
     bool flip_failed_logged;
     bool flip_wait_logged;
+    /* The application's loop, when it gave one: the card's descriptor is on it, and a completed
+       flip arrives as a readable event rather than being waited for. `hosted` is whether the
+       registration took. */
+    struct inkcell_input_host host;
+    bool hosted;
+    /* A frame was drawn while a flip was pending and has not gone to the panel yet. The draw
+       buffer holds it and both dumb buffers are owed its rows, so the flip-complete event can
+       put it up without the application drawing it again. */
+    bool frame_owed;
     /* Whether `shown` holds a frame yet; until then the whole frame is damage. */
     bool frame_valid;
     bool presented;
@@ -686,6 +700,8 @@ static void inkcell_kms_release(struct inkcell_kms_panel *panel) {
     }
 }
 
+static int inkcell_kms_on_readable(int fd, uint32_t events, void *userdata);
+
 static int inkcell_backend_kms_init(void **state_out, void *userdata) {
     const struct inkcell_backend_kms_context *context =
         (const struct inkcell_backend_kms_context *)userdata;
@@ -756,12 +772,29 @@ static int inkcell_backend_kms_init(void **state_out, void *userdata) {
     panel->rotate180 =
         inkwell_env_int("KMS_ROTATE", 0, 270, inkwell_env_int("FB_ROTATE", 0, 270, 0)) == 180;
 
+    /* Not fatal: without the loop, present() waits for a flip itself, as it would for an
+       application that never offered one. */
+    panel->host = context->host;
+    if (panel->host.add_fd != NULL) {
+        const int added =
+            panel->host.add_fd(panel->host.ctx, panel->fd, inkcell_kms_on_readable, panel);
+        if (added < 0) {
+            inkwell_log_warn("ui", "KMS: the card could not be put on the loop: %s",
+                             strerror(-added));
+        } else {
+            panel->hosted = true;
+        }
+    }
+
     inkwell_log_info("ui",
                      "KMS UI backend active (%s, %ux%u@%u, connector %u, crtc %u, %s, theme %s "
                      "at scale %d%s)",
                      path, width, height, panel->mode.vrefresh, panel->connector_id, panel->crtc_id,
                      panel->atomic ? "atomic" : "legacy", state->theme->id, state->scale,
                      panel->rotate180 ? ", rotated 180" : "");
+    if (!panel->hosted) {
+        inkwell_log_info("ui", "KMS: no loop to hear page flips on, so present() waits for them");
+    }
     if (state_out != NULL) {
         *state_out = panel;
     }
@@ -948,6 +981,75 @@ static size_t inkcell_kms_copy_rows(const struct inkcell_kms_panel *panel, uint8
     return (size_t)(bottom - top) * row_bytes;
 }
 
+/*
+ * The frame in the draw buffer to the panel: the rows the back buffer is owed copied into it,
+ * then the first modeset or a flip. The caller has made sure no flip is pending, since the back
+ * buffer is the one the panel was reading until the last flip completed. Returns the bytes
+ * copied.
+ */
+static size_t inkcell_kms_push(struct inkcell_kms_panel *panel) {
+    panel->frame_owed = false;
+    const unsigned back_index = panel->mode_set ? 1U - panel->front : 0U;
+    struct inkcell_kms_buffer *back = &panel->buffers[back_index];
+    size_t written = 0U;
+    if (back->owed_top < back->owed_bottom) {
+        written = inkcell_kms_copy_rows(panel, back->map, back->owed_top, back->owed_bottom);
+        back->owed_top = 0U;
+        back->owed_bottom = 0U;
+    }
+
+    if (!panel->mode_set) {
+        const int rc = inkcell_kms_modeset(panel, back->fb_id);
+        if (rc < 0) {
+            if (!panel->modeset_failed_logged) {
+                inkwell_log_warn("ui", "KMS: modeset failed: %s", strerror(-rc));
+                panel->modeset_failed_logged = true;
+            }
+            /* Owed in full again, so the next attempt puts up a whole frame. */
+            inkcell_kms_owe(back, 0U, panel->state.surface.height);
+        } else {
+            panel->mode_set = true;
+            panel->front = back_index;
+        }
+        return written;
+    }
+    const int rc = inkcell_kms_flip(panel, back->fb_id);
+    if (rc < 0) {
+        if (!panel->flip_failed_logged) {
+            inkwell_log_warn("ui", "KMS: page flip failed: %s", strerror(-rc));
+            panel->flip_failed_logged = true;
+        }
+        /* `shown` now holds a frame the panel never got, so a next frame that draws the same
+           thing would find no damage and never put it up. Dropping the comparison makes the
+           next frame whole, which is the only answer that recovers on its own. */
+        panel->frame_valid = false;
+    } else {
+        panel->flip_pending = true;
+        panel->flip_at = inkwell_time_monotonic_ms();
+        panel->front = back_index;
+    }
+    return written;
+}
+
+/* The card is readable: a flip has completed, and a frame drawn while it was pending goes up. */
+static int inkcell_kms_on_readable(int fd, uint32_t events, void *userdata) {
+    struct inkcell_kms_panel *panel = (struct inkcell_kms_panel *)userdata;
+    if ((events & (INKWELL_LOOP_HUP | INKWELL_LOOP_ERR)) != 0U) {
+        /* A card in error stays readable-with-error on a level-triggered loop, and would call
+           back for ever. Off the loop it goes, and present() waits for flips itself. */
+        if (panel->host.remove_fd != NULL) {
+            panel->host.remove_fd(panel->host.ctx, fd);
+        }
+        panel->hosted = false;
+        inkwell_log_warn("ui", "KMS: the card reported an error on the loop; waiting for flips");
+    }
+    inkcell_kms_drain_events(panel);
+    if (!panel->flip_pending && panel->frame_owed) {
+        (void)inkcell_kms_push(panel);
+    }
+    return 0;
+}
+
 static void inkcell_backend_kms_present(void *state_ptr, const void *snapshot, void *userdata) {
     (void)userdata;
     struct inkcell_kms_panel *panel = inkcell_kms_panel_of(state_ptr);
@@ -965,6 +1067,7 @@ static void inkcell_backend_kms_present(void *state_ptr, const void *snapshot, v
     const size_t count = inkcell_fb_damage_rects(state, panel->draw_buffer, panel->shown,
                                                  !panel->frame_valid, &rect, 1U);
     panel->frame_valid = true;
+    panel->presented = true;
     uint32_t top = state->surface.height;
     uint32_t bottom = 0U;
     if (count > 0U && rect.valid) {
@@ -973,60 +1076,42 @@ static void inkcell_backend_kms_present(void *state_ptr, const void *snapshot, v
     }
     bottom = bottom < state->surface.height ? bottom : state->surface.height;
     if (top >= bottom && panel->mode_set) {
-        /* Nothing moved: the panel already shows this frame. */
-        panel->presented = true;
+        /* Nothing moved: the panel already shows this frame, or is owed it already. */
         inkcell_latency_frame_drawn(0U);
         inkcell_latency_frame_end(0U);
         return;
     }
-
-    /* The back buffer, once the flip away from it has happened. */
-    inkcell_kms_wait_flip(panel);
-    const unsigned back_index = panel->mode_set ? 1U - panel->front : 0U;
-    struct inkcell_kms_buffer *back = &panel->buffers[back_index];
-    struct inkcell_kms_buffer *other = &panel->buffers[1U - back_index];
     if (top < bottom) {
-        inkcell_kms_owe(back, top, bottom);
-        inkcell_kms_owe(other, top, bottom);
+        inkcell_kms_owe(&panel->buffers[0], top, bottom);
+        inkcell_kms_owe(&panel->buffers[1], top, bottom);
     }
-    size_t written = 0U;
-    if (back->owed_top < back->owed_bottom) {
-        written = inkcell_kms_copy_rows(panel, back->map, back->owed_top, back->owed_bottom);
-        back->owed_top = 0U;
-        back->owed_bottom = 0U;
-    }
-    inkcell_latency_frame_drawn(written);
 
-    if (!panel->mode_set) {
-        const int rc = inkcell_kms_modeset(panel, back->fb_id);
-        if (rc < 0) {
-            if (!panel->modeset_failed_logged) {
-                inkwell_log_warn("ui", "KMS: modeset failed: %s", strerror(-rc));
-                panel->modeset_failed_logged = true;
-            }
-            /* Owed in full again, so the next attempt puts up a whole frame. */
-            inkcell_kms_owe(back, 0U, state->surface.height);
-        } else {
-            panel->mode_set = true;
-            panel->front = back_index;
-        }
-    } else {
-        const int rc = inkcell_kms_flip(panel, back->fb_id);
-        if (rc < 0) {
-            if (!panel->flip_failed_logged) {
-                inkwell_log_warn("ui", "KMS: page flip failed: %s", strerror(-rc));
-                panel->flip_failed_logged = true;
-            }
-            /* `shown` now holds a frame the panel never got, so a next frame that draws the same
-               thing would find no damage and never put it up. Dropping the comparison makes the
-               next frame whole, which is the only answer that recovers on its own. */
-            panel->frame_valid = false;
-        } else {
-            panel->flip_pending = true;
-            panel->front = back_index;
-        }
+    if (panel->flip_pending) {
+        /* It may have completed already, with the loop not yet round to saying so. */
+        inkcell_kms_drain_events(panel);
     }
-    panel->presented = true;
+    if (panel->flip_pending && panel->hosted &&
+        inkwell_time_monotonic_ms() - panel->flip_at >= (uint64_t)KMS_FLIP_WAIT_MS) {
+        if (!panel->flip_wait_logged) {
+            inkwell_log_warn("ui", "KMS: a page flip took over %d ms; not waiting for it",
+                             KMS_FLIP_WAIT_MS);
+            panel->flip_wait_logged = true;
+        }
+        panel->flip_pending = false;
+    }
+    if (panel->flip_pending) {
+        if (panel->hosted) {
+            /* Not waited for: the flip-complete event puts this frame up, and a frame drawn
+               before then only adds to what it is owed. */
+            panel->frame_owed = true;
+            inkcell_latency_frame_drawn(0U);
+            inkcell_latency_frame_end(0U);
+            return;
+        }
+        inkcell_kms_wait_flip(panel);
+    }
+    const size_t written = inkcell_kms_push(panel);
+    inkcell_latency_frame_drawn(written);
     inkcell_latency_frame_end(written);
 }
 
@@ -1036,6 +1121,11 @@ static void inkcell_backend_kms_shutdown(void *state_ptr, void *userdata) {
     if (panel == NULL) {
         return;
     }
+    if (panel->hosted && panel->host.remove_fd != NULL) {
+        panel->host.remove_fd(panel->host.ctx, panel->fd);
+    }
+    panel->hosted = false;
+    /* Once, on the way out: the CRTC is about to be handed back, and the buffers freed. */
     inkcell_kms_wait_flip(panel);
     if (panel->mode_set && panel->saved_crtc_valid) {
         /* Before the buffers go: removing the framebuffer on screen would turn the CRTC off. */

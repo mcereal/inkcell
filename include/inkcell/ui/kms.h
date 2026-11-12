@@ -21,9 +21,20 @@
  * rather than with the plane's rotation property, which not every driver has; the fb backend's
  * <PREFIX>_FB_ROTATE is honoured too, since it describes the same panel.
  *
- * A present() that arrives while the last flip is still pending waits for it, for at most a
- * tenth of a second. That is the only blocking this backend does, and it is what holds an
- * animation to the panel's refresh rather than to however fast the loop can draw.
+ * A flip completes on the vertical blank, and until it has, the buffer it flipped away from may
+ * still be on the panel and cannot be written. The card says so by becoming readable, so an
+ * application that hands this backend an `inkcell_input_host` gets the card's descriptor put on
+ * its loop, and a present() that arrives while a flip is pending does not wait: the frame is
+ * drawn, both buffers are owed its rows, and the flip-complete event puts it up. Several frames
+ * drawn inside one refresh cost one copy, of the last, which is what holds an animation to the
+ * panel's rate rather than to however fast the loop can draw. A flip that has not completed a
+ * tenth of a second later is given up on at the next present(), so a panel that has stopped
+ * answering stutters rather than freezing, and a card that reports an error on the loop is taken
+ * off it and waited for as below.
+ *
+ * Without a host there is nothing to hear that event on, so present() waits for the flip
+ * itself, for at most a tenth of a second - a stutter, rather than a hang, from a panel that
+ * has stopped answering. shutdown() waits the same way once, before it hands the CRTC back.
  *
  * It needs DRM master, which the first process to open the card gets while nobody else holds
  * it. A desktop with a compositor running already has it, and init() then fails at the first
@@ -37,6 +48,7 @@
  */
 
 #include "inkcell/ui/backend.h"
+#include "inkcell/ui/input.h"
 
 #include <stdbool.h>
 
@@ -50,10 +62,16 @@ extern "C" {
  * What the KMS backend is opened with. `app` draws the frame, as it does for the fb backend,
  * and NULL draws nothing. `device` is the card to open; NULL takes <PREFIX>_KMS_DEVICE, and
  * failing that the first /dev/dri/cardN with a connected connector.
+ *
+ * `host` is the application's loop, the same seam the evdev reader and the SDL backend take:
+ * `add_fd` is given the card at init() and `remove_fd` takes it back at shutdown(), and the
+ * callback runs from the loop with nothing for the application to do. A zeroed host is no loop,
+ * and present() then waits for a pending flip as described above. `request_stop` is not used.
  */
 struct inkcell_backend_kms_context {
     const struct inkcell_fb_app *app;
     const char *device;
+    struct inkcell_input_host host;
 };
 
 const struct inkcell_backend *inkcell_backend_kms(void);
