@@ -829,14 +829,18 @@ struct inkcell_kms_commit {
     uint64_t values[16];
     uint32_t nobjs;
     uint32_t nprops;
+    /* The object the last property was added to. Kept apart from `objs` so the check below
+       never reads an array element through a computed index, which GCC cannot prove written. */
+    uint32_t last_obj;
 };
 
 static void inkcell_kms_commit_add(struct inkcell_kms_commit *c, uint32_t obj, uint32_t prop,
                                    uint64_t value) {
-    if (c->nobjs == 0U || c->objs[c->nobjs - 1U] != obj) {
+    if (c->nobjs == 0U || c->last_obj != obj) {
         c->objs[c->nobjs] = obj;
         c->counts[c->nobjs] = 0U;
         ++c->nobjs;
+        c->last_obj = obj;
     }
     c->counts[c->nobjs - 1U]++;
     c->props[c->nprops] = prop;
