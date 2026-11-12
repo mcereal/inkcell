@@ -6,8 +6,8 @@ is built on; this says how to work in it.
 ## The one-paragraph version
 
 inkcell is a C17 UI toolkit for d-pad-first, small-screen interfaces, standing on
-[inkwell](https://github.com/mcereal/inkwell) (the runtime). It draws one frame through one of
-backend - `/dev/fb0`, DRM/KMS, an SDL window, or an off-screen page - and the rasteriser, the
+[inkwell](https://github.com/mcereal/inkwell) (the runtime). It draws one frame through one of its
+backends - `/dev/fb0`, DRM/KMS, an SDL window, or an off-screen page - and the rasteriser, the
 widgets and every screen an application writes are the same code on all of them. No threads, no
 event loop of its own: the application's inkwell loop drives it. `make test` before every push.
 

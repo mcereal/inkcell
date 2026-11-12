@@ -196,11 +196,14 @@ def main():
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
     qmp = qmp_connect("qmp.sock")
 
-    matched, differed = 0, 0
+    matched, differed, status = 0, 0, None
     for raw in qemu.stdout:
         line = raw.decode(errors="replace").rstrip()
         if not line.startswith("["):  # the kernel's own lines
             print(line, flush=True)
+        if line.startswith("GALLERY EXIT "):
+            status = line.split()[-1]
+            continue
         if not line.startswith("shown "):
             continue
         _, name, size, digest = line.split()
@@ -218,8 +221,11 @@ def main():
         print(f"  panel {panel_size} {panel_digest} {'matches' if same else 'DIFFERS'}", flush=True)
     qemu.wait()
     mode = "legacy" if args.legacy else "atomic"
-    print(f"kms-vm: {mode}: {matched} frame(s) matched the panel, {differed} did not")
-    return 0 if matched and not differed else 1
+    print(f"kms-vm: {mode}: {matched} frame(s) matched the panel, {differed} did not; "
+          f"the gallery exited {status if status is not None else 'without saying'}")
+    # A run that matched what it showed but stopped early - a crash, a refused init - is a
+    # failure too, so the gallery's own exit status counts.
+    return 0 if matched and not differed and status == "0" else 1
 
 
 if __name__ == "__main__":

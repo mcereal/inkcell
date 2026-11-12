@@ -64,8 +64,6 @@ const struct inkcell_backend *inkcell_backend_kms(void) {
    six of them, which no working panel takes, and short enough that one that has stopped
    answering costs a stutter rather than a hang. */
 #define KMS_FLIP_WAIT_MS 100
-/* How many rectangles a damage pass may report. Only their extent is used. */
-#define KMS_DAMAGE_RECTS 8U
 
 /*
  * One dumb buffer: the kernel's handle, the framebuffer made of it, and where it is mapped.
@@ -879,21 +877,17 @@ static void inkcell_backend_kms_present(void *state_ptr, const void *snapshot, v
     inkcell_latency_frame_begin();
     inkcell_fb_render(state, snapshot);
 
-    /* What changed since the last frame, as a band of rows. */
-    struct inkcell_fb_damage_rect rects[KMS_DAMAGE_RECTS];
+    /* What changed since the last frame, as a band of rows. One rectangle is asked for: an
+       overflowing list widens its last one to cover the rest, so one is the extent. */
+    struct inkcell_fb_damage_rect rect;
     const size_t count = inkcell_fb_damage_rects(state, panel->draw_buffer, panel->shown,
-                                                 !panel->frame_valid, rects, KMS_DAMAGE_RECTS);
+                                                 !panel->frame_valid, &rect, 1U);
     panel->frame_valid = true;
     uint32_t top = state->surface.height;
     uint32_t bottom = 0U;
-    for (size_t i = 0U; i < count; ++i) {
-        if (!rects[i].valid) {
-            continue;
-        }
-        const uint32_t y = rects[i].y > 0 ? (uint32_t)rects[i].y : 0U;
-        const uint32_t b = rects[i].bottom > 0 ? (uint32_t)rects[i].bottom : 0U;
-        top = y < top ? y : top;
-        bottom = b > bottom ? b : bottom;
+    if (count > 0U && rect.valid) {
+        top = rect.y > 0 ? (uint32_t)rect.y : 0U;
+        bottom = rect.bottom > 0 ? (uint32_t)rect.bottom : 0U;
     }
     bottom = bottom < state->surface.height ? bottom : state->surface.height;
     if (top >= bottom && panel->mode_set) {
@@ -944,6 +938,10 @@ static void inkcell_backend_kms_present(void *state_ptr, const void *snapshot, v
                 inkwell_log_warn("ui", "KMS: page flip failed: %s", strerror(-rc));
                 panel->flip_failed_logged = true;
             }
+            /* `shown` now holds a frame the panel never got, so a next frame that draws the same
+               thing would find no damage and never put it up. Dropping the comparison makes the
+               next frame whole, which is the only answer that recovers on its own. */
+            panel->frame_valid = false;
         } else {
             panel->flip_pending = true;
             panel->front = back_index;
