@@ -17,13 +17,19 @@
  * blank, so a frame is never seen half-written. A buffer is two frames behind when its turn
  * comes round, so it is owed the rows of both.
  *
+ * <PREFIX>_KMS_ROTATE=180 turns the frame over for a panel mounted upside down, in the copy
+ * rather than with the plane's rotation property, which not every driver has; the fb backend's
+ * <PREFIX>_FB_ROTATE is honoured too, since it describes the same panel.
+ *
  * A present() that arrives while the last flip is still pending waits for it, for at most a
  * tenth of a second. That is the only blocking this backend does, and it is what holds an
  * animation to the panel's refresh rather than to however fast the loop can draw.
  *
  * It needs DRM master, which the first process to open the card gets while nobody else holds
  * it. A desktop with a compositor running already has it, and init() then fails at the first
- * modeset rather than fighting over the panel.
+ * modeset rather than fighting over the panel. shutdown() puts back whatever the CRTC was
+ * scanning out before, so a console returns without waiting for the kernel's last-close restore,
+ * which never comes while another client holds the card open.
  *
  * No libdrm: the ioctls are the kernel's own, from its uapi headers, so the backend links into
  * a static binary with nothing beside it. On a host without DRM - macOS, or a Linux build

@@ -35,6 +35,7 @@ import time
 import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HOLD_MS = 1000  # how long the gallery holds each scene
 MIRROR = "https://dl-cdn.alpinelinux.org/alpine/v3.20/main/aarch64"
 
 INIT = """#!/bin/busybox sh
@@ -44,7 +45,7 @@ modprobe virtio-gpu || echo "modprobe failed"
 for i in 1 2 3 4 5 6 7 8 9 10; do [ -e /dev/dri/card0 ] && break; sleep 0.2; done
 grep -q kms_legacy /proc/cmdline && export INKCELL_GALLERY_KMS_LEGACY=1
 echo "GALLERY START"
-/gallery --show kms --hold "${HOLD:-1000}" 2>&1
+/gallery --show kms --hold %d 2>&1
 echo "GALLERY EXIT $?"
 poweroff -f
 """
@@ -82,7 +83,7 @@ def build_initramfs(gallery, kernel_tree, busybox_tree, work):
     shutil.copy(os.path.join(busybox_tree, "bin/busybox.static"), os.path.join(root, "bin/busybox"))
     shutil.copy(gallery, os.path.join(root, "gallery"))
     with open(os.path.join(root, "init"), "w") as f:
-        f.write(INIT)
+        f.write(INIT % HOLD_MS)
     os.chmod(os.path.join(root, "init"), 0o755)
 
     # virtio-gpu and everything it needs, decompressed so busybox's modprobe can load them.
@@ -207,15 +208,24 @@ def main():
         if not line.startswith("shown "):
             continue
         _, name, size, digest = line.split()
-        time.sleep(0.4)  # past the flip: the line is printed when it is asked for
         shot = os.path.join(args.work, f"{name}.ppm")
-        reply = screendump(qmp, shot)
+        # The line is printed when the flip is asked for, not when it lands, and under TCG the
+        # scanout can trail it by a long way. So the panel is looked at again until it shows the
+        # frame or the scene's hold is nearly up - past that it may be the next scene's.
+        deadline = time.monotonic() + HOLD_MS / 1000 * 0.9
+        while True:
+            time.sleep(0.1)
+            reply = screendump(qmp, shot)
+            if "error" in reply:
+                break
+            panel_size, panel_digest = ppm_digest(shot)
+            same = (panel_size, panel_digest) == (size, digest)
+            if same or time.monotonic() >= deadline:
+                break
         if "error" in reply:
             print(f"  screendump failed: {reply['error']}")
             differed += 1
             continue
-        panel_size, panel_digest = ppm_digest(shot)
-        same = (panel_size, panel_digest) == (size, digest)
         matched += same
         differed += not same
         print(f"  panel {panel_size} {panel_digest} {'matches' if same else 'DIFFERS'}", flush=True)

@@ -123,6 +123,14 @@ struct inkcell_kms_panel {
     /* Whether `shown` holds a frame yet; until then the whole frame is damage. */
     bool frame_valid;
     bool presented;
+    /* <PREFIX>_KMS_ROTATE=180 (or the fb backend's FB_ROTATE, since it is the same panel): the
+       panel is mounted upside down, so the frame is drawn upright and turned over on its way
+       into the dumb buffer. Damage is still tracked in the frame's rows. */
+    bool rotate180;
+    /* What the CRTC was scanning out before init, put back at shutdown so a console comes back
+       even while another client keeps the card open and the kernel's own restore never runs. */
+    struct drm_mode_crtc saved_crtc;
+    bool saved_crtc_valid;
     uint8_t *draw_buffer;
     /* The last frame drawn, which the next one is compared against to find what changed. */
     uint8_t *shown;
@@ -339,46 +347,63 @@ static int inkcell_kms_pick_crtc(int fd, const struct inkcell_kms_resources *res
 }
 
 /*
- * An object's property, by name: its id, and optionally its current value.
+ * An object's properties, by name: each one's id, and optionally its current value.
  *
  * Atomic modesetting addresses everything by property id, and the ids are the driver's to
- * number, so each one is looked up by the name the kernel documents for it.
+ * number, so each one is looked up by the name the kernel documents for it. The object's list is
+ * fetched once and every name is matched in the same pass: a property's name costs an ioctl,
+ * so looking names up one at a time would cost one per property per name.
+ *
+ * Returns 0 when every name was found, or a negative errno; `ids` is filled as far as it could
+ * be, and an id left 0 is a name the object does not have.
  */
-static int inkcell_kms_prop(int fd, uint32_t obj_id, uint32_t obj_type, const char *name,
-                            uint32_t *id_out, uint64_t *value_out) {
+static int inkcell_kms_props_find(int fd, uint32_t obj_id, uint32_t obj_type,
+                                  const char *const *names, uint32_t *ids, uint64_t *values,
+                                  size_t n) {
+    for (size_t k = 0U; k < n; ++k) {
+        ids[k] = 0U;
+    }
     struct drm_mode_obj_get_properties props = {.obj_id = obj_id, .obj_type = obj_type};
     int rc = inkcell_kms_ioctl(fd, DRM_IOCTL_MODE_OBJ_GETPROPERTIES, &props);
     if (rc < 0) {
         return rc;
     }
     const uint32_t count = props.count_props;
-    uint32_t *ids = calloc(count + 1U, sizeof *ids);
-    uint64_t *values = calloc(count + 1U, sizeof *values);
-    if (ids == NULL || values == NULL) {
-        free(ids);
-        free(values);
+    uint32_t *prop_ids = calloc(count + 1U, sizeof *prop_ids);
+    uint64_t *prop_values = calloc(count + 1U, sizeof *prop_values);
+    if (prop_ids == NULL || prop_values == NULL) {
+        free(prop_ids);
+        free(prop_values);
         return -ENOMEM;
     }
-    props.props_ptr = inkcell_kms_ptr(ids);
-    props.prop_values_ptr = inkcell_kms_ptr(values);
+    props.props_ptr = inkcell_kms_ptr(prop_ids);
+    props.prop_values_ptr = inkcell_kms_ptr(prop_values);
     props.count_props = count;
     rc = inkcell_kms_ioctl(fd, DRM_IOCTL_MODE_OBJ_GETPROPERTIES, &props);
     const uint32_t got = props.count_props < count ? props.count_props : count;
-    rc = rc < 0 ? rc : -ENOENT;
-    for (uint32_t i = 0U; rc == -ENOENT && i < got; ++i) {
-        struct drm_mode_get_property prop = {.prop_id = ids[i]};
-        if (inkcell_kms_ioctl(fd, DRM_IOCTL_MODE_GETPROPERTY, &prop) == 0 &&
-            strncmp(prop.name, name, DRM_PROP_NAME_LEN) == 0) {
-            *id_out = ids[i];
-            if (value_out != NULL) {
-                *value_out = values[i];
+    size_t found = 0U;
+    for (uint32_t i = 0U; rc == 0 && found < n && i < got; ++i) {
+        struct drm_mode_get_property prop = {.prop_id = prop_ids[i]};
+        if (inkcell_kms_ioctl(fd, DRM_IOCTL_MODE_GETPROPERTY, &prop) < 0) {
+            continue;
+        }
+        for (size_t k = 0U; k < n; ++k) {
+            if (ids[k] == 0U && strncmp(prop.name, names[k], DRM_PROP_NAME_LEN) == 0) {
+                ids[k] = prop_ids[i];
+                if (values != NULL) {
+                    values[k] = prop_values[i];
+                }
+                ++found;
+                break;
             }
-            rc = 0;
         }
     }
-    free(ids);
-    free(values);
-    return rc;
+    free(prop_ids);
+    free(prop_values);
+    if (rc < 0) {
+        return rc;
+    }
+    return found == n ? 0 : -ENOENT;
 }
 
 /* The CRTC's primary plane: the one a frame goes on when nothing else is composed over it. */
@@ -404,9 +429,11 @@ static int inkcell_kms_pick_plane(int fd, int crtc_index, uint32_t *plane_out) {
             crtc_index >= 32 || (plane.possible_crtcs & (1U << crtc_index)) == 0U) {
             continue;
         }
+        static const char *const type_name[] = {"type"};
         uint32_t type_id = 0U;
         uint64_t type = 0U;
-        if (inkcell_kms_prop(fd, planes[i], DRM_MODE_OBJECT_PLANE, "type", &type_id, &type) == 0 &&
+        if (inkcell_kms_props_find(fd, planes[i], DRM_MODE_OBJECT_PLANE, type_name, &type_id, &type,
+                                   1U) == 0 &&
             type == KMS_PLANE_TYPE_PRIMARY) {
             *plane_out = planes[i];
             rc = 0;
@@ -420,34 +447,51 @@ static int inkcell_kms_pick_plane(int fd, int crtc_index, uint32_t *plane_out) {
    calls instead. */
 static int inkcell_kms_atomic_props(struct inkcell_kms_panel *panel) {
     struct inkcell_kms_props *p = &panel->props;
+    static const char *const connector_names[] = {"CRTC_ID"};
+    static const char *const crtc_names[] = {"MODE_ID", "ACTIVE"};
+    static const char *const plane_names[] = {"FB_ID", "CRTC_ID", "SRC_X",  "SRC_Y",  "SRC_W",
+                                              "SRC_H", "CRTC_X",  "CRTC_Y", "CRTC_W", "CRTC_H"};
+    uint32_t connector_ids[1];
+    uint32_t crtc_ids[2];
+    uint32_t plane_ids[10];
     const struct {
         uint32_t obj;
         uint32_t type;
-        const char *name;
-        uint32_t *id;
-    } wanted[] = {
-        {panel->connector_id, DRM_MODE_OBJECT_CONNECTOR, "CRTC_ID", &p->connector_crtc_id},
-        {panel->crtc_id, DRM_MODE_OBJECT_CRTC, "MODE_ID", &p->crtc_mode_id},
-        {panel->crtc_id, DRM_MODE_OBJECT_CRTC, "ACTIVE", &p->crtc_active},
-        {panel->plane_id, DRM_MODE_OBJECT_PLANE, "FB_ID", &p->plane_fb_id},
-        {panel->plane_id, DRM_MODE_OBJECT_PLANE, "CRTC_ID", &p->plane_crtc_id},
-        {panel->plane_id, DRM_MODE_OBJECT_PLANE, "SRC_X", &p->plane_src_x},
-        {panel->plane_id, DRM_MODE_OBJECT_PLANE, "SRC_Y", &p->plane_src_y},
-        {panel->plane_id, DRM_MODE_OBJECT_PLANE, "SRC_W", &p->plane_src_w},
-        {panel->plane_id, DRM_MODE_OBJECT_PLANE, "SRC_H", &p->plane_src_h},
-        {panel->plane_id, DRM_MODE_OBJECT_PLANE, "CRTC_X", &p->plane_crtc_x},
-        {panel->plane_id, DRM_MODE_OBJECT_PLANE, "CRTC_Y", &p->plane_crtc_y},
-        {panel->plane_id, DRM_MODE_OBJECT_PLANE, "CRTC_W", &p->plane_crtc_w},
-        {panel->plane_id, DRM_MODE_OBJECT_PLANE, "CRTC_H", &p->plane_crtc_h},
+        const char *const *names;
+        uint32_t *ids;
+        size_t n;
+    } objects[] = {
+        {panel->connector_id, DRM_MODE_OBJECT_CONNECTOR, connector_names, connector_ids, 1U},
+        {panel->crtc_id, DRM_MODE_OBJECT_CRTC, crtc_names, crtc_ids, 2U},
+        {panel->plane_id, DRM_MODE_OBJECT_PLANE, plane_names, plane_ids, 10U},
     };
-    for (size_t i = 0U; i < sizeof wanted / sizeof wanted[0]; ++i) {
-        const int rc = inkcell_kms_prop(panel->fd, wanted[i].obj, wanted[i].type, wanted[i].name,
-                                        wanted[i].id, NULL);
+    for (size_t o = 0U; o < sizeof objects / sizeof objects[0]; ++o) {
+        const int rc = inkcell_kms_props_find(panel->fd, objects[o].obj, objects[o].type,
+                                              objects[o].names, objects[o].ids, NULL, objects[o].n);
         if (rc < 0) {
-            inkwell_log_warn("ui", "KMS: no %s property (%s)", wanted[i].name, strerror(-rc));
+            for (size_t k = 0U; k < objects[o].n; ++k) {
+                if (objects[o].ids[k] == 0U) {
+                    inkwell_log_warn("ui", "KMS: no %s property (%s)", objects[o].names[k],
+                                     strerror(-rc));
+                    break;
+                }
+            }
             return rc;
         }
     }
+    p->connector_crtc_id = connector_ids[0];
+    p->crtc_mode_id = crtc_ids[0];
+    p->crtc_active = crtc_ids[1];
+    p->plane_fb_id = plane_ids[0];
+    p->plane_crtc_id = plane_ids[1];
+    p->plane_src_x = plane_ids[2];
+    p->plane_src_y = plane_ids[3];
+    p->plane_src_w = plane_ids[4];
+    p->plane_src_h = plane_ids[5];
+    p->plane_crtc_x = plane_ids[6];
+    p->plane_crtc_y = plane_ids[7];
+    p->plane_crtc_w = plane_ids[8];
+    p->plane_crtc_h = plane_ids[9];
     struct drm_mode_create_blob blob = {
         .data = inkcell_kms_ptr(&panel->mode),
         .length = sizeof panel->mode,
@@ -564,6 +608,10 @@ static int inkcell_kms_open_card(struct inkcell_kms_panel *panel, const char *pa
     if (rc < 0) {
         goto fail;
     }
+    panel->saved_crtc = (struct drm_mode_crtc){.crtc_id = panel->crtc_id};
+    panel->saved_crtc_valid =
+        inkcell_kms_ioctl(panel->fd, DRM_IOCTL_MODE_GETCRTC, &panel->saved_crtc) == 0 &&
+        panel->saved_crtc.fb_id != 0U && panel->saved_crtc.mode_valid != 0U;
 
     /* Atomic, unless asked not to or refused. Universal planes come first because atomic
        needs them, and the primary plane is only listed once they are on. */
@@ -705,12 +753,15 @@ static int inkcell_backend_kms_init(void **state_out, void *userdata) {
     };
     inkcell_fb_state_apply_theme_from_env(state);
     inkcell_fb_set_app(state, context->app);
+    panel->rotate180 =
+        inkwell_env_int("KMS_ROTATE", 0, 270, inkwell_env_int("FB_ROTATE", 0, 270, 0)) == 180;
 
     inkwell_log_info("ui",
                      "KMS UI backend active (%s, %ux%u@%u, connector %u, crtc %u, %s, theme %s "
-                     "at scale %d)",
+                     "at scale %d%s)",
                      path, width, height, panel->mode.vrefresh, panel->connector_id, panel->crtc_id,
-                     panel->atomic ? "atomic" : "legacy", state->theme->id, state->scale);
+                     panel->atomic ? "atomic" : "legacy", state->theme->id, state->scale,
+                     panel->rotate180 ? ", rotated 180" : "");
     if (state_out != NULL) {
         *state_out = panel;
     }
@@ -866,6 +917,33 @@ static void inkcell_kms_owe(struct inkcell_kms_buffer *b, uint32_t top, uint32_t
     b->owed_bottom = bottom > b->owed_bottom ? bottom : b->owed_bottom;
 }
 
+/*
+ * Rows [top, bottom) of the draw buffer into a dumb buffer: straight across, or turned over -
+ * row y onto row height-1-y with its pixels reversed - for a panel mounted upside down.
+ * Returns the bytes written.
+ */
+static size_t inkcell_kms_copy_rows(const struct inkcell_kms_panel *panel, uint8_t *map,
+                                    uint32_t top, uint32_t bottom) {
+    const struct inkcell_surface *surface = &panel->state.surface;
+    const size_t stride = surface->stride;
+    if (!panel->rotate180) {
+        const size_t from = (size_t)top * stride;
+        const size_t bytes = (size_t)(bottom - top) * stride;
+        memcpy(map + from, panel->draw_buffer + from, bytes);
+        return bytes;
+    }
+    const size_t bpp = surface->bytes_per_pixel;
+    const size_t row_bytes = (size_t)surface->width * bpp;
+    for (uint32_t y = top; y < bottom; ++y) {
+        const uint8_t *const src = panel->draw_buffer + (size_t)y * stride;
+        uint8_t *const dst = map + (size_t)(surface->height - 1U - y) * stride;
+        for (size_t at = 0U; at < row_bytes; at += bpp) {
+            memcpy(dst + (row_bytes - bpp - at), src + at, bpp);
+        }
+    }
+    return (size_t)(bottom - top) * row_bytes;
+}
+
 static void inkcell_backend_kms_present(void *state_ptr, const void *snapshot, void *userdata) {
     (void)userdata;
     struct inkcell_kms_panel *panel = inkcell_kms_panel_of(state_ptr);
@@ -909,10 +987,7 @@ static void inkcell_backend_kms_present(void *state_ptr, const void *snapshot, v
     }
     size_t written = 0U;
     if (back->owed_top < back->owed_bottom) {
-        const size_t stride = state->surface.stride;
-        const size_t from = (size_t)back->owed_top * stride;
-        written = (size_t)(back->owed_bottom - back->owed_top) * stride;
-        memcpy(back->map + from, panel->draw_buffer + from, written);
+        written = inkcell_kms_copy_rows(panel, back->map, back->owed_top, back->owed_bottom);
         back->owed_top = 0U;
         back->owed_bottom = 0U;
     }
@@ -958,6 +1033,17 @@ static void inkcell_backend_kms_shutdown(void *state_ptr, void *userdata) {
         return;
     }
     inkcell_kms_wait_flip(panel);
+    if (panel->mode_set && panel->saved_crtc_valid) {
+        /* Before the buffers go: removing the framebuffer on screen would turn the CRTC off. */
+        uint32_t connector = panel->connector_id;
+        struct drm_mode_crtc crtc = panel->saved_crtc;
+        crtc.set_connectors_ptr = inkcell_kms_ptr(&connector);
+        crtc.count_connectors = 1U;
+        const int rc = inkcell_kms_ioctl(panel->fd, DRM_IOCTL_MODE_SETCRTC, &crtc);
+        if (rc < 0) {
+            inkwell_log_warn("ui", "KMS: could not restore the CRTC: %s", strerror(-rc));
+        }
+    }
     inkcell_fb_set_app(&panel->state, NULL);
     inkcell_fb_glyph_cache_free(&panel->state);
     inkcell_kms_release(panel);
