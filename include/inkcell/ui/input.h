@@ -68,6 +68,9 @@ struct inkcell_input_touch_slot {
     bool live;
     /* Went down in the report being read, so it may become the contact that counts. */
     bool fresh;
+    /* Lifted in the report being read - even if it went down again after, which is a new
+       contact in the same slot rather than the old one jumping. */
+    bool lifted;
     int32_t x, y;
 };
 /* Whether a held `key` should repeat; see inkcell_input_set_repeat_policy(). */
@@ -144,6 +147,10 @@ struct inkcell_input {
     /* A single-touch screen's one contact, and whether the handler last heard it down. */
     bool touch_single_down;
     bool touch_sent_down;
+    /* BTN_TOUCH went down, or up, in the report being read: a tap faster than the scan says
+       both inside one report, and the level alone would show neither. */
+    bool touch_single_pressed;
+    bool touch_single_released;
     int32_t touch_single_x, touch_single_y;
     /* SYN_DROPPED: the kernel's buffer overflowed and the report under way is incomplete, so the
        rest of it is ignored and the contact cancelled. */

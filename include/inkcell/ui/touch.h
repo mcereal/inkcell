@@ -21,8 +21,9 @@
  * Where the contact is comes from the evdev reader (inkcell_input_set_touch_handler()) as a
  * fraction of the digitizer's two axes, and becomes the frame's pixels here, turned by
  * <PREFIX>_TOUCH_ROTATE when the digitizer is not mounted the way the frame is drawn. That knob
- * defaults to the panel's own - <PREFIX>_KMS_ROTATE, then <PREFIX>_FB_ROTATE - because a panel
- * mounted upside down usually has its touch layer glued on the same way.
+ * defaults to the panel's own - <PREFIX>_KMS_ROTATE, then <PREFIX>_FB_ROTATE, when that is the
+ * 180 the backends draw - because a panel mounted upside down usually has its touch layer glued
+ * on the same way.
  *
  * No device, no allocation and no clock: tests/suites/ui_touch.c plays contacts at it.
  */

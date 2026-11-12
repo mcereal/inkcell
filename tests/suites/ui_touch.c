@@ -268,6 +268,42 @@ INKCELL_TEST_CASE(touch_single_reads_btn_touch, unit) {
     record_success(test_name);
 }
 
+INKCELL_TEST_CASE(touch_a_tap_inside_one_report_is_still_a_tap, unit) {
+    static struct inkcell_input input;
+    static struct touch_log log;
+    touch_attach(&input, &log, INKCELL_INPUT_TOUCH_SINGLE);
+    ev(&input, EV_ABS, ABS_X, 100);
+    ev(&input, EV_KEY, BTN_TOUCH, 1);
+    ev(&input, EV_KEY, BTN_TOUCH, 0);
+    syn(&input);
+    INKCELL_TEST_FAIL_IF(log.count != 2U || log.phase[0] != INKCELL_TOUCH_DOWN ||
+                             log.phase[1] != INKCELL_TOUCH_UP,
+                         "a single-touch down and up in one report is a down and an up");
+
+    static struct inkcell_input multi;
+    static struct touch_log mlog;
+    touch_attach(&multi, &mlog, INKCELL_INPUT_TOUCH_MULTI);
+    ev(&multi, EV_ABS, ABS_MT_TRACKING_ID, 1);
+    ev(&multi, EV_ABS, ABS_MT_POSITION_X, 100);
+    ev(&multi, EV_ABS, ABS_MT_TRACKING_ID, -1);
+    syn(&multi);
+    INKCELL_TEST_FAIL_IF(mlog.count != 2U || mlog.phase[0] != INKCELL_TOUCH_DOWN ||
+                             mlog.phase[1] != INKCELL_TOUCH_UP,
+                         "a slot down and lifted in one report is a down and an up");
+
+    /* Lifted and down again in the same slot: two contacts, not one that jumped. */
+    ev(&multi, EV_ABS, ABS_MT_TRACKING_ID, 2);
+    syn(&multi);
+    ev(&multi, EV_ABS, ABS_MT_TRACKING_ID, -1);
+    ev(&multi, EV_ABS, ABS_MT_TRACKING_ID, 3);
+    ev(&multi, EV_ABS, ABS_MT_POSITION_X, 900);
+    syn(&multi);
+    INKCELL_TEST_FAIL_IF(mlog.count != 5U || mlog.phase[3] != INKCELL_TOUCH_UP ||
+                             mlog.phase[4] != INKCELL_TOUCH_DOWN,
+                         "a slot lifted and reused in one report is an up and a down");
+    record_success(test_name);
+}
+
 INKCELL_TEST_CASE(touch_screen_events_stay_off_the_pad, unit) {
     static struct inkcell_input input;
     static struct touch_log log;

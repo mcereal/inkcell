@@ -204,7 +204,10 @@ def touch_check(qmp, lines, size):
     got = []
     deadline = time.monotonic() + 3
     while time.monotonic() < deadline and not any(l.startswith("touch tap") for l in got):
-        got.append(next(lines))
+        line = next(lines, None)
+        if line is None:  # the gallery is gone; what it said is all there is
+            break
+        got.append(line)
     failures = []
     taps = [l.split() for l in got if l.startswith("touch tap")]
     want = (w // 4, h // 4)
@@ -217,7 +220,10 @@ def touch_check(qmp, lines, size):
     got = []
     deadline = time.monotonic() + 3
     while time.monotonic() < deadline and not any(l.startswith("touch up") for l in got):
-        got.append(next(lines))
+        line = next(lines, None)
+        if line is None:
+            break
+        got.append(line)
     steps = sum(int(l.split()[2]) for l in got if l.startswith("touch scroll"))
     if any(l.startswith("touch tap") for l in got):
         failures.append("the drag ended in a tap")

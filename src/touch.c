@@ -19,8 +19,11 @@ void inkcell_touch_init(struct inkcell_touch *touch) {
     }
     *touch = (struct inkcell_touch){0};
     inkcell_pointer_reset(&touch->pointer);
+    /* Only the turn the backends make: they draw 180 and ignore 90 and 270, so inheriting those
+       would turn the finger on a frame that was never turned. */
     const long panel =
-        inkwell_env_int("KMS_ROTATE", 0, 270, inkwell_env_int("FB_ROTATE", 0, 270, 0));
+        inkwell_env_int("KMS_ROTATE", 0, 270, inkwell_env_int("FB_ROTATE", 0, 270, 0)) == 180 ? 180
+                                                                                              : 0;
     const long rotation = inkwell_env_int("TOUCH_ROTATE", 0, 270, panel);
     touch->rotation = rotation % 90 == 0 ? (unsigned)rotation : 0U;
 }
