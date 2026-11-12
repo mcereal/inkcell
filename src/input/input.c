@@ -593,6 +593,7 @@ static void inkcell_input_touch_cancel(struct inkcell_input *input) {
     }
     input->touch_primary = 0U;
     input->touch_single_down = false;
+    input->touch_single_held = 0U;
     input->touch_sent_down = false;
     input->touch_single_pressed = false;
     input->touch_single_released = false;
@@ -726,14 +727,28 @@ static void inkcell_input_touch_event(struct inkcell_input *input, uint16_t type
         }
         return;
     }
-    /* One code is the contact, so a node that reports both cannot end it with the other. */
-    const uint16_t contact =
-        input->touch_axes.kind == INKCELL_INPUT_TOUCH_POINTER ? BTN_LEFT : BTN_TOUCH;
-    if (type == EV_KEY && code == contact) {
-        input->touch_single_down = value != 0;
-        if (value != 0) {
+    /*
+     * The contact is held while any of its codes is: BTN_LEFT for a pointer, and BTN_TOUCH or
+     * BTN_LEFT for a screen. A screen's driver may echo BTN_LEFT beside BTN_TOUCH, and the echo
+     * lifting first must not end the drag; and QEMU's tablet advertises both but presses only
+     * BTN_LEFT for the host's mouse, which must still be a finger. The edges are the level
+     * crossing between none held and some held.
+     */
+    uint8_t bit = 0U;
+    if (type == EV_KEY && code == BTN_LEFT) {
+        bit = 2U;
+    } else if (type == EV_KEY && code == BTN_TOUCH &&
+               input->touch_axes.kind != INKCELL_INPUT_TOUCH_POINTER) {
+        bit = 1U;
+    }
+    if (bit != 0U) {
+        const bool was = input->touch_single_held != 0U;
+        input->touch_single_held = (uint8_t)(value != 0 ? input->touch_single_held | bit
+                                                        : input->touch_single_held & ~bit);
+        input->touch_single_down = input->touch_single_held != 0U;
+        if (!was && input->touch_single_down) {
             input->touch_single_pressed = true;
-        } else {
+        } else if (was && !input->touch_single_down) {
             input->touch_single_released = true;
         }
     } else if (type == EV_ABS && code == ABS_X) {
@@ -759,6 +774,7 @@ bool inkcell_input_attach_touch(struct inkcell_input *input, int fd,
     input->touch_sent_y = 0;
     input->touch_sent_down = false;
     input->touch_single_down = false;
+    input->touch_single_held = 0U;
     input->touch_single_pressed = false;
     input->touch_single_released = false;
     input->touch_dropped = false;
