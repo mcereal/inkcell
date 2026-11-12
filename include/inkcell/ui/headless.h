@@ -34,11 +34,19 @@ extern "C" {
 /*
  * What the headless backend is opened with. `app` is the fb backend's - the thing that draws a
  * frame - and NULL draws nothing. `width`/`height` of 0 take the Brick's panel.
+ *
+ * `pixels` is where the frames go when they have somewhere to be - memory shared with another
+ * process, which then shows them - `size` bytes of it with `stride` bytes a row (0: width * 4).
+ * The caller's, and it must outlive the backend (inkcell_capture_open_into()); with it, `width`
+ * and `height` must be given. NULL draws into memory of the backend's own.
  */
 struct inkcell_backend_headless_context {
     const struct inkcell_fb_app *app;
     uint32_t width;
     uint32_t height;
+    uint8_t *pixels;
+    size_t size;
+    uint32_t stride;
 };
 
 const struct inkcell_backend *inkcell_backend_headless(void);

@@ -36,11 +36,18 @@ static int inkcell_backend_headless_init(void **state_out, void *userdata) {
         return -EINVAL;
     }
 
+    if (context->pixels != NULL && (context->width == 0U || context->height == 0U)) {
+        return -EINVAL; /* the caller's memory has a size; the default panel might not fit it */
+    }
     static struct inkcell_headless panel;
     panel = (struct inkcell_headless){0};
     const uint32_t width = context->width != 0U ? context->width : INKCELL_CAPTURE_WIDTH;
     const uint32_t height = context->height != 0U ? context->height : INKCELL_CAPTURE_HEIGHT;
-    const int opened = inkcell_capture_open(&panel.capture, width, height, 0);
+    const int opened = context->pixels != NULL
+                           ? inkcell_capture_open_into(
+                                 &panel.capture, context->pixels, context->size, width, height,
+                                 context->stride != 0U ? context->stride : width * 4U, 0)
+                           : inkcell_capture_open(&panel.capture, width, height, 0);
     if (opened < 0) {
         return opened;
     }
@@ -48,8 +55,9 @@ static int inkcell_backend_headless_init(void **state_out, void *userdata) {
     struct inkcell_draw_state *const state = inkcell_capture_state(panel.capture);
     inkcell_fb_state_apply_theme_from_env(state);
     inkcell_fb_set_app(state, context->app);
-    inkwell_log_info("ui", "Headless UI backend active (%ux%u in memory, theme %s at scale %d)",
-                     width, height, state->theme->id, state->scale);
+    inkwell_log_info("ui", "Headless UI backend active (%ux%u in %s memory, theme %s at scale %d)",
+                     width, height, context->pixels != NULL ? "the caller's" : "its own",
+                     state->theme->id, state->scale);
 
     *state_out = &panel;
     return 0;
