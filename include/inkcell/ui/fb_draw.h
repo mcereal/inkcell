@@ -407,6 +407,16 @@ struct inkcell_draw_state {
      */
     bool pointer;
     /*
+     * Whether the reader presses with a finger. Set by whoever owns the panel and knows what is
+     * in front of it - a phone's display server - and false otherwise, which keeps every panel
+     * drawing what it always did.
+     *
+     * Unlike `pointer` it does change the layout, and only in one direction: a row or a button
+     * a finger is to press is never shorter than inkcell_fb_touch_target(). A cursor can land
+     * on a line of text; a fingertip covers several.
+     */
+    bool touch;
+    /*
      * Whether the cursor is drawn, on a frame read with a pointer - see inkcell_fb_cursor_shown().
      *
      * A desktop shows where the keyboard is only while the keyboard is in use: a row somebody
@@ -799,6 +809,14 @@ void inkcell_fb_state_set_ppi(struct inkcell_draw_state *state, uint32_t ppi);
 /* `dp` in this frame's pixels: a real length at a known density, a pixel at an unknown one. The
    unit for layout that is not text - a touch target, an icon, a panel inset. */
 int inkcell_fb_dp(const struct inkcell_draw_state *state, int dp);
+
+/*
+ * The least height a press target may have on this frame: INKCELL_TOUCH_TARGET_DP in pixels
+ * when the reader uses a finger (`touch`) and the density is known, 0 otherwise - so a widget
+ * writes `max(its own height, this)` and a d-pad panel, or one whose size nobody stated, is
+ * untouched.
+ */
+int inkcell_fb_touch_target(const struct inkcell_draw_state *state);
 
 /* ---- the theme, as the drawing layers ask for it ------------------------------------------ */
 

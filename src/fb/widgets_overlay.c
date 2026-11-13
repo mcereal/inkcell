@@ -317,6 +317,9 @@ inkcell_fb_dialog_measure(const struct inkcell_draw_state *state,
                    ? inkcell_fb_line_adv_styled(state, &m.head_style) + inkcell_step_px(m.scale)
                    : 0;
     m.button_h = m.line + inkcell_fb_space(state, INKCELL_SPACE_MD);
+    if (m.button_h < inkcell_fb_touch_target(state)) {
+        m.button_h = inkcell_fb_touch_target(state); /* an answer a finger can give */
+    }
 
     /*
      * The action row, measured before the panel is: how tall the panel has to be depends on
@@ -617,7 +620,10 @@ static int inkcell_fb_menu_pad(const struct inkcell_draw_state *state) {
    line of text. The keycap's own height arithmetic, for the keycap's reason - a row a cursor
    lands on has to be big enough to read as a target. */
 static int inkcell_fb_menu_row_h(const struct inkcell_draw_state *state) {
-    return inkcell_fb_line_adv(state, state->scale) + inkcell_fb_space(state, INKCELL_SPACE_SM);
+    const int row =
+        inkcell_fb_line_adv(state, state->scale) + inkcell_fb_space(state, INKCELL_SPACE_SM);
+    const int target = inkcell_fb_touch_target(state);
+    return row > target ? row : target; /* under a finger, a row it can press */
 }
 
 /* Whether a row is one the cursor may stand on. An item with no words is a gap a screen left

@@ -943,6 +943,13 @@ int inkcell_fb_dp(const struct inkcell_draw_state *state, int dp) {
     return inkcell_dp_px(dp, state != NULL ? state->ppi : 0U);
 }
 
+int inkcell_fb_touch_target(const struct inkcell_draw_state *state) {
+    if (state == NULL || !state->touch || state->ppi == 0U) {
+        return 0;
+    }
+    return inkcell_dp_px(INKCELL_TOUCH_TARGET_DP, state->ppi);
+}
+
 /*
  * Where a rectangle really lands: the frame's transform, the panel's edges and whatever clip is
  * in force, applied once - and how many pixels came off its leading edges on the way.

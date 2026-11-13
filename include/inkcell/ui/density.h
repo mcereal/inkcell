@@ -45,6 +45,13 @@ extern "C" {
 #define INKCELL_PPI_MAX 1200U
 
 /*
+ * The least a finger can be asked to hit: 48 dp, about 7.6 mm, which is where both Android and
+ * iOS (44 pt) landed - the pad of a fingertip, with room for the reader not to be exact. What a
+ * press target is held to on a panel read by touch; see inkcell_fb_touch_target().
+ */
+#define INKCELL_TOUCH_TARGET_DP 48
+
+/*
  * `dp` in pixels at `ppi`, rounded to nearest. At ppi 0 a dp is a pixel.
  *
  * Never to nothing where something was asked for: a 1 dp hairline on a 120 ppi panel is still a
