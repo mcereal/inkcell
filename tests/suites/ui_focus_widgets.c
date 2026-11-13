@@ -18,6 +18,7 @@
 #include "framework/inkcell_test.h"
 
 #include "inkcell/ui/backend.h"
+#include "inkcell/ui/density.h"
 #include "inkcell/ui/fb.h"
 #include "inkcell/ui/fb_capture.h"
 #include "inkcell/ui/focus.h"
@@ -102,6 +103,60 @@ INKCELL_TEST_CASE(focus_widgets_menu_identity_is_independent_of_display_order, u
     INKCELL_TEST_FAIL_IF_CLEANUP(
         inkcell_focus_find(&h.map, W_ID_MENU_FIRST, INKCELL_FOCUS_DOWN) != W_ID_MENU_LAST,
         focus_harness_close(&h), "display order should still decide which menu row is next");
+    focus_harness_close(&h);
+    record_success(test_name);
+}
+
+/* How tall the menu's first row and the dialog's accept come out, as registered. */
+static void press_heights(struct focus_harness *h, int *row, int *answer) {
+    inkcell_focus_begin(&h->map, h->storage, FOCUS_W_STORAGE);
+    const struct inkcell_fb_menu_item items[] = {{.label = "Open"}, {.label = "Remove"}};
+    const struct inkcell_fb_menu menu = {
+        .items = items, .count = 2U, .cursor = UINT32_MAX, .focus_base = W_ID_ROW};
+    const struct inkcell_fb_rect box = inkcell_fb_menu_box(h->state, &menu, INKCELL_CAPTURE_WIDTH);
+    inkcell_fb_draw_menu(h->state, box, &menu);
+    const struct inkcell_fb_dialog dialog = {.headline = "Remove?",
+                                             .text = "",
+                                             .accept = "Remove",
+                                             .cancel = "Keep",
+                                             .cursor = 2U,
+                                             .action_focus_id = W_ID_DIALOG};
+    const int w = INKCELL_CAPTURE_WIDTH - 20;
+    const struct inkcell_fb_rect at = {
+        10, 10, w, inkcell_fb_dialog_height(h->state, &dialog, w, INKCELL_CAPTURE_HEIGHT - 20)};
+    inkcell_fb_draw_dialog_at(h->state, at, &dialog);
+    struct inkcell_focus_rect r = {0, 0, 0, 0};
+    *row = inkcell_focus_rect_of(&h->map, W_ID_ROW, &r) ? r.h : -1;
+    *answer = inkcell_focus_rect_of(&h->map, W_ID_DIALOG, &r) ? r.h : -1;
+}
+
+INKCELL_TEST_CASE(focus_widgets_a_finger_gets_a_target_it_can_press, unit) {
+    struct focus_harness h;
+    INKCELL_TEST_FAIL_IF(!focus_harness_open(&h, INKCELL_CAPTURE_WIDTH, INKCELL_CAPTURE_HEIGHT),
+                         "the capture should open");
+    int row = 0, answer = 0;
+    press_heights(&h, &row, &answer);
+    const int row_keys = row, answer_keys = answer;
+    INKCELL_TEST_FAIL_IF_CLEANUP(row <= 0 || answer <= 0, focus_harness_close(&h),
+                                 "the menu row and the answer should register");
+
+    h.state->touch = true;
+    press_heights(&h, &row, &answer);
+    INKCELL_TEST_FAIL_IF_CLEANUP(row != row_keys || answer != answer_keys, focus_harness_close(&h),
+                                 "touch at an unknown density should change nothing");
+
+    h.state->ppi = 416U; /* a phone; set directly so the scale the capture pinned stays */
+    const int target = inkcell_fb_touch_target(h.state);
+    press_heights(&h, &row, &answer);
+    INKCELL_TEST_FAIL_IF_CLEANUP(
+        target != inkcell_dp_px(INKCELL_TOUCH_TARGET_DP, 416U) || row < target || answer < target,
+        focus_harness_close(&h), "under a finger, a row and an answer should be 48 dp at least");
+
+    h.state->touch = false;
+    press_heights(&h, &row, &answer);
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_touch_target(h.state) != 0 || row != row_keys,
+                                 focus_harness_close(&h),
+                                 "the same density without a finger should change nothing");
     focus_harness_close(&h);
     record_success(test_name);
 }
