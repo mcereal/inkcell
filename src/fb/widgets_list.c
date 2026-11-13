@@ -5,6 +5,7 @@
  * leading slot draws in src/fb/widgets_item.c, and which is therefore neither's.
  */
 
+#include "inkcell/ui/density.h"
 #include "inkcell/ui/widgets/chrome.h"
 #include "inkcell/ui/widgets/focus.h"
 #include "inkcell/ui/widgets/list.h"
@@ -193,9 +194,16 @@ struct inkcell_fb_list inkcell_fb_list_begin_styled(const struct inkcell_draw_st
      * move: the rail still measures it, the glide is still clipped to it and a card still may
      * not run past its bottom - it simply holds fewer, taller steps.
      */
-    const int pad = (look.density == INKCELL_FB_LIST_COMFORTABLE && state != NULL)
-                        ? inkcell_fb_space(state, INKCELL_SPACE_LG) / 2
-                        : 0;
+    int pad = (look.density != INKCELL_FB_LIST_COMPACT && state != NULL)
+                  ? inkcell_fb_space(state, INKCELL_SPACE_LG) / 2
+                  : 0;
+    /* Touch: as much more as makes the step a fingertip, measured in the panel's own pixels -
+       rounded up, so the step is never a pixel short of the target. */
+    if (look.density == INKCELL_FB_LIST_TOUCH && state != NULL) {
+        const int target = inkcell_dp_px(INKCELL_TOUCH_TARGET_DP, state->ppi);
+        const int want = (target - layout->line + 1) / 2;
+        pad = want > pad ? want : pad;
+    }
     const int step = layout->line + 2 * pad;
     const int body_h = (int)layout->rows * layout->line;
     const uint32_t steps = step > 0 ? (uint32_t)(body_h / step) : layout->rows;

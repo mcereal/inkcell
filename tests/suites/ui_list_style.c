@@ -17,6 +17,7 @@
 
 #include "framework/inkcell_test.h"
 
+#include "inkcell/ui/density.h"
 #include "inkcell/ui/fb.h"
 #include "inkcell/ui/fb_capture.h"
 #include "inkcell/ui/focus.h"
@@ -144,6 +145,35 @@ INKCELL_TEST_CASE(list_style_comfortable_steps_are_taller_and_fewer, unit) {
                                  "the steps the window holds should fit inside the body");
     INKCELL_TEST_FAIL_IF_CLEANUP(roomy.track_h != tight.track_h, style_harness_close(&h),
                                  "the rail measures the body, which a density does not move");
+    style_harness_close(&h);
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(list_style_touch_steps_are_a_fingertip, unit) {
+    struct style_harness h;
+    INKCELL_TEST_FAIL_IF(!style_harness_open(&h, false), "the capture should open");
+    const struct inkcell_fb_list_style comfortable = {.density = INKCELL_FB_LIST_COMFORTABLE};
+    const struct inkcell_fb_list_style touch = {.density = INKCELL_FB_LIST_TOUCH};
+    static const uint32_t k_ppi[] = {0U, 160U, 420U, 560U};
+    for (size_t i = 0U; i < sizeof k_ppi / sizeof k_ppi[0]; ++i) {
+        h.state->ppi = k_ppi[i];
+        const struct inkcell_fb_list roomy =
+            inkcell_fb_list_begin_styled(h.state, &h.layout, 400U, 0U, NULL, NULL, &comfortable);
+        const struct inkcell_fb_list finger =
+            inkcell_fb_list_begin_styled(h.state, &h.layout, 400U, 0U, NULL, NULL, &touch);
+        INKCELL_TEST_FAIL_IF_CLEANUP(finger.line < inkcell_dp_px(INKCELL_TOUCH_TARGET_DP, k_ppi[i]),
+                                     style_harness_close(&h),
+                                     "a touch step should be at least the touch target");
+        INKCELL_TEST_FAIL_IF_CLEANUP(finger.line < roomy.line || finger.pad < roomy.pad,
+                                     style_harness_close(&h),
+                                     "and never tighter than a comfortable one");
+        INKCELL_TEST_FAIL_IF_CLEANUP(finger.line != h.layout.line + 2 * finger.pad,
+                                     style_harness_close(&h),
+                                     "with its air split above and below the words");
+        INKCELL_TEST_FAIL_IF_CLEANUP((int)finger.model.visible * finger.line > finger.track_h,
+                                     style_harness_close(&h),
+                                     "and as many steps as fit in the body");
+    }
     style_harness_close(&h);
     record_success(test_name);
 }
