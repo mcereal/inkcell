@@ -885,3 +885,59 @@ INKCELL_TEST_CASE(list_style_a_pane_the_keys_are_not_in_draws_no_cursor, unit) {
     style_harness_close(&h);
     record_success(test_name);
 }
+
+/* ---- a swatch: a stated colour in the avatar's gutter -------------------------------------- */
+
+/* The leftmost column in rows [top, bottom) holding exactly `ink`, or -1. */
+static int style_first_x(const struct style_harness *h, int top, int bottom,
+                         struct inkcell_rgb ink) {
+    for (int x = 0; x < (int)INKCELL_CAPTURE_WIDTH; ++x) {
+        for (int y = top; y < bottom; ++y) {
+            if (style_same_rgb(style_pixel(h, x, y), ink)) {
+                return x;
+            }
+        }
+    }
+    return -1;
+}
+
+INKCELL_TEST_CASE(list_style_a_swatch_is_its_colour_ringed_in_the_avatar_gutter, unit) {
+    struct style_harness h;
+    INKCELL_TEST_FAIL_IF(!style_harness_open(&h, false), "the capture should open");
+    const struct inkcell_rgb teal = {20, 184, 166};
+    struct inkcell_fb_list list = inkcell_fb_list_begin(&h.layout, 2U, 0U);
+    const struct inkcell_fb_list_item avatar = {.leading = {.kind = INKCELL_FB_LEADING_AVATAR,
+                                                            .label = "T",
+                                                            .role = INKCELL_COLOR_SURFACE_HIGH},
+                                                .text = "Teal"};
+    const struct inkcell_fb_list_item swatch = {
+        .leading = {.kind = INKCELL_FB_LEADING_SWATCH, .swatch = teal}, .text = "Teal"};
+    inkcell_fb_list_item(h.state, &list, 0U, &avatar);
+    inkcell_fb_list_item(h.state, &list, 1U, &swatch);
+
+    /* The rows by what is on the page: the swatch's own extent is its row, and the avatar's
+       row is the one above it. */
+    int row1 = -1;
+    int row2 = -1;
+    for (int y = 0; y < (int)INKCELL_CAPTURE_HEIGHT; ++y) {
+        if (style_first_x(&h, y, y + 1, teal) >= 0) {
+            row1 = row1 < 0 ? y : row1;
+            row2 = y + 1;
+        }
+    }
+    const int row0 = 0;
+    const struct inkcell_rgb ring = inkcell_fb_color(h.state, INKCELL_COLOR_OUTLINE);
+    const int fill_x = style_first_x(&h, row1, row2, teal);
+    const int ring_x = style_first_x(&h, row1, row2, ring);
+    INKCELL_TEST_FAIL_IF_CLEANUP(fill_x < 0, style_harness_close(&h),
+                                 "the swatch's own colour is on the page");
+    INKCELL_TEST_FAIL_IF_CLEANUP(ring_x < 0 || ring_x >= fill_x, style_harness_close(&h),
+                                 "inside a ring of the outline");
+    const struct inkcell_rgb text = inkcell_fb_color(h.state, INKCELL_COLOR_TEXT);
+    const int words0 = style_first_x(&h, row0, row1, text);
+    const int words1 = style_first_x(&h, row1, row2, text);
+    INKCELL_TEST_FAIL_IF_CLEANUP(words0 < 0 || words0 != words1, style_harness_close(&h),
+                                 "its words start where an avatar row's do");
+    style_harness_close(&h);
+    record_success(test_name);
+}

@@ -652,6 +652,18 @@ enum inkcell_fb_leading_kind {
      * draw a disc with nothing in it.
      */
     INKCELL_FB_LEADING_TONAL_SLOT,
+    /*
+     * A disc of one stated colour, `swatch`, at the avatar's size in the avatar's gutter: the
+     * row is *about* a colour - an accent to pick, a label's colour, a pen - and the colour is
+     * its content the way a photo is a thumbnail's.
+     *
+     * The one place a renderer is handed a colour rather than a role, and it is a kind of its
+     * own so that stays the only one: what it shows is data, not a look, so no theme answers
+     * for it and none should. What the theme does answer for is the ring - the outline role,
+     * an edge's width wide - because a stated colour can be anything, the ground included,
+     * and a swatch nobody can find is a choice nobody can make.
+     */
+    INKCELL_FB_LEADING_SWATCH,
 };
 
 struct inkcell_fb_leading {
@@ -663,6 +675,7 @@ struct inkcell_fb_leading {
     /* AVATAR: a stated fill instead of a tint - the primary for "all traffic", the error
        colour for a row armed to be deleted. INKCELL_COLOR_COUNT means "use the tint". */
     enum inkcell_color role;
+    struct inkcell_rgb swatch; /* SWATCH: the colour */
 };
 
 /*
