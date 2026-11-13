@@ -281,3 +281,10 @@ INKCELL_ICON_ENTRY(SHIFT_LOCK,    "shift_lock")
 INKCELL_ICON_ENTRY(ENTER,         "keyboard_return")
 /* Put the keyboard away without finishing what is typed. */
 INKCELL_ICON_ENTRY(KEYBOARD_HIDE, "keyboard_hide")
+
+/* ---- a phone's side buttons ------------------------------------------------------------------
+ *
+ * What the level a side button moves is (inkcell/ui/input.h, enum inkcell_side_button): the
+ * volume, and the volume at nothing. */
+INKCELL_ICON_ENTRY(VOLUME,     "volume_up")
+INKCELL_ICON_ENTRY(VOLUME_OFF, "volume_off")
