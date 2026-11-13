@@ -52,6 +52,9 @@ struct inkcell_backend_headless_context {
        (inkcell_fb_state_set_ppi()); 0 for unknown. A client of a display server has no
        connector to ask, so the server is who says. */
     uint32_t ppi;
+    /* Whether those frames are read by a finger (the draw state's `touch`): the same server's
+       to say, since it is the one that found the touchscreen. */
+    bool touch;
 };
 
 const struct inkcell_backend *inkcell_backend_headless(void);

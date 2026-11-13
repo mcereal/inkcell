@@ -55,6 +55,7 @@ static int inkcell_backend_headless_init(void **state_out, void *userdata) {
     struct inkcell_draw_state *const state = inkcell_capture_state(panel.capture);
     inkcell_fb_state_apply_theme_from_env(state);
     inkcell_fb_state_set_ppi(state, context->ppi);
+    state->touch = context->touch;
     inkcell_fb_set_app(state, context->app);
     inkwell_log_info(
         "ui", "Headless UI backend active (%ux%u in %s memory, theme %s at scale %d, %u ppi)",
