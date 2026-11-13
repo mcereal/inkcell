@@ -114,7 +114,7 @@
  * macro argument is not.
  */
 #define INKCELL_METRICS_FIELDS(scrim, shadows)                                                     \
-    .margin = 16U, .scale = INKCELL_SCALE(4), .bubble_width_pct = 75U,                             \
+    .margin = 16U, .scale = INKCELL_SCALE(4), .body_dp = 16U, .bubble_width_pct = 75U,             \
     .type =                                                                                        \
         {                                                                                          \
             [INKCELL_TYPE_DISPLAY] = {.offset = INKCELL_SCALE(2),                                  \
@@ -1340,6 +1340,12 @@ bool inkcell_theme_validate(const struct inkcell_theme *theme, char *reason, siz
         if (reason != NULL) {
             snprintf(reason, reason_len, "scale %u is outside %d..%d", theme->metrics.scale,
                      INKCELL_SCALE_MIN, INKCELL_SCALE_MAX);
+        }
+        return false;
+    }
+    if (theme->metrics.body_dp == 0U) {
+        if (reason != NULL) {
+            snprintf(reason, reason_len, "%s", "body_dp is 0: no text size at a known density");
         }
         return false;
     }

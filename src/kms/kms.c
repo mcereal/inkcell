@@ -5,6 +5,7 @@
  * inkcell/ui/kms.h.
  */
 
+#include "inkcell/ui/density.h"
 #include "inkcell/ui/fb_draw.h"
 
 #include "inkcell/ui/kms.h"
@@ -108,6 +109,7 @@ struct inkcell_kms_panel {
     int fd;
     bool atomic;
     uint32_t connector_id;
+    uint32_t connector_mm_width;
     uint32_t crtc_id;
     uint32_t plane_id;
     struct drm_mode_modeinfo mode;
@@ -248,6 +250,7 @@ struct inkcell_kms_connector {
     uint32_t id;
     uint32_t connection;
     uint32_t encoder_id;
+    uint32_t mm_width; /* the panel's size as the connector reports it; 0 when it does not */
     struct drm_mode_modeinfo *modes;
     uint32_t count_modes;
     uint32_t *encoders;
@@ -299,6 +302,7 @@ static int inkcell_kms_connector_get(int fd, uint32_t id, struct inkcell_kms_con
             .id = id,
             .connection = conn.connection,
             .encoder_id = conn.encoder_id,
+            .mm_width = conn.mm_width,
             .modes = mode_list,
             .count_modes = conn.count_modes,
             .encoders = encoder_list,
@@ -611,6 +615,7 @@ static int inkcell_kms_open_card(struct inkcell_kms_panel *panel, const char *pa
         if (conn.connection == KMS_CONNECTED && mode != NULL &&
             inkcell_kms_pick_crtc(panel->fd, &res, &conn, &crtc) == 0) {
             panel->connector_id = conn.id;
+            panel->connector_mm_width = conn.mm_width;
             panel->crtc_id = crtc;
             panel->mode = *mode;
             rc = 0;
@@ -768,6 +773,10 @@ static int inkcell_backend_kms_init(void **state_out, void *userdata) {
             },
     };
     inkcell_fb_state_apply_theme_from_env(state);
+    /* The connector's millimetres against the mode's pixels, when it states believable ones. A
+       rotation turns the picture, not the panel, so the mode's own width is the one to use. */
+    inkcell_fb_state_set_ppi(state,
+                             inkcell_ppi_from_mm(panel->mode.hdisplay, panel->connector_mm_width));
     inkcell_fb_set_app(state, context->app);
     panel->rotate180 =
         inkwell_env_int("KMS_ROTATE", 0, 270, inkwell_env_int("FB_ROTATE", 0, 270, 0)) == 180;
@@ -788,10 +797,10 @@ static int inkcell_backend_kms_init(void **state_out, void *userdata) {
 
     inkwell_log_info("ui",
                      "KMS UI backend active (%s, %ux%u@%u, connector %u, crtc %u, %s, theme %s "
-                     "at scale %d%s)",
+                     "at scale %d, %u ppi%s)",
                      path, width, height, panel->mode.vrefresh, panel->connector_id, panel->crtc_id,
                      panel->atomic ? "atomic" : "legacy", state->theme->id, state->scale,
-                     panel->rotate180 ? ", rotated 180" : "");
+                     (unsigned)state->ppi, panel->rotate180 ? ", rotated 180" : "");
     if (!panel->hosted) {
         inkwell_log_info("ui", "KMS: no loop to hear page flips on, so present() waits for them");
     }

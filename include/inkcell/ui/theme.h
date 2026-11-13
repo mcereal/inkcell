@@ -815,8 +815,18 @@ static inline int inkcell_type_line_px(int line, const struct inkcell_type_style
  * different `margin` - neither should need a renderer to be touched.
  */
 struct inkcell_metrics {
-    uint8_t margin; /* pixels between the panel edge and the body */
-    uint8_t scale;  /* glyph multiplier for body text */
+    uint8_t margin; /* between the panel edge and the body: dp, or pixels at unknown density */
+    uint8_t scale;  /* glyph multiplier for body text, on a panel whose density is unknown */
+    /*
+     * How big body text is, in dp (inkcell/ui/density.h): the font's cell, its em.
+     *
+     * `scale` is a pixel count tuned on one panel. On a panel whose density is known - KMS read
+     * its millimetres, the environment named it - the body scale is this length converted
+     * instead, so text is the same size in the hand on a 3.2" handheld and a 6.3" phone.
+     * Unknown density keeps `scale`, so a panel nobody measured draws what it always did.
+     * 16 is Material's body and close to iOS's 17 pt: what a phone's reader expects.
+     */
+    uint8_t body_dp;
     /*
      * The type scale: one row per role, indexed by enum inkcell_type.
      *
