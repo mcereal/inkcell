@@ -71,7 +71,11 @@ static int inkcell_fb_keyboard_key_scale(const struct inkcell_draw_state *state,
     int key_scale =
         (step > 0) ? INKCELL_SCALE((cell_h - 2 * inkcell_fb_space(state, INKCELL_SPACE_MD)) / step)
                    : scale;
-    const int key_scale_max = (scale * 2 < INKCELL_SCALE_MAX) ? scale * 2 : INKCELL_SCALE_MAX;
+    /* Up to twice the body, as a fill - so held to the fill ceiling, unless the body itself is
+       past it, which a reader's larger text puts it; a key's letter is never smaller than the
+       words beside the keyboard. */
+    const int fill_max = scale > INKCELL_SCALE_FILL_MAX ? scale : INKCELL_SCALE_FILL_MAX;
+    const int key_scale_max = scale * 2 < fill_max ? scale * 2 : fill_max;
     if (key_scale < scale) {
         key_scale = scale;
     }

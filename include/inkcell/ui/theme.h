@@ -399,10 +399,31 @@ INKCELL_STATIC_ASSERT((int)INKCELL_TONE_COUNT - (int)INKCELL_TONE_PRIMARY ==
                           (int)INKCELL_FAMILY_COUNT,
                       "one tone per family, contiguous, in family order");
 
-/* The glyph multipliers the UI will accept, whatever a theme asks for. The lower bound is
-   legibility on the Brick's 3.2" panel; the upper is the buffers sized off it. */
+/*
+ * The glyph multipliers the UI will accept, whatever a theme asks for. The lower bound is
+ * legibility on the Brick's 3.2" panel.
+ *
+ * The upper bound is what a phone needs, and it is not the Brick's. A 16dp body on a 416ppi
+ * panel is already five and a quarter steps, and a heading sits two steps above the body - so a
+ * ceiling of six clipped a phone's headings at its default size and left a reader who asked for
+ * larger text almost nothing to grow into. Twelve holds a 200% body (inkcell_theme_text()) on
+ * such a panel with its headings above it. The buffers sized off it (the glyph and icon rows in
+ * fb_draw.c) are one row of one glyph, on the stack, so the room costs kilobytes.
+ */
 #define INKCELL_SCALE_MIN INKCELL_SCALE(2)
-#define INKCELL_SCALE_MAX INKCELL_SCALE(6)
+#define INKCELL_SCALE_MAX INKCELL_SCALE(12)
+
+/*
+ * The largest a widget grows a mark to *fill* a box - a tile's icon or initials, a dial's
+ * reading, a key's letter - as opposed to how large a reader may ask text to be.
+ *
+ * Those were one number, and they are not one idea. A mark that fills a box is limited by the
+ * detail its master was drawn with: past about six steps an icon's edges go soft and a tile's
+ * initials stop reading as a label and start reading as a poster. So a fill keeps this ceiling
+ * however far INKCELL_SCALE_MAX rises - and a fill that must stay as large as the body text
+ * (a key's letter) takes whichever of the two is larger.
+ */
+#define INKCELL_SCALE_FILL_MAX INKCELL_SCALE(6)
 
 /*
  * Avatar tints: the fills behind a conversation's initials.
@@ -999,6 +1020,29 @@ const struct inkcell_theme *inkcell_theme_next(const struct inkcell_theme *theme
  */
 int inkcell_theme_tint(const struct inkcell_theme *base, struct inkcell_rgb seed,
                        struct inkcell_theme *out);
+
+/*
+ * `theme`'s text at `percent` of the size its author chose, and every role set heavy when `bold`:
+ * the reader's text size and bold text, applied to a type scale somebody designed.
+ *
+ * Size moves the body - `body_dp` and the unmeasured-panel `scale` both - and nothing else, and
+ * that is enough because everything else is measured from it: each type role is an offset from
+ * the body, and margins, spacing, shapes and rows are counted in scale units. So the layout grows
+ * with its words, and a list at 150% is the same list, roomier, rather than words running out of
+ * boxes drawn for smaller ones. The scale still clamps to INKCELL_SCALE_MIN..MAX, which is where
+ * a size past what a panel can hold stops.
+ *
+ * Bold is every role at INKCELL_WEIGHT_STRONG. There are two weights, so it is the body and the
+ * captions that change; headings were strong already and are still told apart by size.
+ *
+ * In place, so it can follow inkcell_theme_tint() or work on a copy of a registered theme; the
+ * id stays the base's. A draw state takes the change when the theme is set on it again with a
+ * scale of 0, which measures the new body at the panel's density. 0, or -EINVAL for no theme or
+ * a percent outside INKCELL_TEXT_PERCENT_MIN..INKCELL_TEXT_PERCENT_MAX.
+ */
+#define INKCELL_TEXT_PERCENT_MIN 50U
+#define INKCELL_TEXT_PERCENT_MAX 200U
+int inkcell_theme_text(struct inkcell_theme *theme, unsigned percent, bool bold);
 
 /* Lookups. A NULL theme resolves to the default, so no caller has to guard. */
 struct inkcell_rgb inkcell_theme_color(const struct inkcell_theme *theme, enum inkcell_color role);

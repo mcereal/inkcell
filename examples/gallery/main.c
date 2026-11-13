@@ -11,6 +11,9 @@
  *   --tint RGB  renders each theme accented with that colour (inkcell_theme_tint()), as six
  *               hex digits - the way to look at an accent on every component before shipping
  *               it. The manifest is always rendered untinted.
+ *   --text PCT  renders each page with its text at that percent of the page's scale, and
+ *   --bold      every role heavy (inkcell_theme_text()): every component at a reader's text
+ *               size, to see that it grows rather than breaks.
  *   --show B    puts the scenes up on a real backend (kms, fb or headless), one after another,
  *               and prints a digest of each frame's colour - which is what a screenshot of the
  *               panel is compared against to prove the frame reached it unchanged.
@@ -384,7 +387,7 @@ static int gallery_show(const char *backend_name, const struct gallery_scene *sc
 
 static void gallery_usage(FILE *out) {
     fputs("usage: inkcell_gallery [--out DIR] [--check FILE] [--scene NAME] [--theme ID]\n"
-          "                       [--scale N] [--tint RRGGBB] [--list]\n"
+          "                       [--scale N] [--tint RRGGBB] [--text PCT] [--bold] [--list]\n"
           "       inkcell_gallery --show kms|fb|headless [--scene NAME] [--hold MS] [--touch]\n",
           out);
 }
@@ -396,6 +399,8 @@ int main(int argc, char **argv) {
     const char *only_theme = NULL;
     int only_scale = 0;
     const char *tint = NULL;
+    unsigned text_pct = 100U;
+    bool bold = false;
     bool list = false;
     const char *show = NULL;
     unsigned hold_ms = 1000U;
@@ -422,6 +427,10 @@ int main(int argc, char **argv) {
             only_theme = argv[++i];
         } else if (strcmp(arg, "--tint") == 0 && has_value) {
             tint = argv[++i];
+        } else if (strcmp(arg, "--text") == 0 && has_value) {
+            text_pct = (unsigned)strtoul(argv[++i], NULL, 10);
+        } else if (strcmp(arg, "--bold") == 0) {
+            bold = true;
         } else if (strcmp(arg, "--scale") == 0 && has_value) {
             /* In whole steps, like <PREFIX>_FB_SCALE: the manifest states a scale in units,
                but the flag is what somebody types to re-render one row of the sheet. */
@@ -488,11 +497,22 @@ int main(int argc, char **argv) {
                 }
                 theme = &tinted;
             }
+            if (bold) {
+                if (theme != &tinted) {
+                    tinted = *theme;
+                    theme = &tinted;
+                }
+                (void)inkcell_theme_text(&tinted, 100U, true);
+            }
             for (size_t k = 0U; k < scale_count; ++k) {
                 if (only_scale != 0 && only_scale != k_scales[k]) {
                     continue;
                 }
-                const int rc = gallery_page(&scenes[s], theme, k_scales[k], out_dir, &pages[count]);
+                /* A page's scale is pinned, so the reader's size is applied to it here rather
+                   than through the theme, which the pin would override. */
+                const int scale = inkcell_theme_clamp_scale(
+                    theme, (int)(((unsigned)k_scales[k] * text_pct + 50U) / 100U));
+                const int rc = gallery_page(&scenes[s], theme, scale, out_dir, &pages[count]);
                 if (rc < 0) {
                     fprintf(stderr, "gallery: %s@%s@%d failed: %s\n", scenes[s].name, theme->id,
                             k_scales[k], strerror(-rc));

@@ -1573,6 +1573,9 @@ int inkcell_fb_icon_drawn(const struct inkcell_draw_state *state, int scale);
 /* The largest multiplier inkcell_fb_draw_icon() will draw at: everything in a row is drawn at the
    text's scale, and the empty state's symbol is the one thing bigger than that. */
 #define INKCELL_FB_ICON_SCALE_MAX (INKCELL_SCALE_MAX * 3)
+/* The largest an icon is grown to fill a box of its own (a tile, a dial): the empty state's three
+   times the body, at the fill ceiling - see INKCELL_SCALE_FILL_MAX. */
+#define INKCELL_FB_ICON_FILL_MAX (INKCELL_SCALE_FILL_MAX * 3)
 
 /*
  * One icon, in `ink`, blended against `ground` - the colour the caller has just filled behind

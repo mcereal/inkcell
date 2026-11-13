@@ -315,7 +315,7 @@ static void inkcell_fb_tile_art(const struct inkcell_draw_state *state,
         if (!inkcell_icon_is_valid(tile->icon)) {
             return;
         }
-        int scale = INKCELL_FB_ICON_SCALE_MAX;
+        int scale = INKCELL_FB_ICON_FILL_MAX; /* a fill, so the fill ceiling */
         /* A whole step at a time. The scale has quarters in it now, and this loop could fit the
            art a good deal closer by walking them - but a tile that shrinks by a quarter step is
            a different tile, so stepping stays what it was and the finer fit is a change of its
@@ -352,7 +352,7 @@ static void inkcell_fb_tile_art(const struct inkcell_draw_state *state,
         if (tile->text == NULL || tile->text[0] == '\0') {
             return;
         }
-        int scale = INKCELL_SCALE_MAX;
+        int scale = INKCELL_SCALE_FILL_MAX; /* a fill, so the fill ceiling */
         /* A whole step at a time, and never past one - the same floor the icon above stops at.
            Walking raw units instead would let a cramped tile take its initials down to a quarter
            step, which is below anything the type scale can name and is not a smaller label but
