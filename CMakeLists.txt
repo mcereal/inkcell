@@ -96,6 +96,8 @@ add_library(inkcell STATIC
     # the on-screen keyboard's model: the grid, the panel ring, the edits. No drawing, which is
     # what lets the whole thing be tested without a panel.
     src/keyboard.c
+    # the keyboard a finger types on: its rows, which key a point is on, what a press is.
+    src/touch_keyboard.c
     # where the d-pad goes: the rectangles a frame drew, and which one lies in a given
     # direction. A model for the keyboard's reason - no panel in it, and a second backend
     # resolving a press wants the same answer.
@@ -130,6 +132,7 @@ add_library(inkcell STATIC
     src/fb/widgets_grid.c
     src/fb/widgets_item.c
     src/fb/widgets_keyboard.c
+    src/fb/widgets_touch_keyboard.c
     src/fb/widgets_list.c
     src/fb/widgets_meter.c
     src/fb/widgets_scaffold.c

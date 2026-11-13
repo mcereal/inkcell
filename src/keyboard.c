@@ -271,6 +271,18 @@ static bool keyboard_delete(char *text, size_t at) {
     return true;
 }
 
+bool inkcell_keyboard_delete_at_caret(struct inkcell_keyboard *kb, char *text) {
+    if (text == NULL) {
+        return false;
+    }
+    const size_t at = keyboard_caret_normalise(kb, text);
+    if (!keyboard_delete(text, at)) {
+        return false;
+    }
+    keyboard_caps_on_edit(kb);
+    return true;
+}
+
 void inkcell_keyboard_reset(struct inkcell_keyboard *kb) {
     if (kb == NULL) {
         return;

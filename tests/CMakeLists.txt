@@ -42,6 +42,7 @@ set(INKCELL_TEST_SUITES
     suites/ui_shapes.c
     suites/ui_stack.c
     suites/ui_text.c
+    suites/ui_touch_keyboard.c
     suites/ui_theme.c
     suites/ui_type.c
     suites/ui_vector.c

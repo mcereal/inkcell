@@ -338,6 +338,10 @@ bool inkcell_keyboard_insert_text_at_caret(struct inkcell_keyboard *kb,
                                            const struct inkcell_keyboard_layout *layout, char *text,
                                            size_t size, const char *input);
 
+/* The character before the caret, gone - a host keyboard's backspace, or a system keyboard's
+   delete sent to a field. By cell, as the grid's delete is. True only when the text changed. */
+bool inkcell_keyboard_delete_at_caret(struct inkcell_keyboard *kb, char *text);
+
 /* The caret as a byte offset into `text`: the count in `kb` read against the text as it now
    is, on a cell boundary. What a renderer drawing the caret asks, and what every press uses. */
 size_t inkcell_keyboard_caret(const struct inkcell_keyboard *kb, const char *text);

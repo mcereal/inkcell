@@ -34,6 +34,7 @@
  *   widgets/overlay.h   the dialog, the menu, the bottom sheet, the snackbar, the QR
  *   widgets/scroll.h    a viewport over content in pixels, its rail, the large title
  *   widgets/keyboard.h  the on-screen keyboard's grid, over the model in ui/keyboard.h
+ *   widgets/touch_keyboard.h  the keyboard a finger types on, over ui/touch_keyboard.h
  *   widgets/focus.h     the focus ring, travelling between the boxes a frame drew
  *
  * The first four of those overlays are *content for a layer* rather than components that
@@ -72,5 +73,6 @@
 #include "inkcell/ui/widgets/scaffold.h"
 #include "inkcell/ui/widgets/scroll.h"
 #include "inkcell/ui/widgets/stat.h"
+#include "inkcell/ui/widgets/touch_keyboard.h"
 
 #endif /* INKCELL_BACKENDS_FB_WIDGETS_H */
