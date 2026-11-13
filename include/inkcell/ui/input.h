@@ -35,6 +35,29 @@ struct inkcell_input_host {
 typedef void (*inkcell_key_handler)(void *userdata, enum inkcell_key key);
 
 /*
+ * A phone's buttons on its edge: power and volume.
+ *
+ * Not keys, and not in `enum inkcell_key`, for two reasons. They are the system's rather than a
+ * screen's: what power does is put the device to sleep or offer to turn it off, whatever is on the
+ * panel, and the one process that owns the panel is who decides. And their *release* matters as
+ * much as their press: a power button held for half a second is a menu, power and volume-down
+ * together are a screenshot, and a volume key held steps on. So they come with their phase, to a
+ * handler of their own, and only to a host that asked (inkcell_input_watch_side_buttons()) - which
+ * keeps a handheld whose PMIC also says KEY_POWER exactly as it was (see input.c on KEY_POWER).
+ */
+enum inkcell_side_button {
+    INKCELL_SIDE_NONE = 0,
+    INKCELL_SIDE_POWER,
+    INKCELL_SIDE_VOLUME_UP,
+    INKCELL_SIDE_VOLUME_DOWN,
+};
+
+/* `button` went down (`down`) or came up. The kernel's own autorepeat of a held button is not
+   passed on: a hold is the host's to time, from the press to the release. */
+typedef void (*inkcell_side_button_handler)(void *userdata, enum inkcell_side_button button,
+                                            bool down);
+
+/*
  * A touchscreen's one contact that counts, as a fraction of each digitizer axis (0 to
  * INKCELL_TOUCH_UNIT): inkcell_touch_feed() turns it into the frame's pixels and a tap or a
  * scroll. See inkcell_input_set_touch_handler().
@@ -112,6 +135,10 @@ struct inkcell_input {
     int fds[INKCELL_INPUT_MAX_DEVICES];
     size_t count;
     inkcell_key_handler on_key;
+    /* The power and volume buttons' handler, set by inkcell_input_watch_side_buttons(); NULL, the
+       zeroed struct's, reads them as before - not at all. */
+    inkcell_side_button_handler on_button;
+    void *button_userdata;
     void *key_userdata;
 
     /* Software key repeat for a held direction. `repeat_timer_fd` is <= 0 when there is no
@@ -181,6 +208,19 @@ void inkcell_input_shutdown(struct inkcell_input *input);
 
 void inkcell_input_set_handler(struct inkcell_input *input, inkcell_key_handler handler,
                                void *userdata);
+
+/*
+ * Read the power and volume buttons, to `handler` with their phase (enum inkcell_side_button). Also
+ * watches every input node that reports one of them and is not watched already - a phone's
+ * power key is on a PMIC's node and its volume keys on a GPIO one, neither of which
+ * inkcell_input_init() wanted. Call it after inkcell_input_init(). Returns how many nodes it
+ * added (0 off Linux, where a window backend's events still reach the handler).
+ */
+int inkcell_input_watch_side_buttons(struct inkcell_input *input,
+                                     inkcell_side_button_handler handler, void *userdata);
+
+/* An evdev code's button, or INKCELL_SIDE_NONE. Pure. */
+enum inkcell_side_button inkcell_input_map_side_button(uint16_t code);
 
 /*
  * Where a touchscreen's contact goes. NULL - and an application that never asks - drops them,

@@ -57,6 +57,8 @@
 #define KEY_DOWN 108
 #define KEY_PAGEDOWN 109
 #define KEY_DELETE 111
+#define KEY_VOLUMEDOWN 114
+#define KEY_VOLUMEUP 115
 #define KEY_POWER 116
 #define KEY_MENU 139
 #define KEY_CANCEL 223

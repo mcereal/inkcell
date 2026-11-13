@@ -30,6 +30,7 @@
 #include <fcntl.h>
 #include <linux/input.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
@@ -797,6 +798,17 @@ void inkcell_input_handle_device_event(struct inkcell_input *input, int source_f
     }
 
     enum inkcell_key key = INKCELL_KEY_NONE;
+    /* A phone's buttons, to a host that asked for them, before anything here can take one for a
+       quit key: press and release, never the kernel's repeat. */
+    if (type == EV_KEY && input->on_button != NULL) {
+        const enum inkcell_side_button button = inkcell_input_map_side_button(code);
+        if (button != INKCELL_SIDE_NONE) {
+            if (value == 0 || value == 1) {
+                input->on_button(input->button_userdata, button, value == 1);
+            }
+            return;
+        }
+    }
     if (type == EV_KEY) {
         /* value 1 is a press, 2 is the kernel's autorepeat, 0 is a release. */
         if (value == 0) {
@@ -1244,6 +1256,92 @@ static void inkcell_input_setup_repeat_timer(struct inkcell_input *input,
     }
 
     input->repeat_timer_fd = fd;
+}
+
+enum inkcell_side_button inkcell_input_map_side_button(uint16_t code) {
+    switch (code) {
+    case KEY_POWER:
+        return INKCELL_SIDE_POWER;
+    case KEY_VOLUMEUP:
+        return INKCELL_SIDE_VOLUME_UP;
+    case KEY_VOLUMEDOWN:
+        return INKCELL_SIDE_VOLUME_DOWN;
+    default:
+        return INKCELL_SIDE_NONE;
+    }
+}
+
+#if defined(__linux__)
+/* A node already watched, by the device it is: the same node opened twice reads every event
+   twice. */
+static bool inkcell_input_watching(const struct inkcell_input *input, int fd) {
+    struct stat node;
+    if (fstat(fd, &node) != 0) {
+        return false;
+    }
+    for (size_t i = 0U; i < input->count; ++i) {
+        struct stat other;
+        if (fstat(input->fds[i], &other) == 0 && other.st_rdev == node.st_rdev) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool inkcell_input_reports_button(int fd) {
+    unsigned long keys[INKCELL_INPUT_BIT_WORDS(KEY_MAX + 1U)];
+    memset(keys, 0, sizeof keys);
+    if (ioctl(fd, inkwell_ioctl_request_of(EVIOCGBIT(EV_KEY, sizeof keys)), keys) < 0) {
+        return false;
+    }
+    static const uint16_t codes[] = {KEY_POWER, KEY_VOLUMEUP, KEY_VOLUMEDOWN};
+    for (size_t i = 0U; i < INKWELL_ARRAY_LEN(codes); ++i) {
+        if (inkcell_input_bit_set(keys, INKWELL_ARRAY_LEN(keys), codes[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+#endif
+
+int inkcell_input_watch_side_buttons(struct inkcell_input *input,
+                                     inkcell_side_button_handler handler, void *userdata) {
+    if (input == NULL) {
+        return -EINVAL;
+    }
+    input->on_button = handler;
+    input->button_userdata = userdata;
+#if !defined(__linux__)
+    return 0;
+#else
+    if (handler == NULL || input->host.add_fd == NULL) {
+        return 0;
+    }
+    int added = 0;
+    for (unsigned int index = 0; index < INKCELL_INPUT_SCAN_NODES; ++index) {
+        if (input->count >= INKCELL_INPUT_MAX_DEVICES) {
+            break;
+        }
+        char path[32];
+        snprintf(path, sizeof path, "/dev/input/event%u", index);
+        const int fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+        if (fd < 0) {
+            continue;
+        }
+        if (inkcell_input_watching(input, fd) || !inkcell_input_reports_button(fd) ||
+            input->host.add_fd(input->host.ctx, fd, inkcell_input_event_callback, input) < 0) {
+            close(fd);
+            continue;
+        }
+        char name[64];
+        inkcell_input_device_name(fd, name, sizeof name);
+        inkcell_input_use_monotonic_stamps(fd, path);
+        inkwell_log_info("input", "Buttons on %s (%s)", path, name);
+        input->fds[input->count++] = fd;
+        ++added;
+    }
+    return added;
+#endif
 }
 
 int inkcell_input_init(struct inkcell_input *input, const struct inkcell_input_host *host) {
