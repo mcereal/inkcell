@@ -39,6 +39,8 @@ bool inkcell_fb_viewport_begin(struct inkcell_draw_state *state, struct inkcell_
      */
     inkcell_scroll_extent(scroll, content_h, box.h);
     const int32_t offset = inkcell_scroll_offset(scroll, state->now_ms);
+    /* Still moving: the frame owes another (inkcell_fb_state_animating()). */
+    state->scrolling = state->scrolling || inkcell_scroll_active(scroll, state->now_ms);
 
     view->box = box;
     view->offset = offset;

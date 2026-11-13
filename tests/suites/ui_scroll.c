@@ -328,3 +328,80 @@ INKCELL_TEST_CASE(scroll_reveal_stops_at_the_end, unit) {
                          "and never past it");
     record_success(test_name);
 }
+
+/* ---- a finger ---------------------------------------------------------------------------- */
+
+/* Inside the slop a contact is a tap, and the content does not move under it. */
+INKCELL_TEST_CASE(scroll_drag_within_the_slop_is_a_tap, unit) {
+    struct inkcell_scroll s = scroll_open();
+    struct inkcell_scroll_drag d;
+    inkcell_scroll_drag_begin(&d, &s, 500, 10, 0U);
+    inkcell_scroll_drag_move(&d, &s, 494, 16U);
+    INKCELL_TEST_FAIL_IF(d.moved || inkcell_scroll_offset(&s, 16U) != 0,
+                         "a wobble inside the slop should move nothing");
+    INKCELL_TEST_FAIL_IF(inkcell_scroll_drag_end(&d, &s, 495, 32U), "and lift as a tap");
+    INKCELL_TEST_FAIL_IF(inkcell_scroll_offset(&s, SCROLL_SETTLED_MS) != 0, "staying put");
+    record_success(test_name);
+}
+
+/* Past the slop the content follows the finger exactly, from where the drag began. */
+INKCELL_TEST_CASE(scroll_drag_follows_the_finger, unit) {
+    struct inkcell_scroll s = scroll_open();
+    struct inkcell_scroll_drag d;
+    inkcell_scroll_drag_begin(&d, &s, 500, 10, 0U);
+    inkcell_scroll_drag_move(&d, &s, 480, 16U); /* leaves the slop here: measured from 480 */
+    inkcell_scroll_drag_move(&d, &s, 380, 32U);
+    INKCELL_TEST_FAIL_IF(!d.moved || inkcell_scroll_offset(&s, 32U) != 100,
+                         "a finger 100 up should have the content 100 down, without the slop");
+    inkcell_scroll_drag_move(&d, &s, 380, 400U);
+    INKCELL_TEST_FAIL_IF(!inkcell_scroll_drag_end(&d, &s, 380, 600U), "a drag lifts as one");
+    INKCELL_TEST_FAIL_IF(inkcell_scroll_offset(&s, 600U + SCROLL_SETTLED_MS) != 100,
+                         "and a finger that stopped before lifting leaves it where it is");
+    record_success(test_name);
+}
+
+/* Lifted at speed, it carries on in the same direction and comes to rest further on. */
+INKCELL_TEST_CASE(scroll_drag_flicks_on, unit) {
+    struct inkcell_scroll s = scroll_open();
+    struct inkcell_scroll_drag d;
+    inkcell_scroll_drag_begin(&d, &s, 900, 10, 0U);
+    for (uint32_t i = 1U; i <= 5U; ++i) {
+        inkcell_scroll_drag_move(&d, &s, 900 - (int32_t)i * 20, (uint64_t)i * 10U);
+    }
+    const int32_t at_lift = inkcell_scroll_offset(&s, 50U);
+    INKCELL_TEST_FAIL_IF(!inkcell_scroll_drag_end(&d, &s, 800, 50U), "a drag");
+    INKCELL_TEST_FAIL_IF(!inkcell_scroll_active(&s, 60U), "a flick should still be moving");
+    const int32_t rest = inkcell_scroll_offset(&s, 50U + SCROLL_SETTLED_MS);
+    INKCELL_TEST_FAIL_IF(rest <= at_lift, "and come to rest beyond where the finger let go");
+    INKCELL_TEST_FAIL_IF(rest > SCROLL_MAX, "but never past the end");
+
+    /* A finger on it stops it where it is. */
+    struct inkcell_scroll t = scroll_open();
+    inkcell_scroll_drag_begin(&d, &t, 900, 10, 0U);
+    for (uint32_t i = 1U; i <= 5U; ++i) {
+        inkcell_scroll_drag_move(&d, &t, 900 - (int32_t)i * 20, (uint64_t)i * 10U);
+    }
+    (void)inkcell_scroll_drag_end(&d, &t, 800, 50U);
+    const int32_t caught = inkcell_scroll_offset(&t, 150U);
+    inkcell_scroll_drag_begin(&d, &t, 500, 10, 150U);
+    INKCELL_TEST_FAIL_IF(inkcell_scroll_active(&t, 151U) ||
+                             inkcell_scroll_offset(&t, 151U + SCROLL_SETTLED_MS) != caught,
+                         "touching a flick should stop it where it was");
+    record_success(test_name);
+}
+
+/* Dragged past an end, the band gives; let go, it springs back. */
+INKCELL_TEST_CASE(scroll_drag_past_the_top_springs_back, unit) {
+    struct inkcell_scroll s = scroll_open();
+    struct inkcell_scroll_drag d;
+    inkcell_scroll_drag_begin(&d, &s, 100, 10, 0U);
+    inkcell_scroll_drag_move(&d, &s, 120, 16U);
+    inkcell_scroll_drag_move(&d, &s, 420, 400U);
+    const int32_t held = inkcell_scroll_offset(&s, 400U);
+    INKCELL_TEST_FAIL_IF(held >= 0 || held <= -SCROLL_GIVE,
+                         "pulled down at the top, the content gives - less than the pull");
+    (void)inkcell_scroll_drag_end(&d, &s, 420, 400U);
+    INKCELL_TEST_FAIL_IF(inkcell_scroll_offset(&s, 400U + SCROLL_SETTLED_MS) != 0,
+                         "and let go, it springs back to the top");
+    record_success(test_name);
+}
