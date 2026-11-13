@@ -8,17 +8,18 @@
 #include <stdio.h>
 #include <string.h>
 
-#define CH(s) {INKCELL_TKB_CHAR, (s), 10U, 0U, 0U}
-#define LEAD(s) {INKCELL_TKB_CHAR, (s), 10U, 5U, 0U}
-#define SHIFT {INKCELL_TKB_SHIFT, NULL, 15U, 0U, 0U}
-#define DEL {INKCELL_TKB_DELETE, NULL, 15U, 0U, 0U}
-#define TO(label, layer) {INKCELL_TKB_LAYER, (label), 15U, 0U, (uint8_t)(layer)}
+/* The keys as a table. Formatted by hand: clang-format 18's point releases disagree about a macro
+   that is a brace initializer, and the rows read as the keyboard does only laid out like it. */
+// clang-format off
+#define CH(s)   { INKCELL_TKB_CHAR, (s), 10U, 0U, 0U }
+#define LEAD(s) { INKCELL_TKB_CHAR, (s), 10U, 5U, 0U }
+#define SHIFT   { INKCELL_TKB_SHIFT, NULL, 15U, 0U, 0U }
+#define DEL     { INKCELL_TKB_DELETE, NULL, 15U, 0U, 0U }
+#define TO(label, layer) { INKCELL_TKB_LAYER, (label), 15U, 0U, (uint8_t)(layer) }
 /* The bottom row is the same on every layer but for the key that leaves it. */
 #define BOTTOM(label, layer)                                                                       \
-    TO(label, layer), {INKCELL_TKB_HIDE, NULL, 10U, 0U, 0U}, CH(","),                              \
-        {INKCELL_TKB_SPACE, NULL, 40U, 0U, 0U}, CH("."), {                                         \
-        INKCELL_TKB_ENTER, NULL, 15U, 0U, 0U                                                       \
-    }
+    TO(label, layer), { INKCELL_TKB_HIDE, NULL, 10U, 0U, 0U }, CH(","),                            \
+    { INKCELL_TKB_SPACE, NULL, 40U, 0U, 0U }, CH("."), { INKCELL_TKB_ENTER, NULL, 15U, 0U, 0U }
 
 struct tkb_row {
     struct inkcell_tkb_key keys[INKCELL_TKB_KEYS_MAX];
@@ -26,38 +27,33 @@ struct tkb_row {
 };
 
 #define ROW(...)                                                                                   \
-    {{__VA_ARGS__},                                                                                \
-     sizeof((struct inkcell_tkb_key[]){__VA_ARGS__}) / sizeof(struct inkcell_tkb_key)}
+    { { __VA_ARGS__ },                                                                             \
+      sizeof((struct inkcell_tkb_key[]){ __VA_ARGS__ }) / sizeof(struct inkcell_tkb_key) }
 
 static const struct tkb_row k_rows[INKCELL_TKB_LAYER_COUNT][INKCELL_TKB_ROWS] = {
-    [INKCELL_TKB_LETTERS] =
-        {
-            ROW(CH("q"), CH("w"), CH("e"), CH("r"), CH("t"), CH("y"), CH("u"), CH("i"), CH("o"),
-                CH("p")),
-            ROW(LEAD("a"), CH("s"), CH("d"), CH("f"), CH("g"), CH("h"), CH("j"), CH("k"), CH("l")),
-            ROW(SHIFT, CH("z"), CH("x"), CH("c"), CH("v"), CH("b"), CH("n"), CH("m"), DEL),
-            ROW(BOTTOM("?123", INKCELL_TKB_SYMBOLS)),
-        },
-    [INKCELL_TKB_SYMBOLS] =
-        {
-            ROW(CH("1"), CH("2"), CH("3"), CH("4"), CH("5"), CH("6"), CH("7"), CH("8"), CH("9"),
-                CH("0")),
-            ROW(CH("@"), CH("#"), CH("$"), CH("_"), CH("&"), CH("-"), CH("+"), CH("("), CH(")"),
-                CH("/")),
-            ROW(TO("=\\<", INKCELL_TKB_MORE), CH("*"), CH("\""), CH("'"), CH(":"), CH(";"), CH("!"),
-                CH("?"), DEL),
-            ROW(BOTTOM("ABC", INKCELL_TKB_LETTERS)),
-        },
-    [INKCELL_TKB_MORE] =
-        {
-            ROW(CH("~"), CH("`"), CH("|"), CH("^"), CH("="), CH("{"), CH("}"), CH("["), CH("]"),
-                CH("\\")),
-            ROW(LEAD("<"), CH(">"), CH("%"), CH("€"), CH("£"), CH("¥"), CH("°"), CH("×"), CH("÷")),
-            ROW(TO("?123", INKCELL_TKB_SYMBOLS), CH("«"), CH("»"), CH("¿"), CH("¡"), CH("…"),
-                CH("±"), CH("§"), DEL),
-            ROW(BOTTOM("ABC", INKCELL_TKB_LETTERS)),
-        },
+    [INKCELL_TKB_LETTERS] = {
+        ROW(CH("q"), CH("w"), CH("e"), CH("r"), CH("t"), CH("y"), CH("u"), CH("i"), CH("o"), CH("p")),
+        ROW(LEAD("a"), CH("s"), CH("d"), CH("f"), CH("g"), CH("h"), CH("j"), CH("k"), CH("l")),
+        ROW(SHIFT, CH("z"), CH("x"), CH("c"), CH("v"), CH("b"), CH("n"), CH("m"), DEL),
+        ROW(BOTTOM("?123", INKCELL_TKB_SYMBOLS)),
+    },
+    [INKCELL_TKB_SYMBOLS] = {
+        ROW(CH("1"), CH("2"), CH("3"), CH("4"), CH("5"), CH("6"), CH("7"), CH("8"), CH("9"), CH("0")),
+        ROW(CH("@"), CH("#"), CH("$"), CH("_"), CH("&"), CH("-"), CH("+"), CH("("), CH(")"), CH("/")),
+        ROW(TO("=\\<", INKCELL_TKB_MORE), CH("*"), CH("\""), CH("'"), CH(":"), CH(";"), CH("!"),
+            CH("?"), DEL),
+        ROW(BOTTOM("ABC", INKCELL_TKB_LETTERS)),
+    },
+    [INKCELL_TKB_MORE] = {
+        ROW(CH("~"), CH("`"), CH("|"), CH("^"), CH("="), CH("{"), CH("}"), CH("["), CH("]"), CH("\\")),
+        ROW(LEAD("<"), CH(">"), CH("%"), CH("\u20AC"), CH("\u00A3"), CH("\u00A5"), CH("\u00B0"),
+            CH("\u00D7"), CH("\u00F7")),
+        ROW(TO("?123", INKCELL_TKB_SYMBOLS), CH("\u00AB"), CH("\u00BB"), CH("\u00BF"), CH("\u00A1"),
+            CH("\u2026"), CH("\u00B1"), CH("\u00A7"), DEL),
+        ROW(BOTTOM("ABC", INKCELL_TKB_LETTERS)),
+    },
 };
+// clang-format on
 
 const struct inkcell_tkb_key *inkcell_touch_keyboard_row(unsigned layer, unsigned row,
                                                          size_t *count) {
