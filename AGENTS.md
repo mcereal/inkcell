@@ -31,6 +31,7 @@ tests/suites/ui_*.c           one file per subject
 tests/golden/manifest.txt     one digest per gallery page
 scripts/check-strings.py      fails on prose in a renderer
 scripts/check-platform.py     fails on a platform header in include/
+scripts/svg2inkvec.py         SVG artwork to inkvec (inkcell/ui/vector.h); tests/svg2inkvec_test.py
 scripts/kms-vm.py             the KMS backend on QEMU's virtio-gpu, every frame checked on the panel; --touch taps and drags a
                               virtio-multitouch screen through evdev
 ```

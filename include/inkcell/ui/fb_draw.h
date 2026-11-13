@@ -1431,6 +1431,24 @@ void inkcell_fb_scrim_rect(const struct inkcell_draw_state *state, struct inkcel
  * animation damage - and a caller whose shadow travels (an overlay) makes sure the region it
  * vacates is in the next frame's band, which the overlay layer already does for its scrim.
  */
+/*
+ * A vector image (inkcell/ui/vector.h) drawn into `box` on this frame, scaled to fill it: each
+ * shape's coverage blended onto what is there, through the frame's clip, in any pixel format the
+ * surface has. The caller keeps the aspect ratio by the box it asks for.
+ *
+ * `radius` rounds the box's corners as inkcell_fb_fill_round_rect() does, antialiased the same
+ * way, and the picture is cut to that shape - 0 for the square box. That is how a shape is the
+ * system's rather than the artwork's: an app icon is drawn full-bleed and every one comes out
+ * the same outline, as do an avatar or a thumbnail cut to a card's corners.
+ *
+ * 0, or the renderer's negative errno - a picture that could not be drawn leaves the frame as it
+ * was.
+ */
+struct inkcell_vector;
+int inkcell_fb_draw_vector(const struct inkcell_draw_state *state,
+                           const struct inkcell_vector *vector, struct inkcell_fb_rect box,
+                           int radius);
+
 void inkcell_fb_draw_shadow(const struct inkcell_draw_state *state, struct inkcell_fb_rect box,
                             int radius, enum inkcell_elevation elevation, int32_t progress);
 /* The region `box`'s shadow at `elevation` can touch, `box` included: what a caller that moves

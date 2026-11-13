@@ -43,6 +43,7 @@ set(INKCELL_TEST_SUITES
     suites/ui_text.c
     suites/ui_theme.c
     suites/ui_type.c
+    suites/ui_vector.c
     suites/ui_view.c
 )
 if(WIN32)
@@ -84,6 +85,11 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME inkcell_platform_headers
              COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/check-platform.py)
     set_tests_properties(inkcell_platform_headers PROPERTIES LABELS unit)
+
+    # What an editor's SVG becomes as inkvec (scripts/svg2inkvec.py).
+    add_test(NAME inkcell_svg2inkvec
+             COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/svg2inkvec_test.py)
+    set_tests_properties(inkcell_svg2inkvec PROPERTIES LABELS unit)
 endif()
 
 # ---- the golden sheet -------------------------------------------------------------------------
