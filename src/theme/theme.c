@@ -32,6 +32,8 @@
 
 #include "inkcell/ui/theme.h"
 
+#include "theme_internal.h"
+
 #include "inkwell/base/env.h"
 #include "inkwell/base/log.h"
 
@@ -624,6 +626,92 @@ static const struct inkcell_theme
                     },
                 .metrics = INKCELL_METRICS_DARK,
             },
+            {
+                /* The high-contrast theme for a reader who wants it on paper: the same promise -
+                   black against white, one accent, an inverse-video cursor, no shadows - kept the
+                   other way up. Without it, asking for more contrast was also asking for a dark
+                   screen, which is two choices a platform should not make into one. */
+                .id = "contrast-light",
+                .name = "High contrast light",
+                .font_id = "ui",
+                .dark = false,
+                .focus_fill = true,
+                .colors =
+                    {
+                        /* White paper and black ink. The tiers step down far enough to be told
+                           apart, and no further: on this palette an edge is drawn by the outline,
+                           not by the fill. */
+                        [INKCELL_COLOR_BG] = RGB(255, 255, 255),
+                        [INKCELL_COLOR_SURFACE_LOW] = RGB(245, 245, 245),
+                        [INKCELL_COLOR_SURFACE] = RGB(240, 240, 240),
+                        [INKCELL_COLOR_SURFACE_HIGH] = RGB(228, 228, 228),
+                        /* The inverse-video bar, black here, and the accent for a press - the dark
+                           contrast theme's white and yellow, the other way up. */
+                        [INKCELL_COLOR_SURFACE_SEL] = RGB(0, 0, 0),
+                        [INKCELL_COLOR_SURFACE_ACTIVE] = RGB(0, 56, 168),
+                        [INKCELL_COLOR_SURFACE_INVERSE] = RGB(0, 0, 0),
+                        [INKCELL_COLOR_TEXT] = RGB(0, 0, 0),
+                        [INKCELL_COLOR_TEXT_DIM] = RGB(64, 64, 64),
+                        [INKCELL_COLOR_TEXT_STRONG] = RGB(0, 0, 0),
+                        [INKCELL_COLOR_TEXT_ON_SEL] = RGB(255, 255, 255),
+                        [INKCELL_COLOR_TEXT_ON_SEL_DIM] = RGB(190, 190, 190),
+                        [INKCELL_COLOR_TEXT_ON_INVERSE] = RGB(255, 255, 255),
+                        /* One deep blue for every family that is not a verdict, as the dark theme
+                           spends its one yellow. The primary's container is the blue at full
+                           strength; the others are pale fills under black ink, the light half of
+                           the dark theme's deep ones. */
+                        [INKCELL_COLOR_PRIMARY] = RGB(0, 56, 168),
+                        [INKCELL_COLOR_ON_PRIMARY] = RGB(255, 255, 255),
+                        [INKCELL_COLOR_PRIMARY_CONTAINER] = RGB(0, 56, 168),
+                        [INKCELL_COLOR_ON_PRIMARY_CONTAINER] = RGB(255, 255, 255),
+                        [INKCELL_COLOR_SECONDARY] = RGB(0, 56, 168),
+                        [INKCELL_COLOR_ON_SECONDARY] = RGB(255, 255, 255),
+                        [INKCELL_COLOR_SECONDARY_CONTAINER] = RGB(180, 210, 250),
+                        [INKCELL_COLOR_ON_SECONDARY_CONTAINER] = RGB(0, 0, 0),
+                        [INKCELL_COLOR_TERTIARY] = RGB(0, 56, 168),
+                        [INKCELL_COLOR_ON_TERTIARY] = RGB(255, 255, 255),
+                        [INKCELL_COLOR_TERTIARY_CONTAINER] = RGB(210, 210, 210),
+                        [INKCELL_COLOR_ON_TERTIARY_CONTAINER] = RGB(0, 0, 0),
+                        [INKCELL_COLOR_SUCCESS] = RGB(0, 110, 50),
+                        [INKCELL_COLOR_ON_SUCCESS] = RGB(255, 255, 255),
+                        [INKCELL_COLOR_SUCCESS_CONTAINER] = RGB(170, 230, 190),
+                        [INKCELL_COLOR_ON_SUCCESS_CONTAINER] = RGB(0, 0, 0),
+                        /* An amber dark enough to carry white, and far enough from the error's red
+                           that the distinctness check holds the two apart. */
+                        [INKCELL_COLOR_WARNING] = RGB(130, 80, 0),
+                        [INKCELL_COLOR_ON_WARNING] = RGB(255, 255, 255),
+                        [INKCELL_COLOR_WARNING_CONTAINER] = RGB(240, 214, 150),
+                        [INKCELL_COLOR_ON_WARNING_CONTAINER] = RGB(0, 0, 0),
+                        [INKCELL_COLOR_ERROR] = RGB(176, 0, 0),
+                        [INKCELL_COLOR_ON_ERROR] = RGB(255, 255, 255),
+                        [INKCELL_COLOR_ERROR_CONTAINER] = RGB(250, 200, 200),
+                        [INKCELL_COLOR_ON_ERROR_CONTAINER] = RGB(0, 0, 0),
+                        [INKCELL_COLOR_RULE] = RGB(110, 110, 110),
+                        [INKCELL_COLOR_RULE_STRONG] = RGB(0, 56, 168),
+                        [INKCELL_COLOR_OUTLINE] = RGB(60, 60, 60),
+                        [INKCELL_COLOR_METER_TRACK] = RGB(160, 160, 160),
+                        [INKCELL_COLOR_CODE] = RGB(0, 0, 0),
+                        [INKCELL_COLOR_CODE_GROUND] = RGB(255, 255, 255),
+                        [INKCELL_COLOR_SCRIM] = RGB(0, 0, 0),
+                        [INKCELL_COLOR_SHADOW] = RGB(0, 0, 0),
+                    },
+                .avatars =
+                    {
+                        RGB(0, 56, 168),
+                        RGB(0, 0, 0),
+                    },
+                .avatar_count = 2U,
+                /* The dark theme's ladder the other way up: ink first, then the accent, then
+                   greys towards the paper. */
+                .series =
+                    {
+                        RGB(0, 0, 0),
+                        RGB(0, 56, 168),
+                        RGB(110, 110, 110),
+                        RGB(180, 180, 180),
+                    },
+                .metrics = {INKCELL_METRICS_FIELDS(62U, INKCELL_SHADOWS_NONE)},
+            },
 };
 
 #define INKCELL_THEME_COUNT (sizeof k_themes / sizeof k_themes[0])
@@ -1142,7 +1230,11 @@ static const uint16_t k_srgb_linear[256] = {
     60955, 61517, 62082, 62650, 63221, 63795, 64372, 64952, 65535,
 };
 
-static uint32_t theme_luminance(struct inkcell_rgb color) {
+uint16_t inkcell_theme_linear16(uint8_t channel) {
+    return k_srgb_linear[channel];
+}
+
+uint32_t inkcell_theme_luminance16(struct inkcell_rgb color) {
     /* The sRGB weights (0.2126, 0.7152, 0.0722), carried as ten-thousandths so the whole
        calculation stays in integers. The product fits comfortably in 32 bits: 65535 * 10000. */
     const uint32_t r = k_srgb_linear[color.r];
@@ -1152,8 +1244,8 @@ static uint32_t theme_luminance(struct inkcell_rgb color) {
 }
 
 double inkcell_theme_contrast(struct inkcell_rgb a, struct inkcell_rgb b) {
-    uint32_t la = theme_luminance(a);
-    uint32_t lb = theme_luminance(b);
+    uint32_t la = inkcell_theme_luminance16(a);
+    uint32_t lb = inkcell_theme_luminance16(b);
     if (la < lb) {
         const uint32_t swap = la;
         la = lb;

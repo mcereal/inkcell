@@ -22,6 +22,8 @@
 #include "inkcell/ui/theme.h"
 #include "inkwell/base/env.h"
 
+#include <errno.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -974,5 +976,130 @@ INKCELL_TEST_CASE(ui_env_prefix_is_applied_once, unit) {
                                  "an empty prefix did not restore the default");
 
     inkwell_env_set_prefix(saved);
+    record_success(test_name);
+}
+
+/*
+ * inkcell_theme_tint(): an accent derived rather than tabled.
+ *
+ * The promise is that a tint cannot undo what a theme's author validated, so the first case
+ * holds every registered theme to it around the whole hue circle, with a grey seed and the
+ * corners of the sRGB cube besides - the seeds a palette picker or a wallpaper can produce that
+ * nobody would choose on purpose.
+ */
+static struct inkcell_rgb theme_test_hue(unsigned step, unsigned steps) {
+    /* A fully saturated hue, by sector: no libm in the test either. */
+    const unsigned span = 6U * 255U;
+    const unsigned h = (step * span) / steps;
+    const uint8_t rise = (uint8_t)(h % 255U);
+    const uint8_t fall = (uint8_t)(255U - rise);
+    switch (h / 255U) {
+    case 0U:
+        return (struct inkcell_rgb){255, rise, 0};
+    case 1U:
+        return (struct inkcell_rgb){fall, 255, 0};
+    case 2U:
+        return (struct inkcell_rgb){0, 255, rise};
+    case 3U:
+        return (struct inkcell_rgb){0, fall, 255};
+    case 4U:
+        return (struct inkcell_rgb){rise, 0, 255};
+    default:
+        return (struct inkcell_rgb){255, 0, fall};
+    }
+}
+
+INKCELL_TEST_CASE(ui_theme_tint_holds_every_theme_around_the_hue_circle, unit) {
+    static const struct inkcell_rgb k_odd[] = {
+        {142, 142, 147}, /* graphite */
+        {0, 0, 0},       {255, 255, 255}, {0, 0, 255}, {255, 255, 0}, {40, 30, 60}, {250, 210, 220},
+    };
+    const unsigned hues = 36U;
+    for (size_t t = 0; t < inkcell_theme_count(); ++t) {
+        const struct inkcell_theme *base = inkcell_theme_at(t);
+        for (unsigned i = 0U; i < hues + sizeof k_odd / sizeof k_odd[0]; ++i) {
+            const struct inkcell_rgb seed = i < hues ? theme_test_hue(i, hues) : k_odd[i - hues];
+            struct inkcell_theme tinted;
+            const int r = inkcell_theme_tint(base, seed, &tinted);
+            if (r != 0) {
+                fprintf(stderr, "  theme '%s' tinted #%02x%02x%02x: %d\n", base->id, seed.r, seed.g,
+                        seed.b, r);
+            }
+            INKCELL_TEST_FAIL_IF(r != 0, "a tinted theme failed its readability contract");
+        }
+    }
+    record_success(test_name);
+}
+
+static bool theme_test_same(struct inkcell_rgb a, struct inkcell_rgb b) {
+    return a.r == b.r && a.g == b.g && a.b == b.b;
+}
+
+INKCELL_TEST_CASE(ui_theme_tint_keeps_luminance_and_the_verdicts, unit) {
+    const struct inkcell_theme *base = inkcell_theme_by_id("dark");
+    struct inkcell_theme tinted;
+    INKCELL_TEST_FAIL_IF(inkcell_theme_tint(base, (struct inkcell_rgb){0, 122, 255}, &tinted) != 0,
+                         "a blue accent on the dark theme was refused");
+    INKCELL_TEST_FAIL_IF(strcmp(tinted.id, base->id) != 0, "a tint changed the theme's id");
+
+    for (int i = 0; i < (int)INKCELL_COLOR_COUNT; ++i) {
+        /* Same luminance is a contrast of 1:1 - to within the one 8-bit step a channel has. */
+        const double ratio = inkcell_theme_contrast(tinted.colors[i], base->colors[i]);
+        INKCELL_TEST_FAIL_IF(ratio > 1.02, "a tint moved a colour's luminance");
+    }
+    static const enum inkcell_color k_kept[] = {
+        INKCELL_COLOR_TEXT,
+        INKCELL_COLOR_TEXT_DIM,
+        INKCELL_COLOR_SUCCESS,
+        INKCELL_COLOR_WARNING,
+        INKCELL_COLOR_ERROR,
+        INKCELL_COLOR_ERROR_CONTAINER,
+        INKCELL_COLOR_SURFACE_INVERSE,
+        INKCELL_COLOR_CODE,
+        INKCELL_COLOR_SCRIM,
+    };
+    for (size_t i = 0; i < sizeof k_kept / sizeof k_kept[0]; ++i) {
+        INKCELL_TEST_FAIL_IF(!theme_test_same(tinted.colors[k_kept[i]], base->colors[k_kept[i]]),
+                             "a tint touched text or a verdict");
+    }
+
+    /* The hue lands: a blue accent turns the yellow primary blue. */
+    const struct inkcell_rgb primary = tinted.colors[INKCELL_COLOR_PRIMARY];
+    INKCELL_TEST_FAIL_IF(!(primary.b > primary.r + 40 && primary.b > primary.g),
+                         "a blue accent did not make the primary blue");
+    const struct inkcell_rgb ground = tinted.colors[INKCELL_COLOR_BG];
+    INKCELL_TEST_FAIL_IF(!(ground.b > ground.r), "the ground did not take a breath of the accent");
+    record_success(test_name);
+}
+
+INKCELL_TEST_CASE(ui_theme_tint_grey_and_pure_surfaces, unit) {
+    /* A graphite accent: grey families, at the luminance the theme picked. */
+    struct inkcell_theme tinted;
+    INKCELL_TEST_FAIL_IF(inkcell_theme_tint(inkcell_theme_by_id("light"),
+                                            (struct inkcell_rgb){142, 142, 147}, &tinted) != 0,
+                         "a graphite accent was refused");
+    const struct inkcell_rgb primary = tinted.colors[INKCELL_COLOR_PRIMARY];
+    const int spread = (primary.r > primary.b ? primary.r - primary.b : primary.b - primary.r) +
+                       (primary.g > primary.b ? primary.g - primary.b : primary.b - primary.g);
+    INKCELL_TEST_FAIL_IF(spread > 4, "a graphite accent left a hue on the primary");
+
+    /* The contrast themes chose pure-grey surfaces; an accent does not overrule that. */
+    for (size_t t = 0; t < inkcell_theme_count(); ++t) {
+        const struct inkcell_theme *base = inkcell_theme_at(t);
+        if (!base->focus_fill) {
+            continue;
+        }
+        INKCELL_TEST_FAIL_IF(
+            inkcell_theme_tint(base, (struct inkcell_rgb){220, 40, 120}, &tinted) != 0,
+            "a contrast theme refused an accent");
+        INKCELL_TEST_FAIL_IF(
+            !theme_test_same(tinted.colors[INKCELL_COLOR_BG], base->colors[INKCELL_COLOR_BG]) ||
+                !theme_test_same(tinted.colors[INKCELL_COLOR_SURFACE],
+                                 base->colors[INKCELL_COLOR_SURFACE]),
+            "a tint put a hue on a contrast theme's grey surfaces");
+    }
+
+    INKCELL_TEST_FAIL_IF(inkcell_theme_tint(NULL, (struct inkcell_rgb){0, 0, 255}, NULL) != -EINVAL,
+                         "a tint with nowhere to write was not refused");
     record_success(test_name);
 }

@@ -966,6 +966,40 @@ const struct inkcell_theme *inkcell_theme_resolve(const char *id);
 /* The next theme in registry order, wrapping - the Settings row steps through with this. */
 const struct inkcell_theme *inkcell_theme_next(const struct inkcell_theme *theme);
 
+/*
+ * `base` re-hued around `seed`, written to `out`: an accent colour, or a colour taken from a
+ * wallpaper, applied to a palette somebody designed.
+ *
+ * The registry's themes are tables, picked and validated by hand, and that is the right way to
+ * make a *look*. It is the wrong way to offer a choice of accent: a table per accent per look is
+ * a matrix that grows with both, and every cell of it is a palette somebody has to validate.
+ * So the accent is derived instead, and the derivation is built so that it cannot undo what the
+ * table's author checked:
+ *
+ *   - The primary family takes the seed's hue, the secondary the same hue held back, and the
+ *     tertiary the hue turned a sixth of the way round - Material's arrangement, so the three
+ *     voices still read as three.
+ *   - The surfaces and lines take a breath of it, so the whole frame belongs to the accent. A
+ *     theme whose surfaces are pure grey keeps them pure: the contrast themes chose that.
+ *   - The verdicts - success, warning, error - are left alone. They mean something, and the
+ *     distinctness check that keeps them apart was made against these colours. So is the text,
+ *     and the code, scrim, avatars and series.
+ *   - Every colour it touches keeps its relative luminance exactly (to the validator's own
+ *     measure), so every contrast ratio in the base survives. Only hue and chroma move, and a
+ *     hue that cannot be as saturated at that luminance gives up chroma, never lightness.
+ *   - A grey seed (a graphite accent) gives grey families.
+ *
+ * `out` keeps the base's id and name: it is that theme, accented, and something that saves the
+ * choice saves the two halves separately. It must outlive any draw state it is set on.
+ *
+ * 0, or -ERANGE when the result fails inkcell_theme_validate() - which a test holds every
+ * registered theme to across the hue circle, so it is the answer for a theme a caller built
+ * itself - with `out` then a plain copy of `base`. -EINVAL for no `out`. A NULL base is the
+ * default theme.
+ */
+int inkcell_theme_tint(const struct inkcell_theme *base, struct inkcell_rgb seed,
+                       struct inkcell_theme *out);
+
 /* Lookups. A NULL theme resolves to the default, so no caller has to guard. */
 struct inkcell_rgb inkcell_theme_color(const struct inkcell_theme *theme, enum inkcell_color role);
 struct inkcell_rgb inkcell_theme_tone(const struct inkcell_theme *theme, enum inkcell_tone tone);
