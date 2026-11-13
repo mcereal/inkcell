@@ -384,3 +384,33 @@ INKCELL_TEST_CASE(view_moving_scroll_owes_a_frame, unit) {
     view_harness_close(&h);
     record_success(test_name);
 }
+
+/*
+ * Shapes far down the content, scrolled onto the panel, are drawn.
+ *
+ * A primitive that skips what is off the panel has to ask in the coordinates it is drawn in. The
+ * rounded fill's corners, the ring and the line asked against the panel's own size before the
+ * view moved them, so in a viewport scrolled past the panel's height a radio's ring, a card's
+ * corners and a separator vanished while the text beside them drew.
+ */
+INKCELL_TEST_CASE(view_draws_shapes_scrolled_up_from_below_the_panel, unit) {
+    struct view_harness h;
+    INKCELL_TEST_FAIL_IF(!view_harness_open(&h), "capture should open");
+    const struct inkcell_fb_rect box = {0, 0, (int)VIEW_W, (int)VIEW_H};
+    const int far = (int)VIEW_H * 3; /* content three panels down, scrolled up onto it */
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_view_push(h.state, box, 0, -far),
+                                 view_harness_close(&h), "a view scrolled down the content");
+    const struct inkcell_rgb ink = inkcell_fb_color(h.state, INKCELL_COLOR_TEXT);
+    inkcell_fb_stroke_round_rect(h.state, 20, far + 20, 40, 40, 20, 3, ink);
+    inkcell_fb_fill_round_rect(h.state, 100, far + 20, 60, 40, 16, ink);
+    inkcell_fb_stroke_line(h.state, 20, far + 120, 180, far + 120, 2, ink);
+    inkcell_fb_view_pop(h.state);
+
+    INKCELL_TEST_FAIL_IF_CLEANUP(!view_marked(&h, 40, 21), view_harness_close(&h),
+                                 "a ring's edge should land on the panel");
+    INKCELL_TEST_FAIL_IF_CLEANUP(!view_marked(&h, 104, 24), view_harness_close(&h),
+                                 "and a rounded fill's corner");
+    INKCELL_TEST_FAIL_IF_CLEANUP(!view_marked(&h, 100, 120), view_harness_close(&h), "and a line");
+    view_harness_close(&h);
+    record_success(test_name);
+}

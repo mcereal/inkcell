@@ -2556,15 +2556,19 @@ void inkcell_fb_fill_round_rect_ends(const struct inkcell_draw_state *state, int
      * is what is *walked*: a shape far larger than the panel has a corner band as big as its
      * own radius, and deciding against every pixel of it one sub-sample at a time is work with
      * no picture at the end. Two comparisons per row and column is what that costs instead.
+     *
+     * "On the panel" is asked in the coordinates the shape is drawn in - the view's (see
+     * inkcell_fb_view_content_box()) - since a shape inside a scrolled viewport sits at its
+     * content position, which may be far below the panel's own height and still on it.
      */
-    const int panel_w = inkcell_fb_panel_width(state);
-    const int panel_h = inkcell_fb_panel_height(state);
+    const struct inkcell_fb_rect area = inkcell_fb_view_content_box(state);
     const int middle = w - 2 * radius;
     for (int i = 0; i < radius; ++i) {
         const int top_row = y + i;
         const int bottom_row = y + h - 1 - i;
-        const bool want_top = round_top && top_row >= 0 && top_row < panel_h;
-        const bool want_bottom = round_bottom && bottom_row >= 0 && bottom_row < panel_h;
+        const bool want_top = round_top && top_row >= area.y && top_row < area.y + area.h;
+        const bool want_bottom =
+            round_bottom && bottom_row >= area.y && bottom_row < area.y + area.h;
         if (!want_top && !want_bottom) {
             continue;
         }
@@ -2578,8 +2582,8 @@ void inkcell_fb_fill_round_rect_ends(const struct inkcell_draw_state *state, int
         for (int j = 0; j < radius; ++j) {
             const int left_col = x + j;
             const int right_col = x + w - 1 - j;
-            const bool want_left = left_col >= 0 && left_col < panel_w;
-            const bool want_right = right_col >= 0 && right_col < panel_w;
+            const bool want_left = left_col >= area.x && left_col < area.x + area.w;
+            const bool want_right = right_col >= area.x && right_col < area.x + area.w;
             if (!want_left && !want_right) {
                 continue;
             }
@@ -2659,20 +2663,20 @@ void inkcell_fb_stroke_round_rect(const struct inkcell_draw_state *state, int x,
     const int run = split ? band : w;
     const int sides = split ? 2 : 1;
 
-    /* Bounded to the panel for the reason the fill's corner bands are: the blend clips, but a
-       ring larger than the panel would still be walked in full. */
-    const int panel_w = inkcell_fb_panel_width(state);
-    const int panel_h = inkcell_fb_panel_height(state);
-    const int row_from = y > 0 ? y : 0;
-    const int row_to = (y + h) < panel_h ? (y + h) : panel_h;
+    /* Bounded to what is on the panel, in the view's coordinates, for the reason the fill's
+       corner bands are: the blend clips, but a ring larger than the panel would still be walked
+       in full. */
+    const struct inkcell_fb_rect area = inkcell_fb_view_content_box(state);
+    const int row_from = y > area.y ? y : area.y;
+    const int row_to = (y + h) < area.y + area.h ? (y + h) : area.y + area.h;
     for (int py = row_from; py < row_to; ++py) {
         const bool cross_row = (py < y + thickness) || (py >= y + h - thickness);
         for (int side = 0; side < sides; ++side) {
             const int start = side == 0 ? x : x + w - run;
             /* In 64 bits so that a caller's coordinate near the ends of an int cannot
                overflow on the way to being clamped away. */
-            const int64_t first = (int64_t)0 - start;
-            const int64_t last = (int64_t)panel_w - start;
+            const int64_t first = (int64_t)area.x - start;
+            const int64_t last = (int64_t)area.x + area.w - start;
             const int col_from = (int)(first > 0 ? first : 0);
             const int col_to = (int)(last < run ? last : run);
             for (int k = col_from; k < col_to; ++k) {
@@ -2944,12 +2948,17 @@ void inkcell_fb_stroke_line(const struct inkcell_draw_state *state, int x0, int 
     if (state == NULL || thickness <= 0) {
         return;
     }
-    const int panel_w = inkcell_fb_panel_width(state);
-    const int panel_h = inkcell_fb_panel_height(state);
-    /* A segment wholly off a generous margin round the panel is not walked. The blend clips each
-       pixel anyway; this is what stops a wild coordinate costing a wild loop. */
-    if ((x0 < -panel_w && x1 < -panel_w) || (x0 > 2 * panel_w && x1 > 2 * panel_w) ||
-        (y0 < -panel_h && y1 < -panel_h) || (y0 > 2 * panel_h && y1 > 2 * panel_h)) {
+    /* A segment wholly off a generous margin round what is on the panel - in the view's
+       coordinates, so a line in a scrolled viewport is judged where it is drawn - is not walked.
+       The blend clips each pixel anyway; this is what stops a wild coordinate costing a wild
+       loop. */
+    const struct inkcell_fb_rect area = inkcell_fb_view_content_box(state);
+    const int lo_x = area.x - area.w;
+    const int hi_x = area.x + 2 * area.w;
+    const int lo_y = area.y - area.h;
+    const int hi_y = area.y + 2 * area.h;
+    if ((x0 < lo_x && x1 < lo_x) || (x0 > hi_x && x1 > hi_x) || (y0 < lo_y && y1 < lo_y) ||
+        (y0 > hi_y && y1 > hi_y)) {
         return;
     }
 
