@@ -8,6 +8,9 @@
  *   --out DIR   writes the pages as PPM, for scripts/frames.py to turn into pictures.
  *   (default)   prints a manifest line per page - scene, theme, scale, size, digest.
  *   --check F   reads a manifest and reports the lines that no longer match.
+ *   --tint RGB  renders each theme accented with that colour (inkcell_theme_tint()), as six
+ *               hex digits - the way to look at an accent on every component before shipping
+ *               it. The manifest is always rendered untinted.
  *   --show B    puts the scenes up on a real backend (kms, fb or headless), one after another,
  *               and prints a digest of each frame's colour - which is what a screenshot of the
  *               panel is compared against to prove the frame reached it unchanged.
@@ -381,7 +384,7 @@ static int gallery_show(const char *backend_name, const struct gallery_scene *sc
 
 static void gallery_usage(FILE *out) {
     fputs("usage: inkcell_gallery [--out DIR] [--check FILE] [--scene NAME] [--theme ID]\n"
-          "                       [--scale N] [--list]\n"
+          "                       [--scale N] [--tint RRGGBB] [--list]\n"
           "       inkcell_gallery --show kms|fb|headless [--scene NAME] [--hold MS] [--touch]\n",
           out);
 }
@@ -392,6 +395,7 @@ int main(int argc, char **argv) {
     const char *only_scene = NULL;
     const char *only_theme = NULL;
     int only_scale = 0;
+    const char *tint = NULL;
     bool list = false;
     const char *show = NULL;
     unsigned hold_ms = 1000U;
@@ -416,6 +420,8 @@ int main(int argc, char **argv) {
             only_scene = argv[++i];
         } else if (strcmp(arg, "--theme") == 0 && has_value) {
             only_theme = argv[++i];
+        } else if (strcmp(arg, "--tint") == 0 && has_value) {
+            tint = argv[++i];
         } else if (strcmp(arg, "--scale") == 0 && has_value) {
             /* In whole steps, like <PREFIX>_FB_SCALE: the manifest states a scale in units,
                but the flag is what somebody types to re-render one row of the sheet. */
@@ -471,6 +477,16 @@ int main(int argc, char **argv) {
             const struct inkcell_theme *theme = inkcell_theme_at(t);
             if (only_theme != NULL && strcmp(only_theme, theme->id) != 0) {
                 continue;
+            }
+            struct inkcell_theme tinted;
+            if (tint != NULL) {
+                const unsigned long rgb = strtoul(tint, NULL, 16);
+                const struct inkcell_rgb seed = {(uint8_t)(rgb >> 16), (uint8_t)(rgb >> 8),
+                                                 (uint8_t)rgb};
+                if (inkcell_theme_tint(theme, seed, &tinted) < 0) {
+                    fprintf(stderr, "gallery: %s does not take the tint %s\n", theme->id, tint);
+                }
+                theme = &tinted;
             }
             for (size_t k = 0U; k < scale_count; ++k) {
                 if (only_scale != 0 && only_scale != k_scales[k]) {

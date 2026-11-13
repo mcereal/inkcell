@@ -66,6 +66,7 @@ endif()
 add_library(inkcell STATIC
     # the vocabulary: colours by role, shapes, metrics, fonts, icons, emoji
     src/theme/theme.c
+    src/theme/tint.c
     src/theme/font.c
     src/theme/font5x7.c
     src/theme/font_ui.c

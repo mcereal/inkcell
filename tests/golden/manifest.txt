@@ -16,6 +16,8 @@ buttons contrast 12 1024x768 bd950b1b391517ac
 buttons contrast 16 1024x768 fd95cee5629a1328
 buttons colorblind 12 1024x768 f6801723acdc6014
 buttons colorblind 16 1024x768 9a853bc46dcdc65d
+buttons contrast-light 12 1024x768 1607033dc1629a13
+buttons contrast-light 16 1024x768 1f75063b126fc697
 chrome dark 12 1024x768 373f1653aea21e10
 chrome dark 16 1024x768 7fc1590cc2a1e9aa
 chrome light 12 1024x768 5a107e696ac34681
@@ -24,6 +26,8 @@ chrome contrast 12 1024x768 2454047e62a647a8
 chrome contrast 16 1024x768 d27c92848e6c47ed
 chrome colorblind 12 1024x768 6aef0783b55eece2
 chrome colorblind 16 1024x768 d2bffc40b8d6e1b1
+chrome contrast-light 12 1024x768 48fb2d1e7f215154
+chrome contrast-light 16 1024x768 bdee23843cd84a97
 controls dark 12 1024x768 2e93e3f0819d8167
 controls dark 16 1024x768 a1b6f50f142342a7
 controls light 12 1024x768 6c0f9854daf27ace
@@ -32,6 +36,8 @@ controls contrast 12 1024x768 e850e08debaab5fa
 controls contrast 16 1024x768 976ba58ffef93768
 controls colorblind 12 1024x768 8151448885529551
 controls colorblind 16 1024x768 aa9e30c661deb443
+controls contrast-light 12 1024x768 3034ef63253f00d8
+controls contrast-light 16 1024x768 5c0fb68822451535
 list dark 12 1024x768 5c1ca07181a71543
 list dark 16 1024x768 1f1da870d4c89c5e
 list light 12 1024x768 2b1f75b94effd9d8
@@ -40,6 +46,8 @@ list contrast 12 1024x768 8ad68c4cd32b710f
 list contrast 16 1024x768 36fde516be1196f6
 list colorblind 12 1024x768 a3616c5ced16e471
 list colorblind 16 1024x768 9676e7856feb76a5
+list contrast-light 12 1024x768 d95b23877d3e5501
+list contrast-light 16 1024x768 e70f43029ed2988b
 cards dark 12 1024x768 b02cd1f68155cb90
 cards dark 16 1024x768 c77b2fe17f304eac
 cards light 12 1024x768 3e8e01af71350987
@@ -48,6 +56,8 @@ cards contrast 12 1024x768 9e776090271ecde5
 cards contrast 16 1024x768 89c53a67766b1bb5
 cards colorblind 12 1024x768 a1ca0f53941e3e7a
 cards colorblind 16 1024x768 727e470b1cbf62d1
+cards contrast-light 12 1024x768 70fd210738ac2405
+cards contrast-light 16 1024x768 2c3aa19106df42ae
 meters dark 12 1024x768 b9ba3a537258471a
 meters dark 16 1024x768 daee13564e5f4254
 meters light 12 1024x768 cacea2a70e56d6ce
@@ -56,6 +66,8 @@ meters contrast 12 1024x768 aea1d06fc692275e
 meters contrast 16 1024x768 0ca722d9fcfe7997
 meters colorblind 12 1024x768 e6d59342cc0e724f
 meters colorblind 16 1024x768 f069ec8779ff60ba
+meters contrast-light 12 1024x768 428bf9cccf1c9fa2
+meters contrast-light 16 1024x768 7f01ff864524267e
 transcript dark 12 1024x768 d4d6a930fd155fcb
 transcript dark 16 1024x768 7bdd721afdef5d91
 transcript light 12 1024x768 72a89088ee898264
@@ -64,6 +76,8 @@ transcript contrast 12 1024x768 bd433fe26e0565f5
 transcript contrast 16 1024x768 e3d6319f6736a5cc
 transcript colorblind 12 1024x768 02904e30d5dec932
 transcript colorblind 16 1024x768 1a5572f55c4e7760
+transcript contrast-light 12 1024x768 047531e3b00ad384
+transcript contrast-light 16 1024x768 f893526d958f2d6c
 overlays dark 12 1024x768 5a92db7a3197f4f2
 overlays dark 16 1024x768 5a2e3610237a4ea9
 overlays light 12 1024x768 7f072883da7fcf3f
@@ -72,6 +86,8 @@ overlays contrast 12 1024x768 2c435c54c3a33ab2
 overlays contrast 16 1024x768 1574aa05e0fb48c7
 overlays colorblind 12 1024x768 38e139ae48cdbcda
 overlays colorblind 16 1024x768 037ce65e20e08568
+overlays contrast-light 12 1024x768 28bd8566cc6b164d
+overlays contrast-light 16 1024x768 732b8e3939d528d9
 layers dark 12 1024x768 334c727cad7a0af4
 layers dark 16 1024x768 16e480c0f5742e73
 layers light 12 1024x768 df3e2d700934fbd8
@@ -80,6 +96,8 @@ layers contrast 12 1024x768 75c644cc90a90fa0
 layers contrast 16 1024x768 801ee3e0f10f04c6
 layers colorblind 12 1024x768 de9fbbf75bbaf8d3
 layers colorblind 16 1024x768 69d5a738ed44cb23
+layers contrast-light 12 1024x768 0ae9d87d73971e84
+layers contrast-light 16 1024x768 ff3723d1339de4c9
 scroll dark 12 1024x768 bebc12220235f9e0
 scroll dark 16 1024x768 58311d4302615f5a
 scroll light 12 1024x768 112bf4a6ab0e437a
@@ -88,6 +106,8 @@ scroll contrast 12 1024x768 5112e7ad36dde448
 scroll contrast 16 1024x768 cdc06785a4ab35e8
 scroll colorblind 12 1024x768 2a5221b14071b72e
 scroll colorblind 16 1024x768 5c4840c141bfc736
+scroll contrast-light 12 1024x768 bd291a84ec5bd203
+scroll contrast-light 16 1024x768 40c5818f1dad1d19
 scroll_overscroll dark 12 1024x768 67a37c2169bc1d66
 scroll_overscroll dark 16 1024x768 6aa6135da0079f77
 scroll_overscroll light 12 1024x768 781b383d2831a5a7
@@ -96,6 +116,8 @@ scroll_overscroll contrast 12 1024x768 439aa84dd71aff58
 scroll_overscroll contrast 16 1024x768 20b73e30c98f6925
 scroll_overscroll colorblind 12 1024x768 c6a3640cecb8c632
 scroll_overscroll colorblind 16 1024x768 1e0a9ad6f50ec32a
+scroll_overscroll contrast-light 12 1024x768 587db833a9877f16
+scroll_overscroll contrast-light 16 1024x768 f3ced493cad243a1
 scroll_title dark 12 1024x768 0f63f400b560f71f
 scroll_title dark 16 1024x768 ea8f1f3ed8c13ea7
 scroll_title light 12 1024x768 df7979e57c3c455c
@@ -104,6 +126,8 @@ scroll_title contrast 12 1024x768 6ae36e828f00b98d
 scroll_title contrast 16 1024x768 62146266ddf51e6a
 scroll_title colorblind 12 1024x768 bfb67f628162c0c0
 scroll_title colorblind 16 1024x768 f4528e1e96955cdf
+scroll_title contrast-light 12 1024x768 41d73b87e523bb00
+scroll_title contrast-light 16 1024x768 39097f0d0348f65e
 typography dark 12 1024x768 46fdb6ac001f3a1e
 typography dark 16 1024x768 4683a292894a382a
 typography light 12 1024x768 69da6ab89f4943ac
@@ -112,6 +136,8 @@ typography contrast 12 1024x768 5ec9f80114a81d55
 typography contrast 16 1024x768 2c954e7acf7f29f1
 typography colorblind 12 1024x768 8a4d3c32d393215d
 typography colorblind 16 1024x768 e86068a719e85af7
+typography contrast-light 12 1024x768 1470b286305a87fb
+typography contrast-light 16 1024x768 d3fea61c995e3f6d
 palette dark 12 1024x768 edfb77b5482d618c
 palette dark 16 1024x768 eeba0fa7f53c7c93
 palette light 12 1024x768 b0177ce014e77d4a
@@ -120,6 +146,8 @@ palette contrast 12 1024x768 7d7baf7037050fe1
 palette contrast 16 1024x768 6611d153ac10d6fe
 palette colorblind 12 1024x768 e9f4222e29ec918c
 palette colorblind 16 1024x768 d21118a4fd9ffb2f
+palette contrast-light 12 1024x768 0caa7d7de8943c92
+palette contrast-light 16 1024x768 255d91f07cb6b6a6
 shapes dark 12 1024x768 db20d70d948e53b8
 shapes dark 16 1024x768 6fe24b9b98c93fde
 shapes light 12 1024x768 298e67a1627b248b
@@ -128,6 +156,8 @@ shapes contrast 12 1024x768 7649bc6487d35b11
 shapes contrast 16 1024x768 5a09d3bd39b40447
 shapes colorblind 12 1024x768 22399e4bab0fc68f
 shapes colorblind 16 1024x768 b2bd788d6a16161f
+shapes contrast-light 12 1024x768 0b750866b6bf84b4
+shapes contrast-light 16 1024x768 d1e85aca7ed39a17
 keyboard dark 12 1024x768 f08e628b0b57b92f
 keyboard dark 16 1024x768 22bc0d651dcf1cd4
 keyboard light 12 1024x768 5b6a55a45894d914
@@ -136,6 +166,8 @@ keyboard contrast 12 1024x768 0bcc0cdbf21f9614
 keyboard contrast 16 1024x768 1bd4b56237a7f480
 keyboard colorblind 12 1024x768 6f5795b22071d356
 keyboard colorblind 16 1024x768 aa804195b6514d67
+keyboard contrast-light 12 1024x768 a7d9404e6ec38877
+keyboard contrast-light 16 1024x768 f8694a648a3e7224
 keyboard_emoji dark 12 1024x768 c6f5e5da1f813106
 keyboard_emoji dark 16 1024x768 1efb0c3e85fd0244
 keyboard_emoji light 12 1024x768 3e8e59b1c09ca70e
@@ -144,6 +176,8 @@ keyboard_emoji contrast 12 1024x768 6c1f3604f89944f9
 keyboard_emoji contrast 16 1024x768 1609e7a998a86e9f
 keyboard_emoji colorblind 12 1024x768 c83b9f7f7fd0e5c3
 keyboard_emoji colorblind 16 1024x768 3cf01f5f6614599f
+keyboard_emoji contrast-light 12 1024x768 331d7ecef2d2f62f
+keyboard_emoji contrast-light 16 1024x768 7b420bc10442d051
 focus dark 12 1024x768 9321c21ed5e3e1bf
 focus dark 16 1024x768 20feb6373fa8c160
 focus light 12 1024x768 a0f18970c1e769d7
@@ -152,6 +186,8 @@ focus contrast 12 1024x768 4c74ae5fe00c44f9
 focus contrast 16 1024x768 bf061b1b9d549415
 focus colorblind 12 1024x768 409d93e5b9760d4a
 focus colorblind 16 1024x768 4b68df16f5b2c46e
+focus contrast-light 12 1024x768 93cbce5d3f159ce9
+focus contrast-light 16 1024x768 dfd3b091778d0de2
 focus_ring dark 12 1024x768 8489c95bffdcc70a
 focus_ring dark 16 1024x768 1b54ce6171878da9
 focus_ring light 12 1024x768 14a9ea0650cbbb2b
@@ -160,6 +196,8 @@ focus_ring contrast 12 1024x768 07fe574001b02d13
 focus_ring contrast 16 1024x768 017372eeeaa042b1
 focus_ring colorblind 12 1024x768 de77d9e143971212
 focus_ring colorblind 16 1024x768 bd9ca59f8a8f5f97
+focus_ring contrast-light 12 1024x768 e4da9acf94357de0
+focus_ring contrast-light 16 1024x768 90a2bcc1f939480f
 glide dark 12 1024x768 75115c7e51859a10
 glide dark 16 1024x768 da32a0c493be44b3
 glide light 12 1024x768 c9b1d3848b8c856e
@@ -168,6 +206,8 @@ glide contrast 12 1024x768 c87baacf510c944a
 glide contrast 16 1024x768 94c88a9e43891135
 glide colorblind 12 1024x768 bb4e88916349edea
 glide colorblind 16 1024x768 355ccb7689907c67
+glide contrast-light 12 1024x768 25d7bfa7029cf635
+glide contrast-light 16 1024x768 0182ea9f0414c617
 fab dark 12 1024x768 44ae78849b428eb4
 fab dark 16 1024x768 75de4d06eba1fc54
 fab light 12 1024x768 ccf8fdae77060425
@@ -176,6 +216,8 @@ fab contrast 12 1024x768 50a8b9762915b8bf
 fab contrast 16 1024x768 062a120c279643bf
 fab colorblind 12 1024x768 9e99e2c800f1364d
 fab colorblind 16 1024x768 6835092d53a11e30
+fab contrast-light 12 1024x768 87502aa9f0c79070
+fab contrast-light 16 1024x768 588976077433372e
 grid dark 12 1024x768 55490334a030a9ad
 grid dark 16 1024x768 546fb6b1151cda58
 grid light 12 1024x768 a2db0c12d1602671
@@ -184,6 +226,8 @@ grid contrast 12 1024x768 a5a6db4bb1c20107
 grid contrast 16 1024x768 d58addfc8491dd36
 grid colorblind 12 1024x768 99a31aa77f8adbe9
 grid colorblind 16 1024x768 c742a9661d6ddf98
+grid contrast-light 12 1024x768 6b3d39a14eb928aa
+grid contrast-light 16 1024x768 ee8122236d8d8c8c
 grid_covers dark 12 1024x768 2b858ec88d98d849
 grid_covers dark 16 1024x768 32daeb1f6e14afef
 grid_covers light 12 1024x768 ccad3a294ff4b708
@@ -192,6 +236,8 @@ grid_covers contrast 12 1024x768 d8394ccf9fbbe926
 grid_covers contrast 16 1024x768 59ab0da541883839
 grid_covers colorblind 12 1024x768 09c7be09a6a881c7
 grid_covers colorblind 16 1024x768 87fa16797f23b9dc
+grid_covers contrast-light 12 1024x768 975b0a3eb304cec0
+grid_covers contrast-light 16 1024x768 415d5e194a560cdb
 stack dark 12 1024x768 5dd097874fe8f91a
 stack dark 16 1024x768 a8f600d17856abee
 stack light 12 1024x768 61a3bb6d25762368
@@ -200,6 +246,8 @@ stack contrast 12 1024x768 fe7f32570e8ff47a
 stack contrast 16 1024x768 d58b5b00ef629e65
 stack colorblind 12 1024x768 7fbe53df0f28e1f8
 stack colorblind 16 1024x768 61edca7f7615abc4
+stack contrast-light 12 1024x768 6632897c72a9e464
+stack contrast-light 16 1024x768 7e36359070ec2a0a
 scaffold dark 12 1024x768 5f04e4baf9153446
 scaffold dark 16 1024x768 71b7a5b06f057738
 scaffold light 12 1024x768 9497bf0f52122f5c
@@ -208,6 +256,8 @@ scaffold contrast 12 1024x768 86cb8b7de5018e67
 scaffold contrast 16 1024x768 8e03fa3188b3c6b2
 scaffold colorblind 12 1024x768 887d597c14c0346f
 scaffold colorblind 16 1024x768 0db8bd2be1a6b773
+scaffold contrast-light 12 1024x768 bf17bf1924563bd0
+scaffold contrast-light 16 1024x768 9047af4b93b89d33
 scaffold_top dark 12 1024x768 5f04e4baf9153446
 scaffold_top dark 16 1024x768 912af1db982f261c
 scaffold_top light 12 1024x768 9497bf0f52122f5c
@@ -216,6 +266,8 @@ scaffold_top contrast 12 1024x768 86cb8b7de5018e67
 scaffold_top contrast 16 1024x768 2701623bf346015a
 scaffold_top colorblind 12 1024x768 887d597c14c0346f
 scaffold_top colorblind 16 1024x768 7ab6458aa488945d
+scaffold_top contrast-light 12 1024x768 bf17bf1924563bd0
+scaffold_top contrast-light 16 1024x768 660b4181821b0669
 scaffold_wide dark 12 2240x1260 7a20b4790ee98664
 scaffold_wide dark 16 2240x1260 5890bf313bb7f1ed
 scaffold_wide light 12 2240x1260 d8f67a71122e57a7
@@ -224,6 +276,8 @@ scaffold_wide contrast 12 2240x1260 f492bf21a749f0bc
 scaffold_wide contrast 16 2240x1260 b33699d40a3ba615
 scaffold_wide colorblind 12 2240x1260 e71c50b6c034354e
 scaffold_wide colorblind 16 2240x1260 e34e93e0d878b989
+scaffold_wide contrast-light 12 2240x1260 f98e654366fb014a
+scaffold_wide contrast-light 16 2240x1260 584f89be1fcd6f61
 list_grouped dark 12 1024x768 5ac56ffd2b115ba3
 list_grouped dark 16 1024x768 e1766557617c96fc
 list_grouped light 12 1024x768 0f34282983da0b84
@@ -232,6 +286,8 @@ list_grouped contrast 12 1024x768 69074ad5645339a0
 list_grouped contrast 16 1024x768 1c7c9c7328d0d5ed
 list_grouped colorblind 12 1024x768 32cac87bf0481330
 list_grouped colorblind 16 1024x768 05e4c03033ec0f7d
+list_grouped contrast-light 12 1024x768 9463c4ea307feb28
+list_grouped contrast-light 16 1024x768 698585111935d0e1
 list_sections dark 12 1024x768 7356e12d09df06a0
 list_sections dark 16 1024x768 7fa3c2c87168a365
 list_sections light 12 1024x768 497534fa0dc72bfd
@@ -240,6 +296,8 @@ list_sections contrast 12 1024x768 7a80c2257b8dc89c
 list_sections contrast 16 1024x768 5e49bc8acf9e52a2
 list_sections colorblind 12 1024x768 1ebb9df4b2a07b24
 list_sections colorblind 16 1024x768 2475c5c8baee837c
+list_sections contrast-light 12 1024x768 62bbd49ea06349ef
+list_sections contrast-light 16 1024x768 776bf19291010bf1
 list_plain dark 12 1024x768 b69e18182722326d
 list_plain dark 16 1024x768 ba8c37eda12e687b
 list_plain light 12 1024x768 f56a560317f74ae7
@@ -248,6 +306,8 @@ list_plain contrast 12 1024x768 7375ba7bcde70dce
 list_plain contrast 16 1024x768 94c36637c910867f
 list_plain colorblind 12 1024x768 34062a3d50f4eb70
 list_plain colorblind 16 1024x768 1b25c238a98b8a6b
+list_plain contrast-light 12 1024x768 0450a0bec5178812
+list_plain contrast-light 16 1024x768 1117db5ee2ff74f7
 app_bar dark 12 1024x768 ef76f0d3b74b9454
 app_bar dark 16 1024x768 bc85642b2464932f
 app_bar light 12 1024x768 51daa6407fad561e
@@ -256,6 +316,8 @@ app_bar contrast 12 1024x768 6971ba5ffd2682d5
 app_bar contrast 16 1024x768 31f6d0a6150afb62
 app_bar colorblind 12 1024x768 3c363a431686d31d
 app_bar colorblind 16 1024x768 114751c45e421793
+app_bar contrast-light 12 1024x768 db704053ca20c183
+app_bar contrast-light 16 1024x768 146e5493d0c60d35
 app_bar_narrow dark 12 440x768 772b357a4b268c14
 app_bar_narrow dark 16 440x768 71fa18333cb58ee1
 app_bar_narrow light 12 440x768 c38784aec1ab4920
@@ -264,6 +326,8 @@ app_bar_narrow contrast 12 440x768 00ef2c523332214a
 app_bar_narrow contrast 16 440x768 eb68771089fa0595
 app_bar_narrow colorblind 12 440x768 8571cfed6f182e6f
 app_bar_narrow colorblind 16 440x768 719e6b7e295023c4
+app_bar_narrow contrast-light 12 440x768 12c42121fed8de30
+app_bar_narrow contrast-light 16 440x768 69d94cab28453402
 progress dark 12 1024x768 491513cdb6ab2f58
 progress dark 16 1024x768 1f462ca625b2fb3c
 progress light 12 1024x768 e70a46fc3cf2ba11
@@ -272,6 +336,8 @@ progress contrast 12 1024x768 f9b72e674b43d012
 progress contrast 16 1024x768 51ee882724b8baee
 progress colorblind 12 1024x768 041483e69eac5b96
 progress colorblind 16 1024x768 921372a641395b0c
+progress contrast-light 12 1024x768 211dfdac3325896b
+progress contrast-light 16 1024x768 7bafdaf9fd251b82
 dashboard dark 12 1600x1000 7cfbc226a8fbd36c
 dashboard dark 16 1600x1000 3d64e9047cc7800f
 dashboard light 12 1600x1000 caad22e539ed1289
@@ -280,3 +346,5 @@ dashboard contrast 12 1600x1000 c21126a000c60d4e
 dashboard contrast 16 1600x1000 598e6ce4a6013b16
 dashboard colorblind 12 1600x1000 2e183b6aeed92448
 dashboard colorblind 16 1600x1000 690c131432c50cc4
+dashboard contrast-light 12 1600x1000 934bc62b041b83a4
+dashboard contrast-light 16 1600x1000 fff08b360c1c1e8e
