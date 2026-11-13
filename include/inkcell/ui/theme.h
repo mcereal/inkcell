@@ -1000,6 +1000,29 @@ const struct inkcell_theme *inkcell_theme_next(const struct inkcell_theme *theme
 int inkcell_theme_tint(const struct inkcell_theme *base, struct inkcell_rgb seed,
                        struct inkcell_theme *out);
 
+/*
+ * `theme`'s text at `percent` of the size its author chose, and every role set heavy when `bold`:
+ * the reader's text size and bold text, applied to a type scale somebody designed.
+ *
+ * Size moves the body - `body_dp` and the unmeasured-panel `scale` both - and nothing else, and
+ * that is enough because everything else is measured from it: each type role is an offset from
+ * the body, and margins, spacing, shapes and rows are counted in scale units. So the layout grows
+ * with its words, and a list at 150% is the same list, roomier, rather than words running out of
+ * boxes drawn for smaller ones. The scale still clamps to INKCELL_SCALE_MIN..MAX, which is where
+ * a size past what a panel can hold stops.
+ *
+ * Bold is every role at INKCELL_WEIGHT_STRONG. There are two weights, so it is the body and the
+ * captions that change; headings were strong already and are still told apart by size.
+ *
+ * In place, so it can follow inkcell_theme_tint() or work on a copy of a registered theme; the
+ * id stays the base's. A draw state takes the change when the theme is set on it again with a
+ * scale of 0, which measures the new body at the panel's density. 0, or -EINVAL for no theme or
+ * a percent outside INKCELL_TEXT_PERCENT_MIN..INKCELL_TEXT_PERCENT_MAX.
+ */
+#define INKCELL_TEXT_PERCENT_MIN 50U
+#define INKCELL_TEXT_PERCENT_MAX 200U
+int inkcell_theme_text(struct inkcell_theme *theme, unsigned percent, bool bold);
+
 /* Lookups. A NULL theme resolves to the default, so no caller has to guard. */
 struct inkcell_rgb inkcell_theme_color(const struct inkcell_theme *theme, enum inkcell_color role);
 struct inkcell_rgb inkcell_theme_tone(const struct inkcell_theme *theme, enum inkcell_tone tone);

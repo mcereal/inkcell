@@ -18,6 +18,7 @@
 
 #include "inkcell/ui/anim.h"
 #include "inkcell/ui/fb_capture.h"
+#include "inkcell/ui/fb_draw.h"
 #include "inkcell/ui/font.h"
 #include "inkcell/ui/theme.h"
 #include "inkwell/base/env.h"
@@ -1101,5 +1102,60 @@ INKCELL_TEST_CASE(ui_theme_tint_grey_and_pure_surfaces, unit) {
 
     INKCELL_TEST_FAIL_IF(inkcell_theme_tint(NULL, (struct inkcell_rgb){0, 0, 255}, NULL) != -EINVAL,
                          "a tint with nowhere to write was not refused");
+    record_success(test_name);
+}
+
+/* inkcell_theme_text(): the reader's text size and bold text. */
+INKCELL_TEST_CASE(ui_theme_text_sizes_the_body_and_holds_the_contract, unit) {
+    static const unsigned k_sizes[] = {INKCELL_TEXT_PERCENT_MIN, 85U, 100U, 115U, 130U, 150U,
+                                       INKCELL_TEXT_PERCENT_MAX};
+    for (size_t t = 0; t < inkcell_theme_count(); ++t) {
+        const struct inkcell_theme *base = inkcell_theme_at(t);
+        for (size_t i = 0; i < sizeof k_sizes / sizeof k_sizes[0]; ++i) {
+            for (int bold = 0; bold < 2; ++bold) {
+                struct inkcell_theme sized = *base;
+                INKCELL_TEST_FAIL_IF(inkcell_theme_text(&sized, k_sizes[i], bold != 0) != 0,
+                                     "a size in range was refused");
+                char reason[128];
+                if (!inkcell_theme_validate(&sized, reason, sizeof reason)) {
+                    fprintf(stderr, "  theme '%s' at %u%%: %s\n", base->id, k_sizes[i], reason);
+                    INKCELL_TEST_FAIL_IF(true, "a sized theme failed its contract");
+                }
+            }
+        }
+    }
+
+    struct inkcell_theme big = *inkcell_theme_default();
+    INKCELL_TEST_FAIL_IF(inkcell_theme_text(&big, 150U, true) != 0, "150% bold");
+    const struct inkcell_theme *base = inkcell_theme_default();
+    INKCELL_TEST_FAIL_IF(big.metrics.body_dp !=
+                             (uint8_t)((base->metrics.body_dp * 150U + 50U) / 100U),
+                         "the body is half again its size");
+    INKCELL_TEST_FAIL_IF(big.metrics.scale <= base->metrics.scale,
+                         "and so is the unmeasured scale");
+    for (int i = 0; i < (int)INKCELL_TYPE_COUNT; ++i) {
+        INKCELL_TEST_FAIL_IF(big.metrics.type[i].weight != (uint8_t)INKCELL_WEIGHT_STRONG,
+                             "bold sets every role heavy");
+    }
+    INKCELL_TEST_FAIL_IF(strcmp(big.id, base->id) != 0, "the id stays the base's");
+
+    /* On a panel of known density the scale comes from the body: a bigger body, a bigger scale. */
+    struct inkcell_capture *capture = NULL;
+    INKCELL_TEST_FAIL_IF(inkcell_capture_open(&capture, 320U, 240U, INKCELL_SCALE(4)) < 0,
+                         "a capture");
+    struct inkcell_draw_state *state = inkcell_capture_state(capture);
+    inkcell_fb_state_set_ppi(state, 416U);
+    inkcell_fb_state_set_theme(state, base, 0);
+    const int normal = state->scale;
+    inkcell_fb_state_set_theme(state, &big, 0);
+    const int larger = state->scale;
+    inkcell_capture_close(capture);
+    INKCELL_TEST_FAIL_IF(larger <= normal, "a larger text size draws at a larger scale");
+
+    INKCELL_TEST_FAIL_IF(
+        inkcell_theme_text(&big, INKCELL_TEXT_PERCENT_MAX + 1U, false) != -EINVAL ||
+            inkcell_theme_text(&big, INKCELL_TEXT_PERCENT_MIN - 1U, false) != -EINVAL ||
+            inkcell_theme_text(NULL, 100U, false) != -EINVAL,
+        "sizes out of range, and no theme, are refused");
     record_success(test_name);
 }
