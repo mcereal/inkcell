@@ -82,6 +82,7 @@ add_library(inkcell STATIC
     src/layout.c
     src/anim.c
     src/density.c
+    src/pager.c
     src/vector.c
     # where a screen's parts go in the room it was given, and how much room that is as a class
     # rather than a pixel count. No backend in it, for src/layout.c's reason.
