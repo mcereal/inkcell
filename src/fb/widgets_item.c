@@ -188,7 +188,8 @@ static struct inkcell_fb_item_geom inkcell_fb_item_measure(const struct inkcell_
     g.text_x = g.content_x;
     if (item->leading.kind == INKCELL_FB_LEADING_AVATAR ||
         item->leading.kind == INKCELL_FB_LEADING_TONAL ||
-        item->leading.kind == INKCELL_FB_LEADING_TONAL_SLOT) {
+        item->leading.kind == INKCELL_FB_LEADING_TONAL_SLOT ||
+        item->leading.kind == INKCELL_FB_LEADING_SWATCH) {
         /* One measurement for all three. A tonal container is an avatar that happens to be
            filled from a family rather than from a hash, and a gutter that differed between them
            would be a list unable to mix the two - which the node detail does a card at a time and
@@ -1036,6 +1037,19 @@ void inkcell_fb_list_item(struct inkcell_draw_state *state, struct inkcell_fb_li
         }
         inkcell_fb_draw_avatar(state, lead_x, g.lead_y, size, item->leading.label,
                                item->leading.icon, disc);
+    } else if (item->leading.kind == INKCELL_FB_LEADING_SWATCH) {
+        /* The avatar's disc, as measured - and ringed in the outline, so a colour near the
+           ground it stands on is still a disc. */
+        const int size = g.lead_disc;
+        const int lead_x = g.content_x + (g.lead_size - size) / 2;
+        const int ring = inkcell_fb_edge(state);
+        inkcell_fb_fill_round_rect(state, lead_x, g.lead_y, size, size, size / 2,
+                                   inkcell_fb_color(state, INKCELL_COLOR_OUTLINE));
+        if (size > 2 * ring) {
+            inkcell_fb_fill_round_rect(state, lead_x + ring, g.lead_y + ring, size - 2 * ring,
+                                       size - 2 * ring, (size - 2 * ring) / 2,
+                                       item->leading.swatch);
+        }
     } else if (item->leading.kind == INKCELL_FB_LEADING_ICON) {
         inkcell_fb_draw_icon(state, g.content_x, g.head_y, item->leading.icon, scale, head_ink,
                              ground);
