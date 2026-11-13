@@ -16,6 +16,7 @@
 #include "inkcell/ui/density.h"
 #include "inkcell/ui/emoji.h"
 #include "inkcell/ui/icon.h"
+#include "inkcell/ui/vector.h"
 #include "inkwell/base/env.h"
 #include "inkwell/base/text.h"
 #include "inkwell/base/time.h"
@@ -1414,6 +1415,41 @@ static int inkcell_fb_rrect_coverage(int px, int py, int x, int y, int w, int h,
         }
     }
     return covered;
+}
+
+struct fb_vector_target {
+    const struct inkcell_draw_state *state;
+    struct inkcell_fb_rect box;
+    int radius;
+};
+
+static void fb_vector_emit(void *ctx, int x, int y, struct inkcell_rgb color, int coverage) {
+    const struct fb_vector_target *t = ctx;
+    const int px = t->box.x + x;
+    const int py = t->box.y + y;
+    /* The shape's coverage, then the box's corner's: a pixel half in the shape and half in the
+       corner is a quarter painted, as the two edges overlap. */
+    int steps = (coverage * INKCELL_FB_AA_STEPS + INKCELL_VECTOR_COVERAGE_ONE / 2) /
+                INKCELL_VECTOR_COVERAGE_ONE;
+    if (t->radius > 0) {
+        steps =
+            steps *
+            inkcell_fb_rrect_coverage(px, py, t->box.x, t->box.y, t->box.w, t->box.h, t->radius) /
+            INKCELL_FB_AA_STEPS;
+    }
+    inkcell_fb_blend_pixel(t->state, px, py, color, steps);
+}
+
+int inkcell_fb_draw_vector(const struct inkcell_draw_state *state,
+                           const struct inkcell_vector *vector, struct inkcell_fb_rect box,
+                           int radius) {
+    if (state == NULL) {
+        return -EINVAL;
+    }
+    const int half = (box.w < box.h ? box.w : box.h) / 2;
+    struct fb_vector_target target = {
+        .state = state, .box = box, .radius = radius < half ? radius : half};
+    return inkcell_vector_render(vector, box.w, box.h, fb_vector_emit, &target);
 }
 
 /*
