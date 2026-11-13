@@ -92,6 +92,14 @@ enum inkcell_fb_list_appearance {
 enum inkcell_fb_list_density {
     INKCELL_FB_LIST_COMPACT = 0,
     INKCELL_FB_LIST_COMFORTABLE,
+    /*
+     * A step a finger can land on: at least INKCELL_TOUCH_TARGET_DP tall at the panel's density,
+     * and never less than comfortable. For a list read by touch rather than walked by keys - a
+     * phone's settings page - where a comfortable step at a phone's density is a few millimetres
+     * and every row is a near miss. Air is added round the words as comfortable adds it, so the
+     * words sit in the middle of the taller step.
+     */
+    INKCELL_FB_LIST_TOUCH,
 };
 
 /*
