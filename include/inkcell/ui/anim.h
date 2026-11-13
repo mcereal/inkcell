@@ -98,6 +98,37 @@ int32_t inkcell_anim_value(const struct inkcell_anim *anim, uint64_t now_ms);
 bool inkcell_anim_active(const struct inkcell_anim *anim, uint64_t now_ms);
 
 /*
+ * A point in flight: two values that share one clock, so a thing sliding across and down
+ * arrives at both at once rather than along an L.
+ *
+ * What a layout that rearranges itself wants - icons closing up round a gap, a card moving to
+ * where it now sorts. The caller says where each thing *is* every frame and the point moves
+ * there from wherever it had got to, which is inkcell_anim_to()'s rule in two dimensions: aiming
+ * at a new place mid-flight turns round from the current position, and aiming at the place it
+ * is already heading for is a no-op, so it can be called every frame with the layout as it
+ * stands. Lengths are the caller's - pixels, usually - and are not clamped.
+ */
+struct inkcell_anim_point {
+    int32_t from_x, from_y;
+    int32_t to_x, to_y;
+    struct inkcell_anim t; /* 0 at `from`, INKCELL_ANIM_ONE at `to` */
+};
+
+/* Puts it at (`x`, `y`) with nothing in flight: where a thing seen for the first time is. */
+void inkcell_anim_point_set(struct inkcell_anim_point *point, int32_t x, int32_t y);
+
+/* Aims it at (`x`, `y`) from wherever it is at `now_ms`. */
+void inkcell_anim_point_to(struct inkcell_anim_point *point, uint64_t now_ms, int32_t x, int32_t y,
+                           uint32_t duration_ms, enum inkcell_ease ease);
+
+/* Where it is at `now_ms`. */
+void inkcell_anim_point_at(const struct inkcell_anim_point *point, uint64_t now_ms, int32_t *x,
+                           int32_t *y);
+
+/* Whether it still has somewhere to be at `now_ms`. */
+bool inkcell_anim_point_active(const struct inkcell_anim_point *point, uint64_t now_ms);
+
+/*
  * A small table of animations kept by id.
  *
  * A screen renderer is rebuilt from scratch every frame and has nowhere of its own to keep
