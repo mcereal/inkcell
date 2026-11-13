@@ -1151,6 +1151,10 @@ INKCELL_TEST_CASE(ui_theme_text_sizes_the_body_and_holds_the_contract, unit) {
     const int larger = state->scale;
     inkcell_capture_close(capture);
     INKCELL_TEST_FAIL_IF(larger <= normal, "a larger text size draws at a larger scale");
+    /* And the whole of it, within a quarter step's rounding, on a phone's panel: a ceiling
+       sized for a small handheld clipped 150% to a seventh more than the default here. */
+    INKCELL_TEST_FAIL_IF(larger * 100 < normal * 145,
+                         "a phone's panel has the room for a reader's 150%");
 
     INKCELL_TEST_FAIL_IF(
         inkcell_theme_text(&big, INKCELL_TEXT_PERCENT_MAX + 1U, false) != -EINVAL ||

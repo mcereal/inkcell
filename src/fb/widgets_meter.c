@@ -279,7 +279,7 @@ static void inkcell_fb_dial_label(const struct inkcell_draw_state *state,
         if (dial->icon == INKCELL_ICON_NONE) {
             return;
         }
-        for (int scale = INKCELL_FB_ICON_SCALE_MAX; scale > 0; scale -= INKCELL_SCALE(1)) {
+        for (int scale = INKCELL_FB_ICON_FILL_MAX; scale > 0; scale -= INKCELL_SCALE(1)) {
             if (inkcell_fb_icon_drawn(state, scale) > hole * 2 / 5) {
                 continue;
             }
@@ -304,7 +304,11 @@ static void inkcell_fb_dial_label(const struct inkcell_draw_state *state,
        whole of its screen: the theme's display size is set for a title, and a reading a screen
        is about can be larger than its title. */
     struct inkcell_type_style largest = inkcell_fb_type_style(state, INKCELL_TYPE_DISPLAY);
-    largest.scale = INKCELL_SCALE_MAX;
+    /* A fill, so the fill ceiling - but never smaller than the display role itself, which a
+       reader's larger text can take past it. */
+    if (largest.scale < INKCELL_SCALE_FILL_MAX) {
+        largest.scale = INKCELL_SCALE_FILL_MAX;
+    }
     const struct inkcell_type_style styles[] = {
         inkcell_type_style_tabular(largest),
         inkcell_type_style_tabular(inkcell_fb_type_style(state, INKCELL_TYPE_DISPLAY)),

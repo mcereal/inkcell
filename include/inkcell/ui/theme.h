@@ -399,10 +399,31 @@ INKCELL_STATIC_ASSERT((int)INKCELL_TONE_COUNT - (int)INKCELL_TONE_PRIMARY ==
                           (int)INKCELL_FAMILY_COUNT,
                       "one tone per family, contiguous, in family order");
 
-/* The glyph multipliers the UI will accept, whatever a theme asks for. The lower bound is
-   legibility on the Brick's 3.2" panel; the upper is the buffers sized off it. */
+/*
+ * The glyph multipliers the UI will accept, whatever a theme asks for. The lower bound is
+ * legibility on the Brick's 3.2" panel.
+ *
+ * The upper bound is what a phone needs, and it is not the Brick's. A 16dp body on a 416ppi
+ * panel is already five and a quarter steps, and a heading sits two steps above the body - so a
+ * ceiling of six clipped a phone's headings at its default size and left a reader who asked for
+ * larger text almost nothing to grow into. Twelve holds a 200% body (inkcell_theme_text()) on
+ * such a panel with its headings above it. The buffers sized off it (the glyph and icon rows in
+ * fb_draw.c) are one row of one glyph, on the stack, so the room costs kilobytes.
+ */
 #define INKCELL_SCALE_MIN INKCELL_SCALE(2)
-#define INKCELL_SCALE_MAX INKCELL_SCALE(6)
+#define INKCELL_SCALE_MAX INKCELL_SCALE(12)
+
+/*
+ * The largest a widget grows a mark to *fill* a box - a tile's icon or initials, a dial's
+ * reading, a key's letter - as opposed to how large a reader may ask text to be.
+ *
+ * Those were one number, and they are not one idea. A mark that fills a box is limited by the
+ * detail its master was drawn with: past about six steps an icon's edges go soft and a tile's
+ * initials stop reading as a label and start reading as a poster. So a fill keeps this ceiling
+ * however far INKCELL_SCALE_MAX rises - and a fill that must stay as large as the body text
+ * (a key's letter) takes whichever of the two is larger.
+ */
+#define INKCELL_SCALE_FILL_MAX INKCELL_SCALE(6)
 
 /*
  * Avatar tints: the fills behind a conversation's initials.

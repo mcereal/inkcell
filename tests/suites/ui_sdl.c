@@ -63,7 +63,7 @@ INKCELL_TEST_CASE(sdl_display_scale_sizes_the_panel_for_the_desk, unit) {
                          "and at 125%, the floor");
     INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 0.5f) != INKCELL_SCALE_MIN,
                          "nothing goes below the legibility floor");
-    INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 4.0f) != INKCELL_SCALE_MAX,
+    INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 16.0f) != INKCELL_SCALE_MAX,
                          "nor above what the buffers are sized for");
     INKCELL_TEST_FAIL_IF(inkcell_sdl_display_scale(theme, 0.0f) != theme,
                          "a density nobody could measure is the theme's own scale");
