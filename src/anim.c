@@ -234,3 +234,48 @@ void inkcell_anim_table_reset(struct inkcell_anim_table *table) {
         memset(table, 0, sizeof *table);
     }
 }
+
+void inkcell_anim_point_set(struct inkcell_anim_point *point, int32_t x, int32_t y) {
+    if (point == NULL) {
+        return;
+    }
+    point->from_x = point->to_x = x;
+    point->from_y = point->to_y = y;
+    inkcell_anim_set(&point->t, INKCELL_ANIM_ONE);
+}
+
+void inkcell_anim_point_at(const struct inkcell_anim_point *point, uint64_t now_ms, int32_t *x,
+                           int32_t *y) {
+    if (point == NULL) {
+        return;
+    }
+    const int64_t v = inkcell_anim_value(&point->t, now_ms);
+    if (x != NULL) {
+        *x = point->from_x +
+             (int32_t)(((int64_t)point->to_x - point->from_x) * v / INKCELL_ANIM_ONE);
+    }
+    if (y != NULL) {
+        *y = point->from_y +
+             (int32_t)(((int64_t)point->to_y - point->from_y) * v / INKCELL_ANIM_ONE);
+    }
+}
+
+void inkcell_anim_point_to(struct inkcell_anim_point *point, uint64_t now_ms, int32_t x, int32_t y,
+                           uint32_t duration_ms, enum inkcell_ease ease) {
+    if (point == NULL || (point->to_x == x && point->to_y == y)) {
+        return;
+    }
+    int32_t cx = 0;
+    int32_t cy = 0;
+    inkcell_anim_point_at(point, now_ms, &cx, &cy);
+    point->from_x = cx;
+    point->from_y = cy;
+    point->to_x = x;
+    point->to_y = y;
+    inkcell_anim_set(&point->t, 0);
+    inkcell_anim_to(&point->t, now_ms, INKCELL_ANIM_ONE, duration_ms, ease);
+}
+
+bool inkcell_anim_point_active(const struct inkcell_anim_point *point, uint64_t now_ms) {
+    return point != NULL && inkcell_anim_active(&point->t, now_ms);
+}

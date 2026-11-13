@@ -274,3 +274,35 @@ INKCELL_TEST_CASE(anim_null_arguments_are_safe, unit) {
     inkcell_anim_table_reset(NULL);
     record_success(test_name);
 }
+
+INKCELL_TEST_CASE(anim_point_moves_both_ways_at_once_and_turns_round, unit) {
+    struct inkcell_anim_point p;
+    inkcell_anim_point_set(&p, 100, 200);
+    int32_t x = 0;
+    int32_t y = 0;
+    inkcell_anim_point_at(&p, 0U, &x, &y);
+    INKCELL_TEST_FAIL_IF(x != 100 || y != 200 || inkcell_anim_point_active(&p, 0U),
+                         "set should put it there, still");
+
+    inkcell_anim_point_to(&p, 1000U, 300, 0, 200U, INKCELL_EASE_LINEAR);
+    inkcell_anim_point_at(&p, 1100U, &x, &y);
+    INKCELL_TEST_FAIL_IF(x != 200 || y != 100, "half way in time should be half way on both axes");
+    INKCELL_TEST_FAIL_IF(!inkcell_anim_point_active(&p, 1100U), "and still moving");
+
+    inkcell_anim_point_to(&p, 1100U, 300, 0, 200U, INKCELL_EASE_LINEAR);
+    inkcell_anim_point_at(&p, 1100U, &x, &y);
+    INKCELL_TEST_FAIL_IF(x != 200 || y != 100,
+                         "aiming where it already heads should change nothing");
+
+    inkcell_anim_point_to(&p, 1100U, 100, 200, 200U, INKCELL_EASE_LINEAR);
+    inkcell_anim_point_at(&p, 1100U, &x, &y);
+    INKCELL_TEST_FAIL_IF(x != 200 || y != 100, "turning round should start from where it got to");
+    inkcell_anim_point_at(&p, 1300U, &x, &y);
+    INKCELL_TEST_FAIL_IF(x != 100 || y != 200 || inkcell_anim_point_active(&p, 1300U),
+                         "and land exactly, at rest");
+
+    inkcell_anim_point_to(&p, 2000U, -50, 9000, 0U, INKCELL_EASE_OUT);
+    inkcell_anim_point_at(&p, 2000U, &x, &y);
+    INKCELL_TEST_FAIL_IF(x != -50 || y != 9000, "no time is a jump, and lengths are not clamped");
+    record_success(test_name);
+}
