@@ -122,7 +122,7 @@ bool inkcell_fb_state_animating(const struct inkcell_draw_state *state) {
     }
     return inkcell_anim_active(&state->slide, state->now_ms) ||
            inkcell_anim_active(&state->focus_ring.travel, state->now_ms) ||
-           inkcell_anim_active(&state->list_glide.travel, state->now_ms) ||
+           inkcell_anim_active(&state->list_glide.travel, state->now_ms) || state->scrolling ||
            inkcell_anim_table_active(&state->anim, state->now_ms) || inkcell_fb_app_pending(state);
 }
 
@@ -546,6 +546,7 @@ void inkcell_fb_app_frame_begin(struct inkcell_draw_state *state) {
        that a caller which renders without presenting - the capture harness - does not carry a
        rectangle from one page into the next. */
     state->animation_damage = (struct inkcell_fb_damage_rect){0};
+    state->scrolling = false;
     /*
      * With one exception, and it is the one thing a frame inherits from the last: wherever the
      * focus ring painted.

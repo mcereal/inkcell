@@ -267,3 +267,95 @@ bool inkcell_scroll_reveal(struct inkcell_scroll *scroll, int32_t top, int32_t h
     inkcell_scroll_aim(scroll, want, now_ms, INKCELL_SCROLL_MOTION_MS);
     return true;
 }
+
+/* ---- a finger ------------------------------------------------------------------------------ */
+
+/* Holds the content at `raw` with nothing in flight - place() without the clamp, since a finger
+   may hold it past an end. Bounded far beyond what the band will show, so it never overflows. */
+static void inkcell_scroll_hold(struct inkcell_scroll *scroll, int32_t raw) {
+    const int32_t far = scroll->viewport * 2;
+    const int32_t at = inkcell_scroll_clamp(raw, -far, inkcell_scroll_max(scroll) + far);
+    scroll->from = at;
+    scroll->target = at;
+    inkcell_anim_set(&scroll->travel, INKCELL_ANIM_ONE);
+}
+
+static void inkcell_scroll_drag_sample(struct inkcell_scroll_drag *drag, int32_t y,
+                                       uint64_t now_ms) {
+    if (drag->sample_count == INKCELL_SCROLL_DRAG_SAMPLES) {
+        for (uint32_t i = 1U; i < INKCELL_SCROLL_DRAG_SAMPLES; ++i) {
+            drag->samples[i - 1U] = drag->samples[i];
+        }
+        drag->sample_count--;
+    }
+    drag->samples[drag->sample_count].y = y;
+    drag->samples[drag->sample_count].ms = now_ms;
+    drag->sample_count++;
+}
+
+void inkcell_scroll_drag_begin(struct inkcell_scroll_drag *drag, struct inkcell_scroll *scroll,
+                               int32_t y, int32_t slop, uint64_t now_ms) {
+    if (drag == NULL || scroll == NULL) {
+        return;
+    }
+    *drag = (struct inkcell_scroll_drag){.active = true, .slop = slop > 0 ? slop : 0};
+    drag->start_y = y;
+    drag->start_raw = inkcell_scroll_raw(scroll, now_ms);
+    inkcell_scroll_hold(scroll, drag->start_raw);
+    inkcell_scroll_drag_sample(drag, y, now_ms);
+}
+
+void inkcell_scroll_drag_move(struct inkcell_scroll_drag *drag, struct inkcell_scroll *scroll,
+                              int32_t y, uint64_t now_ms) {
+    if (drag == NULL || scroll == NULL || !drag->active) {
+        return;
+    }
+    if (!drag->moved) {
+        const int32_t far = y - drag->start_y;
+        if (far <= drag->slop && far >= -drag->slop) {
+            return;
+        }
+        drag->moved = true;
+        drag->start_y = y; /* measured from here, so the content does not jump by the slop */
+        drag->sample_count = 0U;
+    }
+    inkcell_scroll_hold(scroll, drag->start_raw + (drag->start_y - y));
+    inkcell_scroll_drag_sample(drag, y, now_ms);
+}
+
+bool inkcell_scroll_drag_end(struct inkcell_scroll_drag *drag, struct inkcell_scroll *scroll,
+                             int32_t y, uint64_t now_ms) {
+    if (drag == NULL || scroll == NULL || !drag->active) {
+        return false;
+    }
+    inkcell_scroll_drag_move(drag, scroll, y, now_ms);
+    drag->active = false;
+    const int32_t max = inkcell_scroll_max(scroll);
+    if (!drag->moved || scroll->target < 0 || scroll->target > max) {
+        inkcell_scroll_release(scroll, now_ms); /* a no-op unless held past an end */
+        return drag->moved;
+    }
+    /* The finger's speed over the last stretch of its travel, oldest sample in that stretch to
+       the lift. */
+    const uint32_t last = drag->sample_count - 1U;
+    uint32_t first = last;
+    while (first > 0U && drag->samples[last].ms - drag->samples[first - 1U].ms <=
+                             INKCELL_SCROLL_FLING_SAMPLE_MS) {
+        --first;
+    }
+    const int64_t dt = (int64_t)(drag->samples[last].ms - drag->samples[first].ms);
+    if (dt <= 0) {
+        return true;
+    }
+    /* Content moves against the finger: a finger going up the panel scrolls down the content. */
+    const int64_t travel = (int64_t)drag->samples[first].y - (int64_t)drag->samples[last].y;
+    const int64_t speed = travel * 1000 / dt; /* pixels a second */
+    if (speed < INKCELL_SCROLL_FLING_MIN && speed > -INKCELL_SCROLL_FLING_MIN) {
+        return true;
+    }
+    const int64_t distance = speed * (int64_t)INKCELL_SCROLL_FLING_MS / 3000;
+    const int64_t want = (int64_t)scroll->target + distance;
+    const int32_t target = (int32_t)(want < 0 ? 0 : (want > max ? max : want));
+    inkcell_scroll_aim(scroll, target, now_ms, INKCELL_SCROLL_FLING_MS);
+    return true;
+}

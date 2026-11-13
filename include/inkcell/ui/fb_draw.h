@@ -557,6 +557,13 @@ struct inkcell_draw_state {
      */
     struct inkcell_fb_list_glide list_glide;
     /*
+     * A viewport on this frame whose scroll still has somewhere to be - a flick slowing, an
+     * overscroll springing back. Set by inkcell_fb_viewport_begin() and cleared at the start of
+     * every frame, so it is this frame's fact: the scroll itself is the screen's, and this is how
+     * the backend learns that another frame is owed for it.
+     */
+    bool scrolling;
+    /*
      * The frame's content transform: what inkcell_fb_shift_begin() has moved the body by, and the
      * band it is confined to while it is moved. See inkcell_fb_shift_begin().
      */

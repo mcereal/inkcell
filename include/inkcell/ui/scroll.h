@@ -38,11 +38,12 @@
  *
  * ---- what is deliberately not here ----
  *
- * **There is no fling, and no velocity.** Momentum is the answer to a finger leaving a screen
- * at speed, and this device has a d-pad: a press is a discrete request to move by a row or a
- * page, and the thing that makes it feel continuous is that the offset *eases* to where the
- * press sent it rather than jumping. A velocity model here would be machinery serving a
- * gesture the hardware cannot produce.
+ * **A d-pad has no fling; a finger has one, and it is still one curve.** A press is a discrete
+ * request to move by a row or a page, eased so it feels continuous. A finger is different: it
+ * drags the content (struct inkcell_scroll_drag), and when it leaves at speed the content keeps
+ * going and slows to a stop. That flick is *not* a velocity integrated frame by frame - it is one
+ * travel, aimed once when the finger lifts, whose ease-out starts at the finger's speed. So
+ * everything below about nothing being accumulated holds for it too.
  *
  * **Nothing is accumulated.** Where a scroll has got to is derived from the clock and a
  * target, exactly as `struct inkcell_anim` derives a knob's position - so a frame that was
@@ -228,6 +229,52 @@ bool inkcell_scroll_reveal(struct inkcell_scroll *scroll, int32_t top, int32_t h
  * function rather than two.
  */
 int32_t inkcell_scroll_rubber(int32_t over, int32_t dim);
+
+/* ---- a finger -------------------------------------------------------------------------------
+ *
+ * A contact dragging the content: it follows the finger exactly, with the band past either end,
+ * and on lifting it flicks on or springs back.
+ *
+ * A contact is a tap until it leaves `slop` pixels of where it went down - `moved` says which -
+ * so a screen can tell "pressed a row" from "scrolled the list" on the same contact, and the
+ * content does not jump by the slop when the drag begins: it is measured from where the finger
+ * was when it became one.
+ *
+ * Touching content that is still flicking stops it where it is, as a finger on a moving page
+ * does. The flick's speed is the finger's over its last INKCELL_SCROLL_FLING_SAMPLE_MS of travel;
+ * a lift slower than INKCELL_SCROLL_FLING_MIN is a placing, not a flick, and stays put.
+ */
+#define INKCELL_SCROLL_FLING_SAMPLE_MS 100U
+/* The slowest lift that flicks, in pixels a second. */
+#define INKCELL_SCROLL_FLING_MIN 120
+/* How long a flick takes to come to rest. Its distance follows from the finger's speed and this:
+   an ease-out cubic starting at speed v covers v * duration / 3. */
+#define INKCELL_SCROLL_FLING_MS 900U
+#define INKCELL_SCROLL_DRAG_SAMPLES 8U
+
+struct inkcell_scroll_drag {
+    bool active;
+    bool moved; /* left the slop: a drag, not a tap */
+    int32_t slop;
+    int32_t start_y;   /* where the drag is measured from */
+    int32_t start_raw; /* the content's position then, before the band */
+    struct {
+        int32_t y;
+        uint64_t ms;
+    } samples[INKCELL_SCROLL_DRAG_SAMPLES];
+    uint32_t sample_count;
+};
+
+/* A finger down at `y` (panel pixels; down the panel is positive). Anything in flight stops. */
+void inkcell_scroll_drag_begin(struct inkcell_scroll_drag *drag, struct inkcell_scroll *scroll,
+                               int32_t y, int32_t slop, uint64_t now_ms);
+/* The finger at `y`: the content follows once it has left the slop. */
+void inkcell_scroll_drag_move(struct inkcell_scroll_drag *drag, struct inkcell_scroll *scroll,
+                              int32_t y, uint64_t now_ms);
+/* The finger lifted at `y`: a flick, a spring back from past an end, or - for a tap or a slow
+   lift - nothing. Answers `moved`, so a screen that has a tap to act on knows whether to. */
+bool inkcell_scroll_drag_end(struct inkcell_scroll_drag *drag, struct inkcell_scroll *scroll,
+                             int32_t y, uint64_t now_ms);
 
 #ifdef __cplusplus
 }

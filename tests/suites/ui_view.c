@@ -351,3 +351,36 @@ INKCELL_TEST_CASE(viewport_places_content_on_the_column_outside_it, unit) {
     view_harness_close(&h);
     record_success(test_name);
 }
+
+/* A viewport whose scroll is still moving owes the next frame; one at rest does not. What lets a
+   backend that draws only when asked keep a flick going until it settles. */
+INKCELL_TEST_CASE(view_moving_scroll_owes_a_frame, unit) {
+    struct view_harness h;
+    INKCELL_TEST_FAIL_IF(!view_harness_open(&h), "capture should open");
+    struct inkcell_scroll scroll = {0};
+    const struct inkcell_fb_rect box = {.x = 0, .y = 0, .w = 40, .h = 40};
+    inkcell_fb_state_set_now(h.state, 1000U);
+    inkcell_fb_app_frame_begin(h.state);
+    struct inkcell_fb_viewport view;
+    if (inkcell_fb_viewport_begin(h.state, &view, box, &scroll, 400)) {
+        inkcell_fb_viewport_end(h.state, &view);
+    }
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_state_animating(h.state), view_harness_close(&h),
+                                 "a scroll at rest owes nothing");
+    inkcell_scroll_to(&scroll, 200, 1000U);
+    inkcell_fb_app_frame_begin(h.state);
+    if (inkcell_fb_viewport_begin(h.state, &view, box, &scroll, 400)) {
+        inkcell_fb_viewport_end(h.state, &view);
+    }
+    INKCELL_TEST_FAIL_IF_CLEANUP(!inkcell_fb_state_animating(h.state), view_harness_close(&h),
+                                 "a scroll on its way owes the next frame");
+    inkcell_fb_state_set_now(h.state, 5000U);
+    inkcell_fb_app_frame_begin(h.state);
+    if (inkcell_fb_viewport_begin(h.state, &view, box, &scroll, 400)) {
+        inkcell_fb_viewport_end(h.state, &view);
+    }
+    INKCELL_TEST_FAIL_IF_CLEANUP(inkcell_fb_state_animating(h.state), view_harness_close(&h),
+                                 "and once it has arrived, nothing again");
+    view_harness_close(&h);
+    record_success(test_name);
+}
