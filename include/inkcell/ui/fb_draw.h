@@ -466,6 +466,15 @@ struct inkcell_draw_state {
        swapping in that theme's default. */
     bool scale_pinned;
     /*
+     * The panel's density in pixels per inch, or 0 for unknown (inkcell/ui/density.h). Known, it
+     * turns the theme's body_dp and margin into pixels and inkcell_fb_dp() answers in real
+     * lengths; unknown, the theme's pixel scale stands. Set by inkcell_fb_state_set_ppi().
+     */
+    uint32_t ppi;
+    /* <PREFIX>_FB_PPI named the density, so what a panel reports about itself is not taken: the
+       person with the shell has measured the panel the EDID lied about. */
+    bool ppi_pinned;
+    /*
      * The clock this frame is drawn against, and what is still moving in it.
      *
      * A frame is otherwise a function of the snapshot alone, and a snapshot has no notion of
@@ -771,9 +780,25 @@ struct inkcell_fb_rect inkcell_fb_view_content_box(const struct inkcell_draw_sta
  */
 bool inkcell_fb_state_set_theme_by_id(struct inkcell_draw_state *state, const char *id);
 
-/* Sets the theme and takes the scale from it. Pass 0 for `scale` to accept the theme's. */
+/* Sets the theme and takes the scale from it. Pass 0 for `scale` to accept the theme's: its
+   body_dp at this state's density when that is known, its own scale when not. */
 void inkcell_fb_state_set_theme(struct inkcell_draw_state *state, const struct inkcell_theme *theme,
                                 int scale);
+
+/*
+ * The panel's density, as whoever opened it knows it: a backend from the connector's
+ * millimetres, a client from the display server that owns the panel. 0 says unknown.
+ *
+ * The body scale follows, unless something pinned it (<PREFIX>_FB_SCALE, a capture's explicit
+ * scale), and so does everything measured from the scale - spacing, radii, the type scale. A
+ * density named in <PREFIX>_FB_PPI was a person's correction and is kept over the report.
+ * Re-measures like a theme switch, so call it before the first frame rather than per frame.
+ */
+void inkcell_fb_state_set_ppi(struct inkcell_draw_state *state, uint32_t ppi);
+
+/* `dp` in this frame's pixels: a real length at a known density, a pixel at an unknown one. The
+   unit for layout that is not text - a touch target, an icon, a panel inset. */
+int inkcell_fb_dp(const struct inkcell_draw_state *state, int dp);
 
 /* ---- the theme, as the drawing layers ask for it ------------------------------------------ */
 

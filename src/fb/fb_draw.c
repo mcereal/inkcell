@@ -13,6 +13,7 @@
 
 #include "emoji_internal.h"
 #include "inkcell/i18n/strings.h"
+#include "inkcell/ui/density.h"
 #include "inkcell/ui/emoji.h"
 #include "inkcell/ui/icon.h"
 #include "inkwell/base/env.h"
@@ -65,6 +66,12 @@ void inkcell_fb_state_set_theme(struct inkcell_draw_state *state, const struct i
         state->glyph_cache = calloc(1U, sizeof *state->glyph_cache);
     }
     state->theme = theme != NULL ? theme : inkcell_theme_default();
+    if (scale <= 0) {
+        /* The theme's body as a length, at a density somebody knows; 0 (unknown) falls through
+           to the theme's own pixel scale in the clamp. */
+        scale = inkcell_scale_for_dp(state->theme->metrics.body_dp, state->ppi,
+                                     inkcell_fb_font(state)->height);
+    }
     state->scale = inkcell_theme_clamp_scale(state->theme, scale);
     /* Every position remembered in there is in pixels, measured against metrics this call has
        just replaced. Keeping them would slide a knob from where it sat under the old scale. */
@@ -710,7 +717,7 @@ int inkcell_fb_edge(const struct inkcell_draw_state *state) {
 }
 
 int inkcell_fb_margin(const struct inkcell_draw_state *state) {
-    return (int)inkcell_fb_metrics(state)->margin;
+    return inkcell_fb_dp(state, (int)inkcell_fb_metrics(state)->margin);
 }
 
 int inkcell_fb_scrim_depth(const struct inkcell_draw_state *state) {
@@ -914,8 +921,25 @@ void inkcell_fb_state_apply_theme_from_env(struct inkcell_draw_state *state) {
      */
     const int steps = (int)inkwell_env_int("FB_SCALE", INKCELL_SCALE_MIN / INKCELL_SCALE_UNIT,
                                            INKCELL_SCALE_MAX / INKCELL_SCALE_UNIT, 0);
-    const int scale = steps > 0 ? INKCELL_SCALE(steps) : inkcell_theme_scale(theme);
-    inkcell_fb_state_set_theme(state, theme, scale);
+    /* Before the theme, whose body scale is measured against it. */
+    const long ppi = inkwell_env_int("FB_PPI", INKCELL_PPI_MIN, INKCELL_PPI_MAX, 0);
+    state->ppi_pinned = ppi > 0;
+    if (state->ppi_pinned) {
+        state->ppi = (uint32_t)ppi;
+    }
+    inkcell_fb_state_set_theme(state, theme, steps > 0 ? INKCELL_SCALE(steps) : 0);
+}
+
+void inkcell_fb_state_set_ppi(struct inkcell_draw_state *state, uint32_t ppi) {
+    if (state == NULL || state->ppi_pinned || state->ppi == ppi) {
+        return;
+    }
+    state->ppi = ppi;
+    inkcell_fb_state_set_theme(state, state->theme, state->scale_pinned ? state->scale : 0);
+}
+
+int inkcell_fb_dp(const struct inkcell_draw_state *state, int dp) {
+    return inkcell_dp_px(dp, state != NULL ? state->ppi : 0U);
 }
 
 /*

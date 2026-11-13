@@ -47,6 +47,10 @@ struct inkcell_backend_headless_context {
     uint8_t *pixels;
     size_t size;
     uint32_t stride;
+    /* The density of the panel these frames end up on, when whoever shows them knows it
+       (inkcell_fb_state_set_ppi()); 0 for unknown. A client of a display server has no
+       connector to ask, so the server is who says. */
+    uint32_t ppi;
 };
 
 const struct inkcell_backend *inkcell_backend_headless(void);
