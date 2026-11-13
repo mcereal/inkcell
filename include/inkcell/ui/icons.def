@@ -268,3 +268,16 @@ INKCELL_ICON_ENTRY(SEARCH,      "search")
  * arrow pointing back the way the rail will fold, which is Material's pair. */
 INKCELL_ICON_ENTRY(RAIL_EXPAND,   "menu")
 INKCELL_ICON_ENTRY(RAIL_COLLAPSE, "menu_open")
+
+/* ---- the touch keyboard's own keys ----------------------------------------------------------
+ *
+ * The function keys of the keyboard a finger types on (inkcell/ui/touch_keyboard.h), which the
+ * widget draws itself, so nobody else would supply them. Delete is BACKSPACE above. Two shifts
+ * because the key says which it is: one capital, or capitals held on. */
+INKCELL_ICON_ENTRY(SHIFT,         "shift")
+INKCELL_ICON_ENTRY(SHIFT_LOCK,    "shift_lock")
+/* The key that ends a line, or does what the field says its enter does when that has no mark
+   of its own ("Done", "Go"). */
+INKCELL_ICON_ENTRY(ENTER,         "keyboard_return")
+/* Put the keyboard away without finishing what is typed. */
+INKCELL_ICON_ENTRY(KEYBOARD_HIDE, "keyboard_hide")
