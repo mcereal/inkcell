@@ -291,3 +291,5 @@ INKCELL_ICON_ENTRY(VOLUME_OFF, "volume_off")
 /* What holding power offers: the power symbol every device prints on its button. Not SHUTDOWN
    (an unplugged plug), which says a link is down rather than this device going off. */
 INKCELL_ICON_ENTRY(POWER_BUTTON, "power_settings_new")
+/* A picture, or a place pictures are kept: a photo library's empty grid, a viewer's own glyph. */
+INKCELL_ICON_ENTRY(PHOTO, "photo_library")
