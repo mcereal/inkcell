@@ -293,3 +293,10 @@ INKCELL_ICON_ENTRY(VOLUME_OFF, "volume_off")
 INKCELL_ICON_ENTRY(POWER_BUTTON, "power_settings_new")
 /* A picture, or a place pictures are kept: a photo library's empty grid, a viewer's own glyph. */
 INKCELL_ICON_ENTRY(PHOTO, "photo_library")
+/* Playing and its controls: start and stop what plays, and the next or last of a list of it. */
+INKCELL_ICON_ENTRY(PLAY, "play_arrow")
+INKCELL_ICON_ENTRY(PAUSE, "pause")
+INKCELL_ICON_ENTRY(SKIP_NEXT, "skip_next")
+INKCELL_ICON_ENTRY(SKIP_PREVIOUS, "skip_previous")
+/* Music, or a place songs are kept: a player's empty library, a song with no art of its own. */
+INKCELL_ICON_ENTRY(MUSIC, "music_note")
