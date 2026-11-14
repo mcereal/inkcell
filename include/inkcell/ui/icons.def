@@ -288,3 +288,6 @@ INKCELL_ICON_ENTRY(KEYBOARD_HIDE, "keyboard_hide")
  * volume, and the volume at nothing. */
 INKCELL_ICON_ENTRY(VOLUME,     "volume_up")
 INKCELL_ICON_ENTRY(VOLUME_OFF, "volume_off")
+/* What holding power offers: the power symbol every device prints on its button. Not SHUTDOWN
+   (an unplugged plug), which says a link is down rather than this device going off. */
+INKCELL_ICON_ENTRY(POWER_BUTTON, "power_settings_new")
