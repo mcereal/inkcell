@@ -222,7 +222,7 @@ forces the second on a machine that has the library.
 make test        # debug build + ctest: the unit suite, the no-prose check, the golden sheet
 make debug       # build only
 make gallery     # the pictures (see above)
-make format      # clang-format, skipping the generated glyph tables
+make format      # the pinned clang-format, skipping the generated glyph tables
 ```
 
 Sanitizers: `cmake -S . -B build -DINKCELL_ENABLE_ASAN=ON -DINKCELL_ENABLE_UBSAN=ON`. CI runs

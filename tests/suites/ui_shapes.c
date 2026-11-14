@@ -511,7 +511,7 @@ INKCELL_TEST_CASE(emoji_enlarged_stays_sharp, unit) {
         const int rows = box < INKCELL_EMOJI_BAND ? box : INKCELL_EMOJI_BAND;
         INKCELL_TEST_FAIL_IF(inkcell_emoji_render(sprite, box, first, rows, band) != 0,
                              "the grinning face should render");
-        uint8_t(*middle)[4] = &band[(size_t)(box / 2 - first) * (size_t)box];
+        uint8_t (*middle)[4] = &band[(size_t)(box / 2 - first) * (size_t)box];
         int ramp = 0;
         for (int x = 0; x < box / 2 && middle[x][3] < 255U; ++x) {
             ramp += middle[x][3] > 0U;
