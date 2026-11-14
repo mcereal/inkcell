@@ -109,6 +109,8 @@ add_library(inkcell STATIC
     src/input/input.c
     src/input/key.c
     src/input/input_profile.c
+    # a force-feedback motor on an evdev node: a phone's actuator, a gamepad's rumble
+    src/input/haptic.c
     # the framebuffer backend: the panel, the primitives, and the components above them
     src/fb/fb.c
     src/fb/fb_draw.c
