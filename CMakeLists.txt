@@ -149,6 +149,8 @@ add_library(inkcell STATIC
     # the log, the environment knobs, the whole-file read and the UTF-8 helpers went to inkwell,
     # which is where they always belonged - none of them was ever about drawing.
     src/utils/qr.c
+    # a picture fitted into a box, and its pixels scaled to that size
+    src/image.c
 )
 
 target_include_directories(inkcell PUBLIC
