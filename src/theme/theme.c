@@ -41,8 +41,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define RGB(rr, gg, bb)                                                                            \
-    { .r = (rr), .g = (gg), .b = (bb) }
+#define RGB(rr, gg, bb) {.r = (rr), .g = (gg), .b = (bb)}
 
 /*
  * The metrics the Brick's panel was tuned for. A theme that wants a different look overrides
@@ -95,18 +94,19 @@
  */
 #define INKCELL_SHADOWS_LIGHT                                                                      \
     {                                                                                              \
-        [INKCELL_ELEVATION_FLAT] = {0U, 0U, 0U}, [INKCELL_ELEVATION_RAISED] = {1U, 3U, 16U},       \
-        [INKCELL_ELEVATION_FLOATING] = {2U, 5U, 22U}, [INKCELL_ELEVATION_MODAL] = {3U, 8U, 28U},   \
+        [INKCELL_ELEVATION_FLAT] = {0U, 0U, 0U},                                                   \
+        [INKCELL_ELEVATION_RAISED] = {1U, 3U, 16U},                                                \
+        [INKCELL_ELEVATION_FLOATING] = {2U, 5U, 22U},                                              \
+        [INKCELL_ELEVATION_MODAL] = {3U, 8U, 28U},                                                 \
     }
 #define INKCELL_SHADOWS_DARK                                                                       \
     {                                                                                              \
-        [INKCELL_ELEVATION_FLAT] = {0U, 0U, 0U}, [INKCELL_ELEVATION_RAISED] = {1U, 3U, 40U},       \
-        [INKCELL_ELEVATION_FLOATING] = {2U, 5U, 50U}, [INKCELL_ELEVATION_MODAL] = {3U, 8U, 60U},   \
+        [INKCELL_ELEVATION_FLAT] = {0U, 0U, 0U},                                                   \
+        [INKCELL_ELEVATION_RAISED] = {1U, 3U, 40U},                                                \
+        [INKCELL_ELEVATION_FLOATING] = {2U, 5U, 50U},                                              \
+        [INKCELL_ELEVATION_MODAL] = {3U, 8U, 60U},                                                 \
     }
-#define INKCELL_SHADOWS_NONE                                                                       \
-    {                                                                                              \
-        { 0U, 0U, 0U }                                                                             \
-    }
+#define INKCELL_SHADOWS_NONE {{0U, 0U, 0U}}
 
 /*
  * The scrim and the shadows are taken as parameters rather than restated in the table, so a
@@ -142,12 +142,12 @@
                                       .tracking = INKCELL_SCALE(1) / 2,                            \
                                       .line_pct = 100U,                                            \
                                       .tabular = true},                                            \
-    },                                                                                             \
+        },                                                                                         \
     .space =                                                                                       \
         {                                                                                          \
             [INKCELL_SPACE_NONE] = 0U, [INKCELL_SPACE_XS] = 1U, [INKCELL_SPACE_SM] = 2U,           \
             [INKCELL_SPACE_MD] = 4U,   [INKCELL_SPACE_LG] = 6U,                                    \
-    },                                                                                             \
+        },                                                                                         \
     .field_label_cols = 20U, .narrow_cols = 40U, .card_pad = 2U, .meter_thickness = 1U,            \
     .motion_ms =                                                                                   \
         {                                                                                          \
@@ -155,29 +155,27 @@
             [INKCELL_MOTION_MEDIUM] = 220U,                                                        \
             [INKCELL_MOTION_LONG] = 320U,                                                          \
             [INKCELL_MOTION_LOOP] = 1400U,                                                         \
-    },                                                                                             \
+        },                                                                                         \
     .shape =                                                                                       \
         {                                                                                          \
             [INKCELL_SHAPE_NONE] = 0U,                                                             \
             [INKCELL_SHAPE_SM] = 2U,                                                               \
             [INKCELL_SHAPE_MD] = 3U,                                                               \
             [INKCELL_SHAPE_LG] = 4U,                                                               \
-    },                                                                                             \
+        },                                                                                         \
     .opacity =                                                                                     \
         {                                                                                          \
             [INKCELL_OPACITY_HOVER] = 8U,      [INKCELL_OPACITY_FOCUS] = 12U,                      \
             [INKCELL_OPACITY_PRESS] = 20U,     [INKCELL_OPACITY_DISABLED] = 38U,                   \
             [INKCELL_OPACITY_SCRIM] = (scrim),                                                     \
-    },                                                                                             \
+        },                                                                                         \
     .shadow = shadows
 
 /* The default metrics: Material's 32% scrim, which is the figure every platform has converged
    on - enough that the eye stops reading the body, little enough that it can still see what the
    question is about, and a palette that needs more says so. */
-#define INKCELL_METRICS_DARK                                                                       \
-    { INKCELL_METRICS_FIELDS(32U, INKCELL_SHADOWS_DARK) }
-#define INKCELL_METRICS_LIGHT                                                                      \
-    { INKCELL_METRICS_FIELDS(32U, INKCELL_SHADOWS_LIGHT) }
+#define INKCELL_METRICS_DARK {INKCELL_METRICS_FIELDS(32U, INKCELL_SHADOWS_DARK)}
+#define INKCELL_METRICS_LIGHT {INKCELL_METRICS_FIELDS(32U, INKCELL_SHADOWS_LIGHT)}
 
 static const struct inkcell_theme
     k_themes[] =

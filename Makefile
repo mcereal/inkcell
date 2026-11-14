@@ -3,12 +3,24 @@
 
 BUILD ?= build
 
-.PHONY: all test debug format clean gallery gallery-update
+.PHONY: all venv test debug format format-check clean gallery gallery-update
 
 all: debug
 
-debug:
-	cmake -S . -B $(BUILD) -G Ninja -DCMAKE_BUILD_TYPE=Debug
+# The host tools in requirements-dev.txt - the Python inkwell's Mbed TLS generates its sources
+# with, and the pinned clang-format - in a venv of their own, remade when that file changes.
+VENV = $(BUILD)/venv
+VENV_STAMP = $(VENV)/.installed
+
+venv: $(VENV_STAMP)
+$(VENV_STAMP): requirements-dev.txt
+	python3 -m venv $(VENV)
+	$(VENV)/bin/pip install --quiet --disable-pip-version-check -r requirements-dev.txt
+	@touch $@
+
+debug: $(VENV_STAMP)
+	cmake -S . -B $(BUILD) -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+	  -DPython3_EXECUTABLE=$(abspath $(VENV))/bin/python3
 	cmake --build $(BUILD)
 
 # The verify step, and what CI runs: the unit suite plus the check that no renderer spells out
@@ -46,9 +58,18 @@ gallery-update: debug
 # has ever run it over, is the one moment it did nothing. The CI check runs after the add and
 # caught it there instead, which is a round trip for something the author could have been told
 # locally. --others --exclude-standard is the untracked half, minus whatever .gitignore says.
-format:
-	git ls-files --cached --others --exclude-standard '*.c' '*.h' \
-	  | grep -v '^src/generated/' | xargs clang-format -i
+#
+# `format-check` is what CI runs: the same list, changing nothing, failing on the first file that
+# differs. The formatter is the one requirements-dev.txt pins, never whatever is on PATH.
+FORMAT_FILES = $$(git ls-files --cached --others --exclude-standard '*.c' '*.h' \
+  | grep -v '^src/generated/')
+CLANG_FORMAT ?= $(VENV)/bin/clang-format
+
+format: $(VENV_STAMP)
+	$(CLANG_FORMAT) -i $(FORMAT_FILES)
+
+format-check: $(VENV_STAMP)
+	$(CLANG_FORMAT) --dry-run --Werror $(FORMAT_FILES)
 
 clean:
 	rm -rf $(BUILD)

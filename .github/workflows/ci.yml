@@ -164,20 +164,15 @@ jobs:
 
   format:
     name: clang-format
-    # Pinned, not ubuntu-latest: the formatter's output is the check, and it moves with the
-    # point release - 26.04's clang-format-18 (18.1.8) lays out tables that 24.04's (18.1.3)
-    # accepts differently, so an image bump fails files nobody touched.
-    runs-on: ubuntu-24.04
+    # The formatter's output is the check, so it is pinned to the patch release in
+    # requirements-dev.txt and installed from PyPI by the Makefile - the same wheel a Mac formats
+    # with. apt's clang-format-18 moved with the runner image (24.04's 18.1.3 and 26.04's 18.1.8
+    # lay tables out differently), which is why this job used to pin the image instead.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install clang-format
-        run: sudo apt-get update && sudo apt-get install -y clang-format-18
-
-      # The generated glyph tables are excluded for the reason they are in their own directory:
-      # 42k lines nobody wrote and nobody reads, and reformatting them would bury every real
-      # change in a diff the size of the repository.
+      # Through the Makefile, so the file list - which excludes the generated glyph tables, 42k
+      # lines nobody wrote and nobody reads - lives in exactly one place.
       - name: Check formatting
-        run: |
-          files=$(git ls-files '*.c' '*.h' | grep -v '^src/generated/')
-          clang-format-18 --dry-run --Werror $files
+        run: make format-check

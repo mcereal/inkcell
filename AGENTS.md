@@ -38,7 +38,9 @@ scripts/kms-vm.py             the KMS backend on QEMU's virtio-gpu, every frame 
 
 ## Style
 
-- clang-format 18, config in `.clang-format`. `make format` before pushing; CI checks it.
+- clang-format, the exact version pinned in `requirements-dev.txt` (`make format` installs it into
+  `build/venv`; never format with whatever is on `PATH`), config in `.clang-format`. `make format`
+  before pushing; CI runs `make format-check`.
   `src/generated/` is excluded on purpose: reflowing megabytes of glyph tables is an unreadable
   diff.
 - `inkcell_` on everything public, `INKCELL_` on macros and enum members. A symbol carries the

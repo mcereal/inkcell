@@ -376,7 +376,7 @@ static bool raster_path(struct raster *r, const uint8_t *at, const uint8_t *end,
 static void raster_composite(struct raster *r, const uint8_t rgba[4], uint8_t (*out)[4]) {
     for (int row = r->top_row; row <= r->bottom_row; ++row) {
         int32_t *acc = g_acc[row];
-        uint8_t(*px)[4] = &out[(size_t)row * (size_t)r->width];
+        uint8_t (*px)[4] = &out[(size_t)row * (size_t)r->width];
         int32_t sum = 0;
         for (int x = 0; x < r->width; ++x) {
             sum += acc[x];

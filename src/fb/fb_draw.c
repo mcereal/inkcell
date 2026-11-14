@@ -2257,7 +2257,7 @@ void inkcell_fb_draw_emoji_box(const struct inkcell_draw_state *state, int x, in
         if (!inkcell_fb_clip_box(state, x, top + first, drawn, rows, &clip)) {
             continue;
         }
-        uint8_t(*pixels)[4] = band;
+        uint8_t (*pixels)[4] = band;
 #if INKCELL_EMOJI_CACHE_SLOTS > 0
         if (drawn <= INKCELL_EMOJI_BAND) {
             pixels = inkcell_fb_emoji_cached(sprite, drawn);
@@ -2282,7 +2282,7 @@ void inkcell_fb_draw_emoji_box(const struct inkcell_draw_state *state, int x, in
                 state->surface.size) {
                 continue;
             }
-            uint8_t(*from)[4] = &pixels[(size_t)row * (size_t)drawn + (size_t)span.dx];
+            uint8_t (*from)[4] = &pixels[(size_t)row * (size_t)drawn + (size_t)span.dx];
             for (int i = 0; i < span.w; ++i, out += bpp) {
                 /* The margin is a good share of every emoji, and a pixel with no opacity has
                    nothing to add - premultiplied, it is all zero. */
