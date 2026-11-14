@@ -338,6 +338,15 @@ bool inkcell_keyboard_insert_text_at_caret(struct inkcell_keyboard *kb,
                                            const struct inkcell_keyboard_layout *layout, char *text,
                                            size_t size, const char *input);
 
+/* A line break at the caret: what a field with lines does with its enter key. The one control
+   character a field takes - inkcell_keyboard_insert_text_at_caret() refuses every control, a
+   newline included, since a single-line field must never hold one. Under the same cap as typed
+   text; true only when the text changed. Deleting it is inkcell_keyboard_delete_at_caret()'s, a
+   newline being one cell. */
+bool inkcell_keyboard_newline_at_caret(struct inkcell_keyboard *kb,
+                                       const struct inkcell_keyboard_layout *layout, char *text,
+                                       size_t size);
+
 /* The character before the caret, gone - a host keyboard's backspace, or a system keyboard's
    delete sent to a field. By cell, as the grid's delete is. True only when the text changed. */
 bool inkcell_keyboard_delete_at_caret(struct inkcell_keyboard *kb, char *text);
