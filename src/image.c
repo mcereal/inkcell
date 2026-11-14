@@ -45,9 +45,8 @@ struct inkcell_image_fit inkcell_image_fit(uint32_t width, uint32_t height, int 
     return f;
 }
 
-void inkcell_image_scale_bgra(const uint8_t *src, uint32_t src_w, uint32_t src_h,
-                              size_t src_stride, uint8_t *dst, uint32_t dst_w, uint32_t dst_h,
-                              size_t dst_stride) {
+void inkcell_image_scale_bgra(const uint8_t *src, uint32_t src_w, uint32_t src_h, size_t src_stride,
+                              uint8_t *dst, uint32_t dst_w, uint32_t dst_h, size_t dst_stride) {
     if (src == NULL || dst == NULL || src_w == 0U || src_h == 0U || dst_w == 0U || dst_h == 0U) {
         return;
     }

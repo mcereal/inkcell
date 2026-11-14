@@ -25,7 +25,7 @@ extern "C" {
 
 /* A picture fitted into a box: the part of it shown, and where that lands. */
 struct inkcell_image_fit {
-    int x, y, w, h;                       /* on the page: inside the box */
+    int x, y, w, h;                      /* on the page: inside the box */
     uint32_t src_x, src_y, src_w, src_h; /* of the picture */
 };
 
@@ -51,9 +51,8 @@ struct inkcell_image_fit inkcell_image_fit(uint32_t width, uint32_t height, int 
  * Larger, each is its nearest source pixel. Alpha is averaged like the rest. The cost is one read
  * of each source pixel and one write of each destination pixel. Nothing happens for a side of 0.
  */
-void inkcell_image_scale_bgra(const uint8_t *src, uint32_t src_w, uint32_t src_h,
-                              size_t src_stride, uint8_t *dst, uint32_t dst_w, uint32_t dst_h,
-                              size_t dst_stride);
+void inkcell_image_scale_bgra(const uint8_t *src, uint32_t src_w, uint32_t src_h, size_t src_stride,
+                              uint8_t *dst, uint32_t dst_w, uint32_t dst_h, size_t dst_stride);
 
 #ifdef __cplusplus
 }
