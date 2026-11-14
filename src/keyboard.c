@@ -249,6 +249,22 @@ bool inkcell_keyboard_insert_text_at_caret(struct inkcell_keyboard *kb,
     return true;
 }
 
+bool inkcell_keyboard_newline_at_caret(struct inkcell_keyboard *kb,
+                                       const struct inkcell_keyboard_layout *layout, char *text,
+                                       size_t size) {
+    if (text == NULL || size == 0U) {
+        return false;
+    }
+    /* The one control a field with lines takes, so not through keyboard_input_ok(): the bytes
+       go in by the same insert and the same cap as typed text. */
+    const size_t at = keyboard_caret_normalise(kb, text);
+    if (!keyboard_insert(text, size, keyboard_cap(layout, size), at, "\n")) {
+        return false;
+    }
+    keyboard_caps_on_edit(kb);
+    return true;
+}
+
 /*
  * Remove the cell before byte `at` - the caret.
  *

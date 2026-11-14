@@ -661,3 +661,30 @@ INKCELL_TEST_CASE(keyboard_stale_caret_stays_at_the_end_as_text_grows, unit) {
     INKCELL_TEST_FAIL_IF(strcmp(host, "abc") != 0,
                          "host text over a stale count should still go on the end");
 }
+
+/* A field with lines: the enter key breaks one at the caret, under the field's cap, and a delete
+   takes the break back - while typed text still may not carry one. */
+INKCELL_TEST_CASE(keyboard_newline_breaks_a_line_at_the_caret, unit) {
+    const struct inkcell_keyboard_layout layout = bare_layout();
+    struct inkcell_keyboard kb;
+    inkcell_keyboard_reset(&kb);
+    char text[8] = "abcd";
+    (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_L2, text, sizeof text);
+    (void)inkcell_keyboard_key(&kb, &layout, INKCELL_KEY_L2, text, sizeof text);
+    INKCELL_TEST_FAIL_IF(!inkcell_keyboard_newline_at_caret(&kb, &layout, text, sizeof text) ||
+                             strcmp(text, "ab\ncd") != 0,
+                         "a break at the caret");
+    INKCELL_TEST_FAIL_IF(inkcell_keyboard_caret(&kb, text) != 3U, "the caret after it");
+    INKCELL_TEST_FAIL_IF(!inkcell_keyboard_delete_at_caret(&kb, text) || strcmp(text, "abcd") != 0,
+                         "delete takes it back");
+    INKCELL_TEST_FAIL_IF(
+        inkcell_keyboard_insert_text_at_caret(&kb, &layout, text, sizeof text, "x\ny"),
+        "typed text may not carry one");
+    (void)inkcell_keyboard_newline_at_caret(&kb, &layout, text, sizeof text);
+    (void)inkcell_keyboard_newline_at_caret(&kb, &layout, text, sizeof text);
+    (void)inkcell_keyboard_newline_at_caret(&kb, &layout, text, sizeof text);
+    INKCELL_TEST_FAIL_IF(inkcell_keyboard_newline_at_caret(&kb, &layout, text, sizeof text) ||
+                             strlen(text) != 7U,
+                         "and a full field takes no more");
+    record_success(test_name);
+}
